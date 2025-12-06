@@ -1,0 +1,35 @@
+ Infectious Disease Clinical Research Program - contactus@idcrp.org
+ National Genomics Data Center
+ OSF
+ the fasta files is part of supplementary material
+BioProject
+BioProject; BioSample
+BioSample
+ENA
+GISAID
+GISAID;   Indian biological data centre (IBDC)
+GISAID;  NCBI (unspecified)
+GISAID;  Supplemental file
+GISAID;  popgen library
+GISAID; BioProject
+GISAID; BioSample
+GISAID; ENA
+GISAID; Sequence read archive (SRA)
+GISAID; Sequence read archive (SRA); BioProject; BioSample
+GISAID; Sequence read archive (SRA); ENA
+GenBank
+GenBank;  NCBI (unspecified)
+GenBank; BioProject
+GenBank; BioProject; BioSample
+GenBank; GISAID
+GenBank; GISAID;  Supplemental
+GenBank; GISAID;  Supplemental file
+GenBank; GISAID; Sequence read archive (SRA)
+GenBank; GISAID; Sequence read archive (SRA); BioProject
+GenBank; GISAID; Sequence read archive (SRA); BioProject; BioSample
+GenBank; Sequence read archive (SRA); BioProject
+Not Reported
+Sequence read archive (SRA)
+Sequence read archive (SRA); BioProject
+Sequence read archive (SRA); BioProject; BioSample
+figshare

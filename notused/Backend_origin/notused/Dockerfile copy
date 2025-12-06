@@ -1,0 +1,91 @@
+# syntax=docker/dockerfile:1
+
+############################
+# 1) BUILD STAGE
+############################
+FROM python:3.10-slim AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=on \
+    PIP_NO_CACHE_DIR=on \
+    DEBIAN_FRONTEND=noninteractive
+
+# Build-only deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential libpq-dev \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Dependencies first (cache-friendly)
+COPY requirements.txt .
+RUN python -m venv /opt/venv \
+ && . /opt/venv/bin/activate \
+ && pip install --upgrade pip \
+ && pip install -r requirements.txt
+
+############################
+# 2) RUNTIME STAGE
+############################
+FROM python:3.10-slim AS runtime
+
+# Runtime-only deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 curl \
+  && rm -rf /var/lib/apt/lists/*
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=on \
+    PATH="/opt/venv/bin:$PATH" \
+    WORKERS=3 \
+    THREADS=2 \
+    TIMEOUT=120 \
+    KEEPALIVE=5 \
+    RUN_DB_INIT=1
+
+# Non-root user
+RUN adduser --disabled-password --gecos '' appuser
+
+WORKDIR /app
+
+# Copy venv from builder
+COPY --from=builder /opt/venv /opt/venv
+
+# Copy app code
+COPY . .
+
+# Dirs & ownership
+RUN mkdir -p /app/logs /app/uploads /app/data /app/static \
+ && chown -R appuser:appuser /app
+
+USER appuser
+
+EXPOSE 8000
+
+# Healthcheck ↔ /health
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -fsS http://localhost:8000/health || exit 1
+
+# Start: optional init → Gunicorn + UvicornWorker
+# CMD ["sh","-c", "\
+#   if [ \"$RUN_DB_INIT\" = \"1\" ]; then \
+#     python wait_for_db.py && python init_db.py; \
+#   fi; \
+#   exec gunicorn -k uvicorn.workers.UvicornWorker main:app \
+#     -b 0.0.0.0:8000 \
+#     --workers ${WORKERS:-3} \
+#     --threads ${THREADS:-2} \
+#     --timeout ${TIMEOUT:-120} \
+#     --keep-alive ${KEEPALIVE:-5} \
+#     --access-logfile - \
+#     --error-logfile - \
+#   "]
+
+
+CMD ["sh","-c","python wait_for_db.py && python init_db.py && \
+  exec gunicorn -k uvicorn.workers.UvicornWorker main:app \
+  -b 0.0.0.0:8000 --workers ${WORKERS:-3} --threads ${THREADS:-2} \
+  --timeout ${TIMEOUT:-120} --keep-alive ${KEEPALIVE:-5} \
+  --access-logfile - --error-logfile -"]

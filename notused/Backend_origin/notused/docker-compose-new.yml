@@ -1,0 +1,132 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:13
+    container_name: prostatecancer-postgres
+    environment:
+      POSTGRES_USER: sarscov_user
+      POSTGRES_PASSWORD: secure_password_123
+      POSTGRES_DB: sarscov_db
+    # ports:
+    #   - "5433:5432"  # Only enable for development/debugging
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    networks: [prostatecancer-network]
+    restart: unless-stopped
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -U sarscov_user -d sarscov_db -h localhost"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    container_name: prostatecancer-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks: [prostatecancer-network]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    env_file:
+      - .env
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: prostatecancer-backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://sarscov_user:secure_password_123@postgres:5432/sarscov_db
+      DATABASE_POOL_SIZE: 10
+      DATABASE_MAX_OVERFLOW: 20
+      DATABASE_POOL_TIMEOUT: 30
+      DATABASE_POOL_RECYCLE: 1800
+      DATABASE_POOL_USE_LIFO: "true"
+      REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: '["http://localhost"]'
+    # ports:
+    #   - "8000:8000"  # Only enable for development/debugging
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+      - ./Processed_Data_DB.csv:/app/Processed_Data_DB.csv
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [prostatecancer-network]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+
+  webapp:
+    build:
+      context: ../Webapp
+      dockerfile: ../Webapp/Dockerfile
+    container_name: prostatecancer-webapp
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_BASE: http://localhost
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [prostatecancer-network]
+    restart: unless-stopped
+    healthcheck:
+      # Health Check
+      test:
+        [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    # ports:
+    #   - "3000:3000"  # Only enable for development/debugging
+
+  nginx:
+    image: nginx:alpine
+    container_name: prostatecancer-nginx
+    ports:
+      - "80:80" # Only exposed port to the outside
+    volumes:
+      - ../Webapp/nginx_setup/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      webapp:
+        condition: service_started
+    networks: [prostatecancer-network]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/nginx-health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  prostatecancer-network:
+    driver: bridge

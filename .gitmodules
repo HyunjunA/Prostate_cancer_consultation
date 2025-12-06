@@ -1,0 +1,6 @@
+[submodule "Backend"]
+	path = Backend
+	url = https://github.com/HyunjunA/Prostate_cancer_consultation_dashboard_backend.git
+[submodule "Webapp"]
+	path = Webapp
+	url = https://github.com/HyunjunA/Prostate_cancer_consultation_dashboard.git
