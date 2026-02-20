@@ -23,7 +23,7 @@ import PatientConsultationReports from "@/components/PatientConsultationReports"
 
 // first meeting patient report component
 // import PatientReport from "@/components/PatientInitialVisitReportV29";
-// import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV31";
+import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV31";
 
 // // These below components are the one with feedback from Dr. Timothy
 // 수정되었으나 한질문이 한페이지에 나오는 버전은 아님.
