@@ -1,1 +1,32 @@
 notused
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Node
+node_modules/
+.next/
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+.claude/
+
+# Backend runtime data
+app/Backend/logs/
+app/Backend/uploads/
+app/Backend/data/
+
+# Generated / large data
+*.xlsx
+Processed_Data_DB.csv

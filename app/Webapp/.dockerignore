@@ -1,0 +1,43 @@
+# Node.js dependencies
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Next.js build output
+.next
+out
+
+# Old/temporary build artifacts
+dist
+src/app/dist
+
+# Logs
+logs
+*.log
+*.out
+*.err
+
+# Env/config
+.env
+.env.local
+.env.*.local
+
+# IDE/editor configs
+.vscode
+.idea
+*.swp
+.DS_Store
+
+
+
+
+node_modules
+.next
+dist
+src/app/dist
+.env
+.env.local
+*.log
+.DS_Store
+.idea
+.vscode

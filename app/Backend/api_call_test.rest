@@ -1,0 +1,2050 @@
+# Verify that the API is functioning correctly at http://localhost:8000/docs , and then proceed to check the following as well.
+
+@base = http://localhost:8000
+@json = application/json
+@api_key = REDACTED_API_KEY
+
+# NLP Classifier API (r01-nlp Docker container)
+# Run: docker run -d --name r01-nlp -p 8001:8000 r01-nlp-classifiers:latest
+# Docs: http://localhost:8001/__docs__/
+@nlp_base = http://localhost:8001
+
+
+############################################################
+### 0) Health / Readiness
+############################################################
+GET {{base}}/health
+X-API-Key: {{api_key}}
+
+###
+GET {{base}}/ready
+X-API-Key: {{api_key}}
+
+###
+GET {{base}}/
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 1) Dashboard Stats
+############################################################
+GET {{base}}/api/stats/dashboard
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 2) Doctor Interface - Get Files
+# list of file names in the doctor_sentence_view table
+# each file is the conversation transcript between a doctor and a patient.
+############################################################
+GET {{base}}/api/doctor/files
+X-API-Key: {{api_key}}
+
+
+############################################################ 
+### 3) Doctor Interface - Get Sentences by File & Speaker
+# get all sentences for a given file and speaker (DoctorID or Interviewer) from the doctor_sentence_view table
+# For a given file, extract only the sentences whose class is between 1 and 5 and whose speaker column is 'Interviewer (doctor)'.
+############################################################
+GET {{base}}/api/doctor/sentences/quality-coded-nlp-pilot-sid-1.xlsx/Interviewer:
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 4) Doctor Interface - Get Rewrites (All)
+# get all history of rewriting done by doctors from the doctor_rewrite_log table
+############################################################
+GET {{base}}/api/doctor/rewrites
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 5) Doctor Interface - Get Rewrites (Filtered)
+# get all rewrites for a given file and speaker from the doctor_rewrite_log table
+############################################################
+GET {{base}}/api/doctor/rewrites?file=quality-coded-nlp-pilot-sid-1.xlsx&speaker=Interviewer:
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 6) Doctor Interface - Get Rewrites (Pagination)
+############################################################
+GET {{base}}/api/doctor/rewrites?skip=0&limit=50
+X-API-Key: {{api_key}}
+
+############################################################
+### 6-1) Doctor Interface - Get Rewrite History for Specific Sentence
+# View the revision history of a specific sentence (file, i, i2)
+############################################################
+GET {{base}}/api/doctor/rewrites/quality-coded-nlp-pilot-sid-1.xlsx/29/3/history
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 6-2) Doctor Interface - AI Rewrite Suggestion
+###
+
+@apiKey = REDACTED_API_KEY
+
+### ═══════════════════════════════════════════════════════════
+### AI Rewrite API Tests
+### ═══════════════════════════════════════════════════════════
+
+@baseUrl = http://localhost:8000
+@apiKey = REDACTED_API_KEY
+
+### ───────────────────────────────────────────────────────────
+### 1. Basic Request
+### ───────────────────────────────────────────────────────────
+POST {{baseUrl}}/api/doctor/ai-rewrite
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "sentence": "So 12% risk of death from prostate cancer at 15 years is small in the grand scheme of things.",
+  "class_": "1"
+}
+
+### ───────────────────────────────────────────────────────────
+### 2. With Target Score - target_score 
+### ───────────────────────────────────────────────────────────
+POST {{baseUrl}}/api/doctor/ai-rewrite
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "sentence": "So 12% risk of death from prostate cancer at 15 years is small in the grand scheme of things.",
+  "class_": "1",
+  "target_score": 5
+}
+
+### ───────────────────────────────────────────────────────────
+### 3. With Context
+### ───────────────────────────────────────────────────────────
+POST {{baseUrl}}/api/doctor/ai-rewrite
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "sentence": "So 12% risk of death from prostate cancer at 15 years is small in the grand scheme of things.",
+  "class_": "1",
+  "target_score": 5,
+  "context": "I hope you're not going to die of your cancer, I want to prevent that. So of course everyone who gets diagnosed with cancer wants to know what is the risk that the cancer will harm them. We know this data from studies looking at risk of cancer death in men who chose not to treat their cancers. In your case, that risk turns out to be 12% at 15 years. So 12% risk of death from prostate cancer at 15 years is small in the grand scheme of things, but it's a little bit too high for doctors."
+}
+
+### ───────────────────────────────────────────────────────────
+### 4. Class 1 - Cancer Prognosis
+### ───────────────────────────────────────────────────────────
+POST {{baseUrl}}/api/doctor/ai-rewrite
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "sentence": "The cancer might spread.",
+  "class_": "1",
+  "target_score": 5
+}
+
+### ───────────────────────────────────────────────────────────
+### 5. Class 2 - Life Expectancy
+### ───────────────────────────────────────────────────────────
+POST {{baseUrl}}/api/doctor/ai-rewrite
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "sentence": "You have a long time to live.",
+  "class_": "2",
+  "target_score": 5
+}
+
+### ───────────────────────────────────────────────────────────
+### 6. Class 3 - Erectile Dysfunction
+### ───────────────────────────────────────────────────────────
+POST {{baseUrl}}/api/doctor/ai-rewrite
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "sentence": "There is risk of ED.",
+  "class_": "3",
+  "target_score": 5
+}
+
+### ───────────────────────────────────────────────────────────
+### 7. Class 4 - Urinary Incontinence
+### ───────────────────────────────────────────────────────────
+POST {{baseUrl}}/api/doctor/ai-rewrite
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "sentence": "You might need pads.",
+  "class_": "4",
+  "target_score": 5
+}
+
+### ───────────────────────────────────────────────────────────
+### 8. Class 5 - Irritative Symptoms
+### ───────────────────────────────────────────────────────────
+POST {{baseUrl}}/api/doctor/ai-rewrite
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "sentence": "You may have urinary symptoms.",
+  "class_": "5",
+  "target_score": 5
+}
+
+### ───────────────────────────────────────────────────────────
+### 9. Error Test - Missing API Key (Expect 403)
+### ───────────────────────────────────────────────────────────
+POST {{baseUrl}}/api/doctor/ai-rewrite
+Content-Type: application/json
+
+{
+  "sentence": "Test sentence",
+  "class_": "1"
+}
+
+### ───────────────────────────────────────────────────────────
+### 10. Error Test - Invalid API Key (Expect 403)
+### ───────────────────────────────────────────────────────────
+POST {{baseUrl}}/api/doctor/ai-rewrite
+Content-Type: application/json
+X-API-Key: wrong-api-key
+
+{
+  "sentence": "Test sentence",
+  "class_": "1"
+}
+
+### ───────────────────────────────────────────────────────────
+### 11. Error Test - Missing Required Field (Expect 422)
+### ───────────────────────────────────────────────────────────
+POST {{baseUrl}}/api/doctor/ai-rewrite
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "sentence": "Test sentence"
+}
+
+
+### ═══════════════════════════════════════════════════════════
+### Improvement Suggestions API Tests
+### VS Code REST Client Extension 
+### ═══════════════════════════════════════════════════════════
+
+# @baseUrl = http://localhost:8000
+# @apiKey = test
+
+### ───────────────────────────────────────────────────────────
+### 1. Get All Improvement Suggestions (All Classes)
+### ───────────────────────────────────────────────────────────
+GET {{baseUrl}}/api/doctor/improvement-suggestions
+X-API-Key: {{apiKey}}
+
+### ───────────────────────────────────────────────────────────
+### 2. Class 1 - Cancer Prognosis (All Levels)
+### ───────────────────────────────────────────────────────────
+GET {{baseUrl}}/api/doctor/improvement-suggestions/1
+X-API-Key: {{apiKey}}
+
+### ───────────────────────────────────────────────────────────
+### 3. Class 1 - Cancer Prognosis (Filtered: score > 2)
+### Returns suggestions for target scores 3, 4, 5
+### ───────────────────────────────────────────────────────────
+GET {{baseUrl}}/api/doctor/improvement-suggestions/1?current_score=2
+X-API-Key: {{apiKey}}
+
+### ───────────────────────────────────────────────────────────
+### 4. Class 1 - Cancer Prognosis (Filtered: score > 3)
+### Returns suggestions for target scores 4, 5
+### ───────────────────────────────────────────────────────────
+GET {{baseUrl}}/api/doctor/improvement-suggestions/1?current_score=3
+X-API-Key: {{apiKey}}
+
+### ───────────────────────────────────────────────────────────
+### 5. Class 2 - Life Expectancy (All Levels)
+### ───────────────────────────────────────────────────────────
+GET {{baseUrl}}/api/doctor/improvement-suggestions/2
+X-API-Key: {{apiKey}}
+
+### ───────────────────────────────────────────────────────────
+### 6. Class 2 - Life Expectancy (Filtered: score > 1)
+### ───────────────────────────────────────────────────────────
+GET {{baseUrl}}/api/doctor/improvement-suggestions/2?current_score=1
+X-API-Key: {{apiKey}}
+
+### ───────────────────────────────────────────────────────────
+### 7. Class 3 - Erectile Dysfunction (All Levels)
+### ───────────────────────────────────────────────────────────
+GET {{baseUrl}}/api/doctor/improvement-suggestions/3
+X-API-Key: {{apiKey}}
+
+### ───────────────────────────────────────────────────────────
+### 8. Class 4 - Urinary Incontinence (All Levels)
+### ───────────────────────────────────────────────────────────
+GET {{baseUrl}}/api/doctor/improvement-suggestions/4
+X-API-Key: {{apiKey}}
+
+### ───────────────────────────────────────────────────────────
+### 9. Class 5 - Irritative Symptoms (All Levels)
+### ───────────────────────────────────────────────────────────
+GET {{baseUrl}}/api/doctor/improvement-suggestions/5
+X-API-Key: {{apiKey}}
+
+### ───────────────────────────────────────────────────────────
+### 10. POST - Class 1 with current_score
+### ───────────────────────────────────────────────────────────
+POST {{baseUrl}}/api/doctor/improvement-suggestions
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "class_": "1",
+  "current_score": 3
+}
+
+### ───────────────────────────────────────────────────────────
+### 11. POST - Class 3 without current_score (All Levels)
+### ───────────────────────────────────────────────────────────
+POST {{baseUrl}}/api/doctor/improvement-suggestions
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "class_": "3"
+}
+
+### ───────────────────────────────────────────────────────────
+### 12. POST - Class 5 with current_score=4
+### Returns only target score 5
+### ───────────────────────────────────────────────────────────
+POST {{baseUrl}}/api/doctor/improvement-suggestions
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "class_": "5",
+  "current_score": 4
+}
+
+### ───────────────────────────────────────────────────────────
+### 13. Error Test - Invalid Class (Expect 400)
+### ───────────────────────────────────────────────────────────
+GET {{baseUrl}}/api/doctor/improvement-suggestions/99
+X-API-Key: {{apiKey}}
+
+### ───────────────────────────────────────────────────────────
+### 14. Error Test - Invalid Class via POST (Expect 400)
+### ───────────────────────────────────────────────────────────
+POST {{baseUrl}}/api/doctor/improvement-suggestions
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "class_": "invalid"
+}
+
+### ───────────────────────────────────────────────────────────
+### 15. Error Test - Missing API Key (Expect 403)
+### ───────────────────────────────────────────────────────────
+GET {{baseUrl}}/api/doctor/improvement-suggestions/1
+
+### ═══════════════════════════════════════════════════════════
+### COMBINED: AI Rewrite + Improvement Suggestions workflow
+### ═══════════════════════════════════════════════════════════
+
+### ───────────────────────────────────────────────────────────
+### 16. Step 1: Get suggestions for current score 3
+### ───────────────────────────────────────────────────────────
+GET {{baseUrl}}/api/doctor/improvement-suggestions/1?current_score=3
+X-API-Key: {{apiKey}}
+
+### ───────────────────────────────────────────────────────────
+### 17. Step 2: Use AI Rewrite with target score 5
+### ───────────────────────────────────────────────────────────
+POST {{baseUrl}}/api/doctor/ai-rewrite
+Content-Type: application/json
+X-API-Key: {{apiKey}}
+
+{
+  "sentence": "So 12% risk of death from prostate cancer at 15 years is small.",
+  "class_": "1",
+  "target_score": 5
+}
+
+
+
+############################################################
+### 7) Patient Interface - Get Files 
+# return list of file names in the patient_summary table
+############################################################
+GET {{base}}/api/patient/files
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 7) Doctor Interface - Update Rewrite
+# Insert new doctor rewrite record with full data
+# Always creates a new record with current timestamp
+############################################################
+PUT {{base}}/api/doctor/rewrites
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "file": "quality-coded-nlp-pilot-sid-1.xlsx",
+  "i": 0,
+  "i2": 1,
+  "speaker": "Interviewer:",
+  "time": "2025-01-15T10:30:00",
+  "original_sentence": "original_sentence_example",
+  "revised_sentence": "revised_sentence_example",
+  "score": 5,
+  "class_": "1",
+  "selected": true
+}
+
+############################################################
+GET {{base}}/api/doctor/rewrites/quality-coded-nlp-pilot-sid-1.xlsx/0/1/1
+X-API-Key: {{api_key}}
+
+
+
+
+
+
+############################################################
+### Doctor Interface - Score Average APIs
+############################################################
+
+
+############################################################
+### 1) Get All Score Averages (all file/speaker/class combinations)
+############################################################
+GET {{base}}/api/doctor/scores/average
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 2) Get Score Averages - Filter by File
+############################################################
+GET {{base}}/api/doctor/scores/average?file=quality-coded-nlp-pilot-sid-1.xlsx
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 3) Get Score Averages - Filter by File and Speaker
+############################################################
+GET {{base}}/api/doctor/scores/average?file=quality-coded-nlp-pilot-sid-1.xlsx&speaker=Interviewer:
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 4) Get Score Averages - Filter by File, Speaker, and Class
+############################################################
+GET {{base}}/api/doctor/scores/average?file=quality-coded-nlp-pilot-sid-5.xlsx&speaker=Interviewer:&class=5
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 5) Get Score Averages - Filter by Class Only
+############################################################
+GET {{base}}/api/doctor/scores/average?class=2
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 6) Get Complete Score Summary for Specific File and Speaker
+# Returns: overall stats + breakdown by class
+############################################################
+GET {{base}}/api/doctor/scores/summary/quality-coded-nlp-pilot-sid-1.xlsx/Interviewer:
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 7) Get Score Summary - Different File
+############################################################
+GET {{base}}/api/doctor/scores/summary/quality-coded-nlp-pilot-sid-4.xlsx/Interviewer:
+X-API-Key: {{api_key}}
+
+
+
+############################################################
+### 8) Doctor Interface - Score Sentence
+# Submit a score for a specific sentence
+############################################################
+POST {{base}}/api/doctor/score-sentence
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "sentence": "Based on your age and health, you have a 15% chance of experiencing erectile dysfunction within 2 years after surgery.",
+  "class_": "3"
+}
+
+
+############################################################
+### Doctor Interface - Class Distribution APIs
+############################################################
+
+
+############################################################
+### 1) Get Class Distribution for All Files
+############################################################
+GET {{base}}/api/doctor/class-distribution
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 2) Get Class Distribution for All Files (Include Invalid)
+############################################################
+GET {{base}}/api/doctor/class-distribution?include_invalid=true
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 3) Get Class Distribution for Specific File (Query Param)
+############################################################
+GET {{base}}/api/doctor/class-distribution?file=quality-coded-nlp-pilot-sid-1.xlsx
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 4) Get Detailed Class Distribution for Specific File (Path Param)
+############################################################
+GET {{base}}/api/doctor/class-distribution/quality-coded-nlp-pilot-sid-1.xlsx
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 5) Get Detailed Class Distribution (Include Invalid)
+############################################################
+GET {{base}}/api/doctor/class-distribution/quality-coded-nlp-pilot-sid-1.xlsx?include_invalid=true
+X-API-Key: {{api_key}}
+
+############################################################
+### 8) Patient Interface - Get Summaries (All)
+# return all summaries from the patient_summary table
+############################################################
+GET {{base}}/api/patient/summaries
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 9) Patient Interface - Get Summaries (Filtered)
+# return summaries for a given file and speaker from the patient_summary table
+############################################################
+GET {{base}}/api/patient/summaries?file=quality-coded-nlp-pilot-sid-1.xlsx&speaker=Patient_quality-coded-nlp-pilot-sid-1
+X-API-Key: {{api_key}}
+
+
+# Used in the frontend to get detailed summary info for a specific file and speaker
+############################################################
+### 10) Patient Interface - Get Summary Detail
+# return detailed summary for a given file and speaker from the patient_summary_scoring table
+############################################################
+GET {{base}}/api/patient/summaries/quality-coded-nlp-pilot-sid-1.xlsx/Patient_quality-coded-nlp-pilot-sid-1
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 11) Patient Interface - Get Scoring
+# return all scoring from the patient_responses table
+############################################################
+GET {{base}}/api/patient/scoring
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 12) Patient Interface - Get Scoring (Filtered)
+# return scoring for a given file and speaker from the patient_responses table
+# first
+############################################################
+GET {{base}}/api/patient/scoring?file=quality-coded-nlp-pilot-sid-1.xlsx&speaker=Patient_quality-coded-nlp-pilot-sid-1
+X-API-Key: {{api_key}}
+
+
+# Used in the frontend to get scoring info for a specific file and speaker
+#####################################################
+### 13) Patient Interface - Update Scoring
+#####################################################
+PUT {{base}}/api/patient/scoring
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "file": "quality-coded-nlp-pilot-sid-1.xlsx",
+  "speaker": "Patient_quality-coded-nlp-pilot-sid-1",
+  "class_1_patient_scoring": 1,
+  "class_2_patient_scoring": 1,
+  "class_3_patient_scoring": 1,
+  "class_4_patient_scoring": 1,
+  "class_5_patient_scoring": 1
+}
+
+############################################################
+### 14) Patient Interface - Get Responses
+# return responses from the patient_responses table
+############################################################
+GET {{base}}/api/patient/responses
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 15) Patient Interface - Get Responses (Filtered)
+# return responses for a given file and speaker from the patient_responses table
+############################################################
+# GET {{base}}/api/patient/responses?file=quality-coded-nlp-pilot-sid-1.xlsx&speaker=Patient_quality-coded-nlp-pilot-sid-1
+# X-API-Key: {{api_key}}
+
+GET {{base}}/api/patient/responses?file=test_consultation_001.txt&speaker=TEST_PATIENT_100
+X-API-Key: {{api_key}}
+
+
+
+
+
+##############################################################
+### 16) Patient Interface - Update Responses
+### Update Patient Responses (CREATE)
+##############################################################
+PUT {{base}}/api/patient/responses
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "file": "quality-coded-nlp-pilot-sid-1.xlsx",
+  "speaker": "Patient_quality-coded-nlp-pilot-sid-1",
+  "answer_1": "I feel good about the treatment",
+  "answer_2": "The doctor explained everything clearly",
+  "answer_3": "I understand the risks"
+}
+
+############################################################
+### 17) Patient Interface - Get Responses (Verify)
+### Update Patient Responses (UPDATE - partial)
+############################################################
+PUT {{base}}/api/patient/responses
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "file": "quality-coded-nlp-pilot-sid-1.xlsx",
+  "speaker": "Patient_quality-coded-nlp-pilot-sid-1",
+  "answer_4": "I have some concerns about recovery time",
+  "answer_5": "Overall I'm satisfied"
+}
+
+### Get Patient Responses (Verify)
+GET {{base}}/api/patient/responses?file=quality-coded-nlp-pilot-sid-1.xlsx&speaker=Patient_quality-coded-nlp-pilot-sid-1
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 15) Survey - Submit Baseline Information
+# BaselineAnswers type
+# sexAtBirth: "male" | "female" | null
+# race: string[] (multi-select)
+# education: string | null
+# maritalStatus: string | null
+# employment: string[] (multi-select)
+# employmentOther: string
+############################################################
+POST {{base}}/api/surveys/submit
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "survey_type": "baseline",
+  "file": "???",
+  "speaker": "???",
+  "answers": {
+    "sexAtBirth": "male",
+    "race": ["Asian"],
+    "education": "College graduate",
+    "maritalStatus": "Married",
+    "employment": ["Employed full-time"],
+    "employmentOther": ""
+  }
+}
+
+
+############################################################
+### 16) Survey - Submit SDM (4 questions)
+# SDMAnswers type
+# q1: "yes" | "no" | null
+# q2: 1-5 | null
+# q3: 1-5 | null
+# q4: "yes" | "no" | null
+############################################################
+POST {{base}}/api/surveys/submit
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "survey_type": "sdm",
+  "file": "???",
+  "speaker": "???",
+  "answers": {
+    "q1": "yes",
+    "q2": 4,
+    "q3": 5,
+    "q4": "yes"
+  }
+}
+
+
+############################################################
+### 17) Survey - Submit DCS (16 questions)
+# DecisionalConflictAnswers type
+# q1~q16: 0 | 1 | 2 | 3 | 4 | null
+# 0=Strongly Agree, 1=Agree, 2=Neither, 3=Disagree, 4=Strongly Disagree
+############################################################
+POST {{base}}/api/surveys/submit
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "survey_type": "dcs",
+  "file": "???",
+  "speaker": "???",
+  "answers": {
+    "q1": 0,
+    "q2": 1,
+    "q3": 2,
+    "q4": 1,
+    "q5": 0,
+    "q6": 1,
+    "q7": 2,
+    "q8": 1,
+    "q9": 0,
+    "q10": 1,
+    "q11": 2,
+    "q12": 1,
+    "q13": 0,
+    "q14": 1,
+    "q15": 2,
+    "q16": 1
+  }
+}
+
+
+############################################################
+### 18) Survey - Submit Risk Perception (5 questions)
+# RiskPerceptionAnswers type
+# Each value is string (percentage) | null
+############################################################
+POST {{base}}/api/surveys/submit
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "survey_type": "risk_perception",
+  "file": "???",
+  "speaker": "???",
+  "answers": {
+    "cancer_risk_untreated": "20",
+    "cancer_risk_treated": "5",
+    "erectile_dysfunction_risk": "50",
+    "urinary_incontinence_risk": "10",
+    "irritative_urinary_risk": "15"
+  }
+}
+
+
+############################################################
+### 19) Survey - Submit Patient Satisfaction (4 ratings + feedback)
+# PatientSatisfactionAnswers type
+# overall_satisfaction: 1-5 | null
+# report_understandability: 1-5 | null
+# report_helpfulness: 1-5 | null
+# would_recommend: 1-5 | null
+# feedback_text: string
+############################################################
+POST {{base}}/api/surveys/submit
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "survey_type": "satisfaction",
+  "file": "???",
+  "speaker": "???",
+  "answers": {
+    "overall_satisfaction": 5,
+    "report_understandability": 4,
+    "report_helpfulness": 5,
+    "would_recommend": 5,
+    "feedback_text": "The consultation report was very helpful and informative."
+  }
+}
+
+
+############################################################
+### 20) Survey - Submit Patient Questions (10 questions)
+# PatientQuestionsAnswers type
+# q1~q10: string (free text, empty string allowed)
+############################################################
+POST {{base}}/api/surveys/submit
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "survey_type": "questions",
+  "file": "???",
+  "speaker": "???",
+  "answers": {
+    "q1": "I still have questions about recovery time.",
+    "q2": "What are the long-term effects?",
+    "q3": "I feel informed about my options.",
+    "q4": "More information about side effects would help.",
+    "q5": "Worried about erectile dysfunction.",
+    "q6": "Email is preferred.",
+    "q7": "Family support is important.",
+    "q8": "How often are follow-ups needed?",
+    "q9": "Nothing else at this time.",
+    "q10": "Thank you for the thorough explanation."
+  }
+}
+
+
+
+
+############################################################
+### 21) Survey - Get Submissions (Pagination, Filtering, Stats)
+############################################################
+GET {{base}}/api/surveys/submissions?page=1&size=10
+X-API-Key: {{api_key}}
+
+############################################################
+### Survey Type - DCS & Not Synced with REDCap
+############################################################
+
+GET {{base}}/api/surveys/submissions?survey_type=dcs&redcap_synced=false
+X-API-Key: {{api_key}}
+
+############################################################
+### By Speaker - Patient_quality-coded-nlp-pilot-sid-1
+############################################################
+GET {{base}}/api/surveys/by-speaker/Patient_quality-coded-nlp-pilot-sid-1
+X-API-Key: {{api_key}}
+
+############################################################
+### Survey Stats
+############################################################
+GET {{base}}/api/surveys/stats
+X-API-Key: {{api_key}}
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### REDCap Records API Tests
+### ══════════════════════════════════════════════════════════════════════════════
+
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 1. View REDCap Configuration (Field Mapping Info) , not working properly yet
+### ══════════════════════════════════════════════════════════════════════════════
+GET {{base}}/api/surveys/redcap/redcap-config
+Content-Type: application/json
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 2. View All REDCap Records + Data Status, working properly, (This API functioned correctly; however, for security reasons, fetching data directly from the REDCap project is currently disabled.)
+### ══════════════════════════════════════════════════════════════════════════════
+GET {{base}}/api/surveys/redcap/records
+Content-Type: application/json
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 3. View Specific Record Detail, working properly, (This API functioned correctly; however, for security reasons, fetching data directly from the REDCap project is currently disabled.)
+### ══════════════════════════════════════════════════════════════════════════════
+GET {{base}}/api/surveys/redcap/records/TEST001
+Content-Type: application/json
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 4. Submit SDM Survey (4 questions)
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{base}}/api/surveys/submit
+Content-Type: application/json
+
+{
+  "survey_type": "sdm",
+  "file": "test_consultation_001.txt",
+  "speaker": "TEST_PATIENT_100",
+  "answers": {
+    "q1": "1",
+    "q2": "1",
+    "q3": "2",
+    "q4": "1"
+  },
+  "metadata": {
+    "source": "api_test",
+    "timestamp": "2024-12-11T10:00:00"
+  }
+}
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 5. Submit DCS Survey (16 questions)
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{base}}/api/surveys/submit
+Content-Type: application/json
+
+{
+  "survey_type": "dcs",
+  "file": "test_consultation_001.txt",
+  "speaker": "TEST_PATIENT_100",
+  "answers": {
+    "q1": "1",
+    "q2": "2",
+    "q3": "2",
+    "q4": "2",
+    "q5": "3",
+    "q6": "2",
+    "q7": "1",
+    "q8": "1",
+    "q9": "2",
+    "q10": "2",
+    "q11": "3",
+    "q12": "4",
+    "q13": "2",
+    "q14": "1",
+    "q15": "2",
+    "q16": "2"
+  },
+  "metadata": {
+    "source": "api_test"
+  }
+}
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 6. Submit Risk Perception Survey (5 questions)
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{base}}/api/surveys/submit
+Content-Type: application/json
+
+{
+  "survey_type": "risk_perception",
+  "file": "test_consultation_001.txt",
+  "speaker": "TEST_PATIENT_100",
+  "answers": {
+    "q1": "3",
+    "q2": "1",
+    "q3": "3",
+    "q4": "2",
+    "q5": "2"
+  },
+  "metadata": {
+    "source": "api_test"
+  }
+}
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 7. Submit Patient Satisfaction Survey (1 question - free text)
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{base}}/api/surveys/submit
+Content-Type: application/json
+
+{
+  "survey_type": "satisfaction",
+  "file": "test_consultation_001.txt",
+  "speaker": "TEST_PATIENT_100",
+  "answers": {
+    "feedbackText": "The NLP report was very helpful in understanding my treatment options. It clearly explained the risks and benefits of each approach."
+  },
+  "metadata": {
+    "source": "api_test"
+  }
+}
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 8. Submit All Surveys at Once (Complete Patient Submission)
+### ══════════════════════════════════════════════════════════════════════════════
+
+### 8-1. SDM
+POST {{base}}/api/surveys/submit
+Content-Type: application/json
+
+{
+  "survey_type": "sdm",
+  "file": "consultation_2024_001.txt",
+  "speaker": "PATIENT_2024_001",
+  "answers": {
+    "q1": "1",
+    "q2": "1",
+    "q3": "2",
+    "q4": "1"
+  }
+}
+
+### 8-2. DCS
+POST {{base}}/api/surveys/submit
+Content-Type: application/json
+
+{
+  "survey_type": "dcs",
+  "file": "consultation_2024_001.txt",
+  "speaker": "PATIENT_2024_001",
+  "answers": {
+    "q1": "1",
+    "q2": "1",
+    "q3": "2",
+    "q4": "2",
+    "q5": "2",
+    "q6": "1",
+    "q7": "1",
+    "q8": "1",
+    "q9": "2",
+    "q10": "2",
+    "q11": "2",
+    "q12": "3",
+    "q13": "1",
+    "q14": "1",
+    "q15": "1",
+    "q16": "1"
+  }
+}
+
+### 8-3. Risk Perception
+POST {{base}}/api/surveys/submit
+Content-Type: application/json
+
+{
+  "survey_type": "risk_perception",
+  "file": "consultation_2024_001.txt",
+  "speaker": "PATIENT_2024_001",
+  "answers": {
+    "q1": "2",
+    "q2": "1",
+    "q3": "2",
+    "q4": "2",
+    "q5": "1"
+  }
+}
+
+### 8-4. Satisfaction
+POST {{base}}/api/surveys/submit
+Content-Type: application/json
+
+{
+  "survey_type": "satisfaction",
+  "file": "consultation_2024_001.txt",
+  "speaker": "PATIENT_2024_001",
+  "answers": {
+    "q1": "Excellent experience. The report helped me understand all my options clearly."
+  }
+}
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 9. View REDCap Record After Submission
+### ══════════════════════════════════════════════════════════════════════════════
+GET {{base}}/api/surveys/redcap/records/TEST001
+Content-Type: application/json
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 10. Get All Submissions from PostgreSQL DB
+### ══════════════════════════════════════════════════════════════════════════════
+GET {{base}}/api/surveys/submissions
+Content-Type: application/json
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 11. Get Submissions with Filters
+### 특정 환자id를 가지는 자가 그 webapp에서 설문 결과를 제출시에 survey_submission_log 테이블에 저장된 데이터를 조회하는 API 테스트
+### ══════════════════════════════════════════════════════════════════════════════
+
+### Filter by file AND speaker
+GET {{base}}/api/surveys/submissions?file=quality-coded-nlp-pilot-sid-1.xlsx&speaker=Patient_quality-coded-nlp-pilot-sid-1
+Content-Type: application/json
+
+### Filter by speaker
+GET {{base}}/api/surveys/submissions?speaker=Patient_quality-coded-nlp-pilot-sid-1
+Content-Type: application/json
+
+### Filter by survey type
+GET {{base}}/api/surveys/submissions?survey_type=sdm
+Content-Type: application/json
+
+### Filter by REDCap sync status
+GET {{base}}/api/surveys/submissions?redcap_synced=true
+Content-Type: application/json
+
+### Combined filters with pagination
+GET {{base}}/api/surveys/submissions?survey_type=dcs&redcap_synced=true&page=1&size=10
+Content-Type: application/json
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 12. Get Submission by ID
+### 특정 환자id를 가지는 자가 그 webapp에서 설문 결과를 제출시에 survey_submission_log 테이블에 저장된 데이터를 저장시 할당된 id를 사용하여 조회하는 API 테스트
+### ══════════════════════════════════════════════════════════════════════════════
+GET {{base}}/api/surveys/submissions/1
+Content-Type: application/json
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 13. Get Submissions by Speaker
+### ══════════════════════════════════════════════════════════════════════════════
+GET {{base}}/api/surveys/by-speaker/TEST_PATIENT_100
+Content-Type: application/json
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 14. Get Submissions by File
+### ══════════════════════════════════════════════════════════════════════════════
+GET {{base}}/api/surveys/by-file/test_consultation_001.txt
+Content-Type: application/json
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 15. Get Submissions by Survey Type
+### ══════════════════════════════════════════════════════════════════════════════
+GET {{base}}/api/surveys/by-type/sdm?page=1&size=10
+Content-Type: application/json
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 16. Get Survey Statistics
+### ══════════════════════════════════════════════════════════════════════════════
+GET {{base}}/api/surveys/stats
+Content-Type: application/json
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 17. Delete Submission from PostgreSQL DB by using the Submission ID
+### ══════════════════════════════════════════════════════════════════════════════
+DELETE {{base}}/api/surveys/submissions/1
+Content-Type: application/json
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 18. Delete Record from REDCap by using the Record ID, which is the same as the speaker, which is patient ID.
+### ══════════════════════════════════════════════════════════════════════════════
+DELETE {{base}}/api/surveys/redcap/records/Patient_quality-coded-nlp-pilot-sid-1	
+Content-Type: application/json
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 19. Verify Record Deleted from REDCap (This API functioned correctly; however, for security reasons, fetching data directly from the REDCap project is currently disabled.)
+### ══════════════════════════════════════════════════════════════════════════════
+GET {{base}}/api/surveys/redcap/records/TEST001
+Content-Type: application/json
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 20. View Updated REDCap Records List (This API functioned correctly; however, for security reasons, fetching data directly from the REDCap project is currently disabled.)
+### ══════════════════════════════════════════════════════════════════════════════
+GET {{base}}/api/surveys/redcap/records
+Content-Type: application/json
+
+
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 21. Import Sample Data (Quick Test)
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{base}}/api/surveys/redcap/records/TEST005/import-sample
+Content-Type: application/json
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 22. Import Complete Survey Data (All 26 Fields)
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{base}}/api/surveys/redcap/records/TEST004/import
+Content-Type: application/json
+
+{
+    "dcs1_v2": "1",
+    "dcs2_v2": "2",
+    "dcs3_v2": "2",
+    "dcs4_v2": "2",
+    "dcs5_v2": "3",
+    "dcs6_v2": "2",
+    "dcs7_v2": "1",
+    "dcs8_v2": "1",
+    "dcs9_v2": "2",
+    "dcs10_v2": "2",
+    "dcs11_v2": "3",
+    "dcs12_v2": "4",
+    "dcs13_v2": "2",
+    "dcs14_v2": "1",
+    "dcs15_v2": "2",
+    "dcs16_v2": "2",
+    "sdmp_options": "1",
+    "sdm_ptos": "1",
+    "sdm_cons": "2",
+    "sdm_pref": "1",
+    "risk_percep_1_1": "3",
+    "risk_percept2_2": "1",
+    "risk_percept_3_3": "3",
+    "risk_percept_4_4": "2",
+    "risk_percep_5_5": "2",
+    "pt_satisfaction": "The NLP report was excellent. It helped me understand all treatment options clearly."
+}
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 23. Import Only DCS (16 Fields)
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{base}}/api/surveys/redcap/records/TEST_DCS_001/import
+Content-Type: application/json
+
+{
+    "dcs1_v2": "1",
+    "dcs2_v2": "1",
+    "dcs3_v2": "2",
+    "dcs4_v2": "2",
+    "dcs5_v2": "2",
+    "dcs6_v2": "1",
+    "dcs7_v2": "1",
+    "dcs8_v2": "1",
+    "dcs9_v2": "2",
+    "dcs10_v2": "2",
+    "dcs11_v2": "2",
+    "dcs12_v2": "3",
+    "dcs13_v2": "1",
+    "dcs14_v2": "1",
+    "dcs15_v2": "1",
+    "dcs16_v2": "1"
+}
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 24. Import Only SDM (4 Fields)
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{base}}/api/surveys/redcap/records/TEST_SDM_001/import
+Content-Type: application/json
+
+{
+    "sdmp_options": "1",
+    "sdm_ptos": "1",
+    "sdm_cons": "2",
+    "sdm_pref": "1"
+}
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 25. Import Only Risk Perception (5 Fields)
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{base}}/api/surveys/redcap/records/TEST_RISK_001/import
+Content-Type: application/json
+
+{
+    "risk_percep_1_1": "2",
+    "risk_percept2_2": "1",
+    "risk_percept_3_3": "3",
+    "risk_percept_4_4": "2",
+    "risk_percep_5_5": "2"
+}
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 26. Import Only Satisfaction (1 Field)
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{base}}/api/surveys/redcap/records/TEST_SAT_001/import
+Content-Type: application/json
+
+{
+    "pt_satisfaction": "Very satisfied with the consultation. The risk information was presented clearly and helped me make an informed decision."
+}
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 27. Bulk Import (Alternative Endpoint - record_id in body)
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{base}}/api/surveys/redcap/import
+Content-Type: application/json
+
+{
+    "record_id": "TEST_BULK_001",
+    "overwrite": false,
+    "data": {
+        "dcs1_v2": "2",
+        "dcs2_v2": "2",
+        "dcs3_v2": "3",
+        "sdmp_options": "1",
+        "sdm_ptos": "2",
+        "pt_satisfaction": "Good experience overall."
+    }
+}
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 28. Verify Imported Record (TEST001)
+### ══════════════════════════════════════════════════════════════════════════════
+GET {{base}}/api/surveys/redcap/records/TEST001
+Content-Type: application/json
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 29. Verify Imported Record (TEST_SAMPLE_001)
+### ══════════════════════════════════════════════════════════════════════════════
+GET {{base}}/api/surveys/redcap/records/TEST_SAMPLE_001
+Content-Type: application/json
+
+
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### Clean Up - Delete Test Records
+### ══════════════════════════════════════════════════════════════════════════════
+
+### 30. Delete TEST_SAMPLE_001
+DELETE {{base}}/api/surveys/redcap/records/Patient_quality-coded-nlp-pilot-sid-1
+Content-Type: application/json
+
+### 31. Delete TEST001
+DELETE {{base}}/api/surveys/redcap/records/ptest003
+Content-Type: application/json
+
+### 32. Delete TEST_DCS_001
+DELETE {{base}}/api/surveys/redcap/records/TEST_DCS_001
+Content-Type: application/json
+
+### 33. Delete TEST_SDM_001
+DELETE {{base}}/api/surveys/redcap/records/TEST_SDM_001
+Content-Type: application/json
+
+### 34. Delete TEST_RISK_001
+DELETE {{base}}/api/surveys/redcap/records/TEST_RISK_001
+Content-Type: application/json
+
+### 35. Delete TEST_SAT_001
+DELETE {{base}}/api/surveys/redcap/records/TEST_SAT_001
+Content-Type: application/json
+
+### 36. Delete TEST_BULK_001
+DELETE {{base}}/api/surveys/redcap/records/TEST_BULK_001
+Content-Type: application/json
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### 37. Final Verification - View All Records
+### ══════════════════════════════════════════════════════════════════════════════
+GET {{base}}/api/surveys/redcap/records
+Content-Type: application/json
+
+
+### ██████████████████████████████████████████████████████████████████████████████
+###
+###   NLP PROXY API (via Backend — /api/nlp/*)
+###   These hit the backend which proxies to the NLP container(s)
+###   with caching, retry, and rate limiting
+###
+### ██████████████████████████████████████████████████████████████████████████████
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### NLP Proxy 0. Health Check
+### ══════════════════════════════════════════════════════════════════════════════
+GET {{base}}/api/nlp/health
+
+### ══════════════════════════════════════════════════════════════════════════════
+### NLP Proxy 1. Model List
+### ══════════════════════════════════════════════════════════════════════════════
+GET {{base}}/api/nlp/models
+X-API-Key: {{api_key}}
+
+### ══════════════════════════════════════════════════════════════════════════════
+### NLP Proxy 2. Single Prediction — Cancer Prognosis (cp)
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{base}}/api/nlp/predict
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "text": "So 12% risk of death from prostate cancer at 15 years is small in the grand scheme of things.",
+  "model": "cp"
+}
+
+### ══════════════════════════════════════════════════════════════════════════════
+### NLP Proxy 3. Single Prediction — Erectile Dysfunction (ed)
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{base}}/api/nlp/predict
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "text": "the nerves that supply the erectile function of the penis go right underneath the prostate.",
+  "model": "ed"
+}
+
+### ══════════════════════════════════════════════════════════════════════════════
+### NLP Proxy 4. Single Prediction — Life Expectancy (le)
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{base}}/api/nlp/predict
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "text": "you are very young for prostate cancer so we have got to plan for the long-term for you.",
+  "model": "le"
+}
+
+### ══════════════════════════════════════════════════════════════════════════════
+### NLP Proxy 5. Single Prediction — Incontinence (inc)
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{base}}/api/nlp/predict
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "text": "most of my patients will leak a little bit for the first 3 months after surgery.",
+  "model": "inc"
+}
+
+### ══════════════════════════════════════════════════════════════════════════════
+### NLP Proxy 6. Single Prediction — Irritative Urinary Symptoms (ius)
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{base}}/api/nlp/predict
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "text": "radiation comes with a little bit of baggage like frequency urgency and nocturia.",
+  "model": "ius"
+}
+
+### ══════════════════════════════════════════════════════════════════════════════
+### NLP Proxy 7. Predict by Class (class 1 = cp)
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{base}}/api/nlp/predict/by-class
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "text": "in your case that risk turns out to be 12 percent at 15 years.",
+  "class": "1"
+}
+
+### ══════════════════════════════════════════════════════════════════════════════
+### NLP Proxy 8. Predict by Class (class 3 = ed)
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{base}}/api/nlp/predict/by-class
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "text": "the nerves that supply the erectile function of the penis go right underneath the prostate.",
+  "class": "3"
+}
+
+### ══════════════════════════════════════════════════════════════════════════════
+### NLP Proxy 9. Batch Prediction — cp model, 5 sentences
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{base}}/api/nlp/predict/batch
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "texts": [
+    "this is rolling. excellent, okay.",
+    "what is the risk of this cancer in my life?",
+    "prostate cancer is slow-growing and often doesnt cause harm until 15 years out from diagnosis.",
+    "the biopsy showed cancer in three areas on the left side of the prostate.",
+    "in your case that risk turns out to be 12 percent at 15 years."
+  ],
+  "model": "cp"
+}
+
+### ══════════════════════════════════════════════════════════════════════════════
+### NLP Proxy 10. All Models — single sentence against all 5 classifiers
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{base}}/api/nlp/predict/all
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "text": "meaning that prostate cancers slow-growing and often doesnt cause harm until 15 20 years out from the diagnosis."
+}
+
+### ══════════════════════════════════════════════════════════════════════════════
+### NLP Proxy 11. Cache Verification — send same request twice; second should be cached
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{base}}/api/nlp/predict
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "text": "So 12% risk of death from prostate cancer at 15 years is small in the grand scheme of things.",
+  "model": "cp"
+}
+
+### ══════════════════════════════════════════════════════════════════════════════
+### NLP Proxy 12. Error — Invalid Model (Expect 400)
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{base}}/api/nlp/predict
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "text": "test sentence",
+  "model": "invalid_model"
+}
+
+### ══════════════════════════════════════════════════════════════════════════════
+### NLP Proxy 13. Error — Missing API Key (Expect 403)
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{base}}/api/nlp/predict
+Content-Type: {{json}}
+
+{
+  "text": "test sentence",
+  "model": "cp"
+}
+
+
+### ██████████████████████████████████████████████████████████████████████████████
+###
+###   NLP CLASSIFIER API (r01-nlp Docker Container — Direct Access)
+###   Image: r01-nlp-classifiers:latest
+###   Internal network only (no external port mapping with replicas)
+###   Models: 5 ranger classifiers for prostate cancer consultation topics
+###
+###   Docs:   http://localhost:8001/__docs__/ (only if port 8001 is mapped)
+###
+### ██████████████████████████████████████████████████████████████████████████████
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### NLP-0. Health Check & Metadata
+### ══════════════════════════════════════════════════════════════════════════════
+
+### Ping - verify API is online
+GET {{nlp_base}}/ping
+
+### Model metadata - shows required R packages
+GET {{nlp_base}}/metadata
+
+### Input prototype - shows expected input format
+GET {{nlp_base}}/prototype
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### NLP-1. Cancer Prognosis (cp) - Single Sentence
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{nlp_base}}/predict/cp
+Content-Type: application/json
+
+[{"text": "So 12% risk of death from prostate cancer at 15 years is small in the grand scheme of things."}]
+
+### ──────────────────────────────────────────────────────────────────────────────
+### NLP-2. Erectile Dysfunction (ed) - Single Sentence
+### ──────────────────────────────────────────────────────────────────────────────
+POST {{nlp_base}}/predict/ed
+Content-Type: application/json
+
+[{"text": "the nerves that supply the erectile function of the penis go right underneath the prostate."}]
+
+### ──────────────────────────────────────────────────────────────────────────────
+### NLP-3. Continence (inc) - Single Sentence
+### ──────────────────────────────────────────────────────────────────────────────
+POST {{nlp_base}}/predict/inc
+Content-Type: application/json
+
+[{"text": "most of my patients will leak a little bit for the first 3 months after surgery."}]
+
+### ──────────────────────────────────────────────────────────────────────────────
+### NLP-4. Irritative Urinary Symptoms (ius) - Single Sentence
+### ──────────────────────────────────────────────────────────────────────────────
+POST {{nlp_base}}/predict/ius
+Content-Type: application/json
+
+[{"text": "radiation comes with a little bit of baggage like frequency urgency and nocturia."}]
+
+### ──────────────────────────────────────────────────────────────────────────────
+### NLP-5. Life Expectancy (le) - Single Sentence
+### ──────────────────────────────────────────────────────────────────────────────
+POST {{nlp_base}}/predict/le
+Content-Type: application/json
+
+[{"text": "you are very young for prostate cancer so we have got to plan for the long-term for you."}]
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### NLP-6. Batch Prediction - Multiple Sentences at Once (cp)
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{nlp_base}}/predict/cp
+Content-Type: application/json
+
+[
+  {"text": "this is rolling. excellent, okay."},
+  {"text": "what is the risk of this cancer in my life?"},
+  {"text": "prostate cancer is slow-growing and often doesnt cause harm until 15 years out from diagnosis."},
+  {"text": "the biopsy showed cancer in three areas on the left side of the prostate."},
+  {"text": "in your case that risk turns out to be 12 percent at 15 years."}
+]
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### NLP-7. All 5 Models on Same Sentence
+### Run each one separately to compare which topic scores highest
+### ══════════════════════════════════════════════════════════════════════════════
+
+### 7a. cp
+POST {{nlp_base}}/predict/cp
+Content-Type: application/json
+
+[{"text": "meaning that prostate cancers slow-growing and often doesnt cause harm until 15 20 years out from the diagnosis."}]
+
+### 7b. ed
+POST {{nlp_base}}/predict/ed
+Content-Type: application/json
+
+[{"text": "meaning that prostate cancers slow-growing and often doesnt cause harm until 15 20 years out from the diagnosis."}]
+
+### 7c. inc
+POST {{nlp_base}}/predict/inc
+Content-Type: application/json
+
+[{"text": "meaning that prostate cancers slow-growing and often doesnt cause harm until 15 20 years out from the diagnosis."}]
+
+### 7d. ius
+POST {{nlp_base}}/predict/ius
+Content-Type: application/json
+
+[{"text": "meaning that prostate cancers slow-growing and often doesnt cause harm until 15 20 years out from the diagnosis."}]
+
+### 7e. le
+POST {{nlp_base}}/predict/le
+Content-Type: application/json
+
+[{"text": "meaning that prostate cancers slow-growing and often doesnt cause harm until 15 20 years out from the diagnosis."}]
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### NLP-8. Neutral Text (should get low scores for all models)
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{nlp_base}}/predict/cp
+Content-Type: application/json
+
+[{"text": "thank you for coming in today, let me pull up your chart."}]
+
+###
+POST {{nlp_base}}/predict/ed
+Content-Type: application/json
+
+[{"text": "thank you for coming in today, let me pull up your chart."}]
+
+###
+POST {{nlp_base}}/predict/inc
+Content-Type: application/json
+
+[{"text": "thank you for coming in today, let me pull up your chart."}]
+
+###
+POST {{nlp_base}}/predict/ius
+Content-Type: application/json
+
+[{"text": "thank you for coming in today, let me pull up your chart."}]
+
+###
+POST {{nlp_base}}/predict/le
+Content-Type: application/json
+
+[{"text": "thank you for coming in today, let me pull up your chart."}]
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### NLP-9. Real Transcript Sentences (from pilot data)
+### ══════════════════════════════════════════════════════════════════════════════
+
+### High-confidence cancer prognosis sentence (manual score=2 in ground truth)
+POST {{nlp_base}}/predict/cp
+Content-Type: application/json
+
+[{"text": "meaning that prostate cancers slow-growing and often doesnt cause harm until 15, 20 years out from the diagnosis."}]
+
+### High-confidence continence sentence
+POST {{nlp_base}}/predict/inc
+Content-Type: application/json
+
+[{"text": "and in fact most of my patients they will leak a little bit for the first 3 months after surgery but then they recover."}]
+
+### High-confidence erectile dysfunction sentence
+POST {{nlp_base}}/predict/ed
+Content-Type: application/json
+
+[{"text": "so the nerves that supply the erectile function of the penis go right underneath the prostate and they can be damaged during surgery."}]
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+### NLP-10. Full Transcript Analysis
+### Send all interviewer sentences from a consultation and classify each
+### ══════════════════════════════════════════════════════════════════════════════
+POST {{nlp_base}}/predict/cp
+Content-Type: application/json
+
+[
+  {"text": "so it sounds like in july you had a psa check blood test and the psa was elevated around 5."},
+  {"text": "and since youre 52 years old obviously thats not normal it should be lower than 3 and a half."},
+  {"text": "the biopsy showed cancer in three areas on the left kind of in the front middle and back part of the prostate."},
+  {"text": "the big question that many patients have is what would happen if i didnt do anything for this cancer."},
+  {"text": "we know this data from studies looking at risk of cancer death in men who chose not to treat their cancers."},
+  {"text": "in your case that risk turns out to be about 12 percent at 15 years."},
+  {"text": "so the risk of dying from prostate cancer without treatment is relatively low but its not zero."},
+  {"text": "i would recommend treatment given your age and the grade of the cancer."}
+]
+
+
+
+
+
+POST {{nlp_base}}/predict/le
+Content-Type: application/json
+
+[
+  {"text": "so it sounds like in july you had a psa check blood test and the psa was elevated around 5."},
+  {"text": "and since youre 52 years old obviously thats not normal it should be lower than 3 and a half."},
+  {"text": "the biopsy showed cancer in three areas on the left kind of in the front middle and back part of the prostate."},
+  {"text": "the big question that many patients have is what would happen if i didnt do anything for this cancer."},
+  {"text": "we know this data from studies looking at risk of cancer death in men who chose not to treat their cancers."},
+  {"text": "in your case that risk turns out to be about 12 percent at 15 years."},
+  {"text": "so the risk of dying from prostate cancer without treatment is relatively low but its not zero."},
+  {"text": "i would recommend treatment given your age and the grade of the cancer."}
+]
+
+
+
+POST {{nlp_base}}/predict/ed
+Content-Type: application/json
+
+[
+  {"text": "so it sounds like in july you had a psa check blood test and the psa was elevated around 5."},
+  {"text": "and since youre 52 years old obviously thats not normal it should be lower than 3 and a half."},
+  {"text": "the biopsy showed cancer in three areas on the left kind of in the front middle and back part of the prostate."},
+  {"text": "the big question that many patients have is what would happen if i didnt do anything for this cancer."},
+  {"text": "we know this data from studies looking at risk of cancer death in men who chose not to treat their cancers."},
+  {"text": "in your case that risk turns out to be about 12 percent at 15 years."},
+  {"text": "so the risk of dying from prostate cancer without treatment is relatively low but its not zero."},
+  {"text": "i would recommend treatment given your age and the grade of the cancer."}
+]
+
+
+
+
+POST {{nlp_base}}/predict/inc
+Content-Type: application/json
+
+[
+  {"text": "so it sounds like in july you had a psa check blood test and the psa was elevated around 5."},
+  {"text": "and since youre 52 years old obviously thats not normal it should be lower than 3 and a half."},
+  {"text": "the biopsy showed cancer in three areas on the left kind of in the front middle and back part of the prostate."},
+  {"text": "the big question that many patients have is what would happen if i didnt do anything for this cancer."},
+  {"text": "we know this data from studies looking at risk of cancer death in men who chose not to treat their cancers."},
+  {"text": "in your case that risk turns out to be about 12 percent at 15 years."},
+  {"text": "so the risk of dying from prostate cancer without treatment is relatively low but its not zero."},
+  {"text": "i would recommend treatment given your age and the grade of the cancer."}
+]
+
+
+
+
+POST {{nlp_base}}/predict/ius
+Content-Type: application/json
+
+[
+  {"text": "so it sounds like in july you had a psa check blood test and the psa was elevated around 5."},
+  {"text": "and since youre 52 years old obviously thats not normal it should be lower than 3 and a half."},
+  {"text": "the biopsy showed cancer in three areas on the left kind of in the front middle and back part of the prostate."},
+  {"text": "the big question that many patients have is what would happen if i didnt do anything for this cancer."},
+  {"text": "we know this data from studies looking at risk of cancer death in men who chose not to treat their cancers."},
+  {"text": "in your case that risk turns out to be about 12 percent at 15 years."},
+  {"text": "so the risk of dying from prostate cancer without treatment is relatively low but its not zero."},
+  {"text": "i would recommend treatment given your age and the grade of the cancer."}
+]
+
+
+### ══════════════════════════════════════════════════════════════════════════════
+###
+### TRANSCRIPT ANALYSIS API — Michael's ML Pipeline
+###
+### These endpoints run the full 5-model NLP pipeline (cp, le, ed, inc, ius)
+### on uploaded transcript xlsx files. The pipeline:
+###   1. Reads the xlsx (columns: speaker, text)
+###   2. Filters to Interviewer sentences only
+###   3. Splits multi-sentence utterances into individual sentences
+###   4. Sends each sentence to all 5 NLP models for scoring
+###   5. Ranks sentences by pred_score, selects top_n per model
+###   6. Builds context windows around each top sentence
+###   7. Saves results to: xlsx file on disk, transcript_analysis_log table (JSON + xlsx binary),
+###      and sentence_prediction table (one row per sentence per model, SQL-queryable)
+###
+### Input file requirements:
+###   - Format: xlsx
+###   - Required columns: [speaker, text]
+###   - Speaker values: "Interviewer" (scored), "Patient" (not scored)
+###
+### Output: JSON response with per-model results + xlsx file for download
+###
+### ══════════════════════════════════════════════════════════════════════════════
+
+# Test file path — change this to match your local file location
+@transcript_file = /Users/choih2/Documents/GitHub/Graciela_Lab_Collab/prostate_cancer_project/prostate_cancer_R01_NLP_classifiers_Michael/prediction_pipeline_and_results/processed_transcripts_sid-01.xlsx
+@transcript_file_2 = /Users/choih2/Documents/GitHub/Graciela_Lab_Collab/prostate_cancer_project/prostate_cancer_R01_NLP_classifiers_Michael/prediction_pipeline_and_results/processed_transcripts_sid-01-replica.xlsx
+
+
+############################################################
+### TRANSCRIPT-1. Single File Analysis
+###
+### Analyze one xlsx transcript file through the full ML pipeline.
+###
+### Parameters (multipart form-data):
+###   file           — The xlsx file to analyze (required)
+###   top_n          — Number of highest-scoring sentences per model (default: 0 = all)
+###                    Example: top_n=5 returns top 5 sentences per model
+###   context_window — Number of surrounding sentences for context (default: 3)
+###                    Example: context_window=3 gives 3 before + target + 3 after
+###
+### The patient_id is derived from the filename:
+###   "processed_transcripts_sid-01.xlsx" → patient_id = "sid-01"
+###
+### Response includes:
+###   - patient_id, total_sentences, parameters used
+###   - models: { cp: [...], le: [...], ed: [...], inc: [...], ius: [...] }
+###     Each model array contains top_n sentence objects with:
+###       name, index, i, i2, speaker, text, .pred_1, context
+###
+### Results are automatically saved to:
+###   - Disk: /app/uploads/{patient_id}_predictions.xlsx
+###   - DB table: transcript_analysis_log (JSON blob + xlsx binary)
+###   - DB table: sentence_prediction (individual rows, SQL-queryable)
+############################################################
+POST {{base}}/api/transcript/analyze
+X-API-Key: {{api_key}}
+Content-Type: multipart/form-data; boundary=transcript_boundary
+
+--transcript_boundary
+Content-Disposition: form-data; name="file"; filename="processed_transcripts_sid-01.xlsx"
+Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+
+< {{transcript_file}}
+--transcript_boundary
+Content-Disposition: form-data; name="top_n"
+
+5
+--transcript_boundary
+Content-Disposition: form-data; name="context_window"
+
+3
+--transcript_boundary--
+
+
+############################################################
+### TRANSCRIPT-1b. Single File Analysis — All Sentences (top_n=0)
+###
+### Same as above but returns ALL scored sentences (no top_n filtering).
+### Useful for comprehensive analysis or when you need every prediction.
+### Warning: produces many more rows in the response and DB.
+############################################################
+POST {{base}}/api/transcript/analyze
+X-API-Key: {{api_key}}
+Content-Type: multipart/form-data; boundary=transcript_boundary_all
+
+--transcript_boundary_all
+Content-Disposition: form-data; name="file"; filename="processed_transcripts_sid-01.xlsx"
+Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+
+< {{transcript_file}}
+--transcript_boundary_all
+Content-Disposition: form-data; name="top_n"
+
+0
+--transcript_boundary_all
+Content-Disposition: form-data; name="context_window"
+
+3
+--transcript_boundary_all--
+
+
+############################################################
+### TRANSCRIPT-2. Batch Analysis (Multiple Files)
+###
+### Analyze multiple xlsx files in a single request.
+### Each file is processed independently with per-file error handling
+### (one file failing does not block others).
+###
+### Parameters (multipart form-data):
+###   files          — Multiple xlsx files (use "files" key for each)
+###   top_n          — Applied to all files in the batch
+###   context_window — Applied to all files in the batch
+###
+### Response: array of per-file results, each containing the same
+### structure as the single-file endpoint.
+############################################################
+POST {{base}}/api/transcript/analyze-batch
+X-API-Key: {{api_key}}
+Content-Type: multipart/form-data; boundary=batch_boundary
+
+--batch_boundary
+Content-Disposition: form-data; name="files"; filename="processed_transcripts_sid-01.xlsx"
+Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+
+< {{transcript_file}}
+--batch_boundary
+Content-Disposition: form-data; name="files"; filename="processed_transcripts_sid-01-replica.xlsx"
+Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+
+< {{transcript_file_2}}
+--batch_boundary
+Content-Disposition: form-data; name="top_n"
+
+5
+--batch_boundary
+Content-Disposition: form-data; name="context_window"
+
+3
+--batch_boundary--
+
+
+############################################################
+### TRANSCRIPT-3. Download Results — Single Patient (xlsx)
+###
+### Download the prediction results as an xlsx file for one patient.
+###
+### The xlsx contains 5 sheets (one per NLP model: cp, inc, ed, ius, le).
+### Each sheet has columns: name, index, i, i2, speaker, text, .pred_1, context
+###
+### Lookup order:
+###   1. Disk: /app/uploads/{patient_id}_predictions.xlsx
+###   2. DB fallback: reads xlsx_data from transcript_analysis_log
+###      (useful if the container was restarted and disk files were lost)
+############################################################
+GET {{base}}/api/transcript/download/sid-01
+X-API-Key: {{api_key}}
+
+
+############################################################
+### TRANSCRIPT-3b. Download Results — Batch (zip)
+###
+### Download results for multiple patients as a single zip file.
+### Each patient's xlsx is included in the zip archive.
+###
+### Query parameter:
+###   patient_ids — Comma-separated list of patient IDs
+###
+### Falls back to DB if disk files are missing.
+############################################################
+GET {{base}}/api/transcript/download-batch?patient_ids=sid-01,sid-01-replica
+X-API-Key: {{api_key}}
+
+
+############################################################
+### TRANSCRIPT-4. Analysis History — Paginated
+###
+### View all past analysis runs for a patient, sorted newest first.
+###
+### URL path parameter:
+###   patient_id — The patient to query (e.g., "sid-01")
+###
+### Query parameters:
+###   page — Page number, 1-based (default: 1)
+###   size — Items per page (default: 20)
+###
+### Response:
+###   { items: [...], total, page, size, pages }
+###   Each item: { id, patient_id, total_sentences, top_n, context_window,
+###                source_filename, analyzed_at }
+###
+### Use the "id" field from history items as "analysis_id" in the
+### predictions endpoint to query a specific analysis run.
+############################################################
+GET {{base}}/api/transcript/history/sid-01
+X-API-Key: {{api_key}}
+
+###
+# History with pagination (page 1, 5 items per page)
+GET {{base}}/api/transcript/history/sid-01?page=1&size=5
+X-API-Key: {{api_key}}
+
+
+############################################################
+### TRANSCRIPT-5. Query Sentence-Level Predictions (API)
+###
+### Retrieve individual sentence predictions stored in the
+### sentence_prediction table. Each row represents one sentence
+### scored by one NLP model.
+###
+### URL path parameter:
+###   patient_id — The patient to query (e.g., "sid-01")
+###
+### Query parameters (all optional):
+###   model       — Filter by NLP model: cp, inc, ed, ius, or le
+###   top_n       — Return only the top N highest-scoring per model
+###   analysis_id — Query a specific analysis run (from /history endpoint)
+###                  Default: latest analysis run for the patient
+###   min_score   — Minimum pred_score threshold (0.0–1.0)
+###
+### Response:
+###   { patient_id, analysis_id, total, predictions: [...] }
+###   Each prediction: { model, sentence_index, utterance_index,
+###     sentence_in_utterance, speaker, sentence_text, pred_score, context }
+###
+### Column mapping (xlsx → API response):
+###   xlsx column    API field                Description
+###   -----------    ---------                -----------
+###   (sheet name)   model                    NLP model (cp/inc/ed/ius/le)
+###   name           (patient_id in URL)      Patient identifier
+###   index          sentence_index           Global sentence number (1-based)
+###   i              utterance_index          Utterance number from transcript
+###   i2             sentence_in_utterance    Sentence position within utterance
+###   speaker        speaker                  Speaker label (e.g., "Interviewer")
+###   text           sentence_text            Sentence text (lowercased)
+###   .pred_1        pred_score               Prediction probability (0.0–1.0)
+###   context        context                  Surrounding sentences with <main> tags
+###
+### Note: If the analysis was run before the sentence_prediction feature,
+### the endpoint will automatically backfill predictions from the stored
+### model_results JSON on first query.
+############################################################
+
+### 5a. All predictions from the latest analysis run (all models)
+GET {{base}}/api/transcript/predictions/sid-01
+X-API-Key: {{api_key}}
+
+###
+### 5b. Only the cp (cancer prognosis) model predictions
+GET {{base}}/api/transcript/predictions/sid-01?model=cp
+X-API-Key: {{api_key}}
+
+###
+### 5c. Top 3 highest-scoring sentences per model, minimum score 0.8
+GET {{base}}/api/transcript/predictions/sid-01?top_n=3&min_score=0.8
+X-API-Key: {{api_key}}
+
+###
+### 5d. Specific analysis run (replace 1 with actual id from /history)
+### Use TRANSCRIPT-4 (/history) first to find the analysis_id you want
+GET {{base}}/api/transcript/predictions/sid-01?analysis_id=1&model=ed
+X-API-Key: {{api_key}}
+
+###
+### 5e. Only ed (erectile dysfunction) model, minimum score 0.5
+GET {{base}}/api/transcript/predictions/sid-01?model=ed&min_score=0.5
+X-API-Key: {{api_key}}
+
+###
+### 5f. Top 10 inc (incontinence) model predictions
+GET {{base}}/api/transcript/predictions/sid-01?model=inc&top_n=10
+X-API-Key: {{api_key}}
+
+###
+### 5g. All le (life expectancy) predictions from the latest run
+GET {{base}}/api/transcript/predictions/sid-01?model=le
+X-API-Key: {{api_key}}
+
+###
+### 5h. All ius (informed understanding/shared decision-making) predictions
+GET {{base}}/api/transcript/predictions/sid-01?model=ius
+X-API-Key: {{api_key}}

@@ -1,0 +1,21 @@
+# ../Webapp/Dockerfile.dev
+FROM node:20-slim
+
+ENV NODE_ENV=development \
+    NEXT_TELEMETRY_DISABLED=1
+
+WORKDIR /app
+
+# 패키지 설치(캐시 최적화)
+COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* ./
+RUN \
+  if [ -f pnpm-lock.yaml ]; then npm i -g pnpm && pnpm i; \
+  elif [ -f yarn.lock ]; then yarn install; \
+  else npm ci || npm install; fi
+
+# 소스는 런타임에 바인드 마운트 하므로 여기서는 복사하지 않음
+EXPOSE 3000
+
+# 헬스체크(선택)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=10 \
+  CMD curl -fsS http://localhost:3000/ || exit 1

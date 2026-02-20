@@ -1,0 +1,113 @@
+erDiagram
+
+    %% ============================================
+    %% Doctor Interface Tables
+    %% ============================================
+
+    doctor_sentence_view {
+        VARCHAR file PK
+        INT i PK
+        INT i2 PK
+        VARCHAR speaker
+        TEXT sentences
+        FLOAT score
+        VARCHAR class
+        TIMESTAMP time
+    }
+
+    doctor_rewrite_log {
+        VARCHAR file PK,FK
+        INT i PK,FK
+        INT i2 PK,FK
+        TIMESTAMP time PK
+        VARCHAR speaker
+        TEXT original_sentences
+        FLOAT original_score
+        TEXT revised_sentences
+        FLOAT score
+        VARCHAR class
+        BOOLEAN selected
+    }
+
+    doctor_sentence_view ||--o{ doctor_rewrite_log : "FK file,i,i2"
+
+
+    %% ============================================
+    %% Patient Interface Tables
+    %% ============================================
+
+    patient_summary {
+        VARCHAR file PK
+        VARCHAR speaker PK
+        TEXT entire_summary
+        VARCHAR class_1
+        TEXT summary_class_1
+        VARCHAR class_2
+        TEXT summary_class_2
+        VARCHAR class_3
+        TEXT summary_class_3
+        VARCHAR class_4
+        TEXT summary_class_4
+        VARCHAR class_5
+        TEXT summary_class_5
+    }
+
+    patient_summary_scoring {
+        VARCHAR file PK,FK
+        VARCHAR speaker PK,FK
+        INT class_1_patient_scoring
+        INT class_2_patient_scoring
+        INT class_3_patient_scoring
+        INT class_4_patient_scoring
+        INT class_5_patient_scoring
+    }
+
+    patient_responses {
+        VARCHAR file PK,FK
+        VARCHAR speaker PK,FK
+        TEXT answer_1
+        TEXT answer_2
+        TEXT answer_3
+        TEXT answer_4
+        TEXT answer_5
+    }
+
+    patient_summary ||--o{ patient_summary_scoring : "FK file,speaker"
+    patient_summary ||--o{ patient_responses : "FK file,speaker"
+
+
+    %% ============================================
+    %% Survey Submission Tables
+    %% ============================================
+
+    survey_submission_log {
+        INT id PK
+        VARCHAR file FK
+        VARCHAR speaker FK
+        VARCHAR survey_type
+        TEXT answers
+        TEXT extra_data
+        TIMESTAMP submitted_at
+        BOOLEAN redcap_synced
+        VARCHAR redcap_record_id
+        TEXT redcap_error
+    }
+
+    patient_summary ||--o{ survey_submission_log : "FK file,speaker"
+
+
+    %% ============================================
+    %% Transcript Analysis Log (ML Pipeline Results)
+    %% ============================================
+
+    transcript_analysis_log {
+        INT id PK
+        VARCHAR patient_id "indexed"
+        INT total_sentences
+        INT top_n
+        INT context_window
+        TEXT model_results "JSON string"
+        BYTEA xlsx_data "binary xlsx"
+        VARCHAR source_filename
+        TIMESTAMP analyzed_at "indexed"
+    }
