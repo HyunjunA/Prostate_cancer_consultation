@@ -1,0 +1,37 @@
+Prostate Cancer Project - Control Log (Summary)
+=================================================
+
+Terminology: "NLP" = Michael's r01-nlp-classifiers Docker (5 ranger Random Forest
+models: cp, le, ed, inc, ius). Not LLMs or general NLP libraries.
+
+Feb 10th, 2026:
+
+1. NLP API Production-Ready Integration
+   - Added NLP service integration to Backend (3 new files, 3 modified)
+   - Scaled NLP containers to 3 replicas for concurrent request handling
+   - Added Redis caching and retry logic for reliability
+
+2. Data Pipeline Documentation
+   - Documented data flow: Ella's transcript → Michael's NLP input → NLP classification results
+   - Created pipeline module design document (File Management, Process Manager, State Manager)
+
+3. Michael's NLP Classifier Analysis
+   - Full analysis of Docker image, R code, model structure, and ground truth data
+   - Mapped all 5 NLP model endpoints (cp, le, ed, inc, ius)
+
+4. Raw Transcript Data Analysis
+   - Compared 3 file formats: Ella (TurboScribe), Michael (input/output)
+   - Identified format gap: TurboScribe → NLP input conversion not yet implemented
+
+5. Folder Organization
+   - Renamed prostate_cancer_Ella/ → prostate_cancer_R01_raw_transcripts_Ella/
+   - Consolidated all prostate_cancer_* folders into prostate_cancer_project/
+
+6. Git Push
+   - Backend: 12 files 
+   - Webapp: 29 files 
+
+7. Next Steps
+   - Pipeline module implementation (designed but not coded)
+   - TurboScribe → NLP input preprocessing script
+   - Docker build and E2E verification

@@ -1,0 +1,75 @@
+Prostate Cancer Project - Control Log (Technical Detail)
+=========================================================
+
+Terminology: "NLP" in this document refers to Michael's r01-nlp-classifiers
+Docker container — 5 ranger (Random Forest) binary classifiers built with
+R 4.5.1 + vetiver + plumber. Models: cp (Cancer Prognosis), le (Life Expectancy),
+ed (Erectile Dysfunction), inc (Incontinence), ius (Irritative Urinary Symptoms).
+It does NOT refer to LLMs or general NLP libraries.
+
+Feb 19th, 2026:
+
+1. Michael's New Files Analysis Report Completed
+   - NLP_PIPELINE_UPDATE_MICHAELS_CLASSIFIERS_EN.md / _KR.md (907 lines each)
+   - Analyzed 3 files received from Michael on Feb 17: REC001 (SID 14).xlsx, nlp-pilot-processed-results-sid14.xlsx, data-processing-pipeline.html
+   - Key differences identified vs existing pipeline (process-data-guille.R):
+     * Sentence selection: slice_max(n=5) → filter(.pred_1 >= 0.7)
+     * Speaker filter: 8 IDs → single Interviewer:
+     * Sheet names: abbreviated (cp) → full names (cancer_prognosis)
+     * name column missing (8 → 7 columns)
+   - Full code annotations with ◀◀◀ markers on critical lines
+   - Summary: assessed as version confusion/inconsistency, not deliberate evolution
+
+2. Questions for Michael Added to Report (Section 8, Q1-Q5)
+   - Q1: Why did sentence selection method change?
+   - Q2: Sheet naming convention (abbreviated vs full)
+   - Q3: Missing name column
+   - Q4: Speaker filtering + data processing caution (whitespace strip, prefix matching)
+   - Q5: Third-party participant handling
+
+3. Backend Modification Requirements Documented (Section 9, added to report)
+   - 9.1 Speaker filtering robustness — Priority HIGH
+     * transcript_service.py: PHYSICIAN_IDS + filter_interviewer()
+     * Whitespace strip + add Interviewer: + prefix matching
+   - 9.2 Threshold-based sentence selection — Priority MEDIUM
+     * 4 files affected: transcript_service.py, routes_transcript.py, models.py, database_schema.sql
+     * min_score parameter + min_score column in TranscriptAnalysisLog
+   - 9.3 Flexible filename parsing — Priority MEDIUM
+     * Support REC001 (SID 14).xlsx naming pattern
+   - 9.4 Sheet naming — Priority LOW
+     * Pending Michael's clarification
+   - 9.5-9.6: Priority summary table + per-file impact matrix
+
+4. ML_PIPELINE_DEVELOPMENT_STATUS Document Updated (EN + KR)
+   - Date: 2026-02-12 → 2026-02-19
+   - sentence_prediction table reflected (State Manager section)
+   - GET /predictions/{patient_id} endpoint added (5 → 6 endpoints)
+   - Legacy backfill logic reflected
+   - Key files descriptions updated with SentencePrediction model
+
+5. Project Folder Structure Reorganization
+   - Created dev_docs/ common parent folder
+   - ml_pipeline_dev_docs/ → dev_docs/ml_pipeline_dev_docs/
+   - backend_dev_docs/ → dev_docs/backend_dev_docs/ (new)
+   - Michael's Feb 17 files → 2026-02-17_michael_nlp_pilot_sid14/ subfolder
+
+6. Backend Improvements Document Created (BACKEND_IMPROVEMENTS_TODO_KR.md)
+   - File Management improvements: 4 items (#1-4)
+   - State Management improvements: 6 items (#5-10)
+   - DB/Security items: 13 items (#11-23) — credential management, path traversal, API auth hardening, PHI encryption, file upload validation
+
+7. download-batch DB Fallback Implemented (routes_transcript.py)
+   - Before: files missing from disk treated as missing (no DB check)
+   - After: disk → DB fallback → re-save to disk (same resilience as single /download)
+   - Additional improvements:
+     * Response headers include X-Found-Patients / X-Missing-Patients
+     * DB fallback auto-restores file to disk (subsequent requests skip DB lookup)
+     * Single /download endpoint also re-saves to disk on DB fallback
+
+Files modified:
+- dev_docs/ml_pipeline_dev_docs/NLP_PIPELINE_UPDATE_MICHAELS_CLASSIFIERS_EN.md (report + Section 8-9)
+- dev_docs/ml_pipeline_dev_docs/NLP_PIPELINE_UPDATE_MICHAELS_CLASSIFIERS_KR.md (Korean version)
+- dev_docs/ml_pipeline_dev_docs/ML_PIPELINE_DEVELOPMENT_STATUS_EN.md (sentence_prediction reflected)
+- dev_docs/ml_pipeline_dev_docs/ML_PIPELINE_DEVELOPMENT_STATUS_KR.md (Korean version)
+- dev_docs/backend_dev_docs/BACKEND_IMPROVEMENTS_TODO_KR.md (new)
+- Prostate_cancer_consultation_dashboard/app/Backend/routes_transcript.py (download-batch DB fallback + disk restore)

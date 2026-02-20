@@ -1,0 +1,284 @@
+Michael's ML Pipeline — Command Examples
+==========================================
+
+Last updated: 2026-02-12
+
+These commands run Michael's 5-model NLP pipeline (cp, le, ed, inc, ius)
+via the Backend API and save results to both PostgreSQL DB and local disk.
+
+Prerequisites:
+  - Docker containers running (docker compose up -d)
+  - Input files: xlsx with [speaker, text] columns
+
+
+1. Batch Analysis (2 files -> ML pipeline -> DB auto-save)
+-----------------------------------------------------------
+# Note: All curl commands are written on a single line to avoid line-break (\) whitespace issues when copy-pasting.
+
+# Key example: Analyze two files in a single batch request, with top_n=5 and context_window=3
+curl -s -X POST "http://localhost:8000/api/transcript/analyze-batch" -H "X-API-Key: $(docker exec prostatecancer-backend printenv API_KEY)" -F "files=@/Users/choih2/Documents/GitHub/Graciela_Lab_Collab/prostate_cancer_project/prostate_cancer_R01_NLP_classifiers_Michael/prediction_pipeline_and_results/processed_transcripts_sid-01.xlsx" -F "files=@/Users/choih2/Documents/GitHub/Graciela_Lab_Collab/prostate_cancer_project/prostate_cancer_R01_NLP_classifiers_Michael/prediction_pipeline_and_results/processed_transcripts_sid-01-replica.xlsx" -F "top_n=5" -F "context_window=3" | python3 -m json.tool
+
+
+2. Download Results to Local test_output/
+-----------------------------------------
+
+curl -s -o /Users/choih2/Documents/GitHub/Graciela_Lab_Collab/prostate_cancer_project/test_output/sid-01_predictions.xlsx -H "X-API-Key: $(docker exec prostatecancer-backend printenv API_KEY)" "http://localhost:8000/api/transcript/download/sid-01"
+
+curl -s -o /Users/choih2/Documents/GitHub/Graciela_Lab_Collab/prostate_cancer_project/test_output/sid-01-replica_predictions.xlsx -H "X-API-Key: $(docker exec prostatecancer-backend printenv API_KEY)" "http://localhost:8000/api/transcript/download/sid-01-replica"
+
+
+3. Single File Analysis
+-----------------------
+
+curl -s -X POST "http://localhost:8000/api/transcript/analyze" -H "X-API-Key: $(docker exec prostatecancer-backend printenv API_KEY)" -F "file=@/Users/choih2/Documents/GitHub/Graciela_Lab_Collab/prostate_cancer_project/prostate_cancer_R01_NLP_classifiers_Michael/prediction_pipeline_and_results/processed_transcripts_sid-01.xlsx" -F "top_n=5" -F "context_window=3" | python3 -m json.tool
+
+
+4. Check Analysis History for a Patient
+----------------------------------------
+
+curl -s -H "X-API-Key: $(docker exec prostatecancer-backend printenv API_KEY)" "http://localhost:8000/api/transcript/history/sid-01" | python3 -m json.tool
+
+
+5. Verify DB Storage
+--------------------
+
+docker exec prostatecancer-postgres psql -U prostatecancer_user -d prostatecancer_db -c "SELECT id, patient_id, total_sentences, top_n, context_window, source_filename, analyzed_at, length(xlsx_data) AS xlsx_bytes FROM transcript_analysis_log ORDER BY id DESC LIMIT 5;"
+
+
+6. Query Sentence-Level Predictions (API)
+------------------------------------------
+# Note: All curl commands are written on a single line to avoid line-break (\) whitespace issues when copy-pasting.
+
+# (a) All predictions from the latest analysis run for sid-01 (all models)
+curl -s -H "X-API-Key: $(docker exec prostatecancer-backend printenv API_KEY)" "http://localhost:8000/api/transcript/predictions/sid-01" | python3 -m json.tool
+
+# (b) Only the cp model for sid-01 (all columns: model, sentence_index, utterance_index, sentence_in_utterance, speaker, sentence_text, pred_score, context)
+curl -s -H "X-API-Key: $(docker exec prostatecancer-backend printenv API_KEY)" "http://localhost:8000/api/transcript/predictions/sid-01?model=cp" | python3 -m json.tool
+
+# (c) Top 3 per model, minimum score 0.8
+curl -s -H "X-API-Key: $(docker exec prostatecancer-backend printenv API_KEY)" "http://localhost:8000/api/transcript/predictions/sid-01?top_n=3&min_score=0.8" | python3 -m json.tool
+
+# (d) Results from a specific analysis run (get analysis_id from /history endpoint)
+curl -s -H "X-API-Key: $(docker exec prostatecancer-backend printenv API_KEY)" "http://localhost:8000/api/transcript/predictions/sid-01?analysis_id=<ID>&model=ed" | python3 -m json.tool
+
+# (e) Get cp results from the earliest analysis run for a patient
+#
+#   Step 1: Check /history to find the oldest analysis_id
+#     (items array is newest-first, so the last item = oldest)
+curl -s -H "X-API-Key: $(docker exec prostatecancer-backend printenv API_KEY)" "http://localhost:8000/api/transcript/history/sid-01" | python3 -m json.tool
+#
+#   Step 2: Use the id from Step 1 as analysis_id to query cp results
+curl -s -H "X-API-Key: $(docker exec prostatecancer-backend printenv API_KEY)" "http://localhost:8000/api/transcript/predictions/sid-01?analysis_id=<ID>&model=cp" | python3 -m json.tool
+#
+# Key example: Get cp results from the earliest analysis run for sid-01 in a single command
+#   One-liner (requires jq — brew install jq):
+EARLIEST_ID=$(curl -s -H "X-API-Key: $(docker exec prostatecancer-backend printenv API_KEY)" "http://localhost:8000/api/transcript/history/sid-01" | jq '.items[-1].id') && curl -s -H "X-API-Key: $(docker exec prostatecancer-backend printenv API_KEY)" "http://localhost:8000/api/transcript/predictions/sid-01?analysis_id=${EARLIEST_ID}&model=cp" | jq .
+#
+#   Same result via direct SQL:
+docker exec prostatecancer-postgres psql -U prostatecancer_user -d prostatecancer_db -c "SELECT sp.analysis_id, sp.sentence_index, sp.pred_score, LEFT(sp.sentence_text, 70) AS text_preview, tal.analyzed_at FROM sentence_prediction sp JOIN transcript_analysis_log tal ON sp.analysis_id = tal.id WHERE sp.patient_id = 'sid-01' AND sp.model = 'cp' AND sp.analysis_id = (SELECT MIN(analysis_id) FROM sentence_prediction WHERE patient_id = 'sid-01' AND model = 'cp') ORDER BY sp.pred_score DESC;"
+
+
+7. sentence_prediction Table — Column Mapping
+-----------------------------------------------
+
+The sentence_prediction table stores every row from the xlsx output sheets
+in a SQL-queryable format. Each xlsx sheet (cp, inc, ed, ius, le) becomes
+rows distinguished by the "model" column.
+
+  xlsx column   DB column               Example value        Description
+  -----------   ---------               -------------        -----------
+  (sheet name)  model                   'cp'                 NLP model that scored this sentence
+  name          patient_id              'sid-01'             Patient identifier
+  index         sentence_index          42                   Global sentence sequence number (1-based)
+  i             utterance_index         35                   Original utterance number from transcript
+  i2            sentence_in_utterance   6                    Sentence position within the utterance
+  speaker       speaker                 'Interviewer'        Speaker label
+  text          sentence_text           'the cancer has...'  Sentence text (lowercased)
+  .pred_1       pred_score              0.987654             Prediction probability (0.0-1.0)
+  context       context                 '...<main>...</main>...'  Surrounding sentences
+
+  DB-only columns (not in xlsx):
+  --                id                  1                    Auto-increment primary key
+  --                analysis_id         6                    FK -> transcript_analysis_log.id
+                                                             (identifies which analysis run produced
+                                                             this row; use /history endpoint to find
+                                                             the analysis_id for a given patient)
+
+Note on row count:
+  - If you analyzed with top_n=5, only the top 5 sentences per model are stored.
+  - To store ALL sentences, re-analyze with top_n=0.
+    Example: 341 Interviewer sentences x 5 models = 1,705 rows in sentence_prediction.
+
+
+8. Direct SQL Queries on sentence_prediction
+----------------------------------------------
+
+Connect to DB:
+  docker exec -it prostatecancer-postgres psql -U prostatecancer_user -d prostatecancer_db
+
+-- (a) All predictions for a specific patient
+SELECT model, sentence_index, speaker, pred_score,
+       LEFT(sentence_text, 80) AS text_preview
+FROM sentence_prediction
+WHERE patient_id = 'sid-01'
+ORDER BY model, pred_score DESC;
+
+-- (b) Top 3 highest-scoring sentences per model
+SELECT * FROM (
+    SELECT model, sentence_index, speaker, pred_score,
+           LEFT(sentence_text, 80) AS text_preview,
+           ROW_NUMBER() OVER (PARTITION BY model ORDER BY pred_score DESC) AS rank
+    FROM sentence_prediction
+    WHERE patient_id = 'sid-01'
+) ranked
+WHERE rank <= 3
+ORDER BY model, rank;
+
+-- (c) Only sentences with score >= 0.85 for a specific model (cp)
+SELECT sentence_index, speaker, pred_score, sentence_text
+FROM sentence_prediction
+WHERE patient_id = 'sid-01'
+  AND model = 'cp'
+  AND pred_score >= 0.85
+ORDER BY pred_score DESC;
+
+-- (d) Per-patient, per-model score summary (avg, max, min)
+SELECT patient_id, model,
+       COUNT(*) AS num_sentences,
+       ROUND(AVG(pred_score)::numeric, 4) AS avg_score,
+       ROUND(MAX(pred_score)::numeric, 4) AS max_score,
+       ROUND(MIN(pred_score)::numeric, 4) AS min_score
+FROM sentence_prediction
+GROUP BY patient_id, model
+ORDER BY patient_id, model;
+
+-- (e) Top 10 highest-scoring sentences across all patients and models
+SELECT patient_id, model, sentence_index, pred_score,
+       LEFT(sentence_text, 80) AS text_preview
+FROM sentence_prediction
+ORDER BY pred_score DESC
+LIMIT 10;
+
+-- (f) Results from a specific analysis run (for comparing analysis history)
+SELECT sp.model, sp.sentence_index, sp.pred_score,
+       tal.analyzed_at, tal.source_filename
+FROM sentence_prediction sp
+JOIN transcript_analysis_log tal ON sp.analysis_id = tal.id
+WHERE sp.patient_id = 'sid-01'
+  AND tal.id = <ID>  -- use the id value from the /history endpoint
+ORDER BY sp.model, sp.pred_score DESC;
+
+-- (g) Prediction distribution by speaker (should be Interviewer only)
+SELECT speaker, COUNT(*) AS cnt,
+       ROUND(AVG(pred_score)::numeric, 4) AS avg_score
+FROM sentence_prediction
+WHERE patient_id = 'sid-01'
+GROUP BY speaker;
+
+-- (h) Overall table statistics
+SELECT COUNT(*) AS total_predictions,
+       COUNT(DISTINCT patient_id) AS patients,
+       COUNT(DISTINCT analysis_id) AS analysis_runs
+FROM sentence_prediction;
+
+
+9. Direct NLP Model Calls (bypassing the FastAPI pipeline)
+------------------------------------------------------------
+
+The r01-nlp-classifiers Docker container exposes R-plumber endpoints that
+accept raw text and return prediction scores. These are internal to the
+Docker network (not exposed to host), so you must run curl from inside
+the backend container.
+
+Endpoints:  POST /predict/cp, /predict/le, /predict/ed, /predict/inc, /predict/ius
+Input:      JSON array of {"text": "..."} objects
+Output:     JSON array of {".pred_1": float, ".pred_0": float}
+
+# (a) Single sentence, single model (cp)
+docker exec prostatecancer-backend curl -s -X POST "http://nlp-classifiers:8000/predict/cp" -H "Content-Type: application/json" -d '[{"text": "the cancer has spread to the lymph nodes"}]'
+# Output: [{"pred_1":0.8575,".pred_0":0.1425}]
+
+# (b) Multiple sentences, single model (ed)
+docker exec prostatecancer-backend curl -s -X POST "http://nlp-classifiers:8000/predict/ed" -H "Content-Type: application/json" -d '[{"text": "the nerves that supply erectile function go right underneath the prostate"}, {"text": "we will schedule your follow-up appointment"}]'
+
+# (c) Single sentence against all 5 models (run 5 separate calls)
+for model in cp le ed inc ius; do echo "=== $model ===" && docker exec prostatecancer-backend curl -s -X POST "http://nlp-classifiers:8000/predict/$model" -H "Content-Type: application/json" -d '[{"text": "the likelihood that your cancer will threaten your life is about 40 percent"}]'; echo; done
+
+# (d) Health check
+docker exec prostatecancer-backend curl -s "http://nlp-classifiers:8000/ping"
+
+# Key example: Run a batch of 8 real consultation sentences against the cp model in a single call
+# (e) Full transcript batch — 8 real consultation sentences against cp model
+docker exec prostatecancer-backend curl -s -X POST "http://nlp-classifiers:8000/predict/cp" -H "Content-Type: application/json" -d '[{"text":"so it sounds like in july you had a psa check blood test and the psa was elevated around 5."},{"text":"and since youre 52 years old obviously thats not normal it should be lower than 3 and a half."},{"text":"the biopsy showed cancer in three areas on the left kind of in the front middle and back part of the prostate."},{"text":"the big question that many patients have is what would happen if i didnt do anything for this cancer."},{"text":"we know this data from studies looking at risk of cancer death in men who chose not to treat their cancers."},{"text":"in your case that risk turns out to be about 12 percent at 15 years."},{"text":"so the risk of dying from prostate cancer without treatment is relatively low but its not zero."},{"text":"i would recommend treatment given your age and the grade of the cancer."}]'
+
+# Key example: Run a batch of 8 real consultation sentences against the cp model in a single call, with pretty-printed JSON output
+docker exec prostatecancer-backend curl -s -X POST "http://nlp-classifiers:8000/predict/cp" -H "Content-Type: application/json" -d '[{"text":"so it sounds like in july you had a psa check blood test and the psa was elevated around 5."}]'
+
+docker exec prostatecancer-backend curl -s -X POST "http://nlp-classifiers:8000/predict/le" -H "Content-Type: application/json" -d '[{"text":"so it sounds like in july you had a psa check blood test and the psa was elevated around 5."}]'
+
+# (f) Same 8 sentences against all 5 models (run 5 separate calls)
+for model in cp le ed inc ius; do echo "=== $model ===" && docker exec prostatecancer-backend curl -s -X POST "http://nlp-classifiers:8000/predict/$model" -H "Content-Type: application/json" -d '[{"text":"so it sounds like in july you had a psa check blood test and the psa was elevated around 5."},{"text":"and since youre 52 years old obviously thats not normal it should be lower than 3 and a half."},{"text":"the biopsy showed cancer in three areas on the left kind of in the front middle and back part of the prostate."},{"text":"the big question that many patients have is what would happen if i didnt do anything for this cancer."},{"text":"we know this data from studies looking at risk of cancer death in men who chose not to treat their cancers."},{"text":"in your case that risk turns out to be about 12 percent at 15 years."},{"text":"so the risk of dying from prostate cancer without treatment is relatively low but its not zero."},{"text":"i would recommend treatment given your age and the grade of the cancer."}]'; echo; done
+
+# (g) Same via Backend NLP proxy (with caching/retry, requires API key)
+curl -s -X POST "http://localhost:8000/api/nlp/predict/batch" -H "X-API-Key: $(docker exec prostatecancer-backend printenv API_KEY)" -H "Content-Type: application/json" -d '{"texts":["so it sounds like in july you had a psa check blood test and the psa was elevated around 5.","and since youre 52 years old obviously thats not normal it should be lower than 3 and a half.","the biopsy showed cancer in three areas on the left kind of in the front middle and back part of the prostate.","the big question that many patients have is what would happen if i didnt do anything for this cancer.","we know this data from studies looking at risk of cancer death in men who chose not to treat their cancers.","in your case that risk turns out to be about 12 percent at 15 years.","so the risk of dying from prostate cancer without treatment is relatively low but its not zero.","i would recommend treatment given your age and the grade of the cancer."],"model":"cp"}' | python3 -m json.tool
+
+Note: These direct calls (a-f) return raw prediction scores only (.pred_1, .pred_0).
+      They do NOT perform preprocessing (sentence splitting, speaker filtering),
+      context window generation, top_n ranking, or DB/xlsx storage.
+      For the full pipeline, use the /api/transcript/analyze endpoint instead.
+      The Backend proxy (g) adds caching and retry but also returns raw scores only.
+
+
+Parameters
+----------
+
+  file / files
+      The input xlsx file(s) to analyze. Each file must contain two columns:
+      [speaker, text]. The "speaker" column should have values like "Interviewer"
+      or "Patient". Only Interviewer sentences are scored by the NLP models.
+
+      - For single analysis:  -F "file=@/path/to/file.xlsx"
+      - For batch analysis:   -F "files=@/path/to/file1.xlsx" -F "files=@/path/to/file2.xlsx"
+
+  top_n  (default: 0)
+      Number of highest-scoring sentences to return per model.
+      Each of the 5 NLP models (cp, le, ed, inc, ius) independently ranks
+      every Interviewer sentence by its prediction score (.pred_1).
+      - top_n=5  -> return the 5 highest-scoring sentences per model
+      - top_n=10 -> return the 10 highest-scoring sentences per model
+      - top_n=0  -> return ALL sentences (no filtering, full results)
+
+      Example: With 80 Interviewer sentences and top_n=5, each model sheet
+      in the output xlsx will contain ~5 rows (ties may add extra rows).
+
+  context_window  (default: 3)
+      Number of surrounding sentences to include before and after
+      each top-scoring sentence for context. The target sentence is
+      wrapped in <main>...</main> tags within the context field.
+      - context_window=3 -> 3 sentences before + target + 3 sentences after
+      - context_window=0 -> no context, only the target sentence itself
+      - context_window=5 -> 5 sentences before + target + 5 sentences after
+
+      Example output context field (context_window=3):
+        "Previous sentence 1. Previous sentence 2. Previous sentence 3.
+         <main>The doctor discussed cancer prognosis.</main>
+         Next sentence 1. Next sentence 2. Next sentence 3."
+
+  X-API-Key  (required header)
+      Authentication key for the API. Retrieved automatically from the
+      backend container with: $(docker exec prostatecancer-backend printenv API_KEY)
+      Default for local development: "default-dev-key"
+
+  patient_id  (in URL path)
+      Identifier extracted from the input filename. The pipeline derives it
+      by stripping "processed_transcripts_" prefix and ".xlsx" suffix.
+      - processed_transcripts_sid-01.xlsx       -> patient_id = "sid-01"
+      - processed_transcripts_sid-01-replica.xlsx -> patient_id = "sid-01-replica"
+
+Storage
+-------
+  - DB: transcript_analysis_log table (automatic on every analyze call)
+  - DB: sentence_prediction table (one row per sentence per model, FK -> analysis_log)
+  - Disk: /app/uploads/{patient_id}_predictions.xlsx (inside container)
+  - Download: GET /api/transcript/download/{patient_id} (disk first, DB fallback)
+  - Query: GET /api/transcript/predictions/{patient_id} (SQL-queryable via API or direct SQL)

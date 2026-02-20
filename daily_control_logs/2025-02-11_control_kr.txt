@@ -1,0 +1,46 @@
+전립선암 프로젝트 - 작업 기록
+======================================
+
+용어 정의: 이 문서에서 "NLP"는 Michael의 r01-nlp-classifiers Docker 컨테이너를
+의미합니다 — R 4.5.1 + vetiver + plumber 기반 ranger (Random Forest) 이진 분류기 5개.
+모델: cp (암 예후), le (기대 수명), ed (발기 부전), inc (요실금), ius (자극성 배뇨 증상).
+LLM이나 일반 NLP 라이브러리를 지칭하는 것이 아닙니다.
+
+2026년 2월 11일:
+
+1. 문서 정리
+   - ML_PIPELINE_ARCHITECTURE.md, ML_PIPELINE_OVERVIEW.md를 prostate_cancer_R01_NLP_classifiers_Michael/에서 prostate_cancer_project/로 이동 (프로젝트 루트 레벨)
+   - ML_PIPELINE_DEVELOPMENT_STATUS.md 생성: Gap 분석 — 파이프라인 모듈별 존재하는 것 vs 없는 것 정리
+   - prediction_pipeline_and_results/readme.txt 업데이트: 실행 스크립트명, 입력 파일, 출력 파일 정보 추가
+
+2. R 스크립트 vs Docker 컨테이너 분석
+   - r01-nlp-classifiers Docker 내부 조사: plumber.R, board/ 폴더, 5개 .rds 모델 파일 (vetiver_model + ranger Random Forest)
+   - process-data-guille.R (7 Step 전체 처리) vs r01-nlp-classifiers Docker (Step 4 모델 예측만) 비교
+   - COMPARISON_AND_PLAN_process-data-guille_vs_r01-nlp-classifiers-docker.md 생성: 비교 + 구현 계획을 시각적 다이어그램과 함께 단일 문서로 통합
+
+3. Backend Transcript Analysis Pipeline — 계획
+   - Backend Python으로 구현할 6개 Step (1,2,3,5,6,7) 확인; Step 4는 기존 r01-nlp-classifiers Docker를 nlp_service.py 통해 그대로 사용
+   - 신규 파일: transcript_service.py (전처리 + 후처리), routes_transcript.py (POST /api/transcript/analyze, GET /api/transcript/download)
+   - 수정 파일: requirements.txt (+openpyxl, +nltk), main.py (+라우터 import)
+
+4. Backend 구현 — 완료
+   - transcript_service.py 생성: read_transcript, filter_interviewer, split_sentences, run_predictions, select_top_n, generate_context, export_to_xlsx, analyze_transcript
+   - routes_transcript.py 생성: POST /api/transcript/analyze, GET /api/transcript/download/{patient_id}
+   - main.py 수정: transcript 라우터 import + include 추가
+   - requirements.txt 수정: openpyxl>=3.1.0 추가
+   - test_transcript_pipeline.sh 생성: 5단계 자동 빌드 및 테스트 스크립트
+
+5. 테스트 중 버그 수정
+   - 수정 1: 메모리 내 xlsx 저장 → 파일 기반 저장(/app/uploads/)으로 변경 — gunicorn 멀티 워커 지원
+   - 수정 2: nltk 문장 분리기 → regex 기반 _sent_tokenize()로 교체 — Docker 내 nltk punkt_tab 추출 실패
+   - 수정 3: .lower() 추가 — R의 unnest_tokens(to_lower=TRUE) 동작과 일치
+   - 수정 4: select_top_n에 동점 처리 추가 — R의 slice_max와 동일하게 동점 시 5개 초과 반환 (ius 시트 6행)
+
+6. 검증 — R 스크립트 출력과 일치 확인
+   - sid-01 결과 비교: sid-01_predictions.xlsx vs original-study-physician-predictions-top-context.xlsx
+   - 5개 시트(cp, inc, ed, ius, le) 전부: 208/208 필드 일치 (100%)
+   - 동일한 문장 인덱스, 동일한 텍스트, 동일한 context 문자열, 점수 허용 범위 내 일치
+   - 동점 처리 검증: ius 시트 정확히 6행 반환 (pred=0.5821 동점 2개)
+
+7. 문서화
+   - README_V5.md에 Transcript Analysis API 섹션 추가: 엔드포인트, 사용법(curl 명령어), 파라미터, 출력 형식, 5개 NLP 모델, 테스트 스크립트, 관련 파일

@@ -1,0 +1,51 @@
+Prostate Cancer Project - Control Log (Technical Detail)
+=========================================================
+
+Terminology: "NLP" in this document refers to Michael's r01-nlp-classifiers
+Docker container — 5 ranger (Random Forest) binary classifiers built with
+R 4.5.1 + vetiver + plumber. Models: cp (Cancer Prognosis), le (Life Expectancy),
+ed (Erectile Dysfunction), inc (Incontinence), ius (Irritative Urinary Symptoms).
+It does NOT refer to LLMs or general NLP libraries.
+
+Feb 10th, 2026:
+
+1. NLP API Production-Ready Integration (app/Backend/)
+   - Created redis_client.py: Redis connection management with graceful degradation (init/close/get lifecycle)
+   - Created nlp_service.py: NLP API client with httpx connection pooling, exponential backoff retry (3 attempts), Redis caching (1hr TTL), predict_single/predict_batch/predict_all_models functions
+   - Created routes_nlp.py: 6 NLP proxy endpoints (/api/nlp/health, /predict, /predict/batch, /predict/by-class, /predict/all, /models) with Pydantic validation and API key auth
+   - Modified main.py: Added Redis/NLP startup/shutdown lifecycle events, expanded health endpoint (DB+Redis+NLP), replaced score-sentence hardcoded 5.0 with actual NLP model call (with fallback)
+   - Modified docker-compose.yml: NLP service scaled to 3 replicas, added 2G memory limit per instance, removed container_name and external port (internal network only), increased start_period to 90s
+   - Modified api_call_test.rest: Added 13 NLP proxy test cases (health, models, single predict x5, by-class x2, batch, all-models, cache verification, error tests)
+
+2. Data Pipeline Documentation
+   - Created ML_PIPELINE_OVERVIEW.md: Documented Stage 1 (Ella's TurboScribe raw transcript) → Stage 2 (Michael's NLP input format) → Stage 3 (NLP classification results) data flow, file structures, column mappings, and conversion requirements
+   - Created ML_PIPELINE_ARCHITECTURE.md: Documented modular pipeline design with 3 modules (File Management, Process Manager, State Manager) + main orchestrator, including data flow examples and design principles
+
+3. Michael's NLP Classifier Analysis (prostate_cancer_R01_NLP_classifiers_Michael/)
+   - Analyzed Docker image structure (r01-nlp-classifiers:latest): OCI-format, 660 MB, 21 blob layers, linux/amd64
+   - Analyzed README.md: R 4.5.1 + vetiver + plumber framework, ranger (Random Forest) algorithm, 5 trained models
+   - Mapped 5 NLP model endpoints: class 1→/predict/cp (Cancer Prognosis), 2→/predict/le (Life Expectancy), 3→/predict/ed (Erectile Dysfunction), 4→/predict/inc (Incontinence), 5→/predict/ius (Irritative Urinary Symptoms)
+   - Analyzed process-data-guille.R (176 lines): R prediction pipeline — loads transcripts, filters physician utterances, tokenizes to sentences, runs 5 models, selects top 5 per model, adds ±3 sentence context, exports multi-sheet Excel
+   - Analyzed readme.txt (Michael's email): Script designed for keystroke data, needs modification for TurboScribe input format
+   - Analyzed manual_scoring_ground_truth/nlp-pilot-manual-scores(cp).csv: 9,543 sentences from 20 patients, 6 columns (file, i, i2, speaker, sentences, score), score 0-5 distribution (97.6% scored 0 = not relevant), used as training/evaluation labels for the cp model
+
+4. Raw Transcript Data Analysis
+   - Analyzed Ella's TurboScribe file (SID 33 (8).csv): 489 utterances, 4 columns (start, end, text, speaker), Speaker 1 (doctor, 453 utterances) / Speaker 2 (patient, 36 utterances)
+   - Analyzed Michael's processed input (processed_transcripts_sid-01.xlsx): 192 utterances, 2 columns (speaker, text)
+   - Analyzed Michael's NLP output (original-study-physician-predictions-top-context.xlsx): 5 sheets (cp, le, ed, inc, ius), top sentences with prediction scores and context
+   - Compared all three file formats side-by-side: identified column mapping differences (speaker naming, timestamp presence, data unit granularity)
+   - Identified format gap: TurboScribe CSV → NLP input conversion not yet implemented (Speaker 1→Interviewer mapping, timestamp removal, sentence tokenization needed)
+
+5. Folder Organization
+   - Renamed prostate_cancer_Ella/ → prostate_cancer_R01_raw_transcripts_Ella/ (descriptive naming: project + content + source)
+   - Consolidated all prostate_cancer_* folders into prostate_cancer_project/ (per Collaboration_Principles.md: "Centralized Source of Truth")
+   - Updated all path references in ML_PIPELINE_OVERVIEW.md and ML_PIPELINE_ARCHITECTURE.md
+
+6. Git Push (Both Repos)
+   - Backend repo (Prostate_cancer_consultation_dashboard_backend): Committed and pushed 12 files (+3365/-184 lines) — NLP integration + CSV docs + fake data scripts
+   - Webapp repo (Prostate_cancer_consultation_dashboard_webapp): Committed and pushed 29 files (+28614/-100 lines) — physician/patient report components, consultation scoring, survey v2
+
+7. Next Steps (Not Yet Implemented)
+   - Pipeline modules (pipeline/file_management.py, pipeline/process_manager.py, pipeline/state_manager.py, pipeline/main.py) — designed but not coded
+   - TurboScribe → NLP input preprocessing script
+   - Docker build and E2E verification in new prostate_cancer_project/ path

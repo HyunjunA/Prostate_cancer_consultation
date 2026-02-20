@@ -1,0 +1,33 @@
+Prostate Cancer Project - Control Log (Summary)
+=================================================
+
+Terminology: "NLP" = Michael's r01-nlp-classifiers Docker (5 ranger Random Forest
+models: cp, le, ed, inc, ius). Not LLMs or general NLP libraries.
+
+Feb 19th, 2026:
+
+1. Michael's New Files Analysis Report
+   - Completed 907-line report (EN + KR) analyzing 3 files from Michael (Feb 17)
+   - Identified key inconsistencies: sentence selection (top-5 → threshold >=0.7), speaker filter (8 IDs → 1), sheet naming
+   - Assessed as version confusion, not deliberate change
+
+2. Backend Impact Assessment
+   - Documented 4 required Backend modifications with priority and file impact matrix
+   - HIGH: speaker filtering robustness (whitespace + TurboScribe format)
+   - MEDIUM: threshold-based selection, flexible filename parsing
+
+3. Documentation Updates
+   - ML_PIPELINE_DEVELOPMENT_STATUS (EN + KR): reflected sentence_prediction table, /predictions endpoint, backfill
+   - Created BACKEND_IMPROVEMENTS_TODO_KR.md: 23 items (file mgmt, state mgmt, DB security)
+
+4. Project Reorganization
+   - Created dev_docs/ parent folder for ml_pipeline_dev_docs/ and backend_dev_docs/
+
+5. download-batch DB Fallback Implemented
+   - Added DB fallback to batch download (matching single download behavior)
+   - Added disk auto-restore on DB fallback + X-Missing-Patients response header
+
+6. Next Steps
+   - Confirm with Michael on sentence selection method and speaker filtering convention
+   - Implement speaker filtering fix (Priority HIGH)
+   - Address security items (hardcoded credentials, path traversal validation)

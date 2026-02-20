@@ -1,0 +1,47 @@
+Prostate Cancer Project - Control Log (Technical Detail)
+=========================================================
+
+Terminology: "NLP" in this document refers to Michael's r01-nlp-classifiers
+Docker container — 5 ranger (Random Forest) binary classifiers built with
+R 4.5.1 + vetiver + plumber. Models: cp (Cancer Prognosis), le (Life Expectancy),
+ed (Erectile Dysfunction), inc (Incontinence), ius (Irritative Urinary Symptoms).
+It does NOT refer to LLMs or general NLP libraries.
+
+Feb 11th, 2026:
+
+1. Documentation Consolidation
+   - Moved ML_PIPELINE_ARCHITECTURE.md and ML_PIPELINE_OVERVIEW.md from prostate_cancer_R01_NLP_classifiers_Michael/ to prostate_cancer_project/ (project root level)
+   - Created ML_PIPELINE_DEVELOPMENT_STATUS.md: Gap analysis — what exists vs what's missing for each pipeline module (File Management, Process Manager, State Manager)
+   - Updated readme.txt in prediction_pipeline_and_results/: Added script name, input file, output file info
+
+2. R Script vs Docker Container Analysis
+   - Analyzed r01-nlp-classifiers Docker internals: plumber.R, board/ folder, 5 .rds model files (vetiver_model + ranger Random Forest)
+   - Compared process-data-guille.R (7 Steps, all-in-one) vs r01-nlp-classifiers Docker (Step 4 only, model prediction API)
+   - Created COMPARISON_AND_PLAN_process-data-guille_vs_r01-nlp-classifiers-docker.md: Combined comparison + implementation plan in a single document with visual diagrams
+
+3. Backend Transcript Analysis Pipeline — Plan
+   - Identified 6 missing Steps (1,2,3,5,6,7) to implement in Backend Python; Step 4 reuses existing r01-nlp-classifiers Docker via nlp_service.py
+   - New files: transcript_service.py (preprocessing + postprocessing logic), routes_transcript.py (POST /api/transcript/analyze, GET /api/transcript/download)
+   - Modified files: requirements.txt (+openpyxl, +nltk), main.py (+router import)
+
+4. Backend Implementation — Complete
+   - Created transcript_service.py: read_transcript, filter_interviewer, split_sentences, run_predictions, select_top_n, generate_context, export_to_xlsx, analyze_transcript
+   - Created routes_transcript.py: POST /api/transcript/analyze, GET /api/transcript/download/{patient_id}
+   - Modified main.py: Added transcript router import + include
+   - Modified requirements.txt: Added openpyxl>=3.1.0
+   - Created test_transcript_pipeline.sh: 5-step automated build & test script
+
+5. Bug Fixes During Testing
+   - Fix 1: In-memory xlsx store → file-based storage (/app/uploads/) for gunicorn multi-worker support
+   - Fix 2: Replaced nltk sentence tokenizer with regex-based _sent_tokenize() — nltk punkt_tab extraction failed in Docker
+   - Fix 3: Added .lower() to match R's unnest_tokens(to_lower=TRUE) behavior
+   - Fix 4: Changed select_top_n to include tied scores (matching R's slice_max behavior) — ius sheet had 6 rows due to tied scores
+
+6. Validation — R Script Output Match Confirmed
+   - Compared sid-01 results: our sid-01_predictions.xlsx vs original-study-physician-predictions-top-context.xlsx
+   - All 5 sheets (cp, inc, ed, ius, le): 208/208 fields match (100%)
+   - Same sentence indices, same texts, same context strings, scores within tolerance
+   - Tie handling verified: ius sheet correctly returns 6 rows (2 tied at pred=0.5821)
+
+7. Documentation
+   - Added Transcript Analysis API section to README_V5.md: endpoints, usage (curl commands), parameters, output format, 5 NLP models, test script, related files

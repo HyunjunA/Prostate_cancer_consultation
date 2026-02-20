@@ -1,0 +1,62 @@
+Prostate Cancer Project - Control Log (Technical Detail)
+=========================================================
+
+Terminology: "NLP" in this document refers to Michael's r01-nlp-classifiers
+Docker container — 5 ranger (Random Forest) binary classifiers built with
+R 4.5.1 + vetiver + plumber. Models: cp (Cancer Prognosis), le (Life Expectancy),
+ed (Erectile Dysfunction), inc (Incontinence), ius (Irritative Urinary Symptoms).
+It does NOT refer to LLMs or general NLP libraries.
+
+Feb 12th, 2026:
+
+1. Module Docstring Documentation (Part A)
+   - transcript_service.py: Replaced brief docstring with detailed English documentation — 7-step pipeline description, input/output format, nlp_service.py dependency
+   - nlp_service.py: Replaced brief docstring with detailed English documentation — 5 NLP models (cp, le, ed, inc, ius) with clinical topics, prediction result structure (.pred_1/.pred_0), connection pooling, retry logic, Redis caching, environment variables
+   - routes_transcript.py: Replaced brief docstring with detailed English documentation — 6 endpoints, authentication (X-API-Key), dual storage strategy (file system + database)
+
+2. PostgreSQL DB Storage for ML Pipeline Results (Part B)
+   - Problem: ML results ({patient_id}_predictions.xlsx) stored only on file system (/app/uploads/), no analysis history tracking, data lost on container restart
+   - Solution: New table `transcript_analysis_log` to persist metadata + xlsx binary + JSON results
+
+   Files modified:
+   - models.py: Added LargeBinary import + TranscriptAnalysisLog SQLAlchemy model (id, patient_id, total_sentences, top_n, context_window, model_results TEXT, xlsx_data BYTEA, source_filename, analyzed_at)
+   - database_schema.sql: Added CREATE TABLE transcript_analysis_log + 2 indexes (patient_id, analyzed_at)
+   - routes_transcript.py:
+     * Added imports: json, select, AsyncSession, get_db, TranscriptAnalysisLog
+     * POST /analyze: Added db dependency, _save_to_db() after file save (try/except, non-blocking)
+     * POST /analyze-batch: Same DB save pattern per successful file
+     * GET /download/{patient_id}: Added DB fallback when file missing from disk
+     * GET /history/{patient_id}: New endpoint — paginated analysis history from DB
+     * _save_to_db() helper: Inserts new row per analysis (preserves history), rolls back on failure without affecting response
+
+   Design decisions:
+   - DB failure never blocks the primary response (try/except + rollback)
+   - Each analysis inserts a new row (no upsert — history preserved)
+   - Download falls back to DB when file not on disk (container restart resilience)
+   - init_db.py auto-creates table from database_schema.sql on fresh deploy
+
+3. Automated Test Script
+   - Created test_transcript_pipeline.sh: Full pipeline test automation (zsh)
+   - 8 steps: pre-flight checks → DB table creation → backend rebuild → analyze (top_n=0) → DB verify → second analyze (top_n=5) → history endpoint verify → DB fallback download test
+   - 10/10 tests passing on clean environment
+   - Options: --skip-rebuild, custom xlsx file path
+
+4. Validation — Full Pipeline from Clean State
+   - Removed all Docker containers + volumes (docker compose down -v)
+   - Built and started from scratch (docker compose build && up -d)
+   - Table auto-created by init_db.py
+   - Batch analyzed processed_transcripts_sid-01.xlsx + processed_transcripts_sid-01-replica.xlsx (top_n=5)
+   - Results saved to test_output/
+
+5. Ground Truth Comparison — Michael's Original R Output Match Confirmed
+   - Compared sid-01 results vs original-study-physician-predictions-top-context.xlsx (sid-01 rows)
+   - All 5 sheets (cp, inc, ed, ius, le): every field matches
+     * name, index, i, i2, speaker, text, context: 100% identical
+     * .pred_1: max diff 0.00005 (float rounding only)
+   - Two output files (sid-01 vs sid-01-replica) confirmed identical except name column (same input data)
+   - Tie handling: ius sheet correctly returns 6 rows (2 tied at pred=0.5821)
+
+6. DB Storage Verified
+   - SELECT from transcript_analysis_log: rows created with correct metadata, xlsx binary (262KB), JSON results (1.1MB)
+   - History endpoint: /api/transcript/history/{patient_id} returns paginated list with timestamps and parameters
+   - DB fallback: file deleted from disk → GET /download still serves from DB (HTTP 200)

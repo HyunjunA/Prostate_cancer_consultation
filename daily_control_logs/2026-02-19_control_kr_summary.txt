@@ -1,0 +1,33 @@
+전립선암 프로젝트 - 작업 기록 (요약)
+=================================================
+
+용어: "NLP" = Michael의 r01-nlp-classifiers Docker (ranger Random Forest 모델 5개:
+cp, le, ed, inc, ius). LLM이나 일반 NLP 라이브러리가 아닙니다.
+
+2026년 2월 19일:
+
+1. Michael 신규 파일 분석 보고서 완성
+   - 907줄 보고서(EN + KR) — Michael로부터 2/17 받은 3개 파일 분석
+   - 주요 불일치 식별: 문장 선택(top-5 → 임계값 >=0.7), 화자 필터(8개→1개), 시트 이름
+   - 의도적 변경이 아닌 버전 혼동으로 판단
+
+2. Backend 영향 분석
+   - 4개 수정 필요 사항 문서화 (우선순위 + 파일별 영향 매트릭스)
+   - 높음: 화자 필터링 견고성 (공백 + TurboScribe 형식)
+   - 중간: 임계값 기반 선택, 유연한 파일명 파싱
+
+3. 문서 업데이트
+   - ML_PIPELINE_DEVELOPMENT_STATUS (EN + KR): sentence_prediction 테이블, /predictions 엔드포인트, backfill 반영
+   - BACKEND_IMPROVEMENTS_TODO_KR.md 생성: 23개 항목 (파일 관리, 상태 관리, DB 보안)
+
+4. 프로젝트 폴더 정리
+   - dev_docs/ 상위 폴더 생성 → ml_pipeline_dev_docs/ + backend_dev_docs/ 이동
+
+5. download-batch DB fallback 구현
+   - 배치 다운로드에 DB fallback 추가 (단일 다운로드와 동일한 복원력)
+   - DB fallback 시 디스크 자동 복구 + X-Missing-Patients 응답 헤더 추가
+
+6. 다음 단계
+   - Michael에게 문장 선택 기준 및 화자 필터링 규칙 확인
+   - 화자 필터링 수정 구현 (우선순위 높음)
+   - 보안 항목 대응 (하드코딩된 인증 정보, path traversal 검증)

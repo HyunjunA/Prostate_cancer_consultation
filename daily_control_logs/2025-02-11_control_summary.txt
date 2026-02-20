@@ -1,0 +1,28 @@
+Prostate Cancer Project - Control Log (Summary)
+=================================================
+
+Terminology: "NLP" = Michael's r01-nlp-classifiers Docker (5 ranger Random Forest
+models: cp, le, ed, inc, ius). Not LLMs or general NLP libraries.
+
+Feb 11th, 2026:
+
+1. Documentation Consolidation
+   - Moved pipeline docs to project root, created gap analysis document (ML_PIPELINE_DEVELOPMENT_STATUS.md)
+
+2. R Script vs Docker Container Analysis
+   - Compared process-data-guille.R (full pipeline) vs Docker container (prediction only)
+   - Created combined comparison + implementation plan document with visual diagrams
+
+3. Backend Transcript Analysis Pipeline — Plan
+   - Planned 2 new Python files (transcript_service.py, routes_transcript.py) to replicate the 6 missing Steps from process-data-guille.R
+   - Step 4 (model prediction) reuses existing Docker container as-is
+
+4. Backend Implementation — Complete
+   - Created transcript_service.py + routes_transcript.py + test_transcript_pipeline.sh
+   - Modified main.py, requirements.txt
+
+5. Bug Fixes: gunicorn multi-worker storage, nltk→regex tokenizer, lowercase conversion, tie handling
+
+6. Validation: sid-01 output matches R script 100% (208/208 fields across 5 sheets)
+
+7. Documentation: Added Transcript Analysis API section to README_V5.md (curl commands, parameters, output format)
