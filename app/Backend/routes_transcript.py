@@ -31,7 +31,7 @@ Endpoints
 Authentication
 --------------
 All endpoints require an ``X-API-Key`` header matching the ``API_KEY``
-environment variable (default ``default-dev-key`` for local development).
+environment variable (server refuses to start if not set).
 
 Storage
 -------
@@ -42,6 +42,7 @@ Storage
   wrapped in try/except so a DB failure never blocks the primary response.
 """
 
+import hmac
 import json
 import logging
 import os
@@ -70,14 +71,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/transcript", tags=["Transcript Analysis"])
 
 # API Key verification (same pattern as routes_nlp.py)
-_API_KEY = os.getenv("API_KEY", "default-dev-key")
+_API_KEY = os.environ["API_KEY"]
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
 async def _verify_api_key(api_key: str = Depends(_api_key_header)):
     if api_key is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Missing API Key")
-    if api_key != _API_KEY:
+    if not hmac.compare_digest(api_key, _API_KEY):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API Key")
     return api_key
 
