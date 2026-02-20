@@ -1256,6 +1256,8 @@ Provides API for doctor-patient consultation interface data
 """
 
 from typing import List, Optional, Dict, Any
+import hmac
+import logging
 import os
 import json
 
@@ -1288,6 +1290,7 @@ from sqlalchemy import func, select, and_
 from sqlalchemy.orm import aliased
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # API Key Configuration
@@ -1312,13 +1315,14 @@ async def verify_api_key(api_key: str = Depends(api_key_header)):
 # ──────────────────────────────────────────────────────────────────────────────
 # FastAPI App & CORS
 # ──────────────────────────────────────────────────────────────────────────────
-# http://localhost:8000/docs#/
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+
 app = FastAPI(
     title="Prostate Cancer Doctor-Patient Conversation Archive API",
     description="API for doctor-patient consultation interface data",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url="/docs" if ENVIRONMENT == "development" else None,
+    redoc_url="/redoc" if ENVIRONMENT == "development" else None,
 )
 
 cors_origins = os.getenv(
@@ -1465,42 +1469,18 @@ async def get_doctor_sentences(
 ):
     """Get doctor sentence view data for specific file and speaker where class != -1"""
     
-    # Debug 1: Verify input parameters
-    print("=" * 80)
-    print("🔍 DEBUG - Input Parameters:")
-    print(f"   file: '{file}'")
-    print(f"   speaker: '{speaker}'")
-    print(f"   speaker length: {len(speaker)}")
-    print(f"   speaker repr: {repr(speaker)}")
-    
-    # Debug 2: Check all available speakers for the file
+    # Get speakers for the file
     all_speakers_stmt = select(DoctorSentenceView.speaker).distinct().where(
         DoctorSentenceView.file == file
     )
     all_speakers_raw = (await db.execute(all_speakers_stmt)).scalars().all()
-    
+
     # Filter out None values to prevent TypeError
     all_speakers = [s for s in all_speakers_raw if s is not None]
-    none_count = len(all_speakers_raw) - len(all_speakers)
-    
-    print(f"\n📋 Available speakers in file '{file}' ({none_count} NULL values filtered):")
-    for s in all_speakers_raw:
-        if s is not None:
-            print(f"   - '{s}' (len: {len(s)}, repr: {repr(s)})")
-        else:
-            print(f"   - NULL/None value in database")
-    
-    # Debug 3: Check without class filter first
-    test_stmt = select(DoctorSentenceView).where(
-        DoctorSentenceView.file == file,
-        DoctorSentenceView.speaker == speaker
-    ).limit(5)
-    test_results = (await db.execute(test_stmt)).scalars().all()
-    print(f"\n🧪 Test query (without class filter): found {len(test_results)} rows")
-    for r in test_results[:3]:
-        print(f"   - i={r.i}, i2={r.i2}, class='{r.class_}', sentence='{r.sentence[:50] if r.sentence else None}'")
-    
-    # Debug 4: Execute actual query
+
+    logger.debug("get_doctor_sentences: file=%s, speaker=%s, available_speakers=%d", file, speaker, len(all_speakers))
+
+    # Execute actual query
     stmt = select(DoctorSentenceView).where(
         DoctorSentenceView.file == file,
         DoctorSentenceView.speaker == speaker,
@@ -1508,22 +1488,12 @@ async def get_doctor_sentences(
     ).order_by(DoctorSentenceView.i, DoctorSentenceView.i2)
     
     results = (await db.execute(stmt)).scalars().all()
-    print(f"\n✅ Final query (with class != '-1'): found {len(results)} rows")
-    
-    # 🔍 디버깅: 실제 반환되는 class 값들 확인
-    class_counts = {}
-    for r in results:
-        cls = r.class_ if r.class_ else "NULL"
-        class_counts[cls] = class_counts.get(cls, 0) + 1
-    print(f"\n📊 Class distribution in results:")
-    for cls, count in sorted(class_counts.items()):
-        print(f"   - '{cls}': {count} sentences")
-    print("=" * 80)
-    
+    logger.debug("get_doctor_sentences: found %d rows for file=%s, speaker=%s", len(results), file, speaker)
+
     if not results:
         raise HTTPException(
-            status_code=404, 
-            detail=f"No data found for file='{file}' and speaker='{speaker}'. Available speakers: {all_speakers}"
+            status_code=404,
+            detail="No data found for the specified file and speaker."
         )
     
     return {
@@ -1554,13 +1524,8 @@ async def get_doctor_rewrites(
     api_key: str = Depends(verify_api_key)
 ):
     """Get doctor rewrite history with optional filters"""
-    print("=" * 80)
-    print("🔍 DEBUG [get_doctor_rewrites] - Input Parameters:")
-    print(f"   file: {file}")
-    print(f"   speaker: {speaker}")
-    print(f"   selected: {selected}")
-    print(f"   skip: {skip}, limit: {limit}")
-    
+    logger.debug("get_doctor_rewrites: file=%s, selected=%s, skip=%d, limit=%d", file, selected, skip, limit)
+
     stmt = select(DoctorRewriteLog)
     
     if file:
@@ -1607,17 +1572,8 @@ async def update_doctor_rewrite(
     api_key: str = Depends(verify_api_key)
 ):
     """Insert new doctor rewrite log record with full data"""
-    print("=" * 80)
-    print("🔍 DEBUG [update_doctor_rewrite] - Input Data:")
-    print(f"   file: {update_data.file}")
-    print(f"   i: {update_data.i}, i2: {update_data.i2}")
-    print(f"   speaker: {update_data.speaker}")
-    print(f"   original_sentence: {update_data.original_sentence[:50] if update_data.original_sentence else None}...")
-    print(f"   revised_sentence: {update_data.revised_sentence[:50] if update_data.revised_sentence else None}...")
-    print(f"   score: {update_data.score}")
-    print(f"   class_: {update_data.class_}")
-    print(f"   selected: {update_data.selected}")
-    
+    logger.debug("update_doctor_rewrite: file=%s, i=%d, i2=%d, class=%s", update_data.file, update_data.i, update_data.i2, update_data.class_)
+
     # Check if file exists in DoctorSentenceView
     file_exists_stmt = select(func.count()).select_from(DoctorSentenceView).where(
         DoctorSentenceView.file == update_data.file
@@ -1627,7 +1583,7 @@ async def update_doctor_rewrite(
     if not file_exists:
         raise HTTPException(
             status_code=404,
-            detail=f"File '{update_data.file}' does not exist in DoctorSentenceView"
+            detail="Specified file does not exist."
         )
     
     # Create new record in DoctorRewriteLog
@@ -1675,10 +1631,8 @@ async def get_doctor_rewrite_history(
     Returns all revisions ordered by time (oldest to newest)
     Includes original_score from doctor_sentence_view
     """
-    print("=" * 80)
-    print("🔍 DEBUG [get_doctor_rewrite_history] - Input Parameters:")
-    print(f"   file: {file}, i: {i}, i2: {i2}")
-    
+    logger.debug("get_doctor_rewrite_history: file=%s, i=%d, i2=%d", file, i, i2)
+
     # Get all rewrites for this sentence, ordered by time ascending
     stmt = select(DoctorRewriteLog).where(
         DoctorRewriteLog.file == file,

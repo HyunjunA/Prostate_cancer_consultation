@@ -10,8 +10,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     WEB_CONCURRENCY=3 \
     GUNICORN_TIMEOUT=60 \
     PORT=8000 \
-    # Trust proxy headers if behind Nginx/Traefik
-    FORWARDED_ALLOW_IPS=* \
+    # Trust proxy headers only from Docker internal network (Nginx)
+    FORWARDED_ALLOW_IPS="172.16.0.0/12,10.0.0.0/8,192.168.0.0/16" \
     # Optional: reduce glibc arena fragmentation
     MALLOC_ARENA_MAX=2 \
     # Optional: normalize timezone
