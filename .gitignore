@@ -22,11 +22,17 @@ node_modules/
 .idea/
 .claude/
 
+# Data files — NEVER commit
+data/
+*.csv
+*.xlsx
+*.xls
+
 # Backend runtime data
 app/Backend/logs/
 app/Backend/uploads/
 app/Backend/data/
-
-# Generated / large data
-*.xlsx
 Processed_Data_DB.csv
+
+# Archive (large, contains node_modules copies)
+archive/
