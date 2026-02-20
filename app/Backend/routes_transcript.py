@@ -46,6 +46,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import zipfile
 from io import BytesIO
 from pathlib import Path
@@ -113,9 +114,10 @@ async def analyze(
     try:
         file_bytes = await file.read()
     except Exception as exc:
+        logger.error("Failed to read uploaded file: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to read uploaded file: {exc}",
+            detail="Failed to read uploaded file.",
         )
 
     try:
@@ -134,7 +136,7 @@ async def analyze(
         logger.error("Transcript analysis failed: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Analysis failed: {exc}",
+            detail="Analysis failed. Please check the uploaded file and try again.",
         )
 
     # Save xlsx to disk (shared across gunicorn workers)
@@ -210,7 +212,7 @@ async def download(
 
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"No results found for patient '{patient_id}'. Run /analyze first.",
+        detail="No results found for the requested patient. Run /analyze first.",
     )
 
 
@@ -245,11 +247,12 @@ async def analyze_batch(
         try:
             file_bytes = await file.read()
         except Exception as exc:
+            logger.error("Failed to read uploaded file %s: %s", file.filename, exc)
             failed += 1
             results.append({
                 "filename": file.filename,
                 "status": "error",
-                "detail": f"Failed to read uploaded file: {exc}",
+                "detail": "Failed to read uploaded file.",
             })
             continue
 
@@ -274,7 +277,7 @@ async def analyze_batch(
             results.append({
                 "filename": file.filename,
                 "status": "error",
-                "detail": f"Analysis failed: {exc}",
+                "detail": "Analysis failed. Please check the file and try again.",
             })
             continue
 
@@ -377,7 +380,7 @@ async def download_batch(
     if not found:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No results found for any of the requested patients: {missing}",
+            detail="No results found for any of the requested patients.",
         )
 
     # Build zip in memory
@@ -391,10 +394,7 @@ async def download_batch(
 
     headers = {
         "Content-Disposition": "attachment; filename=batch_results.zip",
-        "X-Found-Patients": ",".join(pid for pid, _ in found),
     }
-    if missing:
-        headers["X-Missing-Patients"] = ",".join(missing)
 
     return StreamingResponse(
         zip_buffer,
@@ -407,19 +407,39 @@ async def download_batch(
 # File-based xlsx storage (shared across gunicorn workers via disk)
 # ──────────────────────────────────────────────────────────────────────────────
 _UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
+_PATIENT_ID_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,254}$")
+
+
+def _validate_patient_id(patient_id: str) -> str:
+    """Validate patient_id to prevent path traversal attacks."""
+    if not _PATIENT_ID_PATTERN.match(patient_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid patient_id format",
+        )
+    resolved = (_UPLOAD_DIR / f"{patient_id}_predictions.xlsx").resolve()
+    if not str(resolved).startswith(str(_UPLOAD_DIR.resolve())):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid patient_id",
+        )
+    return patient_id
 
 
 def _xlsx_path(patient_id: str) -> Path:
+    _validate_patient_id(patient_id)
     return _UPLOAD_DIR / f"{patient_id}_predictions.xlsx"
 
 
 def _save_xlsx(patient_id: str, xlsx_bytes: bytes) -> None:
+    _validate_patient_id(patient_id)
     _UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    _xlsx_path(patient_id).write_bytes(xlsx_bytes)
+    (_UPLOAD_DIR / f"{patient_id}_predictions.xlsx").write_bytes(xlsx_bytes)
 
 
 def _get_xlsx_bytes(patient_id: str) -> Optional[bytes]:
-    path = _xlsx_path(patient_id)
+    _validate_patient_id(patient_id)
+    path = _UPLOAD_DIR / f"{patient_id}_predictions.xlsx"
     return path.read_bytes() if path.exists() else None
 
 
@@ -509,6 +529,7 @@ async def history(
     Returns a paginated list of past analysis runs (newest first), including
     parameters used, timestamps, and source filenames.
     """
+    _validate_patient_id(patient_id)
     offset = (page - 1) * size
 
     # Count total rows
@@ -575,6 +596,7 @@ async def get_predictions(
     By default returns all predictions from the most recent analysis run.
     Use query parameters to filter by model, score threshold, or specific run.
     """
+    _validate_patient_id(patient_id)
     if model and model not in _VALID_MODELS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -595,7 +617,7 @@ async def get_predictions(
         if resolved_analysis_id is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No analysis found for patient '{patient_id}'.",
+                detail="No analysis found for the requested patient.",
             )
 
     # Build query

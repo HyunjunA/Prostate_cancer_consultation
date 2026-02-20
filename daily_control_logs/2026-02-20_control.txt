@@ -2938,7 +2938,7 @@ Priority Summary (Complete)
 | 8 | Resolved  | Default API key fallback              | Low    | Done (2/20)     |
 | 19| Resolved  | DB port exposed to all interfaces     | Low    | Done (2/20)     |
 | 20| Resolved  | Docker ports bound to 0.0.0.0         | Low    | Done (2/20)     |
-| 1 | Immediate | Path traversal (patient_id)           | Low    | Not implemented |
+| 1 | Resolved  | Path traversal (patient_id)           | Low    | Done (2/20)     |
 | 6 | Critical  | Survey endpoints no authentication    | Low    | Not implemented |
 | 3 | Critical  | Patient data access control           | Medium | Not implemented |
 | 18| High      | Stored XSS in survey submissions      | Low    | Not implemented |
@@ -2968,8 +2968,8 @@ or use with real PHI data.
 "Immediate" items require <10 lines of code change — should be applied ASAP.
 "Critical" items (survey auth, access control) require architectural changes.
 
-Total: 20 vulnerabilities identified, 5 resolved, 15 active.
-  - 1 Immediate (simple code fix)
+Total: 20 vulnerabilities identified, 6 resolved, 14 active.
+  - 0 Immediate
   - 2 Critical (architectural)
   - 4 High
   - 4 Medium
@@ -3105,11 +3105,33 @@ Executed 45+ API tests based on api_call_test.rest covering all endpoints:
 All endpoints functional. Security fixes did not break any existing functionality.
 
 ────────────────────────────────────────────────────────────────────────────────
-Remaining Vulnerabilities (15 active)
+Fix 5: Path Traversal Prevention (#1 — Resolved)
 ────────────────────────────────────────────────────────────────────────────────
 
-Immediate (1):
-  #1  Path traversal in patient_id — sanitize input to prevent ../../ attacks
+Problem:
+  patient_id parameter had no input validation. An attacker could send
+  "../../etc/passwd" as the patient ID to read or write files outside the
+  uploads directory. File write was confirmed inside the Docker container.
+
+Changes:
+  - routes_transcript.py: Added `import re` and `_PATIENT_ID_PATTERN` regex
+    (alphanumeric, hyphens, underscores only)
+  - Added `_validate_patient_id()` function with defense-in-depth:
+    Layer 1: Regex whitelist rejects dots, slashes, special characters
+    Layer 2: resolve() check verifies path stays inside uploads directory
+  - Applied to: `_xlsx_path()`, `_save_xlsx()`, `_get_xlsx_bytes()`,
+    `history` endpoint, `predictions` endpoint
+  - `download` and `download-batch` are covered via `_xlsx_path()` calls
+
+Verification:
+  - Normal request (sid-01): 200 OK
+  - Path traversal (../../etc/passwd): 400 "Invalid patient_id format"
+  - download-batch traversal: 400 "Invalid patient_id format"
+  - Code-level test: 10/10 test cases passed (all attack patterns rejected)
+
+────────────────────────────────────────────────────────────────────────────────
+Remaining Vulnerabilities (14 active)
+────────────────────────────────────────────────────────────────────────────────
 
 Critical (2):
   #6  Survey endpoints have no authentication — add API key requirement

@@ -107,7 +107,7 @@ def _validate_model(model: str) -> str:
     if model not in ALL_MODELS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid model '{model}'. Valid models: {ALL_MODELS}",
+            detail="Invalid model. Use /api/nlp/models to see available models.",
         )
     return model
 
@@ -118,7 +118,7 @@ def _class_to_model(class_: str) -> str:
     if model is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid class '{class_}'. Valid classes: {list(CLASS_TO_MODEL.keys())}",
+            detail="Invalid class. Use /api/nlp/models to see available classes.",
         )
     return model
 

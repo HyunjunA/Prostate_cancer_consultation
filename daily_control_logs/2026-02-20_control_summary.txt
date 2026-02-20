@@ -1,0 +1,58 @@
+Prostate Cancer Project - Control Log (Summary)
+=================================================
+
+Terminology: "NLP" = Michael's r01-nlp-classifiers Docker (5 ranger Random Forest
+models: cp, le, ed, inc, ius). Not LLMs or general NLP libraries.
+
+Feb 20th, 2026:
+
+1. Git Repository Cleanup
+   - Submodule → Monorepo migration completed
+   - Enhanced .gitignore (exclude .env, data/, uploads/, logs/, etc.)
+   - Purged sensitive data from git history via force push
+
+2. download-batch DB Fallback Verification
+   - 3 test scenarios executed: disk serve, missing ID handling, DB fallback + auto-restore
+   - All 3/3 passed
+
+3. Hardcoded Credentials Removed (#4 — Resolved)
+   - docker-compose.yml: DB password, API key → environment variable references
+   - .env holds actual values (git-excluded), .env.example with CHANGE_ME placeholders
+
+4. Unimplemented Items Audit
+   - Consolidated 4 days (2/10-2/19) of "Next Steps" → 25 items + 5 pending Michael questions
+
+5. Comprehensive Backend Security Analysis
+   - Analyzed entire Backend (10 files, all routes, Docker, nginx)
+   - Found 20 vulnerabilities total across OWASP categories
+
+6. Live Penetration Testing
+   - Executed 23 attack scenarios (A through W) against running Docker
+   - 2 BLOCKED (SQL Injection, CORS) — defenses confirmed
+   - 16 SUCCEEDED — vulnerabilities confirmed active
+
+7. Security Remediation Session (6 fixes applied)
+   - #2  Timing attack: hmac.compare_digest in routes_transcript.py + routes_nlp.py
+   - #8  Default API key fallback: os.environ["API_KEY"] (crash if unset)
+   - #19 PostgreSQL port: removed 5433 mapping (internal network only)
+   - #20 Docker ports: bound to 127.0.0.1 (localhost only, no LAN access)
+   - #1  Path traversal: regex + resolve() validation on patient_id
+   - Webapp fix: uncommented PatientReportFirstVisit import, rebuilt Docker image
+
+8. Post-Fix API Verification
+   - 45+ endpoint tests executed (all passed)
+   - Auth tests confirmed: no key → 403, wrong key → 403, default key → 403
+
+9. Final Status
+   - 20 vulnerabilities identified, 6 resolved, 14 active
+   - 0 Immediate remaining
+   - 2 Critical (survey auth, patient access control)
+   - 4 High (XSS, browser API key, audit log, HTTPS)
+   - 4 Medium (nginx headers, rate limiting, upload limits, debug logs)
+   - 4 Low (error leak, response headers, Swagger, FORWARDED_ALLOW_IPS)
+
+10. Next Steps
+    - Critical: Add authentication to survey endpoints (#6)
+    - Critical: Implement patient-level access control (#3)
+    - High: Sanitize survey input for XSS (#18)
+    - High: Move API key to server-side proxy (#11)
