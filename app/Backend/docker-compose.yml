@@ -5,9 +5,9 @@ services:
     image: postgres:13
     container_name: prostatecancer-postgres
     environment:
-      POSTGRES_USER: prostatecancer_user
-      POSTGRES_PASSWORD: secure_password_123
-      POSTGRES_DB: prostatecancer_db
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5433:5432"
     volumes:
@@ -19,7 +19,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "pg_isready -U prostatecancer_user -d prostatecancer_db -h localhost",
+          "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -h localhost",
         ]
       interval: 15s
       timeout: 5s
@@ -63,7 +63,7 @@ services:
       dockerfile: Dockerfile
     container_name: prostatecancer-backend
     environment:
-      DATABASE_URL: postgresql+asyncpg://prostatecancer_user:secure_password_123@postgres:5432/prostatecancer_db
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       DATABASE_POOL_SIZE: 10
       DATABASE_MAX_OVERFLOW: 20
       DATABASE_POOL_TIMEOUT: 30
@@ -106,7 +106,7 @@ services:
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: http://localhost:8000
-      NEXT_PUBLIC_API_KEY: REDACTED_API_KEY
+      NEXT_PUBLIC_API_KEY: ${API_KEY}
     depends_on:
       backend:
         condition: service_healthy
