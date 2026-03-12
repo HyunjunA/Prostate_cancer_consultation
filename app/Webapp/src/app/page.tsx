@@ -14,16 +14,19 @@ import { useSearchParams } from "next/navigation";
 
 // import PhysicianReports from "@/components/PhysicianReportsModifiedV38Timothy";
 
-import PhysicianReports from "@/components/PhysicianReportsModifiedV39Timothy";
+// import PhysicianReports from "@/components/PhysicianReportsModifiedV39Timothy";
 
 // PhysicianReportsModifiedV39 is based on my own plan.
 // import PhysicianReports from "@/components/PhysicianReportsModifiedV39";
+
+import PhysicianReports from "@/components/PhysicianReportsModifiedV41Timothy";
 
 import PatientConsultationReports from "@/components/PatientConsultationReports";
 
 // first meeting patient report component
 // import PatientReport from "@/components/PatientInitialVisitReportV29";
-import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV31";
+// import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV31";
+import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV33";
 
 // // These below components are the one with feedback from Dr. Timothy
 // 수정되었으나 한질문이 한페이지에 나오는 버전은 아님.
