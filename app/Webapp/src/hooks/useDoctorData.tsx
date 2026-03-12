@@ -236,6 +236,24 @@ export interface AllImprovementSuggestionsResponse {
   >;
 }
 
+// ═══════════════════════════════════════════════════════════
+// Score Trajectory Data Type Definition (B-2 feedback)
+// ═══════════════════════════════════════════════════════════
+export interface TrajectoryItem {
+  timestamp: string;
+  event_type: "consultation" | "rewrite";
+  file: string;
+  overall_score: number | null;
+  by_class: Record<string, number>;
+  patients_count: number;
+}
+
+export interface TrajectoryResponse {
+  total_events: number;
+  speaker_filter: string | null;
+  trajectory: TrajectoryItem[];
+}
+
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const API_KEY =
   process.env.NEXT_PUBLIC_API_KEY || "REDACTED_API_KEY";
@@ -284,6 +302,10 @@ export const useDoctorData = () => {
     useState<ImprovementSuggestionsResponse | null>(null);
   const [allImprovementSuggestions, setAllImprovementSuggestions] =
     useState<AllImprovementSuggestionsResponse | null>(null);
+
+  // NEW: Trajectory State (B-2 feedback)
+  const [trajectoryData, setTrajectoryData] =
+    useState<TrajectoryResponse | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -882,6 +904,44 @@ export const useDoctorData = () => {
     setImprovementSuggestions(null);
   };
 
+  // ═══════════════════════════════════════════════════════════
+  // NEW: 16) Fetch Score Trajectory (B-2 feedback)
+  // GET /api/doctor/scores/trajectory?speaker=...
+  // ═══════════════════════════════════════════════════════════
+  const fetchTrajectory = async (
+    speaker?: string
+  ): Promise<TrajectoryResponse | null> => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const params = new URLSearchParams();
+      if (speaker) params.append("speaker", speaker);
+
+      const url = params.toString()
+        ? `${BASE_URL}/api/doctor/scores/trajectory?${params.toString()}`
+        : `${BASE_URL}/api/doctor/scores/trajectory`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: getHeaders(),
+      });
+
+      if (!response.ok) throw new Error("Failed to fetch trajectory");
+      const data: TrajectoryResponse = await response.json();
+      setTrajectoryData(data);
+      console.log("Trajectory loaded:", data);
+      return data;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      setError(errorMessage);
+      console.error("Error loading trajectory:", err);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchFiles();
   }, []);
@@ -934,5 +994,8 @@ export const useDoctorData = () => {
     fetchImprovementSuggestions,
     fetchAllImprovementSuggestions,
     clearImprovementSuggestions,
+    // NEW: Trajectory Functions (B-2 feedback)
+    trajectoryData,
+    fetchTrajectory,
   };
 };
