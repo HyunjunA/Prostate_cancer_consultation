@@ -1256,13 +1256,11 @@ Provides API for doctor-patient consultation interface data
 """
 
 from typing import List, Optional, Dict, Any
-import hmac
 import logging
 import os
 import json
 
 from fastapi import FastAPI, Depends, HTTPException, Query, Request, status
-from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -1275,7 +1273,9 @@ from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from datetime import datetime
 
-
+from auth import get_current_user
+from auth.access_control import check_patient_access
+from auth.base import AuthUser
 from db import get_db, db_ready_ping
 from models import (
     DoctorSentenceView,
@@ -1291,26 +1291,6 @@ from sqlalchemy.orm import aliased
 
 load_dotenv()
 logger = logging.getLogger(__name__)
-
-# ──────────────────────────────────────────────────────────────────────────────
-# API Key Configuration
-# ──────────────────────────────────────────────────────────────────────────────
-API_KEY = os.getenv("API_KEY", "default-dev-key")
-api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
-
-async def verify_api_key(api_key: str = Depends(api_key_header)):
-    """Verify API Key from request header"""
-    if api_key is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Missing API Key"
-        )
-    if api_key != API_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid API Key"
-        )
-    return api_key
 
 # ──────────────────────────────────────────────────────────────────────────────
 # FastAPI App & CORS
@@ -1344,12 +1324,14 @@ app.add_middleware(
 from routes_surveys import router as surveys_router
 from routes_nlp import router as nlp_router
 from routes_transcript import router as transcript_router
+from auth.admin_routes import router as auth_router
 from redis_client import init_redis, close_redis, get_redis
 from nlp_service import close_http_client, nlp_health_check, predict_single, CLASS_TO_MODEL, NLPServiceError
 
 app.include_router(surveys_router)
 app.include_router(nlp_router)
 app.include_router(transcript_router)
+app.include_router(auth_router)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # App lifecycle events (Redis + NLP HTTP client)
@@ -1373,24 +1355,13 @@ async def on_shutdown():
 # Basic routes
 # ──────────────────────────────────────────────────────────────────────────────
 @app.get("/")
-async def root(api_key: str = Depends(verify_api_key)):
+async def root(user: AuthUser = Depends(get_current_user)):
     return {
         "message": "Prostate Cancer Doctor-Patient Conversation Archive API",
         "version": "1.0.0",
         "docs": "/docs",
         "health": "/health"
     }
-
-async def verify_api_key_optional(api_key: str = Depends(api_key_header)):
-    """Optional API Key verification for health checks"""
-    if api_key is None:
-        return None  # Allow requests without API Key for health checks
-    if api_key != API_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid API Key"
-        )
-    return api_key
 
 @app.get("/health")
 async def health_check(db: AsyncSession = Depends(get_db)):
@@ -1465,10 +1436,11 @@ async def get_doctor_sentences(
     file: str,
     speaker: str,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(verify_api_key)
+    user: AuthUser = Depends(get_current_user)
 ):
     """Get doctor sentence view data for specific file and speaker where class != -1"""
-    
+    await check_patient_access(file, user, db)
+
     # Get speakers for the file
     all_speakers_stmt = select(DoctorSentenceView.speaker).distinct().where(
         DoctorSentenceView.file == file
@@ -1521,7 +1493,7 @@ async def get_doctor_rewrites(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(verify_api_key)
+    user: AuthUser = Depends(get_current_user)
 ):
     """Get doctor rewrite history with optional filters"""
     logger.debug("get_doctor_rewrites: file=%s, selected=%s, skip=%d, limit=%d", file, selected, skip, limit)
@@ -1569,7 +1541,7 @@ async def get_doctor_rewrites(
 async def update_doctor_rewrite(
     update_data: DoctorRewriteUpdateFull,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(verify_api_key)
+    user: AuthUser = Depends(get_current_user)
 ):
     """Insert new doctor rewrite log record with full data"""
     logger.debug("update_doctor_rewrite: file=%s, i=%d, i2=%d, class=%s", update_data.file, update_data.i, update_data.i2, update_data.class_)
@@ -1623,7 +1595,7 @@ async def get_doctor_rewrite_history(
     i: int,
     i2: int,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(verify_api_key)
+    user: AuthUser = Depends(get_current_user)
 ):
     """
     Get revision history for a specific sentence (file, i, i2)
@@ -1707,7 +1679,7 @@ async def get_doctor_rewrite_by_key(
     i2: int,
     class_: str,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(verify_api_key)
+    user: AuthUser = Depends(get_current_user)
 ):
     """Get specific doctor rewrite record by composite key (file, i, i2, class)"""
     
@@ -1741,7 +1713,7 @@ async def get_doctor_rewrite_by_key(
 @app.get("/api/doctor/files")
 async def get_doctor_files(
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(verify_api_key)
+    user: AuthUser = Depends(get_current_user)
 ):
     """Get list of unique files in doctor interface"""
     print("=" * 80)
@@ -1776,7 +1748,7 @@ async def get_doctor_score_average(
     speaker: Optional[str] = None,
     class_: Optional[str] = Query(None, alias="class"),
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(verify_api_key)
+    user: AuthUser = Depends(get_current_user)
 ):
     """
     Get average score grouped by file, speaker, class
@@ -1906,7 +1878,7 @@ async def get_doctor_score_summary_by_file_speaker(
     file: str,
     speaker: str,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(verify_api_key)
+    user: AuthUser = Depends(get_current_user)
 ):
     """
     Get score summary for specific file and speaker (all classes)
@@ -2041,6 +2013,188 @@ async def get_doctor_score_summary_by_file_speaker(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Doctor Interface - Score Trajectory API (B-2 feedback)
+# ──────────────────────────────────────────────────────────────────────────────
+
+@app.get("/api/doctor/scores/trajectory")
+async def get_doctor_score_trajectory(
+    speaker: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user)
+):
+    """
+    Get cumulative score trajectory over time (B-2 feedback).
+
+    Each data point = a time event (consultation or rewrite).
+    Y-value = cumulative average of all patients seen so far,
+              where each patient contributes 5 category averages,
+              and the overall = average of 5 category averages.
+
+    Time events:
+    1. Patient consultation: all original sentence scores are loaded
+    2. Rewrite: one sentence score is updated → category avg changes
+
+    At each event, re-compute:
+    - For each category: avg score across all consulted patients
+    - Overall = avg of 5 category averages
+    """
+    logger.info("[trajectory] speaker=%s", speaker)
+
+    # ── Step 1: Get all original sentences ──
+    sent_stmt = select(
+        DoctorSentenceView.file,
+        DoctorSentenceView.i,
+        DoctorSentenceView.i2,
+        DoctorSentenceView.class_,
+        DoctorSentenceView.score,
+    ).where(
+        DoctorSentenceView.class_ != '-1',
+        DoctorSentenceView.score.isnot(None),
+    )
+    if speaker:
+        sent_stmt = sent_stmt.where(DoctorSentenceView.speaker == speaker)
+
+    sent_results = (await db.execute(sent_stmt)).all()
+
+    # Build: file_sentences[file][class][(i,i2)] = original_score
+    file_sentences: Dict[str, Dict[str, Dict[tuple, float]]] = {}
+    for r in sent_results:
+        file_sentences.setdefault(r.file, {}).setdefault(r.class_, {})[(r.i, r.i2)] = r.score
+
+    # ── Step 2: Get consultation dates per file ──
+    consult_stmt = select(
+        DoctorSentenceView.file,
+        func.min(DoctorSentenceView.time).label('consultation_date'),
+    ).where(
+        DoctorSentenceView.class_ != '-1',
+        DoctorSentenceView.score.isnot(None),
+    )
+    if speaker:
+        consult_stmt = consult_stmt.where(DoctorSentenceView.speaker == speaker)
+    consult_stmt = consult_stmt.group_by(DoctorSentenceView.file)
+
+    consult_results = (await db.execute(consult_stmt)).all()
+    consultation_dates = {r.file: r.consultation_date for r in consult_results}
+
+    # ── Step 3: Get rewrite events ──
+    rewrite_stmt = select(
+        DoctorRewriteLog.file,
+        DoctorRewriteLog.i,
+        DoctorRewriteLog.i2,
+        DoctorRewriteLog.class_,
+        DoctorRewriteLog.score,
+        DoctorRewriteLog.original_score,
+        DoctorRewriteLog.time,
+    )
+    if speaker:
+        rewrite_stmt = rewrite_stmt.where(DoctorRewriteLog.speaker == speaker)
+    rewrite_stmt = rewrite_stmt.order_by(DoctorRewriteLog.time)
+
+    rewrite_results = (await db.execute(rewrite_stmt)).all()
+
+    # ── Step 4: Build timeline events ──
+    events = []
+
+    # Consultation events
+    for file, consult_date in consultation_dates.items():
+        events.append({
+            "type": "consultation",
+            "time": consult_date,
+            "file": file,
+        })
+
+    # Rewrite events (only if score actually changed)
+    for r in rewrite_results:
+        orig = r.original_score
+        if orig is not None and abs(r.score - orig) < 0.001:
+            continue  # score didn't change, skip
+        events.append({
+            "type": "rewrite",
+            "time": r.time,
+            "file": r.file,
+            "class": r.class_,
+            "i": r.i,
+            "i2": r.i2,
+            "new_score": r.score,
+        })
+
+    events.sort(key=lambda x: x["time"])
+
+    # ── Step 5: Process timeline → cumulative trajectory ──
+    # State: current_state[file][class][(i,i2)] = effective_score
+    current_state: Dict[str, Dict[str, Dict[tuple, float]]] = {}
+    consulted_files: list = []  # ordered list of consulted files
+    trajectory = []
+    prev_overall = None
+
+    for event in events:
+        if event["type"] == "consultation":
+            file = event["file"]
+            consulted_files.append(file)
+            # Load original sentence scores for this file
+            current_state[file] = {}
+            for cls, sentences in file_sentences.get(file, {}).items():
+                current_state[file][cls] = dict(sentences)
+
+        elif event["type"] == "rewrite":
+            file = event["file"]
+            cls = event["class"]
+            key = (event["i"], event["i2"])
+            # Update sentence score (only if file already consulted)
+            if file not in current_state:
+                continue
+            if cls not in current_state[file]:
+                current_state[file][cls] = {}
+            current_state[file][cls][key] = event["new_score"]
+
+        # ── Compute cumulative average ──
+        if not consulted_files:
+            continue
+
+        # For each category, average across all consulted patients
+        class_avgs: Dict[str, float] = {}
+        for cls in ["1", "2", "3", "4", "5"]:
+            patient_scores = []
+            for f in consulted_files:
+                if f in current_state and cls in current_state[f]:
+                    scores = list(current_state[f][cls].values())
+                    if scores:
+                        patient_scores.append(sum(scores) / len(scores))
+            if patient_scores:
+                class_avgs[cls] = sum(patient_scores) / len(patient_scores)
+
+        # Overall = average of category averages
+        if class_avgs:
+            overall = sum(class_avgs.values()) / len(class_avgs)
+        else:
+            overall = None
+
+        # Skip if overall didn't change from previous point (reduce noise)
+        if overall is not None and prev_overall is not None:
+            if abs(overall - prev_overall) < 0.0001 and event["type"] == "rewrite":
+                continue
+
+        prev_overall = overall
+
+        trajectory.append({
+            "timestamp": event["time"].isoformat(),
+            "event_type": event["type"],
+            "file": event["file"],
+            "overall_score": round(overall, 4) if overall is not None else None,
+            "by_class": {k: round(v, 4) for k, v in class_avgs.items()},
+            "patients_count": len(consulted_files),
+        })
+
+    logger.info("[trajectory] Returning %d events", len(trajectory))
+
+    return {
+        "total_events": len(trajectory),
+        "speaker_filter": speaker,
+        "trajectory": trajectory,
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Doctor Interface - Sentence Scoring API
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -2055,26 +2209,15 @@ class SentenceScoringResponse(BaseModel):
 @app.post("/api/doctor/score-sentence", response_model=SentenceScoringResponse)
 async def score_sentence(
     request_data: SentenceScoringRequest,
-    api_key: str = Depends(verify_api_key)
+    user: AuthUser = Depends(get_current_user)
 ):
-    """Score a sentence using the NLP classifier. Falls back to 5.0 if NLP is unavailable."""
-    import logging as _log
-    _logger = _log.getLogger(__name__)
+    """Score a sentence.
 
-    model = CLASS_TO_MODEL.get(request_data.class_) if request_data.class_ else None
-
-    if model:
-        try:
-            result = await predict_single(request_data.sentence, model)
-            score = round(result.get("pred_1", 5.0) * 5, 2)  # scale 0-1 probability to 0-5
-        except NLPServiceError:
-            _logger.warning("NLP unavailable for score-sentence, using fallback")
-            score = 5.0
-    else:
-        score = 5.0  # No valid class provided
-
+    Placeholder: always returns 5 until the communication quality
+    scoring pipeline (Steps 6-9) is implemented.
+    """
     return SentenceScoringResponse(
-        score=score,
+        score=5,
         sentence=request_data.sentence
     )
 
@@ -2087,7 +2230,7 @@ async def get_doctor_class_distribution(
     file: Optional[str] = None,
     include_invalid: bool = Query(False, description="Include class=-1 (invalid) in results"),
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(verify_api_key)
+    user: AuthUser = Depends(get_current_user)
 ):
     """
     Get class distribution per file in doctor_sentence_view
@@ -2162,7 +2305,7 @@ async def get_doctor_class_distribution_by_file(
     file: str,
     include_invalid: bool = Query(False, description="Include class=-1 (invalid) in results"),
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(verify_api_key)
+    user: AuthUser = Depends(get_current_user)
 ):
     """
     Get detailed class distribution for a specific file
@@ -2327,7 +2470,7 @@ class AIRewriteResponse(BaseModel):
 @app.post("/api/doctor/ai-rewrite", response_model=AIRewriteResponse)
 async def generate_ai_rewrite(
     request_data: AIRewriteRequest,
-    api_key: str = Depends(verify_api_key)
+    user: AuthUser = Depends(get_current_user)
 ):
     """
     Generate AI-powered rewrite of a sentence to improve communication quality.
@@ -2548,7 +2691,7 @@ CLASS_NAMES: Dict[str, str] = {
 async def get_improvement_suggestions_by_class(
     class_: str,
     current_score: Optional[float] = Query(None, description="Current score to filter suggestions above this level"),
-    api_key: str = Depends(verify_api_key)
+    user: AuthUser = Depends(get_current_user)
 ):
     """
     Get improvement suggestions for a specific class (topic).
@@ -2616,7 +2759,7 @@ async def get_improvement_suggestions_by_class(
 @app.post("/api/doctor/improvement-suggestions")
 async def get_improvement_suggestions(
     request_data: ImprovementSuggestionsRequest,
-    api_key: str = Depends(verify_api_key)
+    user: AuthUser = Depends(get_current_user)
 ):
     """
     Get improvement suggestions for a specific class (POST version).
@@ -2678,7 +2821,7 @@ async def get_improvement_suggestions(
 
 @app.get("/api/doctor/improvement-suggestions")
 async def get_all_improvement_suggestions(
-    api_key: str = Depends(verify_api_key)
+    user: AuthUser = Depends(get_current_user)
 ):
     """
     Get all improvement suggestions for all classes.
@@ -2714,7 +2857,7 @@ async def get_patient_summaries(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(verify_api_key)
+    user: AuthUser = Depends(get_current_user)
 ):
     """Get patient summaries with optional filters"""
     print("=" * 80)
@@ -2779,14 +2922,15 @@ async def get_patient_summary_detail(
     file: str,
     speaker: str,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(verify_api_key)
+    user: AuthUser = Depends(get_current_user)
 ):
     """Get detailed patient summary for specific file and speaker"""
+    await check_patient_access(file, user, db)
     print("=" * 80)
     print("🔍 DEBUG [get_patient_summary_detail] - Input Parameters:")
     print(f"   file: {file}")
     print(f"   speaker: {speaker}")
-    
+
     # Get summary
     summary_stmt = select(PatientSummary).where(
         PatientSummary.file == file,
@@ -2845,7 +2989,7 @@ async def get_patient_scoring(
     file: Optional[str] = None,
     speaker: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(verify_api_key)
+    user: AuthUser = Depends(get_current_user)
 ):
     """Get patient scoring data"""
     print("=" * 80)
@@ -2903,7 +3047,7 @@ async def get_patient_scoring(
 async def update_patient_scoring(
     update_data: PatientScoringUpdate,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(verify_api_key)
+    user: AuthUser = Depends(get_current_user)
 ):
     """Update or create patient scoring record"""
     print("=" * 80)
@@ -2977,7 +3121,7 @@ async def get_patient_responses(
     file: Optional[str] = None,
     speaker: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(verify_api_key)
+    user: AuthUser = Depends(get_current_user)
 ):
     """Get patient question responses"""
     print("=" * 80)
@@ -3015,7 +3159,7 @@ async def get_patient_responses(
 @app.get("/api/patient/files")
 async def get_patient_files(
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(verify_api_key)
+    user: AuthUser = Depends(get_current_user)
 ):
     """Get list of unique files in patient interface"""
     print("=" * 80)
@@ -3040,7 +3184,7 @@ async def get_patient_files(
 @app.get("/api/stats/dashboard")
 async def get_dashboard_stats(
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(verify_api_key)
+    user: AuthUser = Depends(get_current_user)
 ):
     """Get overall dashboard statistics"""
     print("=" * 80)
@@ -3122,7 +3266,7 @@ class PatientResponsesUpdate(BaseModel):
 async def update_patient_responses(
     update_data: PatientResponsesUpdate,
     db: AsyncSession = Depends(get_db),
-    api_key: str = Depends(verify_api_key)
+    user: AuthUser = Depends(get_current_user)
 ):
     """Update or create patient question responses"""
     print("=" * 80)
@@ -3198,7 +3342,7 @@ class RedcapImportRequest(BaseModel):
 @app.post("/api/redcap/import")
 async def import_to_redcap(
     request_data: RedcapImportRequest,
-    api_key: str = Depends(verify_api_key)
+    user: AuthUser = Depends(get_current_user)
 ):
     """Import records to REDCap project"""
     print("=" * 80)
