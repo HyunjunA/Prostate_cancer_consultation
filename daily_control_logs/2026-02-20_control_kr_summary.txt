@@ -51,8 +51,35 @@ cp, le, ed, inc, ius). LLM이나 일반 NLP 라이브러리가 아닙니다.
    - 중간 4개 (nginx 헤더, 레이트 제한, 업로드 제한, 디버그 로그)
    - 낮음 4개 (에러 유출, 응답 헤더, Swagger, FORWARDED_ALLOW_IPS)
 
-10. 다음 단계
+10. Critical #3: 모듈식 인증 + 환자 접근 제어 구현 완료 (2026-02-20~21)
+    - auth/ 패키지 신규 생성 (12개 파일)
+      * base.py: AuthUser dataclass + AuthBackend Protocol
+      * registry.py: AUTH_MODE 환경변수로 백엔드 선택 (lru_cache)
+      * access_control.py: check_patient_access() + get_accessible_patient_ids()
+      * models.py: AuthUser, AuthAPIKey, PatientAccess (SQLAlchemy)
+      * schemas.py: Pydantic 요청/응답 모델
+      * admin_routes.py: 관리 API (사용자/키/환자접근/로그인/me/mode)
+      * backends/api_key.py: 모듈 A — 기존 단일 키 (기본값, 하위 호환)
+      * backends/multi_key.py: 모듈 B — 사용자별 API 키 (DB 기반)
+      * backends/jwt_auth.py: 모듈 C — JWT Bearer 토큰
+      * backends/oauth2.py: 모듈 D — 외부 IdP (Google/Okta/Azure AD)
+    - 기존 파일 8개 수정
+      * main.py, routes_transcript.py, routes_nlp.py, routes_surveys.py:
+        verify_api_key → get_current_user + check_patient_access 교체
+      * database_schema.sql: auth_user, auth_api_key, patient_access 3개 테이블 + 4개 인덱스
+      * docker-compose.yml: AUTH_MODE 환경변수 추가
+      * .env.example: AUTH_MODE + OAuth2/JWT 설정 변수 추가
+      * requirements.txt: python-jose[cryptography] 추가
+      * init_db.py: auth 모델 import 추가 (create_all 시 테이블 생성)
+    - DB 테이블 3개: auth_user, auth_api_key, patient_access
+    - AUTH_MODE=multi_key로 Docker 재빌드 + 테스트 완료
+      * admin 사용자 생성 (superuser)
+      * 기존 API 키(sk_live_...) 해시로 등록 → 인증 성공 확인
+      * /api/auth/me, /api/patient/summaries 등 정상 동작 확인
+    - selectinload 버그 수정: multi_key 백엔드에서 async lazy loading 에러 → selectinload 적용
+
+11. 다음 단계 (업데이트)
+    - [해결] 치명: 환자별 접근 제어 구현 (#3) → Critical #3으로 구현 완료
     - 치명: 설문 엔드포인트에 인증 추가 (#6)
-    - 치명: 환자별 접근 제어 구현 (#3)
     - 높음: 설문 입력 XSS 정제 (#18)
     - 높음: API 키를 서버 측 프록시로 이동 (#11)

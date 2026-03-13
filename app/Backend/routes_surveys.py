@@ -387,17 +387,17 @@ Survey API Routes - Flexible endpoint for receiving survey submissions
 
 from typing import Dict, Any, Optional, List
 from datetime import datetime, date
-import hmac
 import json
 import os
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
 from sqlalchemy import select, func, and_, desc
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from auth import get_current_user
 from db import get_db
 from models import SurveySubmissionLog
 
@@ -405,27 +405,12 @@ from models import SurveySubmissionLog
 load_dotenv()
 
 # ──────────────────────────────────────────────────────────────────────────────
-# API Key verification
-# ──────────────────────────────────────────────────────────────────────────────
-_API_KEY = os.environ["API_KEY"]
-_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
-
-
-async def _verify_api_key(api_key: str = Depends(_api_key_header)):
-    if api_key is None:
-        raise HTTPException(status_code=403, detail="Missing API Key")
-    if not hmac.compare_digest(api_key, _API_KEY):
-        raise HTTPException(status_code=403, detail="Invalid API Key")
-    return api_key
-
-
-# ──────────────────────────────────────────────────────────────────────────────
 # Router
 # ──────────────────────────────────────────────────────────────────────────────
 router = APIRouter(
     prefix="/api/surveys",
     tags=["Surveys"],
-    dependencies=[Depends(_verify_api_key)],
+    dependencies=[Depends(get_current_user)],
 )
 
 

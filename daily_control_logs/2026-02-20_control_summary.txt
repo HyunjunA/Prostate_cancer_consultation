@@ -51,8 +51,32 @@ Feb 20th, 2026:
    - 4 Medium (nginx headers, rate limiting, upload limits, debug logs)
    - 4 Low (error leak, response headers, Swagger, FORWARDED_ALLOW_IPS)
 
-10. Next Steps
+10. Critical #3: Modular Authentication + Patient Access Control — Implemented (2026-02-20~21)
+    - Created auth/ package (12 new files)
+      * base.py: AuthUser dataclass + AuthBackend Protocol
+      * registry.py: AUTH_MODE env var selects backend (lru_cache)
+      * access_control.py: check_patient_access() + get_accessible_patient_ids()
+      * models.py: AuthUser, AuthAPIKey, PatientAccess (SQLAlchemy)
+      * schemas.py: Pydantic request/response models
+      * admin_routes.py: Admin API (users/keys/patient-access/login/me/mode)
+      * backends/api_key.py: Module A — existing single key (default, backward compatible)
+      * backends/multi_key.py: Module B — per-user API keys (DB-based)
+      * backends/jwt_auth.py: Module C — JWT Bearer tokens
+      * backends/oauth2.py: Module D — external IdP (Google/Okta/Azure AD)
+    - Modified 9 existing files
+      * main.py, routes_transcript.py, routes_nlp.py, routes_surveys.py:
+        verify_api_key → get_current_user + check_patient_access
+      * database_schema.sql: 3 auth tables + 4 indexes
+      * docker-compose.yml: AUTH_MODE env var added
+      * .env.example: AUTH_MODE + OAuth2/JWT config vars
+      * requirements.txt: python-jose[cryptography] added
+      * init_db.py: auth model imports for create_all
+    - 3 DB tables: auth_user, auth_api_key, patient_access
+    - Docker rebuild + test with AUTH_MODE=multi_key — all endpoints verified
+    - Bug fix: async lazy loading in multi_key backend → selectinload applied
+
+11. Next Steps (Updated)
+    - [Resolved] Critical: Implement patient-level access control (#3) → Completed via Critical #3
     - Critical: Add authentication to survey endpoints (#6)
-    - Critical: Implement patient-level access control (#3)
     - High: Sanitize survey input for XSS (#18)
     - High: Move API key to server-side proxy (#11)

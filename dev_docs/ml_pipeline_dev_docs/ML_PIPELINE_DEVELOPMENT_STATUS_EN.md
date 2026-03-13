@@ -1,6 +1,6 @@
 # Pipeline Implementation Status Analysis
 
-> Last updated: 2026-02-19
+> Last updated: 2026-02-26
 
 ---
 
@@ -153,8 +153,13 @@ Main Pipeline:                                   x End-to-end orchestrator
                                                   each complete, but integrated
                                                   orchestration is not implemented)
 
-Testing:                - test_transcript_pipeline.sh
-                        (pipeline automated test: 10/10 passed)
+Testing:                Comprehensive test suite implemented (2026-02-26)
+                        - Backend unit/integration: 559 tests (pytest)
+                        - Backend E2E: 24 tests (Docker live)
+                        - Frontend unit/integration: 279 tests (Jest)
+                        - Frontend E2E: 32 tests (Playwright)
+                        - test_transcript_pipeline.sh: 10/10
+                        - Total: 894 tests — all passing
 ```
 
 **Conclusion:** Both the Process Manager (`transcript_service.py` + `routes_transcript.py`) and State Manager (`transcript_analysis_log` table + DB storage/query/fallback) are **fully implemented**. The entire functionality of `process-data-guille.R` has been migrated to the Backend API, and analysis results are dual-stored in both the file system and DB. **The only remaining major gap is File Management** (automating the conversion from TurboScribe CSV to NLP input format).
@@ -318,6 +323,80 @@ SID 33 (8).csv     ──>    processed_transcripts       manual_scores(cp).csv
 > Going forward, new transcript analyses should use the Backend API.
 
 **Currently missing:** There is no automation code to convert Ella's TurboScribe CSV (`SID 33 (8).csv`) to Michael's input format (`processed_transcripts_sid-01.xlsx`). This is exactly what the **File Management** module in the Pipeline Architecture is supposed to handle.
+
+---
+
+## Test Infrastructure (Implemented 2026-02-26)
+
+### Comprehensive Test Summary
+
+| Area | Framework | Tests | Docker Required |
+|------|-----------|-------|----------------|
+| Backend Unit/Integration | pytest + pytest-asyncio + aiosqlite | 559 | No (in-memory SQLite) |
+| Backend E2E | pytest + httpx | 24 | Yes |
+| Frontend Unit/Integration | Jest + React Testing Library + MSW | 279 | No |
+| Frontend E2E | Playwright | 32 | Yes |
+| Pipeline Shell | test_transcript_pipeline.sh | 10 | Yes |
+| **Total** | | **894** | |
+
+### Running Tests
+
+```bash
+# Backend (no Docker required)
+cd app/Backend
+python -m pytest tests/ -v --tb=short --ignore=tests/e2e
+
+# Frontend (no Docker required)
+cd app/Webapp
+npm test
+
+# E2E (requires Docker — all 8 containers running)
+python -m pytest tests/e2e/ -v -m e2e
+npx playwright test --config=e2e/playwright.config.ts
+```
+
+### Manual API Testing (curl commands)
+
+When Docker containers are running, you can test the NLP pipeline directly:
+
+#### 1) NLP Service Health Check
+
+```bash
+curl -s http://localhost:8000/api/nlp/health \
+  -H "X-API-Key: YOUR_API_KEY" | python3 -m json.tool
+```
+
+#### 2) Single Sentence — All 5 Models
+
+```bash
+curl -s -X POST http://localhost:8000/api/nlp/predict/all \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "You have a low risk of cancer progression."}' | python3 -m json.tool
+```
+
+#### 3) Full Pipeline Analysis (xlsx file)
+
+```bash
+# Run analysis with the example file
+curl -s -X POST http://localhost:8000/api/transcript/analyze \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -F "file=@prediction_pipeline_and_results/processed_transcripts_sid-01.xlsx" \
+  -F "top_n=5" \
+  -F "context_window=3" | python3 -m json.tool
+
+# Download result xlsx
+curl -s http://localhost:8000/api/transcript/download/sid-01 \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -o sid-01_predictions.xlsx
+```
+
+#### 4) Analysis History Query
+
+```bash
+curl -s http://localhost:8000/api/transcript/history/sid-01 \
+  -H "X-API-Key: YOUR_API_KEY" | python3 -m json.tool
+```
 
 ---
 

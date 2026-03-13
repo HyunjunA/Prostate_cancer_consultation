@@ -2519,9 +2519,9 @@ api_call_test.rest 기반으로 45개 이상의 API 테스트를 실행하여 �
 잔여 취약점 (14개 미해결)
 ────────────────────────────────────────────────────────────────────────────────
 
-치명 (2개):
+치명 (1개 미해결, 1개 해결):
   #6  설문 엔드포인트 인증 없음 — API 키 요구 추가
-  #3  환자 데이터 접근 제어 — 환자별 권한 구현
+  #3  [해결] 환자 데이터 접근 제어 — Critical #3으로 구현 완료 (아래 섹션 참조)
 
 높음 (4개):
   #18 저장형 XSS (설문 제출) — 사용자 입력 정제/이스케이프
@@ -2540,3 +2540,69 @@ api_call_test.rest 기반으로 45개 이상의 API 테스트를 실행하여 �
   #15 응답 헤더 민감 데이터 — 내부 헤더 제거
   #10 FastAPI 문서 프로덕션 노출 — /docs 및 /openapi.json 비활성화
   #17 FORWARDED_ALLOW_IPS=* — 신뢰 프록시만 허용
+
+
+================================================================================
+[추가 섹션] Critical #3: 모듈식 인증 + 환자 접근 제어 구현 (2026-02-20~21)
+================================================================================
+
+개요:
+  단일 공유 API 키 → 4가지 인증 모듈 + 환자별 접근 제어 시스템 구현.
+  AUTH_MODE 환경변수로 전환 가능. 기존 방식(api_key)이 기본값으로 하위 호환 유지.
+
+4가지 인증 모듈:
+  A. api_key (기본값) — 기존 단일 X-API-Key. superuser로 동작, 접근 제어 우회. DB 불필요.
+  B. multi_key — 사용자별 고유 API 키. SHA-256 해시로 DB 저장. X-API-Key 헤더 유지.
+  C. jwt — 로그인(POST /api/auth/login) → JWT 토큰 → Authorization: Bearer 인증.
+  D. oauth2 — Google/Okta/Azure AD 외부 IdP 연동. OIDC/JWKS 검증. 자동 사용자 생성.
+
+신규 파일 (12개):
+  auth/__init__.py          — get_current_user FastAPI 의존성
+  auth/base.py              — AuthUser dataclass + AuthBackend Protocol
+  auth/registry.py          — AUTH_MODE → 백엔드 선택 (lru_cache)
+  auth/access_control.py    — check_patient_access() + get_accessible_patient_ids()
+  auth/models.py            — AuthUser, AuthAPIKey, PatientAccess (SQLAlchemy 모델)
+  auth/schemas.py           — Pydantic 요청/응답 모델
+  auth/admin_routes.py      — 관리 API: 사용자/키/환자접근/로그인/me/mode
+  auth/backends/__init__.py — 패키지 init
+  auth/backends/api_key.py  — 모듈 A: 기존 단일 API 키
+  auth/backends/multi_key.py — 모듈 B: 사용자별 API 키
+  auth/backends/jwt_auth.py — 모듈 C: JWT Bearer 토큰
+  auth/backends/oauth2.py   — 모듈 D: OAuth2 외부 IdP
+
+수정된 파일 (9개):
+  main.py               — verify_api_key 제거 → get_current_user + check_patient_access
+  routes_transcript.py   — _verify_api_key 제거 → get_current_user + check_patient_access
+  routes_nlp.py          — _verify_api_key 제거 → get_current_user
+  routes_surveys.py      — _verify_api_key 제거 → get_current_user
+  database_schema.sql    — auth_user, auth_api_key, patient_access 3개 테이블 + 4개 인덱스
+  docker-compose.yml     — AUTH_MODE 환경변수 추가
+  .env.example           — AUTH_MODE + OAuth2/JWT 설정 변수 추가
+  requirements.txt       — python-jose[cryptography] 추가
+  init_db.py             — auth 모델 import 추가 (create_all 시 테이블 생성)
+
+DB 테이블 3개:
+  auth_user              — 사용자 (id, username, email, password_hash, role, is_superuser 등)
+  auth_api_key           — API 키 (user_id FK, key_hash, label, is_active, expires_at 등)
+  patient_access         — 환자 접근 권한 (user_id FK, patient_id, access_type, UNIQUE 제약)
+
+핵심 설계:
+  - AuthUser dataclass가 모든 모듈의 공통 반환 타입
+  - 모듈 A는 is_superuser=True → check_patient_access()에서 즉시 return (오버헤드 제로)
+  - 모듈 B/C/D는 DB 조회 기반 사용자 인증 + patient_access 테이블 기반 접근 제어
+  - 접근 유형 계층: read < write < admin
+
+버그 수정:
+  - multi_key 백엔드: async session에서 lazy loading 불가 → selectinload 적용
+
+검증 (AUTH_MODE=multi_key):
+  - Docker 재빌드 + 전체 서비스 기동
+  - DB 자동 생성 (database_schema.sql → 3개 auth 테이블 포함)
+  - admin 사용자 + 기존 API 키 해시 등록
+  - /api/auth/mode → {"auth_mode": "multi_key"} 확인
+  - /api/auth/me → {"user_id": "1", "username": "admin", "role": "admin", "is_superuser": true}
+  - /api/patient/summaries → 200 OK, 데이터 정상 반환
+  - 웹앱 localhost:3000 → 200 OK
+
+보안 취약점 현황 업데이트:
+  - 총 20개 중 7개 해결 (기존 6개 + #3 해결), 13개 미해결

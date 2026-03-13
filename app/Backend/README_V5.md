@@ -292,6 +292,25 @@ WEB_CONCURRENCY: 1 # Number of worker processes
 
 **Production tips**: don't expose Redis or Postgres publicly; enable AUTH/TLS for Redis; store database credentials in a secret manager; tighten CORS origins; use environment-specific configurations.
 
+### Frontend Environment Variables (NEXT_PUBLIC_*)
+
+Next.js `NEXT_PUBLIC_*` variables are **build-time** injected, NOT runtime. They must be passed as `--build-arg` during `docker build`:
+
+```yaml
+# docker-compose.yml
+webapp:
+  build:
+    args:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_KEY=${API_KEY}
+```
+
+If you change these values, you must rebuild the webapp image:
+
+```bash
+docker compose build webapp && docker compose up -d webapp
+```
+
 ## Runtime Lifecycle
 
 ### Startup Sequence
@@ -385,6 +404,60 @@ curl -s -X POST "http://localhost:8000/api/studies/filter?page=1&size=10" \
 - **Defaults**: GET 120/60s, heavier POST 60/60s
 
 ## Testing & Verification
+
+### Comprehensive Test Suite (894 tests)
+
+The project has a comprehensive automated test suite covering Backend and Frontend:
+
+| Area | Framework | Tests | Docker Required |
+|------|-----------|-------|----------------|
+| Backend Unit/Integration | pytest + pytest-asyncio + aiosqlite | 559 | No |
+| Backend E2E | pytest + httpx | 24 | Yes |
+| Frontend Unit/Integration | Jest + React Testing Library + MSW | 279 | No |
+| Frontend E2E | Playwright (Chromium) | 32 | Yes |
+| **Total** | | **894** | |
+
+### Running Backend Tests
+
+```bash
+cd app/Backend
+
+# All unit/integration tests (no Docker needed — uses in-memory SQLite)
+python -m pytest tests/ -v --tb=short --ignore=tests/e2e
+
+# Run specific test categories
+python -m pytest tests/test_health.py -v              # Health endpoints
+python -m pytest tests/auth/ -v                        # Auth modules
+python -m pytest tests/test_transcript.py -v           # Transcript pipeline
+python -m pytest tests/test_surveys.py -v              # Survey + REDCap
+
+# Coverage report
+python -m pytest tests/ --cov=. --cov-report=html --ignore=tests/e2e
+
+# E2E tests (requires all Docker containers running)
+python -m pytest tests/e2e/ -v -m e2e
+```
+
+### Running Frontend Tests
+
+```bash
+cd app/Webapp
+
+# All unit/integration tests (no Docker needed)
+npm test
+
+# Specific areas
+npm run test:stores       # Zustand stores (9 stores, 35 tests)
+npm run test:hooks        # Custom hooks (6 hooks, 50 tests)
+npm run test:coverage     # Coverage report
+
+# Playwright E2E (requires Docker — webapp + backend running)
+npx playwright test --config=e2e/playwright.config.ts
+
+# Specific E2E suites
+npx playwright test e2e/selection-screen.spec.ts --config=e2e/playwright.config.ts
+npx playwright test e2e/survey-submit-flow.spec.ts --config=e2e/playwright.config.ts
+```
 
 ### Quick Verification After Startup
 
