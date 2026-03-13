@@ -1,0 +1,46 @@
+Prostate Cancer Project - Work Log (Summary)
+=================================================
+
+Terminology: "NLP" = Michael's r01-nlp-classifiers Docker (ranger Random Forest,
+5 models: cp, le, ed, inc, ius). NOT LLMs or general NLP libraries.
+
+February 26, 2026:
+
+1. Playwright E2E Tests — Survey Submit Flow Completed
+   - survey-submit-flow.spec.ts: all 7 tests passing
+   - Full flow: SDM(4Q) → DCS(16Q) → Risk Perception(5Q) → Satisfaction(1Q) → Complete
+   - SDM custom radio buttons: use evaluate() to click circle div (React onClick on div, not span)
+   - Risk Perception: 5 radio questions (not slider) — uses PatientFollowUpReportV31Re.tsx implementation
+   - Backend receipt verification: POST submit → GET /api/surveys/by-speaker/{speaker} confirms storage
+   - Strict mode fixes: .first(), exact: true, getByRole("heading")
+
+2. Total Test Count (894 tests — all passing)
+   - Backend unit/integration: 559 tests (pytest + aiosqlite in-memory)
+   - Backend E2E: 24 tests (pytest + httpx, live Docker)
+   - Frontend unit/integration: 279 tests (Jest + React Testing Library + MSW)
+   - Frontend E2E: 32 tests (Playwright — selection-screen 5 + survey-submit-flow 7 + others 20)
+   - Pipeline shell: test_transcript_pipeline.sh 10/10
+
+3. ML Pipeline API Live Verification
+   - NLP health check: all 5 models healthy
+   - predict/all: single sentence → 5-model simultaneous prediction confirmed
+   - Full pipeline: processed_transcripts_sid-01.xlsx → 341 sentences → 5-sheet xlsx output verified
+   - curl commands documented (Korean + English)
+
+4. Documentation Updates (4 files)
+   - BACKEND_IMPROVEMENTS_TODO_KR.md: marked resolved items (#2, #11, #12, #13, #16, path traversal), added test infrastructure section
+   - ML_PIPELINE_DEVELOPMENT_STATUS_KR.md + _EN.md: expanded Testing section (894 tests), added API curl commands
+   - README_V5.md: added comprehensive test suite section, NEXT_PUBLIC_* build-time injection note
+   - daily_control_logs/2026-02-26: today's work log
+
+5. Issues Found
+   - NEXT_PUBLIC_* env vars: must be injected via --build-arg at Docker build time (not runtime)
+   - surveysSecondVersion/index.tsx: 4 missing exports (build warnings, no runtime impact)
+   - PatientFollowUpReportV31Re.tsx uses its own Risk Perception implementation, not RiskPerceptionSurvey.tsx
+
+6. Next Steps
+   - Critical: Add auth to survey endpoints (#6)
+   - High: XSS sanitization for survey inputs (#18)
+   - High: Move API key to server-side proxy (#11)
+   - Restore AUTH_MODE (api_key → multi_key for production)
+   - Fix surveysSecondVersion build warnings

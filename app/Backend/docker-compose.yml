@@ -71,6 +71,7 @@ services:
       DATABASE_POOL_USE_LIFO: "true"
       REDIS_URL: redis://redis:6379/0
       NLP_API_URL: http://nlp-classifiers:8000
+      AUTH_MODE: ${AUTH_MODE:-api_key}
       CORS_ORIGINS: '["http://localhost:3000","http://localhost"]'
     ports:
       - "127.0.0.1:8000:8000"
@@ -102,18 +103,27 @@ services:
     build:
       context: ../Webapp
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+        NEXT_PUBLIC_API_KEY: ${API_KEY}
+        NEXT_PUBLIC_POSTHOG_KEY: ${POSTHOG_KEY:-}
+        NEXT_PUBLIC_POSTHOG_HOST: ${POSTHOG_HOST:-}
+        NEXT_PUBLIC_OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     container_name: prostatecancer-webapp
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: http://localhost:8000
       NEXT_PUBLIC_API_KEY: ${API_KEY}
+      NEXT_PUBLIC_POSTHOG_KEY: ${POSTHOG_KEY:-}
+      NEXT_PUBLIC_POSTHOG_HOST: ${POSTHOG_HOST:-}
+      NEXT_PUBLIC_OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     depends_on:
       backend:
         condition: service_healthy
     networks: [prostatecancer-network]
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 10

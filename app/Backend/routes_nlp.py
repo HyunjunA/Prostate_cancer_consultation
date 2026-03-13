@@ -5,16 +5,14 @@ Proxies requests from the frontend through the FastAPI backend to the
 R plumber NLP service, adding caching, rate-limiting, and validation.
 """
 
-import hmac
 import logging
-import os
 from typing import Dict, List, Optional
 
-from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 
+from auth import get_current_user
+from auth.base import AuthUser
 from nlp_service import (
     ALL_MODELS,
     CLASS_TO_MODEL,
@@ -26,25 +24,12 @@ from nlp_service import (
     predict_single,
 )
 
-load_dotenv()
 logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Router
 # ──────────────────────────────────────────────────────────────────────────────
 router = APIRouter(prefix="/api/nlp", tags=["NLP Classifier"])
-
-# API Key verification (server refuses to start if API_KEY env var is not set)
-_API_KEY = os.environ["API_KEY"]
-_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
-
-
-async def _verify_api_key(api_key: str = Depends(_api_key_header)):
-    if api_key is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Missing API Key")
-    if not hmac.compare_digest(api_key, _API_KEY):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API Key")
-    return api_key
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -143,7 +128,7 @@ async def nlp_health():
 @router.post("/predict", response_model=NLPPredictResponse)
 async def predict(
     req: NLPPredictRequest,
-    api_key: str = Depends(_verify_api_key),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Classify a single sentence with a specified model."""
     _validate_model(req.model)
@@ -157,7 +142,7 @@ async def predict(
 @router.post("/predict/batch", response_model=NLPBatchResponse)
 async def predict_batch_endpoint(
     req: NLPBatchRequest,
-    api_key: str = Depends(_verify_api_key),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Classify multiple sentences (max 50) with a specified model."""
     _validate_model(req.model)
@@ -175,7 +160,7 @@ async def predict_batch_endpoint(
 @router.post("/predict/by-class", response_model=NLPPredictResponse)
 async def predict_by_class(
     req: NLPByClassRequest,
-    api_key: str = Depends(_verify_api_key),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Classify a sentence using a class number (1-5) instead of model name."""
     model = _class_to_model(req.class_)
@@ -189,7 +174,7 @@ async def predict_by_class(
 @router.post("/predict/all", response_model=NLPAllModelsResponse)
 async def predict_all(
     req: NLPAllModelsRequest,
-    api_key: str = Depends(_verify_api_key),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Classify a single sentence against all 5 models concurrently."""
     try:
@@ -201,7 +186,7 @@ async def predict_all(
 
 @router.get("/models")
 async def list_models(
-    api_key: str = Depends(_verify_api_key),
+    user: AuthUser = Depends(get_current_user),
 ):
     """Return available NLP models and their class mappings."""
     models = []

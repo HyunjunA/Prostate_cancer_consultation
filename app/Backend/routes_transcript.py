@@ -42,7 +42,6 @@ Storage
   wrapped in try/except so a DB failure never blocks the primary response.
 """
 
-import hmac
 import json
 import logging
 import os
@@ -55,10 +54,12 @@ from typing import List, Optional
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse, Response, StreamingResponse
-from fastapi.security import APIKeyHeader
 from sqlalchemy import func as sa_func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from auth import get_current_user
+from auth.access_control import check_patient_access
+from auth.base import AuthUser
 from db import get_db
 from models import SentencePrediction, TranscriptAnalysisLog
 from transcript_service import analyze_transcript
@@ -71,18 +72,6 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────────────
 router = APIRouter(prefix="/api/transcript", tags=["Transcript Analysis"])
 
-# API Key verification (same pattern as routes_nlp.py)
-_API_KEY = os.environ["API_KEY"]
-_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
-
-
-async def _verify_api_key(api_key: str = Depends(_api_key_header)):
-    if api_key is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Missing API Key")
-    if not hmac.compare_digest(api_key, _API_KEY):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid API Key")
-    return api_key
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Endpoints
@@ -93,7 +82,7 @@ async def analyze(
     file: UploadFile = File(..., description="xlsx file with [speaker, text] columns"),
     top_n: int = Form(default=0, ge=0, le=1000, description="Number of top sentences per model (0 = all)"),
     context_window: int = Form(default=3, ge=0, le=10, description="Number of surrounding sentences for context"),
-    api_key: str = Depends(_verify_api_key),
+    user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Upload a transcript xlsx and run the full analysis pipeline.
@@ -165,7 +154,7 @@ async def analyze(
 @router.get("/download/{patient_id}")
 async def download(
     patient_id: str,
-    api_key: str = Depends(_verify_api_key),
+    user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Download the generated xlsx result file for a patient.
@@ -173,6 +162,7 @@ async def download(
     Tries the file system first; falls back to the database if the file is
     missing (e.g. after a container restart).
     """
+    await check_patient_access(patient_id, user, db)
     filepath = _xlsx_path(patient_id)
     filename = f"{patient_id}_predictions.xlsx"
     media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -221,7 +211,7 @@ async def analyze_batch(
     files: List[UploadFile] = File(..., description="One or more xlsx files with [speaker, text] columns"),
     top_n: int = Form(default=0, ge=0, le=1000, description="Number of top sentences per model (0 = all)"),
     context_window: int = Form(default=3, ge=0, le=10, description="Number of surrounding sentences for context"),
-    api_key: str = Depends(_verify_api_key),
+    user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Upload multiple transcript xlsx files and run the analysis pipeline on each.
@@ -323,7 +313,7 @@ async def analyze_batch(
 @router.get("/download-batch")
 async def download_batch(
     patient_ids: str,
-    api_key: str = Depends(_verify_api_key),
+    user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Download results for multiple patients as a single zip file.
@@ -340,6 +330,10 @@ async def download_batch(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="patient_ids parameter is required (comma-separated list)",
         )
+
+    # Check access for each patient
+    for pid in ids:
+        await check_patient_access(pid, user, db)
 
     # Collect existing result files (disk first, then DB fallback)
     found: List[tuple] = []  # (patient_id, xlsx_bytes)
@@ -521,7 +515,7 @@ async def history(
     patient_id: str,
     page: int = Query(default=1, ge=1, description="Page number"),
     size: int = Query(default=20, ge=1, le=100, description="Page size"),
-    api_key: str = Depends(_verify_api_key),
+    user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Retrieve analysis history for a patient from the database.
@@ -530,6 +524,7 @@ async def history(
     parameters used, timestamps, and source filenames.
     """
     _validate_patient_id(patient_id)
+    await check_patient_access(patient_id, user, db)
     offset = (page - 1) * size
 
     # Count total rows
@@ -588,7 +583,7 @@ async def get_predictions(
     top_n: Optional[int] = Query(default=None, ge=1, le=10000, description="Return top N per model by pred_score"),
     analysis_id: Optional[int] = Query(default=None, ge=1, description="Specific analysis run ID (default: latest)"),
     min_score: Optional[float] = Query(default=None, ge=0.0, le=1.0, description="Minimum pred_score filter"),
-    api_key: str = Depends(_verify_api_key),
+    user: AuthUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Query sentence-level NLP predictions for a patient.
@@ -597,6 +592,7 @@ async def get_predictions(
     Use query parameters to filter by model, score threshold, or specific run.
     """
     _validate_patient_id(patient_id)
+    await check_patient_access(patient_id, user, db)
     if model and model not in _VALID_MODELS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

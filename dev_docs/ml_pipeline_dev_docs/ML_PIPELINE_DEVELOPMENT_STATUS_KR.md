@@ -1,6 +1,6 @@
 # Pipeline 현재 구현 상태 분석 (Implementation Status)
 
-> Last updated: 2026-02-19
+> Last updated: 2026-02-26
 
 ---
 
@@ -152,8 +152,13 @@ Main Pipeline:                                   ✗ 전체 오케스트레이�
                                                  (Process Manager + State Manager는
                                                   각각 완료, 통합 오케스트레이션 미구현)
 
-Testing:                ✓ test_transcript_pipeline.sh
-                        (파이프라인 자동 테스트: 10/10 통과)
+Testing:                ✅ 종합 테스트 스위트 구현 완료 (2026-02-26)
+                        ✓ Backend unit/integration: 559 tests (pytest)
+                        ✓ Backend E2E: 24 tests (Docker 라이브)
+                        ✓ Frontend unit/integration: 279 tests (Jest)
+                        ✓ Frontend E2E: 32 tests (Playwright)
+                        ✓ test_transcript_pipeline.sh: 10/10
+                        ✓ 총 894 tests — 전체 통과
 ```
 
 **결론:** Process Manager(`transcript_service.py` + `routes_transcript.py`)와 State Manager(`transcript_analysis_log` 테이블 + DB 저장/조회/fallback)가 **모두 구현 완료**되었습니다. `process-data-guille.R`의 전체 기능이 Backend API로 이관되었으며, 분석 결과는 파일 시스템과 DB에 이중 저장됩니다. **남은 유일한 주요 gap은 File Management** (TurboScribe CSV → NLP 입력 형식 변환 자동화)입니다.
@@ -316,6 +321,80 @@ SID 33 (8).csv     ──→    processed_transcripts       manual_scores(cp).cs
 > 향후 새로운 transcript 분석은 Backend API를 사용하면 됩니다.
 
 **현재 빠져있는 부분:** Ella의 TurboScribe CSV (`SID 33 (8).csv`) → Michael의 입력 형식 (`processed_transcripts_sid-01.xlsx`)으로 변환하는 자동화 코드가 아직 없습니다. 이것이 바로 Pipeline Architecture의 **File Management** 모듈이 해야 할 일입니다.
+
+---
+
+## 테스트 인프라 (2026-02-26 구현 완료)
+
+### 종합 테스트 현황
+
+| 영역 | 프레임워크 | 테스트 수 | Docker 필요 |
+|------|-----------|----------|------------|
+| Backend Unit/Integration | pytest + pytest-asyncio + aiosqlite | 559 | 아니오 (in-memory SQLite) |
+| Backend E2E | pytest + httpx | 24 | 예 |
+| Frontend Unit/Integration | Jest + React Testing Library + MSW | 279 | 아니오 |
+| Frontend E2E | Playwright | 32 | 예 |
+| Pipeline Shell | test_transcript_pipeline.sh | 10 | 예 |
+| **합계** | | **894** | |
+
+### 테스트 실행 방법
+
+```bash
+# Backend (Docker 불필요)
+cd app/Backend
+python -m pytest tests/ -v --tb=short --ignore=tests/e2e
+
+# Frontend (Docker 불필요)
+cd app/Webapp
+npm test
+
+# E2E (Docker 필요 — 8개 컨테이너 모두 실행 상태에서)
+python -m pytest tests/e2e/ -v -m e2e
+npx playwright test --config=e2e/playwright.config.ts
+```
+
+### API 수동 테스트 (curl 커맨드)
+
+Docker 컨테이너가 실행 중일 때 아래 커맨드로 NLP 파이프라인을 직접 테스트할 수 있습니다.
+
+#### 1) NLP 서비스 상태 확인
+
+```bash
+curl -s http://localhost:8000/api/nlp/health \
+  -H "X-API-Key: YOUR_API_KEY" | python3 -m json.tool
+```
+
+#### 2) 단일 문장 전체 모델 예측
+
+```bash
+curl -s -X POST http://localhost:8000/api/nlp/predict/all \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "You have a low risk of cancer progression."}' | python3 -m json.tool
+```
+
+#### 3) 전체 파이프라인 분석 (xlsx 파일)
+
+```bash
+# 예제 파일로 분석 실행
+curl -s -X POST http://localhost:8000/api/transcript/analyze \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -F "file=@prediction_pipeline_and_results/processed_transcripts_sid-01.xlsx" \
+  -F "top_n=5" \
+  -F "context_window=3" | python3 -m json.tool
+
+# 결과 xlsx 다운로드
+curl -s http://localhost:8000/api/transcript/download/sid-01 \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -o sid-01_predictions.xlsx
+```
+
+#### 4) 분석 이력 조회
+
+```bash
+curl -s http://localhost:8000/api/transcript/history/sid-01 \
+  -H "X-API-Key: YOUR_API_KEY" | python3 -m json.tool
+```
 
 ---
 

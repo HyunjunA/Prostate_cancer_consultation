@@ -390,7 +390,8 @@ X-API-Key: {{api_key}}
 ############################################################
 ### 7) Doctor Interface - Update Rewrite
 # Insert new doctor rewrite record with full data
-# Always creates a new record with current timestamp
+# Always creates a new record — use unique time to avoid PK conflict
+# PK = (file, i, i2, time). Change time value on each run.
 ############################################################
 PUT {{base}}/api/doctor/rewrites
 Content-Type: {{json}}
@@ -398,10 +399,10 @@ X-API-Key: {{api_key}}
 
 {
   "file": "quality-coded-nlp-pilot-sid-1.xlsx",
-  "i": 0,
+  "i": 1,
   "i2": 1,
   "speaker": "Interviewer:",
-  "time": "2025-01-15T10:30:00",
+  "time": "{{$timestamp}}",
   "original_sentence": "original_sentence_example",
   "revised_sentence": "revised_sentence_example",
   "score": 5,
@@ -410,7 +411,7 @@ X-API-Key: {{api_key}}
 }
 
 ############################################################
-GET {{base}}/api/doctor/rewrites/quality-coded-nlp-pilot-sid-1.xlsx/0/1/1
+GET {{base}}/api/doctor/rewrites/quality-coded-nlp-pilot-sid-1.xlsx/1/1/1
 X-API-Key: {{api_key}}
 
 

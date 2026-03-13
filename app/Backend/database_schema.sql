@@ -189,3 +189,47 @@ CREATE TABLE sentence_prediction (
 CREATE INDEX idx_sp_analysis_id ON sentence_prediction(analysis_id);
 CREATE INDEX idx_sp_patient_model ON sentence_prediction(patient_id, model);
 CREATE INDEX idx_sp_pred_score ON sentence_prediction(pred_score DESC);
+
+
+-- =====================================================
+-- 6. Authentication & Access Control Tables
+-- =====================================================
+
+CREATE TABLE auth_user (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(150) NOT NULL,
+    email VARCHAR(255) UNIQUE,
+    password_hash VARCHAR(255),
+    role VARCHAR(20) NOT NULL DEFAULT 'user' CHECK (role IN ('admin','user','readonly')),
+    is_superuser BOOLEAN NOT NULL DEFAULT FALSE,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    auth_provider VARCHAR(50) NOT NULL DEFAULT 'local',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE auth_api_key (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES auth_user(id) ON DELETE CASCADE,
+    key_hash VARCHAR(255) NOT NULL,
+    label VARCHAR(100),
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    expires_at TIMESTAMP WITH TIME ZONE,
+    last_used_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE TABLE patient_access (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES auth_user(id) ON DELETE CASCADE,
+    patient_id VARCHAR(255) NOT NULL,
+    access_type VARCHAR(20) NOT NULL DEFAULT 'read' CHECK (access_type IN ('read','write','admin')),
+    granted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    granted_by INT REFERENCES auth_user(id),
+    UNIQUE(user_id, patient_id)
+);
+
+CREATE INDEX idx_auth_api_key_hash ON auth_api_key(key_hash);
+CREATE INDEX idx_auth_api_key_user ON auth_api_key(user_id);
+CREATE INDEX idx_patient_access_user ON patient_access(user_id);
+CREATE INDEX idx_patient_access_patient ON patient_access(patient_id);

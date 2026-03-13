@@ -3133,9 +3133,9 @@ Verification:
 Remaining Vulnerabilities (14 active)
 ────────────────────────────────────────────────────────────────────────────────
 
-Critical (2):
+Critical (1 active, 1 resolved):
   #6  Survey endpoints have no authentication — add API key requirement
-  #3  Patient data access control — implement per-patient authorization
+  #3  [Resolved] Patient data access control — implemented via Critical #3 (see section below)
 
 High (4):
   #18 Stored XSS in survey submissions — sanitize/escape user input
@@ -3154,3 +3154,69 @@ Low (4):
   #15 Sensitive data in response headers — remove internal headers
   #10 FastAPI docs exposed in production — disable /docs and /openapi.json
   #17 FORWARDED_ALLOW_IPS=* — restrict to trusted proxies only
+
+
+================================================================================
+[Additional Section] Critical #3: Modular Authentication + Patient Access Control (2026-02-20~21)
+================================================================================
+
+Overview:
+  Replaced single shared API key with 4 auth modules + patient-level access control.
+  Switchable via AUTH_MODE env var. Existing mode (api_key) is default for backward compat.
+
+4 Authentication Modules:
+  A. api_key (default) — existing single X-API-Key. Operates as superuser, bypasses access control. No DB needed.
+  B. multi_key — per-user unique API keys. SHA-256 hashed in DB. Same X-API-Key header.
+  C. jwt — login (POST /api/auth/login) → JWT token → Authorization: Bearer auth.
+  D. oauth2 — Google/Okta/Azure AD external IdP integration. OIDC/JWKS verification. Auto user creation.
+
+New Files (12):
+  auth/__init__.py          — get_current_user FastAPI dependency
+  auth/base.py              — AuthUser dataclass + AuthBackend Protocol
+  auth/registry.py          — AUTH_MODE → backend selection (lru_cache)
+  auth/access_control.py    — check_patient_access() + get_accessible_patient_ids()
+  auth/models.py            — AuthUser, AuthAPIKey, PatientAccess (SQLAlchemy models)
+  auth/schemas.py           — Pydantic request/response models
+  auth/admin_routes.py      — Admin API: users/keys/patient-access/login/me/mode
+  auth/backends/__init__.py — Package init
+  auth/backends/api_key.py  — Module A: existing single API key
+  auth/backends/multi_key.py — Module B: per-user API keys
+  auth/backends/jwt_auth.py — Module C: JWT Bearer tokens
+  auth/backends/oauth2.py   — Module D: OAuth2 external IdP
+
+Modified Files (9):
+  main.py               — removed verify_api_key → get_current_user + check_patient_access
+  routes_transcript.py   — removed _verify_api_key → get_current_user + check_patient_access
+  routes_nlp.py          — removed _verify_api_key → get_current_user
+  routes_surveys.py      — removed _verify_api_key → get_current_user
+  database_schema.sql    — added auth_user, auth_api_key, patient_access tables + 4 indexes
+  docker-compose.yml     — added AUTH_MODE environment variable
+  .env.example           — added AUTH_MODE + OAuth2/JWT config vars
+  requirements.txt       — added python-jose[cryptography]
+  init_db.py             — added auth model imports for create_all table creation
+
+DB Tables (3 new):
+  auth_user              — users (id, username, email, password_hash, role, is_superuser, etc.)
+  auth_api_key           — API keys (user_id FK, key_hash, label, is_active, expires_at, etc.)
+  patient_access         — patient access grants (user_id FK, patient_id, access_type, UNIQUE constraint)
+
+Core Design:
+  - AuthUser dataclass is the common return type across all modules
+  - Module A returns is_superuser=True → check_patient_access() returns immediately (zero overhead)
+  - Modules B/C/D use DB-based user auth + patient_access table for access control
+  - Access type hierarchy: read < write < admin
+
+Bug Fix:
+  - multi_key backend: async session cannot lazy-load relationships → applied selectinload
+
+Verification (AUTH_MODE=multi_key):
+  - Docker rebuild + full service startup
+  - DB auto-created (database_schema.sql → 3 auth tables included)
+  - admin user + existing API key hash registered
+  - /api/auth/mode → {"auth_mode": "multi_key"} confirmed
+  - /api/auth/me → {"user_id": "1", "username": "admin", "role": "admin", "is_superuser": true}
+  - /api/patient/summaries → 200 OK, data returned correctly
+  - Webapp localhost:3000 → 200 OK
+
+Vulnerability Status Update:
+  - Total 20 identified, 7 resolved (previous 6 + #3), 13 active

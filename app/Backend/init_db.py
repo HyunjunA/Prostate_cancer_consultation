@@ -223,6 +223,8 @@ from models import (
     PatientResponses,
     SentencePrediction,
 )
+# Auth models share the same Base — import so create_all picks them up
+from auth.models import AuthUser, AuthAPIKey, PatientAccess  # noqa: F401
 
 # ---------------------------
 # Helpers
