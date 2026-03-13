@@ -41,6 +41,8 @@ interface ConsultationScoringProps {
   onSentenceClick?: (idx: number) => void;
   /** Suggestions for improvement */
   suggestions?: ImprovementSuggestion[];
+  /** All rubric levels (1-5) for hover tooltips, regardless of current score */
+  allRubricLevels?: ImprovementSuggestion[];
   /** Callback when a suggestion is clicked */
   onSuggestionClick?: (suggestion: ImprovementSuggestion) => void;
   /** Full context text (with representative sentence to highlight) */
@@ -93,6 +95,7 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
   selectedIdx = 0,
   onSentenceClick,
   suggestions = [],
+  allRubricLevels = [],
   onSuggestionClick,
   fullContext,
   aiRewriteText,
@@ -414,95 +417,103 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
             </div>
           </div>
 
-          {/* Scale numbers and labels */}
+          {/* Scale numbers and labels - with hover rubric guidance */}
           <div className="relative mt-4" style={{ height: "80px" }}>
-            {scaleItems.map((item, index) => (
-              <div
-                key={item.value}
-                className="absolute text-center"
-                style={{
-                  left: `${(index / 5) * 100}%`,
-                  transform: "translateX(-50%)",
-                  width: "100px",
-                }}
-              >
-                <div className={`text-lg font-bold ${numberColor} mb-1`}>
-                  {item.value}
-                </div>
+            {scaleItems.map((item, index) => {
+              const rubricEntry = allRubricLevels?.find(
+                (s) => s.targetScore === item.value,
+              );
+              const isCurrentScore =
+                highlightPosition !== undefined &&
+                Math.round(highlightPosition) === item.value;
+              return (
                 <div
-                  className={`text-xs ${labelColor} whitespace-pre-line leading-tight`}
+                  key={item.value}
+                  className="absolute text-center"
+                  style={{
+                    left: `${(index / 5) * 100}%`,
+                    transform: "translateX(-50%)",
+                    width: "100px",
+                  }}
                 >
-                  {item.label}
+                  <div className="relative group inline-block">
+                    <div
+                      className={`text-lg font-bold ${numberColor} mb-1 cursor-help border-b-2 border-dashed ${
+                        isDarkMode ? "border-slate-500" : "border-slate-400"
+                      }`}
+                      style={{ paddingBottom: "2px" }}
+                    >
+                      {item.value}
+                    </div>
+                    {/* Hover tooltip: rubric guidance for this score level */}
+                    {rubricEntry && (
+                      <div
+                        className={`absolute z-50 hidden group-hover:block w-64 p-3 rounded-lg shadow-xl border text-left ${
+                          isDarkMode
+                            ? "bg-slate-800 border-slate-600 text-slate-200"
+                            : "bg-white border-slate-200 text-slate-700"
+                        }`}
+                        style={{
+                          bottom: "100%",
+                          left: "50%",
+                          transform: "translateX(-50%)",
+                          marginBottom: "8px",
+                        }}
+                      >
+                        <div
+                          className={`text-xs font-semibold mb-1 pb-1 border-b ${
+                            isDarkMode
+                              ? "border-slate-600 text-slate-300"
+                              : "border-slate-200 text-slate-500"
+                          }`}
+                        >
+                          Score {item.value}: {item.label.replace(/\n/g, " ")}
+                        </div>
+                        <p
+                          className={`text-xs leading-relaxed ${
+                            isCurrentScore
+                              ? isDarkMode
+                                ? "text-cyan-400 font-semibold"
+                                : "text-cyan-600 font-semibold"
+                              : ""
+                          }`}
+                        >
+                          {rubricEntry.suggestion}
+                        </p>
+                        {isCurrentScore && (
+                          <div
+                            className={`text-[10px] mt-1 ${
+                              isDarkMode ? "text-cyan-500" : "text-cyan-500"
+                            }`}
+                          >
+                            ← Current score
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div
+                    className={`text-xs ${labelColor} whitespace-pre-line leading-tight`}
+                  >
+                    {item.label}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
 
       <div className="text-center mt-4">
         <h2 className={`text-xl font-semibold ${subtitleColor}`}>{subtitle}</h2>
+        {allRubricLevels && allRubricLevels.length > 0 && (
+          <p className={`text-xs mt-2 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
+            Hover over score numbers above for rubric guidance
+          </p>
+        )}
       </div>
 
-      {suggestions && suggestions.length > 0 && (
-        <div
-          className={`mt-6 rounded-lg border ${sectionBorder} ${sectionBg} p-4`}
-        >
-          <div className="flex items-center gap-2 mb-3">
-            <h3
-              className={`text-sm font-semibold uppercase tracking-wider ${titleColor}`}
-            >
-              Rubric Guidance
-            </h3>
-            <span
-              className={`text-xs font-normal px-1.5 py-0.5 rounded ${
-                isDarkMode
-                  ? "bg-slate-700 text-slate-400"
-                  : "bg-slate-200 text-slate-500"
-              }`}
-              title="Source: Rubric-based scoring criteria"
-            >
-              Rubric
-            </span>
-          </div>
-          <ul className="space-y-2">
-            {suggestions.map((suggestion, idx) => (
-              <li
-                key={idx}
-                onClick={() => onSuggestionClick?.(suggestion)}
-                className={`
-                  flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all
-                  ${sectionBorder} ${itemHoverBg}
-                  ${isDarkMode ? "text-slate-300" : "text-slate-700"}
-                `}
-              >
-                <span
-                  className={`
-                    inline-flex items-center justify-center 
-                    min-w-[2rem] px-2 py-1 rounded text-xs font-bold
-                    ${getScoreBadgeColor(suggestion.targetScore, isDarkMode)}
-                  `}
-                >
-                  {suggestion.targetScore}
-                </span>
-
-                <div className="flex-1">
-                  <span
-                    className={`text-xs font-medium ${
-                      isDarkMode ? "text-amber-400" : "text-amber-600"
-                    }`}
-                  >
-                    To reach Score {suggestion.targetScore}:
-                  </span>
-                  <p className="text-sm leading-relaxed mt-1">
-                    {suggestion.suggestion}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {/* Rubric Guidance — now displayed as hover tooltips on score numbers above */}
 
       {/* {(onGenerateAIRewrite || aiRewriteText) && (
         <div

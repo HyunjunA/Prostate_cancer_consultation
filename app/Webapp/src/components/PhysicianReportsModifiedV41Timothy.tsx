@@ -1433,17 +1433,17 @@ const GridView: React.FC<GridViewProps> = ({
         </div>
       )}
 
-      {/* Topics Table - UPDATED: 5 columns as per stakeholder requirements */}
+      {/* Topics Table */}
       <div
         className={cx(
-          "border rounded-xl shadow-xl overflow-visible",
+          "border rounded-xl shadow-xl overflow-hidden",
           isDarkMode
             ? "bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700"
             : "bg-gradient-to-br from-white to-slate-50 border-slate-200",
         )}
       >
-        <div>
-          <table className="w-full table-fixed">
+        <div className="overflow-x-auto">
+          <table className="w-full">
             <thead
               className={cx(
                 "border-b",
@@ -1458,7 +1458,7 @@ const GridView: React.FC<GridViewProps> = ({
                     "px-4 py-4 text-left text-sm font-semibold uppercase tracking-wider",
                     isDarkMode ? "text-slate-300" : "text-slate-700",
                   )}
-                  style={{ width: "20%" }}
+                  style={{ width: "15%" }}
                 >
                   Topic
                 </th>
@@ -1467,27 +1467,16 @@ const GridView: React.FC<GridViewProps> = ({
                     "px-4 py-4 text-center text-sm font-semibold uppercase tracking-wider",
                     isDarkMode ? "text-slate-300" : "text-slate-700",
                   )}
-                  style={{ width: "15%" }}
+                  style={{ width: "10%" }}
                 >
-                  <div className="flex items-center gap-1 justify-center">
-                    Your Score
-                    <span
-                      className={cx(
-                        "text-xs font-normal normal-case",
-                        isDarkMode ? "text-slate-500" : "text-slate-400",
-                      )}
-                      title="Hover over score to see rubric guidance"
-                    >
-                      ⓘ
-                    </span>
-                  </div>
+                  Your Score
                 </th>
                 <th
                   className={cx(
                     "px-4 py-4 text-left text-sm font-semibold uppercase tracking-wider",
                     isDarkMode ? "text-slate-300" : "text-slate-700",
                   )}
-                  style={{ width: "65%" }}
+                  style={{ width: "40%" }}
                 >
                   <div className="flex items-center gap-1">
                     Your Highest Rated Sentence
@@ -1499,6 +1488,28 @@ const GridView: React.FC<GridViewProps> = ({
                       title="Your best performance in this category"
                     >
                       ⓘ
+                    </span>
+                  </div>
+                </th>
+                <th
+                  className={cx(
+                    "px-4 py-4 text-left text-sm font-semibold uppercase tracking-wider",
+                    isDarkMode ? "text-slate-300" : "text-slate-700",
+                  )}
+                  style={{ width: "35%" }}
+                >
+                  <div className="flex items-center gap-1">
+                    How to Improve
+                    <span
+                      className={cx(
+                        "text-xs font-normal normal-case px-1.5 py-0.5 rounded",
+                        isDarkMode
+                          ? "bg-slate-700 text-slate-400"
+                          : "bg-slate-200 text-slate-500",
+                      )}
+                      title="Actionable steps to improve your score"
+                    >
+                      Guide
                     </span>
                   </div>
                 </th>
@@ -1552,58 +1563,21 @@ const GridView: React.FC<GridViewProps> = ({
                       </button>
                     </td>
 
-                    {/* Your Score Column - Color coded with hover rubric tooltip */}
+                    {/* Your Score Column - Color coded */}
                     <td className="px-4 py-5 text-center">
                       {scoreSummaryLoading ? (
                         <div className="flex justify-center">
                           <LoadingSpinner size="sm" isDarkMode={isDarkMode} />
                         </div>
                       ) : (
-                        <div className="relative group inline-block">
-                          <span
-                            className={cx(
-                              "inline-flex items-center justify-center w-10 h-10 rounded-full text-sm font-bold cursor-help",
-                              getScoreColorForValue(data.score, isDarkMode),
-                            )}
-                          >
-                            {data.score !== null ? Math.round(data.score) : "—"}
-                          </span>
-                          {/* Hover tooltip: rubric guidance */}
-                          <div
-                            className={cx(
-                              "absolute z-50 hidden group-hover:block w-72 p-3 rounded-lg shadow-xl border text-left",
-                              "left-1/2 -translate-x-1/2 top-full mt-2",
-                              isDarkMode
-                                ? "bg-slate-800 border-slate-600 text-slate-200"
-                                : "bg-white border-slate-200 text-slate-700",
-                            )}
-                          >
-                            <div className={cx(
-                              "text-xs font-semibold mb-2 pb-1 border-b",
-                              isDarkMode ? "border-slate-600 text-slate-300" : "border-slate-200 text-slate-500",
-                            )}>
-                              Rubric Guide — {topicName}
-                            </div>
-                            {[1, 2, 3, 4, 5].map((level) => {
-                              const allSuggestions = getImprovementSuggestions(topicName, 0);
-                              const item = allSuggestions.find((s) => s.targetScore === level);
-                              const isCurrentLevel = data.score !== null && Math.round(data.score) === level;
-                              return item ? (
-                                <div
-                                  key={level}
-                                  className={cx(
-                                    "text-xs py-1",
-                                    isCurrentLevel
-                                      ? isDarkMode ? "text-cyan-400 font-semibold" : "text-cyan-600 font-semibold"
-                                      : isDarkMode ? "text-slate-400" : "text-slate-500",
-                                  )}
-                                >
-                                  <span className="font-bold">{level}:</span> {item.suggestion}
-                                </div>
-                              ) : null;
-                            })}
-                          </div>
-                        </div>
+                        <span
+                          className={cx(
+                            "inline-flex items-center justify-center w-10 h-10 rounded-full text-sm font-bold",
+                            getScoreColorForValue(data.score, isDarkMode),
+                          )}
+                        >
+                          {data.score !== null ? Math.round(data.score) : "—"}
+                        </span>
                       )}
                     </td>
 
@@ -1619,6 +1593,40 @@ const GridView: React.FC<GridViewProps> = ({
                       </div>
                     </td>
 
+                    {/* How to Improve Column */}
+                    <td className="px-4 py-5">
+                      {firstSuggestion ? (
+                        <div>
+                          <div
+                            className={cx(
+                              "text-xs font-semibold mb-1",
+                              isDarkMode ? "text-amber-400" : "text-amber-600",
+                            )}
+                          >
+                            To reach Score {firstSuggestion.targetScore}:
+                          </div>
+                          <div
+                            className={cx(
+                              "text-sm leading-relaxed line-clamp-3",
+                              isDarkMode ? "text-slate-400" : "text-slate-600",
+                            )}
+                          >
+                            {firstSuggestion.suggestion}
+                          </div>
+                        </div>
+                      ) : (
+                        <div
+                          className={cx(
+                            "text-sm font-medium",
+                            isDarkMode
+                              ? "text-emerald-400"
+                              : "text-emerald-600",
+                          )}
+                        >
+                          ✓ Maximum score achieved
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
@@ -1878,6 +1886,7 @@ const DetailView: React.FC<DetailViewProps> = ({
             selectedIdx={selectedSentenceIdx}
             onSentenceClick={(idx) => setSelectedSentenceIdx(idx)}
             suggestions={getImprovementSuggestions(topicName, data.score)}
+            allRubricLevels={getImprovementSuggestions(topicName, 0)}
             onSuggestionClick={(suggestion) => {
               setSelectedSuggestion(suggestion);
               setShowRewrite(true);
