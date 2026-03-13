@@ -35,6 +35,7 @@ import {
   AIRewriteResponse,
   TrajectoryItem,
   ScoreAverageItem,
+  RewriteStatsResponse,
 } from "@/hooks/useDoctorData";
 
 // ═══════════════════════════════════════════════════════════
@@ -203,6 +204,9 @@ interface DetailViewProps {
   scoreAverageData?: ScoreAverageItem[];
   patients?: PatientRow[];
   fetchScoreAverage?: (file?: string, speaker?: string, classFilter?: string) => void;
+  // Rewrite usage stats (B-5 feedback)
+  rewriteStats?: RewriteStatsResponse | null;
+  fetchRewriteStats?: (speaker?: string) => void;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1682,6 +1686,9 @@ const DetailView: React.FC<DetailViewProps> = ({
   scoreAverageData,
   patients: allPatients,
   fetchScoreAverage,
+  // Rewrite stats
+  rewriteStats,
+  fetchRewriteStats,
 }) => {
   const { name: topicName, patient } = selectedTopic;
   const data = topicsData[topicName];
@@ -1790,6 +1797,9 @@ const DetailView: React.FC<DetailViewProps> = ({
 
         // Refresh topic trajectory chart
         fetchScoreAverage?.(undefined, selectedSpeaker, undefined);
+
+        // Refresh rewrite usage stats
+        fetchRewriteStats?.(selectedSpeaker);
 
         setNewSentence("");
         setSelectedSuggestion(null);
@@ -2086,18 +2096,22 @@ const DetailView: React.FC<DetailViewProps> = ({
           />
         </div>
 
-        {/* Re-write Toggle */}
-        <div className="mb-3 flex gap-3">
+        {/* Re-write Toggle + History */}
+        <div className="mb-3 flex gap-3 items-center">
           <button
             onClick={() => setShowRewrite((s) => !s)}
             className={cx(
-              "px-4 py-2 rounded-md text-sm font-semibold transition",
-              isDarkMode
-                ? "bg-slate-700 text-slate-200 hover:bg-slate-600"
-                : "bg-slate-200 text-slate-800 hover:bg-slate-300",
+              "px-5 py-2.5 rounded-lg text-sm font-bold transition-all shadow-sm",
+              showRewrite
+                ? isDarkMode
+                  ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                  : "bg-slate-200 text-slate-700 hover:bg-slate-300"
+                : isDarkMode
+                  ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white hover:from-cyan-500 hover:to-blue-500 shadow-md animate-pulse"
+                  : "bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-600 hover:to-blue-600 shadow-md animate-pulse",
             )}
           >
-            {showRewrite ? "Hide Re-write" : "Show Re-write"}
+            {showRewrite ? "Hide Re-write Practice" : "Try Re-writing This Sentence"}
           </button>
 
           {/* View History Button */}
@@ -2105,15 +2119,30 @@ const DetailView: React.FC<DetailViewProps> = ({
             <button
               onClick={handleViewHistory}
               className={cx(
-                "px-4 py-2 rounded-md text-sm font-semibold transition flex items-center gap-2",
+                "px-4 py-2.5 rounded-lg text-sm font-semibold transition flex items-center gap-2",
                 isDarkMode
                   ? "bg-purple-700 text-purple-100 hover:bg-purple-600"
                   : "bg-purple-100 text-purple-800 hover:bg-purple-200",
               )}
             >
-              <span>📜</span>
               View History
             </button>
+          )}
+
+          {/* Rewrite Usage Stats Badge */}
+          {rewriteStats && rewriteStats.total_rewrites > 0 && (
+            <span
+              className={cx(
+                "ml-auto px-3 py-1.5 rounded-full text-xs font-medium",
+                isDarkMode
+                  ? "bg-emerald-900/40 text-emerald-300 border border-emerald-700"
+                  : "bg-emerald-50 text-emerald-700 border border-emerald-200",
+              )}
+            >
+              {rewriteStats.total_rewrites} rewrite{rewriteStats.total_rewrites !== 1 ? "s" : ""} practiced
+              {rewriteStats.unique_sentences_rewritten > 0 &&
+                ` across ${rewriteStats.unique_sentences_rewritten} sentence${rewriteStats.unique_sentences_rewritten !== 1 ? "s" : ""}`}
+            </span>
           )}
         </div>
 
@@ -2402,6 +2431,9 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
     // Trajectory (B-2)
     trajectoryData,
     fetchTrajectory,
+    // Rewrite Stats (B-5)
+    rewriteStats,
+    fetchRewriteStats,
   } = useDoctorData();
 
   // ═══════════════════════════════════════════════════════════
@@ -2434,7 +2466,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
     "ALL",
   );
   const [selectedSentenceIdx, setSelectedSentenceIdx] = useState(0);
-  const [showRewrite, setShowRewrite] = useState(false);
+  const [showRewrite, setShowRewrite] = useState(true);
 
   // ═══════════════════════════════════════════════════════════
   // Store value sync
@@ -2470,6 +2502,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       files.length > 0
     ) {
       fetchScoreAverage(undefined, selectedSpeaker, undefined);
+      fetchRewriteStats(selectedSpeaker);
     }
   }, [currentView, selectedSpeaker]);
 
@@ -2836,6 +2869,9 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           scoreAverageData={scoreAverage?.data}
           patients={patients}
           fetchScoreAverage={fetchScoreAverage}
+          // Rewrite usage stats (B-5 feedback)
+          rewriteStats={rewriteStats}
+          fetchRewriteStats={fetchRewriteStats}
         />
       )}
     </div>
