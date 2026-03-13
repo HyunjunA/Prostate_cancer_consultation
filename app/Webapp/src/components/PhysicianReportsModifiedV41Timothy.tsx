@@ -34,6 +34,7 @@ import {
   RewriteHistoryItem,
   AIRewriteResponse,
   TrajectoryItem,
+  ScoreAverageItem,
 } from "@/hooks/useDoctorData";
 
 // ═══════════════════════════════════════════════════════════
@@ -198,6 +199,10 @@ interface DetailViewProps {
     context?: string,
   ) => Promise<AIRewriteResponse | null>;
   aiRewriteLoading: boolean;
+  // Topic trajectory: all patients' scores for the selected topic
+  scoreAverageData?: ScoreAverageItem[];
+  patients?: PatientRow[];
+  fetchScoreAverage?: (file?: string, speaker?: string, classFilter?: string) => void;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1673,6 +1678,10 @@ const DetailView: React.FC<DetailViewProps> = ({
   // AI Rewrite props
   generateAIRewrite,
   aiRewriteLoading,
+  // Topic trajectory
+  scoreAverageData,
+  patients: allPatients,
+  fetchScoreAverage,
 }) => {
   const { name: topicName, patient } = selectedTopic;
   const data = topicsData[topicName];
@@ -1779,6 +1788,9 @@ const DetailView: React.FC<DetailViewProps> = ({
         await fetchScoreSummary(selectedFile, selectedSpeaker);
         setScoreSummaryLoading(false);
 
+        // Refresh topic trajectory chart
+        fetchScoreAverage?.(undefined, selectedSpeaker, undefined);
+
         setNewSentence("");
         setSelectedSuggestion(null);
         setAiRewriteText(null); // Clear AI rewrite after save
@@ -1867,6 +1879,181 @@ const DetailView: React.FC<DetailViewProps> = ({
             {patient.name} • File: {patient.fileName}
           </p>
         </div>
+
+        {/* Topic Trajectory: all patients' scores for this topic */}
+        {scoreAverageData && scoreAverageData.length > 0 && (() => {
+          const classNumber = TOPIC_TO_CLASS[topicName];
+          const topicScores = scoreAverageData
+            .filter((item) => item.class === classNumber && item.avg_score !== null)
+            .map((item, idx) => {
+              const isCurrentPatient = item.file === patient.fileName;
+              const patientInfo = allPatients?.find((p) => p.fileName === item.file);
+              return {
+                index: idx + 1,
+                file: item.file,
+                label: patientInfo?.name || `Patient ${idx + 1}`,
+                score: item.avg_score ?? 0,
+                isCurrentPatient,
+              };
+            })
+            .sort((a, b) => a.index - b.index);
+
+          if (topicScores.length === 0) return null;
+
+          const currentPatientScore = topicScores.find((s) => s.isCurrentPatient);
+
+          return (
+            <div
+              className={cx(
+                "mb-8 rounded-xl border p-6",
+                isDarkMode
+                  ? "bg-slate-800/40 border-slate-700"
+                  : "bg-slate-50 border-slate-200",
+              )}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3
+                  className={cx(
+                    "text-sm font-semibold uppercase tracking-wider",
+                    isDarkMode ? "text-slate-300" : "text-slate-700",
+                  )}
+                >
+                  {topicName} — All Patients Score Overview
+                </h3>
+                <span
+                  className={cx(
+                    "text-xs",
+                    isDarkMode ? "text-slate-500" : "text-slate-400",
+                  )}
+                >
+                  {topicScores.length} patients • Current:{" "}
+                  <span className="text-red-500 font-semibold">
+                    {currentPatientScore?.score?.toFixed(1) ?? "N/A"}
+                  </span>
+                </span>
+              </div>
+              <div style={{ height: "200px" }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={topicScores}
+                    margin={{ top: 8, right: 16, left: -8, bottom: 4 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke={isDarkMode ? "#334155" : "#e2e8f0"}
+                    />
+                    <XAxis
+                      dataKey="index"
+                      tick={{ fontSize: 10, fill: isDarkMode ? "#94a3b8" : "#64748b" }}
+                      tickLine={false}
+                      axisLine={{ stroke: isDarkMode ? "#475569" : "#cbd5e1" }}
+                      label={{
+                        value: "Patient #",
+                        position: "insideBottomRight",
+                        offset: -4,
+                        fontSize: 10,
+                        fill: isDarkMode ? "#64748b" : "#94a3b8",
+                      }}
+                    />
+                    <YAxis
+                      domain={[0, 5]}
+                      ticks={[0, 1, 2, 3, 4, 5]}
+                      tick={{ fontSize: 11, fill: isDarkMode ? "#94a3b8" : "#64748b" }}
+                      tickLine={false}
+                      axisLine={{ stroke: isDarkMode ? "#475569" : "#cbd5e1" }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: isDarkMode ? "#1e293b" : "#ffffff",
+                        border: `1px solid ${isDarkMode ? "#334155" : "#e2e8f0"}`,
+                        borderRadius: "8px",
+                        fontSize: 12,
+                        color: isDarkMode ? "#e2e8f0" : "#1e293b",
+                      }}
+                      formatter={(value: number, _name: string, props: any) => {
+                        const entry = props.payload;
+                        const label = entry.isCurrentPatient
+                          ? `${value.toFixed(2)} ★ Current Patient`
+                          : value.toFixed(2);
+                        return [label, "Score"];
+                      }}
+                      labelFormatter={(_: any, payload: any[]) => {
+                        const item = payload?.[0]?.payload;
+                        return item ? item.label : "";
+                      }}
+                    />
+                    <ReferenceLine
+                      y={3}
+                      stroke={isDarkMode ? "#475569" : "#cbd5e1"}
+                      strokeDasharray="6 3"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="score"
+                      stroke="#9ca3af"
+                      strokeWidth={1.5}
+                      dot={(props: any) => {
+                        const { cx: dotX, cy: dotY, payload } = props;
+                        if (payload.isCurrentPatient) {
+                          return (
+                            <circle
+                              key={`dot-${payload.index}`}
+                              cx={dotX}
+                              cy={dotY}
+                              r={8}
+                              fill="#ef4444"
+                              stroke={isDarkMode ? "#1e293b" : "#ffffff"}
+                              strokeWidth={3}
+                            />
+                          );
+                        }
+                        return (
+                          <circle
+                            key={`dot-${payload.index}`}
+                            cx={dotX}
+                            cy={dotY}
+                            r={4}
+                            fill="#9ca3af"
+                            stroke={isDarkMode ? "#1e293b" : "#ffffff"}
+                            strokeWidth={2}
+                          />
+                        );
+                      }}
+                      activeDot={(props: any) => {
+                        const { cx: dotX, cy: dotY, payload } = props;
+                        return (
+                          <circle
+                            key={`active-${payload.index}`}
+                            cx={dotX}
+                            cy={dotY}
+                            r={payload.isCurrentPatient ? 10 : 6}
+                            fill={payload.isCurrentPatient ? "#ef4444" : "#6b7280"}
+                            stroke={isDarkMode ? "#1e293b" : "#ffffff"}
+                            strokeWidth={2}
+                          />
+                        );
+                      }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex items-center gap-4 mt-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block w-3 h-3 rounded-full bg-red-500" />
+                  <span className={cx("text-xs", isDarkMode ? "text-slate-400" : "text-slate-500")}>
+                    Current Patient ({patient.name})
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block w-3 h-3 rounded-full bg-gray-400" />
+                  <span className={cx("text-xs", isDarkMode ? "text-slate-400" : "text-slate-500")}>
+                    Other Patients
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Consultation Scoring - WITH AI REWRITE PROPS */}
         <div className="mb-8">
@@ -2645,6 +2832,10 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           // NEW: AI Rewrite props
           generateAIRewrite={generateAIRewrite}
           aiRewriteLoading={aiRewriteLoading}
+          // Topic trajectory: all patients' per-topic scores
+          scoreAverageData={scoreAverage?.data}
+          patients={patients}
+          fetchScoreAverage={fetchScoreAverage}
         />
       )}
     </div>
