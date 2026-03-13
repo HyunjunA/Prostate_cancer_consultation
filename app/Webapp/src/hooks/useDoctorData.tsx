@@ -239,6 +239,23 @@ export interface AllImprovementSuggestionsResponse {
 // ═══════════════════════════════════════════════════════════
 // Score Trajectory Data Type Definition (B-2 feedback)
 // ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// Rewrite Stats Data Type Definition
+// ═══════════════════════════════════════════════════════════
+export interface RewriteStatsFileItem {
+  file: string;
+  rewrite_count: number;
+  unique_sentences: number;
+  first_rewrite: string | null;
+  last_rewrite: string | null;
+}
+
+export interface RewriteStatsResponse {
+  total_rewrites: number;
+  unique_sentences_rewritten: number;
+  per_file: RewriteStatsFileItem[];
+}
+
 export interface TrajectoryItem {
   timestamp: string;
   event_type: "consultation" | "rewrite";
@@ -306,6 +323,10 @@ export const useDoctorData = () => {
   // NEW: Trajectory State (B-2 feedback)
   const [trajectoryData, setTrajectoryData] =
     useState<TrajectoryResponse | null>(null);
+
+  // NEW: Rewrite Stats State (B-5 feedback)
+  const [rewriteStats, setRewriteStats] =
+    useState<RewriteStatsResponse | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -942,6 +963,35 @@ export const useDoctorData = () => {
     }
   };
 
+  // ═══════════════════════════════════════════════════════════
+  // Rewrite Stats (B-5 feedback: track rewrite usage)
+  // ═══════════════════════════════════════════════════════════
+  const fetchRewriteStats = async (
+    speaker?: string
+  ): Promise<RewriteStatsResponse | null> => {
+    try {
+      const params = new URLSearchParams();
+      if (speaker) params.append("speaker", speaker);
+
+      const url = params.toString()
+        ? `${BASE_URL}/api/doctor/rewrites/stats?${params.toString()}`
+        : `${BASE_URL}/api/doctor/rewrites/stats`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: getHeaders(),
+      });
+
+      if (!response.ok) throw new Error("Failed to fetch rewrite stats");
+      const data: RewriteStatsResponse = await response.json();
+      setRewriteStats(data);
+      return data;
+    } catch (err) {
+      console.error("Error loading rewrite stats:", err);
+      return null;
+    }
+  };
+
   useEffect(() => {
     fetchFiles();
   }, []);
@@ -997,5 +1047,8 @@ export const useDoctorData = () => {
     // NEW: Trajectory Functions (B-2 feedback)
     trajectoryData,
     fetchTrajectory,
+    // NEW: Rewrite Stats (B-5 feedback)
+    rewriteStats,
+    fetchRewriteStats,
   };
 };

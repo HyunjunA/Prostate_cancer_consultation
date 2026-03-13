@@ -1710,6 +1710,69 @@ async def get_doctor_rewrite_by_key(
         "selected": result.selected
     }
 
+@app.get("/api/doctor/rewrites/stats")
+async def get_doctor_rewrite_stats(
+    speaker: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user)
+):
+    """Get rewrite usage statistics per speaker/file for analytics.
+
+    Returns total rewrite attempts, unique sentences rewritten, and per-file breakdown.
+    Used to track physician engagement with the rewrite learning tool.
+    """
+    base_filter = []
+    if speaker:
+        base_filter.append(DoctorRewriteLog.speaker == speaker)
+
+    # Total rewrite count
+    total_stmt = select(func.count()).select_from(DoctorRewriteLog)
+    for f in base_filter:
+        total_stmt = total_stmt.where(f)
+    total_rewrites = (await db.execute(total_stmt)).scalar() or 0
+
+    # Unique sentences rewritten
+    unique_stmt = select(
+        func.count(func.distinct(
+            func.concat(DoctorRewriteLog.file, ':', DoctorRewriteLog.i, ':', DoctorRewriteLog.i2)
+        ))
+    ).select_from(DoctorRewriteLog)
+    for f in base_filter:
+        unique_stmt = unique_stmt.where(f)
+    unique_sentences = (await db.execute(unique_stmt)).scalar() or 0
+
+    # Per-file breakdown
+    file_stmt = select(
+        DoctorRewriteLog.file,
+        func.count().label('rewrite_count'),
+        func.count(func.distinct(
+            func.concat(DoctorRewriteLog.i, ':', DoctorRewriteLog.i2)
+        )).label('unique_sentences'),
+        func.min(DoctorRewriteLog.time).label('first_rewrite'),
+        func.max(DoctorRewriteLog.time).label('last_rewrite'),
+    ).group_by(DoctorRewriteLog.file)
+    for f in base_filter:
+        file_stmt = file_stmt.where(f)
+    file_stmt = file_stmt.order_by(func.count().desc())
+
+    file_results = (await db.execute(file_stmt)).all()
+
+    return {
+        "total_rewrites": total_rewrites,
+        "unique_sentences_rewritten": unique_sentences,
+        "per_file": [
+            {
+                "file": r.file,
+                "rewrite_count": r.rewrite_count,
+                "unique_sentences": r.unique_sentences,
+                "first_rewrite": r.first_rewrite.isoformat() if r.first_rewrite else None,
+                "last_rewrite": r.last_rewrite.isoformat() if r.last_rewrite else None,
+            }
+            for r in file_results
+        ],
+    }
+
+
 @app.get("/api/doctor/files")
 async def get_doctor_files(
     db: AsyncSession = Depends(get_db),
