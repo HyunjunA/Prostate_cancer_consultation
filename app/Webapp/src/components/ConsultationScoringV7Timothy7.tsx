@@ -126,28 +126,29 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
   }, [sentences, selectedIdx, highlightedQuote]);
 
   // Process sentences for display
+  // NOTE: Currently showing only the LAST sentence. Original code commented out below.
   const displaySentences = useMemo(() => {
     if (sentences && sentences.length > 0) {
-      return sentences.map((item) => {
-        const displayText =
-          item.hasRewrite && item.revisedSentence
-            ? item.revisedSentence
-            : item.sentence;
-        const needsTrunc = displayText.length > maxSentenceChars;
-        const truncated = needsTrunc
-          ? `${displayText.slice(0, maxSentenceChars)}…`
-          : displayText;
-        return {
-          originalText: item.sentence,
+      // Show only the last sentence
+      const lastItem = sentences[sentences.length - 1];
+      // Always show original sentence (rewrite is learning tool only, never replaces original)
+      const displayText = lastItem.sentence;
+      const needsTrunc = displayText.length > maxSentenceChars;
+      const truncated = needsTrunc
+        ? `${displayText.slice(0, maxSentenceChars)}…`
+        : displayText;
+      return [
+        {
+          originalText: lastItem.sentence,
           displayText: displayText,
           truncatedText: truncated,
           isTruncated: needsTrunc,
-          hasRewrite: item.hasRewrite,
-          score: item.hasRewrite ? item.revisedScore : item.score,
-          originalScore: item.score,
-          revisedScore: item.revisedScore,
-        };
-      });
+          hasRewrite: lastItem.hasRewrite,
+          score: lastItem.score, // Always show original score (rewrite is learning tool only)
+          originalScore: lastItem.score,
+          revisedScore: lastItem.revisedScore,
+        },
+      ];
     }
 
     if (highlightedQuote) {
@@ -172,6 +173,54 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
     return [];
   }, [sentences, highlightedQuote, maxSentenceChars]);
 
+  // ── ORIGINAL displaySentences (all sentences) ──────────────────────
+  // const displaySentences = useMemo(() => {
+  //   if (sentences && sentences.length > 0) {
+  //     return sentences.map((item) => {
+  //       const displayText =
+  //         item.hasRewrite && item.revisedSentence
+  //           ? item.revisedSentence
+  //           : item.sentence;
+  //       const needsTrunc = displayText.length > maxSentenceChars;
+  //       const truncated = needsTrunc
+  //         ? `${displayText.slice(0, maxSentenceChars)}…`
+  //         : displayText;
+  //       return {
+  //         originalText: item.sentence,
+  //         displayText: displayText,
+  //         truncatedText: truncated,
+  //         isTruncated: needsTrunc,
+  //         hasRewrite: item.hasRewrite,
+  //         score: item.score, // Always show original score
+  //         originalScore: item.score,
+  //         revisedScore: item.revisedScore,
+  //       };
+  //     });
+  //   }
+  //
+  //   if (highlightedQuote) {
+  //     const needsTrunc = highlightedQuote.length > maxSentenceChars;
+  //     const truncated = needsTrunc
+  //       ? `${highlightedQuote.slice(0, maxSentenceChars)}…`
+  //       : highlightedQuote;
+  //     return [
+  //       {
+  //         originalText: highlightedQuote,
+  //         displayText: highlightedQuote,
+  //         truncatedText: truncated,
+  //         isTruncated: needsTrunc,
+  //         hasRewrite: false,
+  //         score: undefined,
+  //         originalScore: undefined,
+  //         revisedScore: undefined,
+  //       },
+  //     ];
+  //   }
+  //
+  //   return [];
+  // }, [sentences, highlightedQuote, maxSentenceChars]);
+  // ── END ORIGINAL ───────────────────────────────────────────────────
+
   // Highlight the selected sentence in full context
   const highlightedContext = useMemo(() => {
     if (!fullContext || !selectedSentence) return null;
@@ -193,16 +242,16 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
   const titleColor = isDarkMode ? "text-gray-100" : "text-gray-800";
   const leftLabelColor = isDarkMode ? "text-gray-200" : "text-gray-700";
   const numberColor = isDarkMode ? "text-gray-100" : "text-gray-800";
-  const labelColor = isDarkMode ? "text-gray-300" : "text-gray-700";
-  const subtitleColor = isDarkMode ? "text-gray-200" : "text-gray-700";
+  const labelColor = isDarkMode ? "text-gray-200" : "text-gray-800";
+  const subtitleColor = isDarkMode ? "text-gray-100" : "text-gray-800";
   const barColor = isDarkMode ? "bg-blue-400" : "bg-blue-600";
   const tickColor = isDarkMode ? "#93c5fd" : "#2563eb";
 
-  // Improved bubble colors - softer, more professional
-  const bubbleBg = isDarkMode ? "bg-slate-700" : "bg-slate-50";
-  const bubbleBorder = isDarkMode ? "border-slate-600" : "border-slate-200";
-  const bubbleText = isDarkMode ? "text-slate-200" : "text-slate-700";
-  const caretClass = isDarkMode ? "border-t-slate-700" : "border-t-slate-50";
+  // Bubble colors - stronger contrast for visibility
+  const bubbleBg = isDarkMode ? "bg-slate-700" : "bg-gray-200";
+  const bubbleBorder = isDarkMode ? "border-slate-500" : "border-gray-400";
+  const bubbleText = isDarkMode ? "text-slate-100" : "text-gray-800";
+  const caretClass = isDarkMode ? "border-t-slate-700" : "border-t-gray-200";
 
   // Sentence item colors
   const itemBg = isDarkMode ? "bg-slate-800" : "bg-white";
@@ -250,152 +299,67 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
 
         {/* Scale area container */}
         <div className="flex-1 flex flex-col">
-          {/* Expanded Bubble area */}
-          <div className="relative" style={{ minHeight: "180px" }}>
-            <div
-              className="absolute"
-              style={{
-                left: `${pct}%`,
-                transform: "translateX(-50%)",
-                bottom: "8px",
-              }}
-            >
-              {/* Expanded bubble with paragraph style */}
-              <div
-                className={`${bubbleBg} ${bubbleText} rounded-xl shadow-lg border ${bubbleBorder}`}
-                style={{
-                  width: "560px",
-                  maxHeight: "160px",
-                  overflowY: "auto",
-                }}
-              >
-                {displaySentences.length > 0 ? (
-                  <div className="p-3 text-sm leading-relaxed flex gap-3">
-                    {/* Left: Selected sentence info panel */}
-                    {displaySentences[selectedIdx] && (
-                      <div
-                        className={`
-                          flex-shrink-0 pr-3 border-r flex flex-col items-center gap-1.5
-                          ${
-                            isDarkMode ? "border-slate-600" : "border-slate-200"
-                          }
-                        `}
-                        style={{ minWidth: "60px" }}
-                      >
-                        {/* Score Badge */}
-                        <span
-                          className={`
-                            inline-flex items-center justify-center 
-                            w-8 h-8 rounded text-sm font-bold
-                            ${getScoreBadgeColor(
-                              displaySentences[selectedIdx].score,
-                              isDarkMode,
-                            )}
-                          `}
-                        >
-                          {displaySentences[selectedIdx].score ?? "N/A"}
-                        </span>
-
-                        {displaySentences[selectedIdx].hasRewrite && (
-                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500 text-white font-medium">
-                            Rewritten
-                          </span>
-                        )}
-
-                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500 text-white font-medium">
-                          Selected
-                        </span>
-
-                        <span
-                          className={`text-[9px] text-center ${
-                            isDarkMode ? "text-slate-400" : "text-slate-500"
-                          }`}
-                        >
-                          {selectedIdx + 1} / {displaySentences.length}
-                        </span>
-                      </div>
+          {/* Sentence bubble — centered, not floating */}
+          <div className={`mx-auto mb-4 max-w-2xl w-full ${bubbleBg} ${bubbleText} rounded-xl shadow-lg border ${bubbleBorder}`}>
+            {displaySentences.length > 0 ? (
+              <div className="p-3 text-sm leading-relaxed flex gap-3">
+                {/* Left: Score badge */}
+                {displaySentences[selectedIdx] && (
+                  <div className={`flex-shrink-0 pr-3 border-r flex flex-col items-center gap-1.5 ${isDarkMode ? "border-slate-600" : "border-gray-300"}`}>
+                    <span className={`inline-flex items-center justify-center w-8 h-8 rounded text-sm font-bold ${getScoreBadgeColor(displaySentences[selectedIdx].score, isDarkMode)}`}>
+                      {displaySentences[selectedIdx].score ?? "N/A"}
+                    </span>
+                    {/* Commented out: Rewritten badge
+                    {displaySentences[selectedIdx].hasRewrite && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500 text-white font-medium">
+                        Rewritten
+                      </span>
                     )}
-
-                    {/* Right: Paragraph text */}
-                    <div className="flex-1">
-                      {displaySentences.map((item, idx) => {
-                        const isSelected = idx === selectedIdx;
-
-                        // Determine underline color based on state
-                        const underlineColor = item.hasRewrite
-                          ? isDarkMode
-                            ? "border-emerald-500"
-                            : "border-emerald-400"
-                          : isDarkMode
-                            ? "border-slate-500"
-                            : "border-slate-400";
-
-                        // Highlight background for selected
-                        const highlightStyle = isSelected
-                          ? isDarkMode
-                            ? "bg-cyan-900/50 rounded px-1"
-                            : "bg-cyan-100 rounded px-1"
-                          : "hover:bg-slate-200/50 rounded px-0.5";
-
-                        return (
-                          <span key={idx} className="inline">
-                            {/* The sentence text with underline */}
-                            <span
-                              onClick={() => onSentenceClick?.(idx)}
-                              className={`
-                                cursor-pointer transition-all
-                                border-b-2 border-dashed ${underlineColor}
-                                ${highlightStyle}
-                                ${
-                                  item.hasRewrite
-                                    ? isDarkMode
-                                      ? "text-emerald-400"
-                                      : "text-emerald-600"
-                                    : ""
-                                }
-                              `}
-                            >
-                              {item.hasRewrite
-                                ? item.displayText
-                                : item.originalText}
-                            </span>
-                            {/* Space between sentences */}
-                            {idx < displaySentences.length - 1 && " "}
-                          </span>
-                        );
-                      })}
-
-                      {/* Show original if rewritten - below paragraph */}
-                      {displaySentences[selectedIdx]?.hasRewrite && (
-                        <div
-                          className={`mt-2 pt-2 border-t text-[10px] line-through ${
-                            isDarkMode ? "border-slate-600" : "border-slate-200"
-                          } ${originalTextColor}`}
-                        >
-                          Original Chunk: "
-                          {displaySentences[selectedIdx].originalText.length >
-                          80
-                            ? displaySentences[selectedIdx].originalText.slice(
-                                0,
-                                80,
-                              ) + "…"
-                            : displaySentences[selectedIdx].originalText}
-                          "
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-4 text-center text-sm italic text-slate-500">
-                    No sentences available
+                    */}
                   </div>
                 )}
+                {/* Right: Sentence text */}
+                <div className="flex-1">
+                  {displaySentences.map((item, idx) => (
+                    <span key={idx} className="inline">
+                      <span
+                        onClick={() => onSentenceClick?.(idx)}
+                        className="cursor-pointer transition-all"
+                      >
+                        {item.originalText}
+                      </span>
+                      {idx < displaySentences.length - 1 && " "}
+                    </span>
+                  ))}
+                  {/* Commented out: Original sentence display
+                  {displaySentences[selectedIdx]?.hasRewrite && (
+                    <div className={`mt-2 pt-2 border-t text-[10px] line-through ${isDarkMode ? "border-slate-600" : "border-gray-300"} ${originalTextColor}`}>
+                      Original: "{displaySentences[selectedIdx].originalText.length > 80
+                        ? displaySentences[selectedIdx].originalText.slice(0, 80) + "…"
+                        : displaySentences[selectedIdx].originalText}"
+                    </div>
+                  )}
+                  */}
+                </div>
               </div>
+            ) : (
+              <div className="p-4 text-center text-sm italic text-slate-500">
+                No sentences available
+              </div>
+            )}
+          </div>
 
-              {/* Caret */}
-              <div
-                className={`mx-auto w-0 h-0 border-l-[10px] border-r-[10px] border-t-[10px] border-l-transparent border-r-transparent ${caretClass}`}
-              />
+          {/* Score arrow indicator — points down to exact position on scale bar */}
+          <div className="relative h-12 mb-1">
+            <div
+              className="absolute flex flex-col items-center -translate-x-1/2"
+              style={{ left: `${pct}%` }}
+            >
+              <span className="text-sm font-bold px-2 py-0.5 rounded bg-blue-600 text-white">
+                {highlightPosition.toFixed(1)}
+              </span>
+              <div className="w-0.5 h-3 bg-blue-600" />
+              <div className="text-blue-600 text-lg leading-none">▼</div>
             </div>
           </div>
 
@@ -450,8 +414,8 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
                       <div
                         className={`absolute z-50 hidden group-hover:block w-64 p-3 rounded-lg shadow-xl border text-left ${
                           isDarkMode
-                            ? "bg-slate-800 border-slate-600 text-slate-200"
-                            : "bg-white border-slate-200 text-slate-700"
+                            ? "bg-slate-800 border-slate-600 text-white"
+                            : "bg-gray-800 border-gray-700 text-white"
                         }`}
                         style={{
                           bottom: "100%",
@@ -463,8 +427,8 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
                         <div
                           className={`text-xs font-semibold mb-1 pb-1 border-b ${
                             isDarkMode
-                              ? "border-slate-600 text-slate-300"
-                              : "border-slate-200 text-slate-500"
+                              ? "border-slate-600 text-gray-200"
+                              : "border-gray-600 text-gray-200"
                           }`}
                         >
                           Score {item.value}: {item.label.replace(/\n/g, " ")}
@@ -507,7 +471,7 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
       <div className="text-center mt-4">
         <h2 className={`text-xl font-semibold ${subtitleColor}`}>{subtitle}</h2>
         {allRubricLevels && allRubricLevels.length > 0 && (
-          <p className={`text-xs mt-2 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
+          <p className={`text-sm mt-2 ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}>
             Hover over score numbers above for rubric guidance
           </p>
         )}

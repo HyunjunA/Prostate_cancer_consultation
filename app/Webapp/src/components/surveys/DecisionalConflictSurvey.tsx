@@ -301,7 +301,7 @@ export const DecisionalConflictSurvey: React.FC<
   onChange,
   onSubmit,
   isDark = false,
-  physicianName = "[physician_name]",
+  // physicianName removed — survey text now uses generic "your doctor" phrasing
   onTrackEvent,
 }) => {
   const answeredCount = Object.values(answers).filter((v) => v !== null).length;
@@ -326,14 +326,13 @@ export const DecisionalConflictSurvey: React.FC<
             isDark ? "text-slate-300" : "text-gray-700",
           )}
         >
-          Below are some questions regarding your recent consultation with Dr.{" "}
-          {physicianName},
+          Below are some questions regarding your recent consultation with your doctor.
         </p>
         <p
           className={cx("text-sm", isDark ? "text-slate-400" : "text-gray-600")}
         >
           Please select a response that best describes how you felt during the
-          appointment with Dr. {physicianName}.
+          appointment with your doctor.
         </p>
       </div>
 

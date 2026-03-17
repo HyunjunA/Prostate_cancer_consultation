@@ -1281,11 +1281,17 @@ const GridView: React.FC<GridViewProps> = ({
   const isLoadingSentences =
     apiLoading && (!sentences?.data || sentences.data.length === 0);
 
-  // Helper function to get representative sentence (first sentence or highest scored)
+  // Helper function to get representative sentence (last sentence)
   const getRepresentativeSentence = (data: TopicData): string => {
     if (data.sentenceDetails.length === 0) return "No sentence available";
-    // Return the first sentence as representative
-    return data.sentenceDetails[0]?.sentence || "No sentence available";
+    // Return the last sentence as representative
+    return data.sentenceDetails[data.sentenceDetails.length - 1]?.sentence || "No sentence available";
+  };
+
+  // Helper: get last sentence's score for grid display
+  const getLastSentenceScore = (data: TopicData): number | null => {
+    if (data.sentenceDetails.length === 0) return data.score;
+    return data.sentenceDetails[data.sentenceDetails.length - 1]?.score ?? data.score;
   };
 
   // Helper function to get first improvement suggestion
@@ -1533,9 +1539,10 @@ const GridView: React.FC<GridViewProps> = ({
               {ALL_TOPICS.map((topicName) => {
                 const data = topicsData[topicName];
                 const representativeSentence = getRepresentativeSentence(data);
+                const lastScore = getLastSentenceScore(data);
                 const firstSuggestion = getFirstSuggestion(
                   topicName,
-                  data.score,
+                  lastScore,
                 );
 
                 return (
@@ -1572,7 +1579,7 @@ const GridView: React.FC<GridViewProps> = ({
                       </button>
                     </td>
 
-                    {/* Your Score Column - Color coded */}
+                    {/* Your Score Column - uses last sentence score */}
                     <td className="px-4 py-5 text-center">
                       {scoreSummaryLoading ? (
                         <div className="flex justify-center">
@@ -1582,10 +1589,10 @@ const GridView: React.FC<GridViewProps> = ({
                         <span
                           className={cx(
                             "inline-flex items-center justify-center w-10 h-10 rounded-full text-sm font-bold",
-                            getScoreColorForValue(data.score, isDarkMode),
+                            getScoreColorForValue(getLastSentenceScore(data), isDarkMode),
                           )}
                         >
-                          {data.score !== null ? Math.round(data.score) : "—"}
+                          {getLastSentenceScore(data) !== null ? Math.round(getLastSentenceScore(data)!) : "—"}
                         </span>
                       )}
                     </td>
@@ -1692,7 +1699,10 @@ const DetailView: React.FC<DetailViewProps> = ({
 }) => {
   const { name: topicName, patient } = selectedTopic;
   const data = topicsData[topicName];
-  const currentSentence = data.sentenceDetails[selectedSentenceIdx];
+  // Always use last sentence (consistent with ConsultationScoring display)
+  const currentSentence = data.sentenceDetails.length > 0
+    ? data.sentenceDetails[data.sentenceDetails.length - 1]
+    : undefined;
 
   // History modal state
   const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -1757,76 +1767,43 @@ const DetailView: React.FC<DetailViewProps> = ({
     setShowRewrite(true);
   };
 
+  // Score-only handler: no DB save, just instant feedback
   const handleSaveRewrite = async () => {
     if (!newSentence.trim() || !currentSentence) return;
 
-    setSaveStatus({ status: "saving", message: "Saving..." });
+    setSaveStatus({ status: "saving", message: "Scoring..." });
     setRescoring(true);
 
     try {
       const classNumber = TOPIC_TO_CLASS[topicName];
-
       const scoreResult = await scoreSentence(newSentence, classNumber);
-      const newScore = scoreResult?.score ?? 5;
+      const newScore = scoreResult?.score ?? null;
 
       setRescoring(false);
 
-      const result = await saveRewriteWithTimestamp(
-        selectedFile,
-        selectedSpeaker,
-        currentSentence.i,
-        currentSentence.i2,
-        currentSentence.sentence,
-        newSentence,
-        newScore,
-        classNumber,
-        true,
-      );
+      setSaveStatus({
+        status: "success",
+        message: newScore !== null
+          ? `Your rewrite scored: ${newScore.toFixed(1)}`
+          : "Could not score. Please try again.",
+      });
 
-      if (result) {
-        setSaveStatus({
-          status: "success",
-          message: `Saved! New score: ${newScore}`,
-        });
-
-        await fetchRewritesFiltered(selectedFile, selectedSpeaker);
-
-        setScoreSummaryLoading(true);
-        await fetchScoreSummary(selectedFile, selectedSpeaker);
-        setScoreSummaryLoading(false);
-
-        // Refresh topic trajectory chart
-        fetchScoreAverage?.(undefined, selectedSpeaker, undefined);
-
-        // Refresh rewrite usage stats
-        fetchRewriteStats?.(selectedSpeaker);
-
-        setNewSentence("");
-        setSelectedSuggestion(null);
-        setAiRewriteText(null); // Clear AI rewrite after save
-
-        setTimeout(() => {
-          setSaveStatus({ status: "idle", message: "" });
-        }, 3000);
-      } else {
-        setSaveStatus({
-          status: "error",
-          message: "Failed to save. Please try again.",
-        });
-      }
+      setTimeout(() => {
+        setSaveStatus({ status: "idle", message: "" });
+      }, 5000);
     } catch (err) {
       setRescoring(false);
-      console.error("Error saving rewrite:", err);
+      console.error("Error scoring rewrite:", err);
       setSaveStatus({
         status: "error",
-        message: "Error occurred. Please try again.",
+        message: "Scoring failed. Please try again.",
       });
     }
   };
 
   return (
     <div className="space-y-8">
-      {/* History Modal */}
+      {/* Commented out per Ivan's feedback: no rewrite history
       <HistoryModal
         isDarkMode={isDarkMode}
         isOpen={showHistoryModal}
@@ -1834,6 +1811,7 @@ const DetailView: React.FC<DetailViewProps> = ({
         historyData={rewriteHistory}
         loading={historyLoading}
       />
+      */}
 
       {/* Back Button */}
       <button
@@ -1902,7 +1880,7 @@ const DetailView: React.FC<DetailViewProps> = ({
                 index: idx + 1,
                 file: item.file,
                 label: patientInfo?.name || `Patient ${idx + 1}`,
-                score: item.avg_score ?? 0,
+                score: item.avg_score ?? 0, // Backend now returns last sentence score
                 isCurrentPatient,
               };
             })
@@ -2065,11 +2043,15 @@ const DetailView: React.FC<DetailViewProps> = ({
           );
         })()}
 
-        {/* Consultation Scoring - WITH AI REWRITE PROPS */}
-        <div className="mb-8">
+        {/* Consultation Scoring — uses last sentence's score */}
+        <div className="mb-6">
           <ConsultationScoring
             isDarkMode={isDarkMode}
-            title={titleByScore(data.score)}
+            title={titleByScore(
+              data.sentenceDetails.length > 0
+                ? (data.sentenceDetails[data.sentenceDetails.length - 1].score ?? data.score)
+                : data.score
+            )}
             subtitle="Quality of Risk Communication"
             sentences={data.sentenceDetails.map((detail) => ({
               sentence: detail.sentence,
@@ -2078,17 +2060,24 @@ const DetailView: React.FC<DetailViewProps> = ({
               score: detail.score,
               revisedScore: detail.revisedScore,
             }))}
-            highlightPosition={data.score !== null ? data.score : 0}
+            highlightPosition={
+              data.sentenceDetails.length > 0
+                ? (data.sentenceDetails[data.sentenceDetails.length - 1].score ?? data.score ?? 0)
+                : (data.score ?? 0)
+            }
             leftLabel={leftLabelByTopic(topicName)}
             selectedIdx={selectedSentenceIdx}
             onSentenceClick={(idx) => setSelectedSentenceIdx(idx)}
-            suggestions={getImprovementSuggestions(topicName, data.score)}
+            suggestions={getImprovementSuggestions(topicName,
+              data.sentenceDetails.length > 0
+                ? (data.sentenceDetails[data.sentenceDetails.length - 1].score ?? data.score)
+                : data.score
+            )}
             allRubricLevels={getImprovementSuggestions(topicName, 0)}
             onSuggestionClick={(suggestion) => {
               setSelectedSuggestion(suggestion);
               setShowRewrite(true);
             }}
-            // NEW: AI Rewrite props
             aiRewriteText={aiRewriteText || undefined}
             aiRewriteLoading={aiRewriteLoading}
             onGenerateAIRewrite={handleGenerateAIRewrite}
@@ -2096,295 +2085,291 @@ const DetailView: React.FC<DetailViewProps> = ({
           />
         </div>
 
-        {/* Re-write Toggle + History */}
-        <div className="mb-3 flex gap-3 items-center">
-          <button
-            onClick={() => setShowRewrite((s) => !s)}
-            className={cx(
-              "px-5 py-2.5 rounded-lg text-sm font-bold transition-all shadow-sm",
-              showRewrite
-                ? isDarkMode
-                  ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                  : "bg-slate-200 text-slate-700 hover:bg-slate-300"
-                : isDarkMode
-                  ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white hover:from-cyan-500 hover:to-blue-500 shadow-md animate-pulse"
-                  : "bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-600 hover:to-blue-600 shadow-md animate-pulse",
-            )}
-          >
-            {showRewrite ? "Hide Re-write Practice" : "Try Re-writing This Sentence"}
-          </button>
-
-          {/* View History Button */}
-          {currentSentence?.hasRewrite && (
-            <button
-              onClick={handleViewHistory}
-              className={cx(
-                "px-4 py-2.5 rounded-lg text-sm font-semibold transition flex items-center gap-2",
-                isDarkMode
-                  ? "bg-purple-700 text-purple-100 hover:bg-purple-600"
-                  : "bg-purple-100 text-purple-800 hover:bg-purple-200",
-              )}
-            >
-              View History
-            </button>
+        {/* ═══ Re-write Practice Panel ═══ */}
+        <div
+          className={cx(
+            "rounded-xl mb-8 overflow-hidden",
+            isDarkMode
+              ? "bg-slate-800/60 border border-slate-600"
+              : "bg-white border border-slate-200 shadow-sm",
           )}
-
-          {/* Rewrite Usage Stats Badge */}
-          {rewriteStats && rewriteStats.total_rewrites > 0 && (
-            <span
-              className={cx(
-                "ml-auto px-3 py-1.5 rounded-full text-xs font-medium",
-                isDarkMode
-                  ? "bg-emerald-900/40 text-emerald-300 border border-emerald-700"
-                  : "bg-emerald-50 text-emerald-700 border border-emerald-200",
-              )}
-            >
-              {rewriteStats.total_rewrites} rewrite{rewriteStats.total_rewrites !== 1 ? "s" : ""} practiced
-              {rewriteStats.unique_sentences_rewritten > 0 &&
-                ` across ${rewriteStats.unique_sentences_rewritten} sentence${rewriteStats.unique_sentences_rewritten !== 1 ? "s" : ""}`}
-            </span>
-          )}
-        </div>
-
-        {/* Re-write Panel */}
-        {showRewrite && currentSentence && (
+        >
+          {/* Panel Header */}
           <div
             className={cx(
-              "border rounded-lg p-6",
+              "px-6 py-4 border-b flex items-center justify-between",
               isDarkMode
-                ? "bg-slate-800 border-slate-600"
+                ? "bg-slate-800 border-slate-700"
                 : "bg-slate-50 border-slate-200",
             )}
           >
-            <h4
-              className={cx(
-                "text-sm font-semibold uppercase tracking-wider mb-4",
-                isDarkMode ? "text-slate-300" : "text-slate-700",
-              )}
-            >
-              Re-write
-            </h4>
-
-            {selectedSuggestion && (
-              <div
+            <div className="flex items-center gap-3">
+              <h4
                 className={cx(
-                  "mb-4 p-4 rounded-lg border-l-4",
-                  isDarkMode
-                    ? "bg-cyan-900/30 border-cyan-500"
-                    : "bg-cyan-50 border-cyan-500",
+                  "text-lg font-bold",
+                  isDarkMode ? "text-slate-100" : "text-slate-900",
                 )}
               >
-                <div
-                  className={cx(
-                    "text-xs font-semibold uppercase mb-1",
-                    isDarkMode ? "text-cyan-400" : "text-cyan-600",
-                  )}
-                >
-                  Target: Score {selectedSuggestion.targetScore}
-                </div>
-                <div
-                  className={cx(
-                    "text-sm",
-                    isDarkMode ? "text-slate-300" : "text-slate-700",
-                  )}
-                >
-                  {selectedSuggestion.suggestion}
-                </div>
-              </div>
-            )}
-
-            <p
-              className={cx(
-                "text-sm mb-4",
-                isDarkMode ? "text-slate-400" : "text-slate-600",
-              )}
-            >
-              Enter an improved version of the selected sentence.
-            </p>
-
-            {/* Original Sentence */}
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-2">
-                <div
-                  className={cx(
-                    "text-xs font-semibold uppercase",
-                    isDarkMode ? "text-slate-400" : "text-slate-600",
-                  )}
-                >
-                  Original Chunk (Scored Context) [{currentSentence.i},{" "}
-                  {currentSentence.i2}]:
-                </div>
-                <div className="flex items-center gap-2">
-                  <span
-                    className={cx(
-                      "text-xs font-medium",
-                      isDarkMode ? "text-slate-400" : "text-slate-600",
-                    )}
-                  >
-                    {currentSentence.hasRewrite
-                      ? "Revised Score:"
-                      : "Current Score:"}
-                  </span>
-                  <span
-                    className={cx(
-                      "inline-flex items-center justify-center min-w-[2rem] px-2 py-1 rounded text-xs font-bold",
-                      getScoreColorForValue(
-                        currentSentence.hasRewrite
-                          ? (currentSentence.revisedScore ?? null)
-                          : (currentSentence.score ?? null),
-                        isDarkMode,
-                      ),
-                    )}
-                  >
-                    {currentSentence.hasRewrite
-                      ? (currentSentence.revisedScore ?? "N/A")
-                      : (currentSentence.score ?? "N/A")}
-                  </span>
-                </div>
-              </div>
-              <div
+                Re-write Practice
+              </h4>
+              <span
                 className={cx(
-                  "p-3 rounded-lg text-sm",
+                  "text-sm px-3 py-1 rounded-full font-medium",
                   isDarkMode
                     ? "bg-slate-700 text-slate-300"
-                    : "bg-slate-100 text-slate-700",
+                    : "bg-slate-200 text-slate-600",
                 )}
               >
-                &quot;{currentSentence.sentence}&quot;
-              </div>
+                Learning Tool
+              </span>
             </div>
+            {/* Commented out per Ivan's feedback: no history, no stats tracking
+            <div className="flex items-center gap-2">
+              {currentSentence?.hasRewrite && (
+                <button
+                  onClick={handleViewHistory}
+                  className={cx(
+                    "px-3 py-1.5 rounded-md text-xs font-medium transition",
+                    isDarkMode
+                      ? "bg-purple-800/60 text-purple-300 hover:bg-purple-700"
+                      : "bg-purple-50 text-purple-700 hover:bg-purple-100",
+                  )}
+                >
+                  View History
+                </button>
+              )}
+              {rewriteStats && rewriteStats.total_rewrites > 0 && (
+                <span
+                  className={cx(
+                    "px-3 py-1.5 rounded-full text-xs font-medium",
+                    isDarkMode
+                      ? "bg-emerald-900/40 text-emerald-300 border border-emerald-700"
+                      : "bg-emerald-50 text-emerald-700 border border-emerald-200",
+                  )}
+                >
+                  {rewriteStats.total_rewrites} rewrite{rewriteStats.total_rewrites !== 1 ? "s" : ""} across {rewriteStats.unique_sentences_rewritten} sentence{rewriteStats.unique_sentences_rewritten !== 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
+            */}
+          </div>
 
-            {/* Existing Rewrite */}
-            {currentSentence.hasRewrite && (
-              <div className="mb-4">
-                <div className="flex items-center justify-between mb-2">
+          {/* Panel Body */}
+          <div className="p-6">
+            {currentSentence ? (
+              <div className="space-y-5">
+                {/* Step 1: Original Sentence */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span
+                      className={cx(
+                        "flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold",
+                        isDarkMode
+                          ? "bg-slate-700 text-slate-200"
+                          : "bg-slate-200 text-slate-700",
+                      )}
+                    >
+                      1
+                    </span>
+                    <span
+                      className={cx(
+                        "text-base font-semibold",
+                        isDarkMode ? "text-slate-200" : "text-slate-800",
+                      )}
+                    >
+                      Original Sentence
+                    </span>
+                    <span
+                      className={cx(
+                        "inline-flex items-center justify-center min-w-[2.5rem] px-3 py-1 rounded text-sm font-bold ml-auto",
+                        getScoreColorForValue(
+                          currentSentence.score ?? null,
+                          isDarkMode,
+                        ),
+                      )}
+                    >
+                      Score: {currentSentence.score ?? "N/A"}
+                    </span>
+                  </div>
                   <div
                     className={cx(
-                      "text-xs font-semibold uppercase",
-                      isDarkMode ? "text-emerald-400" : "text-emerald-600",
-                    )}
-                  >
-                    Current Rewrite (Score: {currentSentence.revisedScore}):
-                  </div>
-                  {/* View History link in rewrite section */}
-                  <button
-                    onClick={handleViewHistory}
-                    className={cx(
-                      "text-xs font-medium underline transition-colors",
+                      "p-4 rounded-lg text-base leading-relaxed border-l-4",
                       isDarkMode
-                        ? "text-purple-400 hover:text-purple-300"
-                        : "text-purple-600 hover:text-purple-800",
+                        ? "bg-slate-700/50 text-slate-200 border-slate-500"
+                        : "bg-slate-50 text-slate-800 border-slate-300",
                     )}
                   >
-                    View all revisions →
-                  </button>
+                    &quot;{currentSentence.sentence}&quot;
+                  </div>
                 </div>
-                <div
-                  className={cx(
-                    "p-3 rounded-lg text-sm",
-                    isDarkMode
-                      ? "bg-emerald-900/30 text-emerald-300"
-                      : "bg-emerald-50 text-emerald-700",
-                  )}
-                >
-                  &quot;{currentSentence.revisedSentence}&quot;
+
+                {/* Commented out per Ivan's feedback: rewrite is feedback-only, no history/score saving
+                {currentSentence.hasRewrite && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={cx("flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold", isDarkMode ? "bg-emerald-900/60 text-emerald-300" : "bg-emerald-100 text-emerald-700")}>&#x2713;</span>
+                      <span className={cx("text-sm font-semibold", isDarkMode ? "text-emerald-400" : "text-emerald-700")}>Your latest rewrite</span>
+                      <span className={cx("inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded text-xs font-bold ml-auto", getScoreColorForValue(currentSentence.revisedScore ?? null, isDarkMode))}>
+                        Score: {currentSentence.revisedScore ?? "N/A"}
+                      </span>
+                      <button onClick={handleViewHistory} className={cx("text-xs underline transition-colors", isDarkMode ? "text-purple-400 hover:text-purple-300" : "text-purple-600 hover:text-purple-800")}>all revisions</button>
+                    </div>
+                    <div className={cx("p-4 rounded-lg text-sm leading-relaxed border-l-4", isDarkMode ? "bg-emerald-900/20 text-emerald-300 border-emerald-600" : "bg-emerald-50 text-emerald-800 border-emerald-400")}>
+                      &quot;{currentSentence.revisedSentence}&quot;
+                    </div>
+                    {currentSentence.score != null && currentSentence.revisedScore != null && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <span className={cx("text-xs font-medium", currentSentence.revisedScore > currentSentence.score ? (isDarkMode ? "text-emerald-400" : "text-emerald-600") : currentSentence.revisedScore < currentSentence.score ? (isDarkMode ? "text-red-400" : "text-red-600") : (isDarkMode ? "text-slate-400" : "text-slate-500"))}>
+                          {currentSentence.revisedScore > currentSentence.score ? `+${(currentSentence.revisedScore - currentSentence.score).toFixed(1)} improvement` : currentSentence.revisedScore < currentSentence.score ? `${(currentSentence.revisedScore - currentSentence.score).toFixed(1)} regression` : "No change in score"}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                */}
+
+                {/* Improvement hint (if rubric suggestion selected) */}
+                {selectedSuggestion && (
+                  <div
+                    className={cx(
+                      "p-4 rounded-lg border-l-4",
+                      isDarkMode
+                        ? "bg-cyan-900/20 border-cyan-500"
+                        : "bg-cyan-50 border-cyan-500",
+                    )}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span
+                        className={cx(
+                          "text-sm font-bold uppercase",
+                          isDarkMode ? "text-cyan-400" : "text-cyan-600",
+                        )}
+                      >
+                        Hint — To reach score {selectedSuggestion.targetScore}:
+                      </span>
+                      <button
+                        onClick={() => setSelectedSuggestion(null)}
+                        className={cx(
+                          "ml-auto text-sm transition-colors",
+                          isDarkMode
+                            ? "text-slate-400 hover:text-slate-200"
+                            : "text-slate-500 hover:text-slate-700",
+                        )}
+                      >
+                        dismiss
+                      </button>
+                    </div>
+                    <p
+                      className={cx(
+                        "text-base leading-relaxed",
+                        isDarkMode ? "text-slate-200" : "text-slate-800",
+                      )}
+                    >
+                      {selectedSuggestion.suggestion}
+                    </p>
+                  </div>
+                )}
+
+                {/* Step 2: Try rewriting */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span
+                      className={cx(
+                        "flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold",
+                        isDarkMode
+                          ? "bg-cyan-900/60 text-cyan-300"
+                          : "bg-cyan-100 text-cyan-700",
+                      )}
+                    >
+                      2
+                    </span>
+                    <span
+                      className={cx(
+                        "text-base font-semibold",
+                        isDarkMode ? "text-slate-200" : "text-slate-800",
+                      )}
+                    >
+                      How would you say it better?
+                    </span>
+                  </div>
+                  <textarea
+                    value={newSentence}
+                    onChange={(e) => setNewSentence(e.target.value)}
+                    placeholder="Try rephrasing the sentence above — how would you communicate this to the patient next time?"
+                    className={cx(
+                      "w-full p-4 rounded-lg border text-base leading-relaxed transition-colors focus:ring-2 focus:outline-none",
+                      isDarkMode
+                        ? "bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400 focus:ring-cyan-600 focus:border-cyan-600"
+                        : "bg-white border-slate-300 text-slate-900 placeholder-slate-400 focus:ring-cyan-400 focus:border-cyan-400",
+                    )}
+                    rows={3}
+                  />
+
+                  {/* Action row */}
+                  <div className="flex items-center gap-3 mt-3">
+                    <button
+                      onClick={handleSaveRewrite}
+                      disabled={
+                        !newSentence.trim() ||
+                        rescoring ||
+                        saveStatus.status === "saving"
+                      }
+                      className={cx(
+                        "px-5 py-2.5 rounded-lg text-sm font-semibold transition-all",
+                        !newSentence.trim() ||
+                          rescoring ||
+                          saveStatus.status === "saving"
+                          ? isDarkMode
+                            ? "bg-slate-600 text-slate-400 cursor-not-allowed"
+                            : "bg-slate-200 text-slate-500 cursor-not-allowed"
+                          : isDarkMode
+                            ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white hover:from-cyan-500 hover:to-blue-500 shadow-md"
+                            : "bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-600 hover:to-blue-600 shadow-md",
+                      )}
+                    >
+                      {rescoring
+                        ? "Scoring..."
+                        : saveStatus.status === "saving"
+                          ? "Scoring..."
+                          : "Try & Score"}
+                    </button>
+
+                    {/* Save Status inline */}
+                    {saveStatus.message && (
+                      <span
+                        className={cx(
+                          "text-sm font-medium",
+                          saveStatus.status === "success"
+                            ? isDarkMode ? "text-emerald-400" : "text-emerald-600"
+                            : saveStatus.status === "error"
+                              ? isDarkMode ? "text-red-400" : "text-red-600"
+                              : isDarkMode ? "text-slate-400" : "text-slate-500",
+                        )}
+                      >
+                        {saveStatus.message}
+                      </span>
+                    )}
+                  </div>
                 </div>
+
+                {/* Note removed per feedback */}
+              </div>
+            ) : (
+              /* Empty state */
+              <div
+                className={cx(
+                  "text-center py-10",
+                  isDarkMode ? "text-slate-400" : "text-slate-500",
+                )}
+              >
+                <p className="text-base font-medium mb-1">No sentence selected</p>
+                <p className="text-sm">
+                  Click on a sentence above to start practicing.
+                </p>
               </div>
             )}
-
-            {/* New Sentence Input */}
-            <div className="space-y-4">
-              <div>
-                <div
-                  className={cx(
-                    "text-xs font-semibold uppercase mb-2",
-                    isDarkMode ? "text-slate-400" : "text-slate-600",
-                  )}
-                >
-                  Your Revised Sentence:
-                </div>
-                <textarea
-                  value={newSentence}
-                  onChange={(e) => setNewSentence(e.target.value)}
-                  placeholder="Enter an improved way to communicate this information..."
-                  className={cx(
-                    "w-full p-4 rounded-lg border text-sm",
-                    isDarkMode
-                      ? "bg-slate-700 border-slate-600 text-slate-200 placeholder-slate-400"
-                      : "bg-white border-slate-300 text-slate-900 placeholder-slate-500",
-                  )}
-                  rows={4}
-                />
-              </div>
-
-              {/* Save Status */}
-              {saveStatus.message && (
-                <div
-                  className={cx(
-                    "p-3 rounded-lg text-sm font-medium",
-                    saveStatus.status === "success"
-                      ? isDarkMode
-                        ? "bg-emerald-900/50 text-emerald-300"
-                        : "bg-emerald-100 text-emerald-700"
-                      : saveStatus.status === "error"
-                        ? isDarkMode
-                          ? "bg-red-900/50 text-red-300"
-                          : "bg-red-100 text-red-700"
-                        : isDarkMode
-                          ? "bg-slate-700 text-slate-300"
-                          : "bg-slate-100 text-slate-600",
-                  )}
-                >
-                  {saveStatus.message}
-                </div>
-              )}
-
-              {/* Buttons */}
-              <div className="flex gap-3">
-                <button
-                  onClick={handleSaveRewrite}
-                  disabled={
-                    !newSentence.trim() ||
-                    rescoring ||
-                    saveStatus.status === "saving"
-                  }
-                  className={cx(
-                    "px-6 py-3 rounded-lg text-sm font-semibold transition-all",
-                    !newSentence.trim() ||
-                      rescoring ||
-                      saveStatus.status === "saving"
-                      ? isDarkMode
-                        ? "bg-slate-600 text-slate-400 cursor-not-allowed"
-                        : "bg-slate-200 text-slate-500 cursor-not-allowed"
-                      : isDarkMode
-                        ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white hover:from-cyan-500 hover:to-blue-500 shadow-lg"
-                        : "bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-600 hover:to-blue-600 shadow-lg",
-                  )}
-                >
-                  {rescoring
-                    ? "Analyzing..."
-                    : saveStatus.status === "saving"
-                      ? "Saving..."
-                      : "Save & Score"}
-                </button>
-
-                {selectedSuggestion && (
-                  <button
-                    onClick={() => setSelectedSuggestion(null)}
-                    className={cx(
-                      "px-4 py-3 rounded-lg text-sm font-medium transition",
-                      isDarkMode
-                        ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                        : "bg-slate-200 text-slate-700 hover:bg-slate-300",
-                    )}
-                  >
-                    Clear Target
-                  </button>
-                )}
-              </div>
-            </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
