@@ -177,13 +177,12 @@ describe("DecisionalConflictSurvey", () => {
         onChange={jest.fn()}
         onSubmit={jest.fn()}
         isDark={true}
-        physicianName="Smith"
       />
     );
 
     expect(screen.getByText("Decisional Conflict Survey")).toBeInTheDocument();
-    // "Dr. Smith" appears in two paragraphs, so use getAllByText
-    const drSmithElements = screen.getAllByText(/Dr\.\s*Smith/);
-    expect(drSmithElements.length).toBeGreaterThanOrEqual(1);
+    // Survey now uses generic "your doctor" phrasing instead of physician name
+    const doctorElements = screen.getAllByText(/your doctor/);
+    expect(doctorElements.length).toBeGreaterThanOrEqual(1);
   });
 });

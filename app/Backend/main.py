@@ -1855,39 +1855,78 @@ async def get_doctor_score_average(
     # Alias for the subquery
     lr = aliased(DoctorRewriteLog, latest_rewrite_subq, name='lr')
     
-    # Step 2: Main query with LEFT JOIN
-    # Use COALESCE: rewrite_log.score (if exists) OR sentence_view.score
-    effective_score = func.coalesce(
-        latest_rewrite_subq.c.score,
-        DoctorSentenceView.score
-    )
-    
+    # Step 2: Get the LAST sentence score (highest i, then i2) per file/speaker/class
+    # Subquery to find the max (i, i2) per group
+    last_sentence_subq = (
+        select(
+            DoctorSentenceView.file,
+            DoctorSentenceView.speaker,
+            DoctorSentenceView.class_,
+            func.max(DoctorSentenceView.i).label('max_i')
+        )
+        .where(
+            DoctorSentenceView.class_ != '-1',
+            DoctorSentenceView.score.isnot(None)
+        )
+        .group_by(
+            DoctorSentenceView.file,
+            DoctorSentenceView.speaker,
+            DoctorSentenceView.class_
+        )
+    ).subquery('last_sent')
+
+    # Get the actual last sentence row (max i, then max i2 within that i)
+    last_i2_subq = (
+        select(
+            DoctorSentenceView.file,
+            DoctorSentenceView.speaker,
+            DoctorSentenceView.class_,
+            DoctorSentenceView.i,
+            func.max(DoctorSentenceView.i2).label('max_i2')
+        )
+        .join(
+            last_sentence_subq,
+            and_(
+                DoctorSentenceView.file == last_sentence_subq.c.file,
+                DoctorSentenceView.speaker == last_sentence_subq.c.speaker,
+                DoctorSentenceView.class_ == last_sentence_subq.c.class_,
+                DoctorSentenceView.i == last_sentence_subq.c.max_i,
+            )
+        )
+        .where(
+            DoctorSentenceView.class_ != '-1',
+            DoctorSentenceView.score.isnot(None)
+        )
+        .group_by(
+            DoctorSentenceView.file,
+            DoctorSentenceView.speaker,
+            DoctorSentenceView.class_,
+            DoctorSentenceView.i
+        )
+    ).subquery('last_i2')
+
+    # Final query: join back to get the score of the last sentence
     stmt = select(
         DoctorSentenceView.file,
         DoctorSentenceView.speaker,
         DoctorSentenceView.class_,
-        func.avg(effective_score).label('avg_score'),
-        func.count(effective_score).label('count'),
-        func.min(effective_score).label('min_score'),
-        func.max(effective_score).label('max_score'),
-        # Additional stats for transparency
-        func.count(latest_rewrite_subq.c.score).label('rewritten_count')
-    ).select_from(
-        DoctorSentenceView
-    ).outerjoin(
-        latest_rewrite_subq,
+        DoctorSentenceView.score.label('avg_score'),  # Named avg_score for frontend compatibility
+        DoctorSentenceView.i,
+        DoctorSentenceView.i2,
+    ).join(
+        last_i2_subq,
         and_(
-            DoctorSentenceView.file == latest_rewrite_subq.c.file,
-            DoctorSentenceView.i == latest_rewrite_subq.c.i,
-            DoctorSentenceView.i2 == latest_rewrite_subq.c.i2,
-            DoctorSentenceView.speaker == latest_rewrite_subq.c.speaker,
-            latest_rewrite_subq.c.rn == 1  # Only latest rewrite
+            DoctorSentenceView.file == last_i2_subq.c.file,
+            DoctorSentenceView.speaker == last_i2_subq.c.speaker,
+            DoctorSentenceView.class_ == last_i2_subq.c.class_,
+            DoctorSentenceView.i == last_i2_subq.c.i,
+            DoctorSentenceView.i2 == last_i2_subq.c.max_i2,
         )
     ).where(
         DoctorSentenceView.class_ != '-1',
         DoctorSentenceView.score.isnot(None)
     )
-    
+
     # Apply filters
     if file:
         stmt = stmt.where(DoctorSentenceView.file == file)
@@ -1895,23 +1934,18 @@ async def get_doctor_score_average(
         stmt = stmt.where(DoctorSentenceView.speaker == speaker)
     if class_:
         stmt = stmt.where(DoctorSentenceView.class_ == class_)
-    
-    # Group by
-    stmt = stmt.group_by(
-        DoctorSentenceView.file,
-        DoctorSentenceView.speaker,
-        DoctorSentenceView.class_
-    ).order_by(
+
+    stmt = stmt.order_by(
         DoctorSentenceView.file,
         DoctorSentenceView.speaker,
         DoctorSentenceView.class_
     )
-    
+
     results = (await db.execute(stmt)).all()
-    
+
     print(f"   Found {len(results)} groups")
     print("=" * 80)
-    
+
     return {
         "total_groups": len(results),
         "filters": {
@@ -1925,11 +1959,11 @@ async def get_doctor_score_average(
                 "speaker": r.speaker,
                 "class": r.class_,
                 "avg_score": round(r.avg_score, 2) if r.avg_score else None,
-                "count": r.count,
-                "rewritten_count": r.rewritten_count,  # How many used rewrite score
-                "original_count": r.count - r.rewritten_count,  # How many used original score
-                "min_score": r.min_score,
-                "max_score": r.max_score
+                "count": 1,
+                "rewritten_count": 0,
+                "original_count": 1,
+                "min_score": r.avg_score,
+                "max_score": r.avg_score
             }
             for r in results
         ]
