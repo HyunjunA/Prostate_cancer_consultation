@@ -407,3 +407,43 @@ class SentencePrediction(Base):
 
     def __repr__(self):
         return f"<SentencePrediction(id={self.id}, model={self.model}, pred_score={self.pred_score})>"
+
+
+# =====================================================
+# 6. User Interaction Tracking
+# =====================================================
+
+class UserInteractionLog(Base):
+    """Tracks user interaction events from patient/physician UI.
+
+    Each row is a single event (topic expand, rating click, scroll depth, etc.)
+    captured by TrackingEventManager on the frontend and batched to the backend.
+
+    Column descriptions:
+        session_id          Browser session identifier (30-min window, from localStorage)
+        file                Patient file identifier (e.g. "quality-coded-nlp-pilot-sid-1.xlsx")
+        speaker             User identifier (e.g. "Patient_quality-coded-nlp-pilot-sid-1")
+        event_type          Event category: topic_expand, topic_collapse, evidence_expand,
+                            evidence_collapse, rating_click, scroll_depth, dwell_time,
+                            proximity_enter, proximity_exit, time_on_component
+        element_id          Target element identifier (e.g. "Topic_CancerPrognosis")
+        event_data          JSON string with full event metadata
+        device_type         Client device: desktop, tablet, mobile
+        client_timestamp    When the event occurred on the client (ISO 8601)
+        created_at          When the server received the event
+    """
+    __tablename__ = 'user_interaction_log'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(100), nullable=False, index=True)
+    file = Column(String(255), nullable=False, index=True)
+    speaker = Column(String(100), nullable=False, index=True)
+    event_type = Column(String(50), nullable=False, index=True)
+    element_id = Column(String(255))
+    event_data = Column(Text)                                       # JSON string
+    device_type = Column(String(20))                                # desktop | tablet | mobile
+    client_timestamp = Column(TIMESTAMP(timezone=True))
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f"<UserInteractionLog(id={self.id}, session_id={self.session_id}, event_type={self.event_type})>"

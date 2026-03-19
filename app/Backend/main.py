@@ -1324,6 +1324,7 @@ app.add_middleware(
 from routes_surveys import router as surveys_router
 from routes_nlp import router as nlp_router
 from routes_transcript import router as transcript_router
+from routes_tracking import router as tracking_router
 from auth.admin_routes import router as auth_router
 from redis_client import init_redis, close_redis, get_redis
 from nlp_service import close_http_client, nlp_health_check, predict_single, CLASS_TO_MODEL, NLPServiceError
@@ -1331,6 +1332,7 @@ from nlp_service import close_http_client, nlp_health_check, predict_single, CLA
 app.include_router(surveys_router)
 app.include_router(nlp_router)
 app.include_router(transcript_router)
+app.include_router(tracking_router)
 app.include_router(auth_router)
 
 # ──────────────────────────────────────────────────────────────────────────────

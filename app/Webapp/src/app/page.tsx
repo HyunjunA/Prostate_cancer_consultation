@@ -26,7 +26,8 @@ import PatientConsultationReports from "@/components/PatientConsultationReports"
 // first meeting patient report component
 // import PatientReport from "@/components/PatientInitialVisitReportV29";
 // import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV31";
-import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV33";
+// import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV33";
+import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV35";
 
 // // These below components are the one with feedback from Dr. Timothy
 // 수정되었으나 한질문이 한페이지에 나오는 버전은 아님.
@@ -254,7 +255,7 @@ export default function Home() {
           Please access this page with the appropriate URL parameters.
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {/* Patient First Visit Card */}
           <div
             className={`p-5 rounded-lg border ${
@@ -369,6 +370,43 @@ export default function Home() {
               </span>
             </code>
           </div>
+          {/* Admin Tracking Card */}
+          <a
+            href="/admin/tracking"
+            className={`p-5 rounded-lg border block text-left transition-colors ${
+              isDarkMode
+                ? "bg-slate-800 border-slate-700 hover:border-amber-500"
+                : "bg-white border-gray-200 hover:border-amber-400"
+            }`}
+          >
+            <div
+              className={`text-lg font-medium mb-2 ${
+                isDarkMode ? "text-amber-400" : "text-amber-600"
+              }`}
+            >
+              Admin Tracking
+            </div>
+            <p
+              className={`text-sm mb-4 ${
+                isDarkMode ? "text-slate-400" : "text-gray-500"
+              }`}
+            >
+              View user interaction
+              <br />
+              tracking data.
+            </p>
+            <code
+              className={`block text-xs p-2 rounded break-all ${
+                isDarkMode
+                  ? "bg-slate-900 text-slate-300"
+                  : "bg-gray-100 text-gray-700"
+              }`}
+            >
+              <span className="text-amber-500 font-semibold">
+                /admin/tracking
+              </span>
+            </code>
+          </a>
         </div>
 
         {/* Quick Test Links */}
@@ -410,6 +448,16 @@ export default function Home() {
               }`}
             >
               Doctor Demo
+            </a>
+            <a
+              href="/admin/tracking"
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                isDarkMode
+                  ? "bg-amber-600 text-white hover:bg-amber-500"
+                  : "bg-amber-600 text-white hover:bg-amber-700"
+              }`}
+            >
+              Admin Tracking
             </a>
           </div>
         </div>
@@ -479,9 +527,11 @@ export default function Home() {
           </div>
         )}
 
-        {/* Theme toggle button in the top-right corner */}
-        <div className="fixed bottom-8 left-4 right-4 flex justify-between items-center ">
-          <ThemeToggle />
+        {/* Theme toggle button */}
+        <div className="fixed bottom-8 left-4 right-4 flex justify-between items-center pointer-events-none z-50">
+          <div className="pointer-events-auto">
+            <ThemeToggle />
+          </div>
         </div>
 
         {/* <BetaConsentMoal /> */}
