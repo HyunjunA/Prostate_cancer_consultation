@@ -25,7 +25,7 @@
  * 6. Completion/Thank You
  */
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 
 import { usePatientId } from "@/stores/usePatientId";
 import { useFileId } from "@/stores/useFileId";
@@ -66,6 +66,8 @@ import {
 } from "lucide-react";
 
 import { submitSurvey } from "@/api/surveyApi";
+import { sendTrackingEvents } from "@/api/trackingApi";
+import { getOrCreateSession } from "@/tracking/utils/session.utils";
 
 /* =============================================================================
    SECTION 1: TRACKING SYSTEM
@@ -1195,6 +1197,64 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
   }, [currentFile, currentSpeaker]);
 
   // ─────────────────────────────────────────────────────────────────────────
+  // 7.3b Track time spent on report page (Feedback 2-9)
+  //       + Send tracking events to backend on page unload / visibility change
+  // ─────────────────────────────────────────────────────────────────────────
+  const pageLoadTimeRef = useRef<number>(Date.now());
+
+  useEffect(() => {
+    const flushEvents = () => {
+      const events = trackingManager.getEvents();
+      if (events.length === 0) return;
+
+      const session = getOrCreateSession();
+      sendTrackingEvents(
+        session.sessionId,
+        currentFile,
+        currentSpeaker,
+        session.deviceType,
+        events,
+        true, // keepalive for unload
+      );
+      trackingManager.clear();
+    };
+
+    const recordTimeSpent = () => {
+      const durationMs = Date.now() - pageLoadTimeRef.current;
+      if (durationMs < 1000) return; // ignore < 1s visits
+      trackingManager.recordEvent({
+        eventType: "dwell_time",
+        elementId: "page_total_time",
+        timestamp: new Date().toISOString(),
+        metadata: { dwellTimeMs: durationMs, page: "followup_visit" },
+      });
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        recordTimeSpent();
+        flushEvents();
+        pageLoadTimeRef.current = Date.now();
+      }
+    };
+
+    const handleBeforeUnload = () => {
+      recordTimeSpent();
+      flushEvents();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      recordTimeSpent();
+      flushEvents(); // flush on unmount
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [currentFile, currentSpeaker]);
+
+  // ─────────────────────────────────────────────────────────────────────────
   // 7.4 Derived Data
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -1254,6 +1314,12 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
     value: YesNoAnswer | ScaleAnswer,
   ) => {
     setSdmAnswers((prev) => ({ ...prev, [questionId]: value }));
+    trackingManager.recordEvent({
+      eventType: "survey_answer",
+      elementId: `SDM_${String(questionId)}`,
+      timestamp: new Date().toISOString(),
+      metadata: { survey: "sdm", questionId: String(questionId), answer: value },
+    });
   };
 
   const handleDCSChange = (
@@ -1261,6 +1327,12 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
     value: LikertAnswer,
   ) => {
     setDcsAnswers((prev) => ({ ...prev, [questionId]: value }));
+    trackingManager.recordEvent({
+      eventType: "survey_answer",
+      elementId: `DCS_${String(questionId)}`,
+      timestamp: new Date().toISOString(),
+      metadata: { survey: "dcs", questionId: String(questionId), answer: value },
+    });
   };
 
   const handleRiskChange = (
@@ -1268,6 +1340,12 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
     value: string,
   ) => {
     setRiskAnswers((prev) => ({ ...prev, [questionId]: value }));
+    trackingManager.recordEvent({
+      eventType: "survey_answer",
+      elementId: `Risk_${String(questionId)}`,
+      timestamp: new Date().toISOString(),
+      metadata: { survey: "risk_perception", questionId: String(questionId), answer: value },
+    });
   };
 
   const handleSatisfactionChange = (
@@ -1275,6 +1353,12 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
     value: any,
   ) => {
     setSatisfactionAnswers((prev) => ({ ...prev, [field]: value }));
+    trackingManager.recordEvent({
+      eventType: "survey_answer",
+      elementId: `Satisfaction_${String(field)}`,
+      timestamp: new Date().toISOString(),
+      metadata: { survey: "satisfaction", questionId: String(field), answer: typeof value === "string" ? value : JSON.stringify(value) },
+    });
   };
 
   const handleTrackEvent = (eventData: any) => {

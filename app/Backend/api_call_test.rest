@@ -2049,3 +2049,143 @@ X-API-Key: {{api_key}}
 ### 5h. All ius (informed understanding/shared decision-making) predictions
 GET {{base}}/api/transcript/predictions/sid-01?model=ius
 X-API-Key: {{api_key}}
+
+
+############################################################
+### 6) User Interaction Tracking
+# Stores frontend interaction events (topic expand/collapse,
+# rating clicks, scroll depth, dwell time, etc.) per patient session.
+# Events are batched by TrackingEventManager and sent on page unload.
+############################################################
+
+###
+### 6a. POST — Store a batch of interaction events
+POST {{base}}/api/tracking/events
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "session_id": "session_1710850000000_abc123def456",
+  "file": "quality-coded-nlp-pilot-sid-1.xlsx",
+  "speaker": "Patient_quality-coded-nlp-pilot-sid-1",
+  "device_type": "desktop",
+  "events": [
+    {
+      "event_type": "topic_expand",
+      "element_id": "Topic_CancerPrognosis",
+      "timestamp": "2026-03-19T10:30:00.000Z",
+      "metadata": {
+        "topic": "Cancer Prognosis"
+      }
+    },
+    {
+      "event_type": "scroll_depth",
+      "element_id": "page_scroll_25%",
+      "timestamp": "2026-03-19T10:30:05.000Z",
+      "metadata": {
+        "threshold": 25,
+        "currentScrollPercentage": 27,
+        "scrollTop": 350,
+        "scrollHeight": 2800,
+        "clientHeight": 900
+      }
+    },
+    {
+      "event_type": "evidence_expand",
+      "element_id": "Evidence_CancerPrognosis",
+      "timestamp": "2026-03-19T10:30:10.000Z",
+      "metadata": {
+        "topic": "Cancer Prognosis",
+        "action": "expand",
+        "summaryRatingAtExpand": null
+      }
+    },
+    {
+      "event_type": "rating_click",
+      "element_id": "rating_Cancer_Prognosis",
+      "timestamp": "2026-03-19T10:30:15.000Z",
+      "metadata": {
+        "rating": 4,
+        "label": "Very helpful",
+        "topic": "Cancer Prognosis"
+      }
+    },
+    {
+      "event_type": "dwell_time",
+      "element_id": "Topic_CancerPrognosis",
+      "timestamp": "2026-03-19T10:30:20.000Z",
+      "metadata": {
+        "dwellTimeMs": 5200,
+        "minDwellTime": 2000
+      }
+    },
+    {
+      "event_type": "proximity_enter",
+      "element_id": "rating_Cancer_Prognosis",
+      "timestamp": "2026-03-19T10:30:12.000Z",
+      "metadata": {
+        "distance": 85,
+        "threshold": 150
+      }
+    }
+  ]
+}
+
+###
+### 6b. GET — Query all events for a specific patient
+GET {{base}}/api/tracking/events?file=quality-coded-nlp-pilot-sid-1.xlsx&speaker=Patient_quality-coded-nlp-pilot-sid-1
+X-API-Key: {{api_key}}
+
+###
+### 6c. GET — Query events by session
+GET {{base}}/api/tracking/events?session_id=session_1710850000000_abc123def456
+X-API-Key: {{api_key}}
+
+###
+### 6d. GET — Query only rating_click events
+GET {{base}}/api/tracking/events?file=quality-coded-nlp-pilot-sid-1.xlsx&event_type=rating_click
+X-API-Key: {{api_key}}
+
+###
+### 6e. GET — Query only topic_expand events with pagination
+GET {{base}}/api/tracking/events?event_type=topic_expand&limit=10&offset=0
+X-API-Key: {{api_key}}
+
+###
+### 6f. GET — Query scroll_depth events for a specific patient
+GET {{base}}/api/tracking/events?file=quality-coded-nlp-pilot-sid-1.xlsx&event_type=scroll_depth&limit=50
+X-API-Key: {{api_key}}
+
+###
+### 6g. POST — Store events from follow-up page (different session)
+POST {{base}}/api/tracking/events
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "session_id": "session_1710860000000_xyz789abc012",
+  "file": "quality-coded-nlp-pilot-sid-1.xlsx",
+  "speaker": "Patient_quality-coded-nlp-pilot-sid-1",
+  "device_type": "mobile",
+  "events": [
+    {
+      "event_type": "time_on_component",
+      "element_id": "PatientFollowUpReport",
+      "timestamp": "2026-03-19T11:00:00.000Z",
+      "metadata": {
+        "duration": 45000,
+        "componentName": "PatientFollowUpReport",
+        "engaged": true
+      }
+    },
+    {
+      "event_type": "scroll_depth",
+      "element_id": "page_scroll_100%",
+      "timestamp": "2026-03-19T11:00:30.000Z",
+      "metadata": {
+        "threshold": 100,
+        "currentScrollPercentage": 100
+      }
+    }
+  ]
+}

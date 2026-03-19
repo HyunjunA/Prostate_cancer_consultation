@@ -48,6 +48,8 @@ import {
 } from "lucide-react";
 
 import { submitSurvey } from "@/api/surveyApi";
+import { sendTrackingEvents } from "@/api/trackingApi";
+import { getOrCreateSession } from "@/tracking/utils/session.utils";
 
 /* =============================================================================
    SECTION 1: TRACKING SYSTEM
@@ -593,6 +595,44 @@ const PatientFollowUpReport: React.FC<PatientFollowUpReportProps> = ({
     };
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentFile, currentSpeaker]);
+
+  // Send tracking events to backend on page unload / visibility change
+  useEffect(() => {
+    const flushEvents = () => {
+      const events = trackingManager.getEvents();
+      if (events.length === 0) return;
+
+      const session = getOrCreateSession();
+      sendTrackingEvents(
+        session.sessionId,
+        currentFile,
+        currentSpeaker,
+        session.deviceType,
+        events,
+        true,
+      );
+      trackingManager.clear();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        flushEvents();
+      }
+    };
+
+    const handleBeforeUnload = () => {
+      flushEvents();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      flushEvents();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
   }, [currentFile, currentSpeaker]);
 
   // Calculate overall progress

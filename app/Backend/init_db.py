@@ -222,6 +222,7 @@ from models import (
     PatientSummaryScoring,
     PatientResponses,
     SentencePrediction,
+    UserInteractionLog,
 )
 # Auth models share the same Base — import so create_all picks them up
 from auth.models import AuthUser, AuthAPIKey, PatientAccess  # noqa: F401
