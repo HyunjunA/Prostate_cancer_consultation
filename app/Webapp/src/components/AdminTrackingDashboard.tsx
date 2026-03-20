@@ -118,7 +118,7 @@ type TabId = "overview" | "sessions" | "elements" | "events";
 // ══════════════════════════════════════════════════════════════════════════════
 
 export default function AdminTrackingDashboard() {
-  const { isDarkMode } = useThemeStore();
+  const isDarkMode = useThemeStore((state) => state.isDarkMode);
 
   // Data state
   const [stats, setStats] = useState<TrackingStats | null>(null);
@@ -347,7 +347,7 @@ export default function AdminTrackingDashboard() {
   const chartGridColor = isDarkMode ? "#374151" : "#e5e7eb";
 
   const tabClass = (tab: TabId) =>
-    `px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+    `px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium rounded-t-lg transition-colors ${
       activeTab === tab
         ? isDarkMode
           ? "bg-gray-800 text-white border-b-2 border-blue-500"
@@ -389,12 +389,12 @@ export default function AdminTrackingDashboard() {
   // ────────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className={`min-h-screen p-6 ${bg}`}>
+    <div className={`min-h-screen p-3 sm:p-4 lg:p-6 ${bg}`}>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-3">
           <div>
-            <h1 className="text-2xl font-bold">User Interaction Tracking Dashboard</h1>
+            <h1 className="text-lg sm:text-xl lg:text-2xl font-bold">User Interaction Tracking Dashboard</h1>
             <p className="text-sm opacity-50 mt-1">
               Real-time analytics from user_interaction_log
             </p>
@@ -418,22 +418,22 @@ export default function AdminTrackingDashboard() {
         </div>
 
         {/* ── Stats Cards ────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 lg:gap-4 mb-4 sm:mb-6">
           {[
             { label: "Total Events", value: stats?.total_events ?? "—", color: "text-blue-500" },
             { label: "Sessions", value: stats?.total_sessions ?? "—", color: "text-green-500" },
             { label: "Patients", value: stats?.total_patients ?? "—", color: "text-purple-500" },
             { label: "Event Types", value: stats?.total_event_types ?? "—", color: "text-amber-500" },
           ].map((card) => (
-            <div key={card.label} className={`rounded-lg border p-4 ${cardBg}`}>
-              <div className={`text-3xl font-bold ${card.color}`}>{card.value}</div>
+            <div key={card.label} className={`rounded-lg border p-3 sm:p-4 ${cardBg}`}>
+              <div className={`text-xl sm:text-2xl lg:text-3xl font-bold ${card.color}`}>{card.value}</div>
               <div className="text-sm opacity-60 mt-1">{card.label}</div>
             </div>
           ))}
         </div>
 
         {/* ── Tabs ────────────────────────────────────────────────────────── */}
-        <div className="flex gap-1 mb-0">
+        <div className="flex gap-1 mb-0 overflow-x-auto">
           {(
             [
               { id: "overview", label: "Overview" },
@@ -460,11 +460,11 @@ export default function AdminTrackingDashboard() {
             {/* Row 1: Timeline + Event Type Pie */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Activity Timeline */}
-              <div className={`lg:col-span-2 rounded-lg border p-5 ${cardBg}`}>
-                <h2 className="text-sm font-semibold mb-4 opacity-80">
+              <div className={`lg:col-span-2 rounded-lg border p-3 sm:p-4 lg:p-5 ${cardBg}`}>
+                <h2 className="text-xs sm:text-sm font-semibold mb-3 sm:mb-4 opacity-80">
                   Activity Timeline (events/hour)
                 </h2>
-                <div className="h-64">
+                <div className="h-48 sm:h-56 lg:h-64">
                   {timelineData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={timelineData}>
@@ -505,11 +505,11 @@ export default function AdminTrackingDashboard() {
               </div>
 
               {/* Event Type Distribution */}
-              <div className={`rounded-lg border p-5 ${cardBg}`}>
-                <h2 className="text-sm font-semibold mb-4 opacity-80">
+              <div className={`rounded-lg border p-3 sm:p-4 lg:p-5 ${cardBg}`}>
+                <h2 className="text-xs sm:text-sm font-semibold mb-3 sm:mb-4 opacity-80">
                   Event Type Distribution
                 </h2>
-                <div className="h-64">
+                <div className="h-48 sm:h-56 lg:h-64">
                   {eventTypePieData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
@@ -549,11 +549,11 @@ export default function AdminTrackingDashboard() {
             {/* Row 2: Patient Breakdown + Hourly Activity */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Events by Patient (Stacked Bar) */}
-              <div className={`rounded-lg border p-5 ${cardBg}`}>
-                <h2 className="text-sm font-semibold mb-4 opacity-80">
+              <div className={`rounded-lg border p-3 sm:p-4 lg:p-5 ${cardBg}`}>
+                <h2 className="text-xs sm:text-sm font-semibold mb-3 sm:mb-4 opacity-80">
                   Events by Patient (by type)
                 </h2>
-                <div className="h-64">
+                <div className="h-48 sm:h-56 lg:h-64">
                   {patientBarData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={patientBarData} layout="vertical">
@@ -602,11 +602,11 @@ export default function AdminTrackingDashboard() {
               </div>
 
               {/* Hourly Activity Heatmap */}
-              <div className={`rounded-lg border p-5 ${cardBg}`}>
-                <h2 className="text-sm font-semibold mb-4 opacity-80">
+              <div className={`rounded-lg border p-3 sm:p-4 lg:p-5 ${cardBg}`}>
+                <h2 className="text-xs sm:text-sm font-semibold mb-3 sm:mb-4 opacity-80">
                   Activity by Hour of Day
                 </h2>
-                <div className="h-64">
+                <div className="h-48 sm:h-56 lg:h-64">
                   {hourlyData.some((h) => h.count > 0) ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={hourlyData}>
@@ -650,8 +650,8 @@ export default function AdminTrackingDashboard() {
 
             {/* Row 3: Device Breakdown */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className={`rounded-lg border p-5 ${cardBg}`}>
-                <h2 className="text-sm font-semibold mb-4 opacity-80">
+              <div className={`rounded-lg border p-3 sm:p-4 lg:p-5 ${cardBg}`}>
+                <h2 className="text-xs sm:text-sm font-semibold mb-3 sm:mb-4 opacity-80">
                   Device Breakdown
                 </h2>
                 <div className="h-48">
@@ -690,8 +690,8 @@ export default function AdminTrackingDashboard() {
               </div>
 
               {/* Event type counts list */}
-              <div className={`lg:col-span-2 rounded-lg border p-5 ${cardBg}`}>
-                <h2 className="text-sm font-semibold mb-4 opacity-80">
+              <div className={`lg:col-span-2 rounded-lg border p-3 sm:p-4 lg:p-5 ${cardBg}`}>
+                <h2 className="text-xs sm:text-sm font-semibold mb-3 sm:mb-4 opacity-80">
                   Event Type Breakdown
                 </h2>
                 <div className="space-y-2">
@@ -735,13 +735,13 @@ export default function AdminTrackingDashboard() {
               <table className={`w-full text-sm ${tableBg}`}>
                 <thead>
                   <tr className={tableHeaderBg}>
-                    <th className="px-4 py-3 text-left font-medium">Session ID</th>
-                    <th className="px-4 py-3 text-left font-medium">Patient</th>
-                    <th className="px-4 py-3 text-left font-medium">Device</th>
-                    <th className="px-4 py-3 text-right font-medium">Events</th>
-                    <th className="px-4 py-3 text-left font-medium">Start</th>
-                    <th className="px-4 py-3 text-left font-medium">End</th>
-                    <th className="px-4 py-3 text-right font-medium">Duration</th>
+                    <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Session ID</th>
+                    <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Patient</th>
+                    <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Device</th>
+                    <th className="px-2 py-2 sm:px-4 sm:py-3 text-right font-medium">Events</th>
+                    <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Start</th>
+                    <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">End</th>
+                    <th className="px-2 py-2 sm:px-4 sm:py-3 text-right font-medium">Duration</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -799,8 +799,8 @@ export default function AdminTrackingDashboard() {
         {activeTab === "elements" && (
           <div className="space-y-6 mt-0">
             {/* Top Elements Bar Chart */}
-            <div className={`rounded-lg border p-5 ${cardBg}`}>
-              <h2 className="text-sm font-semibold mb-4 opacity-80">
+            <div className={`rounded-lg border p-3 sm:p-4 lg:p-5 ${cardBg}`}>
+              <h2 className="text-xs sm:text-sm font-semibold mb-3 sm:mb-4 opacity-80">
                 Most Interacted Elements (Top 20)
               </h2>
               <div className="h-80">
@@ -860,10 +860,10 @@ export default function AdminTrackingDashboard() {
                 <table className={`w-full text-sm ${tableBg}`}>
                   <thead>
                     <tr className={tableHeaderBg}>
-                      <th className="px-4 py-3 text-left font-medium">#</th>
-                      <th className="px-4 py-3 text-left font-medium">Element ID</th>
-                      <th className="px-4 py-3 text-left font-medium">Event Type</th>
-                      <th className="px-4 py-3 text-right font-medium">Count</th>
+                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">#</th>
+                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Element ID</th>
+                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Event Type</th>
+                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-right font-medium">Count</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -901,13 +901,13 @@ export default function AdminTrackingDashboard() {
           <div className="space-y-0 mt-0">
             {/* Filters */}
             <div className={`rounded-t-lg border border-b-0 p-4 ${cardBg}`}>
-              <div className="flex flex-wrap gap-4 items-end">
-                <div className="flex flex-col">
+              <div className="flex flex-wrap gap-3 sm:gap-4 items-end">
+                <div className="flex flex-col w-full sm:w-auto">
                   <label className="text-xs font-medium mb-1 opacity-70">Patient</label>
                   <select
                     value={filterFile}
                     onChange={(e) => setFilterFile(e.target.value)}
-                    className={`rounded-md border px-3 py-2 text-sm ${inputBg}`}
+                    className={`rounded-md border px-3 py-2 text-sm w-full sm:w-auto ${inputBg}`}
                   >
                     <option value="">All patients</option>
                     {patients.map((p) => (
@@ -917,12 +917,12 @@ export default function AdminTrackingDashboard() {
                     ))}
                   </select>
                 </div>
-                <div className="flex flex-col">
+                <div className="flex flex-col w-full sm:w-auto">
                   <label className="text-xs font-medium mb-1 opacity-70">Event Type</label>
                   <select
                     value={filterEventType}
                     onChange={(e) => setFilterEventType(e.target.value)}
-                    className={`rounded-md border px-3 py-2 text-sm ${inputBg}`}
+                    className={`rounded-md border px-3 py-2 text-sm w-full sm:w-auto ${inputBg}`}
                   >
                     <option value="">All types</option>
                     {stats &&
@@ -933,14 +933,14 @@ export default function AdminTrackingDashboard() {
                       ))}
                   </select>
                 </div>
-                <div className="flex flex-col">
+                <div className="flex flex-col w-full sm:w-auto">
                   <label className="text-xs font-medium mb-1 opacity-70">Session ID</label>
                   <input
                     type="text"
                     value={filterSession}
                     onChange={(e) => setFilterSession(e.target.value)}
                     placeholder="Filter by session…"
-                    className={`rounded-md border px-3 py-2 text-sm w-52 ${inputBg}`}
+                    className={`rounded-md border px-3 py-2 text-sm w-full sm:w-52 ${inputBg}`}
                   />
                 </div>
                 {(filterFile || filterEventType || filterSession) && (
@@ -966,14 +966,14 @@ export default function AdminTrackingDashboard() {
                 <table className={`w-full text-sm ${tableBg}`}>
                   <thead>
                     <tr className={tableHeaderBg}>
-                      <th className="px-4 py-3 text-left font-medium">#</th>
-                      <th className="px-4 py-3 text-left font-medium">Time</th>
-                      <th className="px-4 py-3 text-left font-medium">Patient</th>
-                      <th className="px-4 py-3 text-left font-medium">Session</th>
-                      <th className="px-4 py-3 text-left font-medium">Event Type</th>
-                      <th className="px-4 py-3 text-left font-medium">Element</th>
-                      <th className="px-4 py-3 text-left font-medium">Device</th>
-                      <th className="px-4 py-3 text-left font-medium"></th>
+                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">#</th>
+                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Time</th>
+                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Patient</th>
+                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Session</th>
+                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Event Type</th>
+                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Element</th>
+                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Device</th>
+                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -1039,7 +1039,7 @@ export default function AdminTrackingDashboard() {
                           </tr>
                           {expandedRow === ev.id && (
                             <tr key={`${ev.id}-detail`}>
-                              <td colSpan={8} className="px-4 py-3">
+                              <td colSpan={8} className="px-2 py-2 sm:px-4 sm:py-3">
                                 <div
                                   className={`rounded p-3 text-xs font-mono overflow-x-auto ${
                                     isDarkMode ? "bg-gray-900" : "bg-gray-100"
@@ -1089,7 +1089,7 @@ export default function AdminTrackingDashboard() {
 
               {/* Pagination */}
               <div
-                className={`flex items-center justify-between px-4 py-3 border-t ${
+                className={`flex items-center justify-between px-2 py-2 sm:px-4 sm:py-3 border-t ${
                   isDarkMode ? "border-gray-700" : "border-gray-200"
                 }`}
               >
@@ -1105,17 +1105,17 @@ export default function AdminTrackingDashboard() {
                   <button
                     disabled={page === 0}
                     onClick={() => setPage((p) => Math.max(0, p - 1))}
-                    className="px-3 py-1 rounded border text-sm disabled:opacity-30 hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors"
+                    className="px-2 py-1 sm:px-3 rounded border text-xs sm:text-sm disabled:opacity-30 hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors"
                   >
                     Prev
                   </button>
-                  <span className="px-3 py-1 text-sm">
+                  <span className="px-2 py-1 sm:px-3 text-xs sm:text-sm">
                     {totalPages > 0 ? `${page + 1} / ${totalPages}` : "—"}
                   </span>
                   <button
                     disabled={page >= totalPages - 1}
                     onClick={() => setPage((p) => p + 1)}
-                    className="px-3 py-1 rounded border text-sm disabled:opacity-30 hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors"
+                    className="px-2 py-1 sm:px-3 rounded border text-xs sm:text-sm disabled:opacity-30 hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors"
                   >
                     Next
                   </button>

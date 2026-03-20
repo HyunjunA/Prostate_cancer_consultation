@@ -256,6 +256,11 @@ export interface RewriteStatsResponse {
   per_file: RewriteStatsFileItem[];
 }
 
+export interface TrajectoryPatientDetail {
+  file: string;
+  overall_score: number;
+}
+
 export interface TrajectoryItem {
   timestamp: string;
   event_type: "consultation" | "rewrite";
@@ -263,6 +268,7 @@ export interface TrajectoryItem {
   overall_score: number | null;
   by_class: Record<string, number>;
   patients_count: number;
+  patients_detail: TrajectoryPatientDetail[];
 }
 
 export interface TrajectoryResponse {

@@ -104,7 +104,9 @@ interface TrackingEvent {
     | "topic_collapse"
     | "evidence_expand"
     | "evidence_collapse"
-    | "rating_click";
+    | "rating_click"
+    | "page_enter"
+    | "page_exit";
   elementId: string;
   timestamp: string;
   patientId?: string;
@@ -587,7 +589,7 @@ const HelpfulnessRating: React.FC<HelpfulnessRatingProps> = React.memo(({
               }
             }}
             className={cx(
-              "px-3 py-2 rounded-xl text-xs font-medium border transition-all duration-200",
+              "px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg sm:rounded-xl text-xs font-medium border transition-all duration-200",
               disabled && "cursor-not-allowed opacity-50",
               isSelected
                 ? isDark
@@ -620,7 +622,7 @@ const HelpfulnessLegend: React.FC<HelpfulnessLegendProps> = ({ isDark }) => {
   return (
     <div
       className={cx(
-        "rounded-2xl p-4 mb-6 border",
+        "rounded-2xl p-3 sm:p-4 mb-4 sm:mb-6 border",
         isDark
           ? "bg-slate-900/50 border-slate-800/50"
           : "bg-white/60 border-gray-200/50 shadow-sm",
@@ -672,7 +674,7 @@ const InstructionsBox: React.FC<InstructionsBoxProps> = ({ isDark }) => {
   return (
     <div
       className={cx(
-        "relative overflow-hidden rounded-3xl p-6 mb-8",
+        "relative overflow-hidden rounded-3xl p-4 sm:p-5 lg:p-6 mb-4 sm:mb-6 lg:mb-8",
         "backdrop-blur-xl border",
         isDark
           ? "bg-gradient-to-br from-indigo-950/60 to-violet-950/60 border-indigo-500/20"
@@ -696,7 +698,7 @@ const InstructionsBox: React.FC<InstructionsBoxProps> = ({ isDark }) => {
       <div className="relative flex items-start gap-5">
         <div
           className={cx(
-            "flex-shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center",
+            "flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 lg:w-14 lg:h-14 rounded-2xl flex items-center justify-center",
             "bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/30",
           )}
         >
@@ -705,7 +707,7 @@ const InstructionsBox: React.FC<InstructionsBoxProps> = ({ isDark }) => {
         <div className="flex-1">
           <h3
             className={cx(
-              "text-xl font-bold mb-4",
+              "text-base sm:text-lg lg:text-xl font-bold mb-3 sm:mb-4",
               isDark ? "text-white" : "text-gray-900",
             )}
           >
@@ -806,7 +808,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
         onClick={onToggleExpand}
         data-track-proximity={`TopicHeader_${topicId}`}
         className={cx(
-          "w-full px-6 py-5 flex items-center justify-between text-left transition-all duration-200",
+          "w-full px-4 py-3 sm:px-5 sm:py-4 lg:px-6 lg:py-5 flex items-center justify-between text-left transition-all duration-200",
           "bg-gradient-to-r",
           colors.gradient,
           !isExpanded && "hover:opacity-90",
@@ -815,7 +817,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
         <div className="flex items-center gap-4">
           <div
             className={cx(
-              "flex items-center justify-center w-11 h-11 rounded-xl text-base font-bold text-white",
+              "flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 lg:w-11 lg:h-11 rounded-xl text-base font-bold text-white",
               "bg-gradient-to-br shadow-lg",
               colors.iconBg,
             )}
@@ -825,7 +827,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
           <div>
             <h3
               className={cx(
-                "text-lg font-semibold",
+                "text-base sm:text-lg font-semibold",
                 isDark ? "text-white" : "text-gray-900",
               )}
             >
@@ -872,14 +874,14 @@ const TopicCard: React.FC<TopicCardProps> = ({
       >
         <div
           className={cx(
-            "px-6 pb-6 pt-5",
+            "px-4 pb-4 pt-3 sm:px-5 sm:pb-5 sm:pt-4 lg:px-6 lg:pb-6 lg:pt-5",
             isDark ? "bg-slate-900/40" : "bg-gray-50/50",
           )}
         >
           {/* [V35] AI Summary Text — visually distinct from consultation excerpts */}
           <div
             className={cx(
-              "p-5 rounded-2xl mb-6 border-l-4",
+              "p-3 sm:p-4 lg:p-5 rounded-2xl mb-6 border-l-4",
               isDark
                 ? "bg-violet-950/30 border-l-violet-500 border-y border-r border-violet-500/20"
                 : "bg-gradient-to-r from-violet-50 to-indigo-50 border-l-violet-500 border-y border-r border-violet-200/50 shadow-sm",
@@ -915,7 +917,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
               onClick={onToggleEvidence}
               data-track-proximity={`EvidenceToggle_${topicId}`}
               className={cx(
-                "w-full flex items-center justify-between gap-2 px-5 py-4 rounded-xl text-sm font-semibold transition-all duration-200",
+                "w-full flex items-center justify-between gap-2 px-3 py-3 sm:px-4 sm:py-3.5 lg:px-5 lg:py-4 rounded-xl text-sm font-semibold transition-all duration-200",
                 isDark
                   ? "bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700"
                   : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200 shadow-sm hover:shadow",
@@ -1044,8 +1046,8 @@ const TopicCard: React.FC<TopicCardProps> = ({
 const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
   isDarkMode = false,
 }) => {
-  const { patientId } = usePatientId();
-  const { fileId } = useFileId();
+  const patientId = usePatientId((state) => state.patientId);
+  const fileId = useFileId((state) => state.fileId);
 
   const { fetchSummaryDetail, updateSingleClassScore } = usePatientData();
 
@@ -1054,6 +1056,35 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
     scrollDepth: { thresholds: [25, 50, 75, 100], debounceMs: 200 },
     dwellTime: { minDwellTime: 2000, trackingInterval: 500 },
   });
+
+  // [Feedback #9] Track total time spent on this report page
+  useEffect(() => {
+    const pageEnteredAt = Date.now();
+    trackingManager.recordEvent({
+      eventType: "page_enter",
+      elementId: "patient_report_page",
+      metadata: { timestamp: new Date().toISOString() },
+    });
+
+    const handleBeforeUnload = () => {
+      const timeSpentMs = Date.now() - pageEnteredAt;
+      trackingManager.recordEvent({
+        eventType: "page_exit",
+        elementId: "patient_report_page",
+        metadata: {
+          timeSpentMs,
+          timeSpentSeconds: Math.round(timeSpentMs / 1000),
+          timestamp: new Date().toISOString(),
+        },
+      });
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      handleBeforeUnload();
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, []);
 
   // State Management
   const [summaryData, setSummaryData] = useState<SummaryDetailResponse | null>(
@@ -1450,16 +1481,16 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
           : "bg-gradient-to-br from-slate-50 via-white to-gray-100",
       )}
     >
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-12" id="report-content">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12" id="report-content">
         {/* Header */}
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl mb-6 bg-gradient-to-br from-indigo-500 to-violet-600 shadow-2xl shadow-indigo-500/30">
-            <FileText className="w-10 h-10 text-white" />
+        <div className="text-center mb-6 sm:mb-8 lg:mb-12">
+          <div className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 lg:w-20 lg:h-20 rounded-3xl mb-6 bg-gradient-to-br from-indigo-500 to-violet-600 shadow-2xl shadow-indigo-500/30">
+            <FileText className="w-7 h-7 sm:w-8 sm:h-8 lg:w-10 lg:h-10 text-white" />
           </div>
 
           <h1
             className={cx(
-              "text-4xl font-bold mb-3 tracking-tight",
+              "text-2xl sm:text-3xl lg:text-4xl font-bold mb-3 tracking-tight",
               isDarkMode ? "text-white" : "text-gray-900",
             )}
           >
@@ -1467,7 +1498,7 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
           </h1>
           <p
             className={cx(
-              "text-xl",
+              "text-base sm:text-lg lg:text-xl",
               isDarkMode ? "text-slate-400" : "text-gray-500",
             )}
           >
@@ -1504,7 +1535,7 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
         {/* [V35] Disclaimer — feedback 2-8 */}
         <div
           className={cx(
-            "mb-6 px-5 py-4 rounded-2xl border text-center text-sm",
+            "mb-4 sm:mb-6 px-3 sm:px-5 py-3 sm:py-4 rounded-2xl border text-center text-sm",
             isDarkMode
               ? "bg-amber-500/10 border-amber-500/20 text-amber-300/90"
               : "bg-amber-50 border-amber-200/60 text-amber-800",
@@ -1523,7 +1554,7 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
         {/* Rating Progress Indicator */}
         <div
           className={cx(
-            "mb-8 p-6 rounded-2xl border",
+            "mb-4 sm:mb-6 lg:mb-8 p-4 sm:p-5 lg:p-6 rounded-2xl border",
             isDarkMode
               ? "bg-slate-900/50 border-slate-800/50"
               : "bg-white/80 border-gray-200/50 shadow-lg shadow-gray-500/5",
@@ -1630,7 +1661,7 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
         >
           <div
             className={cx(
-              "flex items-center gap-2 px-5 py-3 rounded-full shadow-lg border backdrop-blur-md cursor-pointer pointer-events-auto animate-bounce",
+              "flex items-center gap-2 px-3 py-2 sm:px-5 sm:py-3 rounded-full shadow-lg border backdrop-blur-md cursor-pointer pointer-events-auto animate-bounce",
               isDarkMode
                 ? "bg-slate-800/90 border-slate-700 text-slate-300"
                 : "bg-white/90 border-gray-200 text-gray-600 shadow-gray-300/50",

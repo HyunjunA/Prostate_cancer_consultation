@@ -1,5 +1,6 @@
 import { useState } from "react";
 import useFilterStore from "../stores/useFilterStore";
+import { useShallow } from "zustand/react/shallow";
 import { ChevronRight, Filter, X, ChevronsLeft } from "lucide-react";
 
 const FilterSidebar = ({ isDarkMode }) => {
@@ -11,7 +12,16 @@ const FilterSidebar = ({ isDarkMode }) => {
     updateFilter,
     clearSection,
     displayByState,
-  } = useFilterStore();
+  } = useFilterStore(
+    useShallow((state) => ({
+      regionState: state.regionState,
+      ageState: state.ageState,
+      genderState: state.genderState,
+      updateFilter: state.updateFilter,
+      clearSection: state.clearSection,
+      displayByState: state.displayByState,
+    }))
+  );
 
   // Define explicit colors based on dark mode
   const colors = {
