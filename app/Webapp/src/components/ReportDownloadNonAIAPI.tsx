@@ -9,7 +9,7 @@ import { useThemeStore } from "@/stores/useThemeStore";
 export const ReportDownload = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [summaryText, setSummaryText] = useState("");
-  const { isDarkMode } = useThemeStore();
+  const isDarkMode = useThemeStore((state) => state.isDarkMode);
   // Add state for error handling popup
   const [error, setError] = useState(null);
   const [showErrorPopup, setShowErrorPopup] = useState(false);

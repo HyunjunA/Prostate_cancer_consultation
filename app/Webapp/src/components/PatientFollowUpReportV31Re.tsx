@@ -362,7 +362,7 @@ const CollapsibleSummary: React.FC<CollapsibleSummaryProps> = ({
         type="button"
         onClick={onToggle}
         className={cx(
-          "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
+          "flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
           isDark
             ? "bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700"
             : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200 shadow-sm hover:shadow",
@@ -385,7 +385,7 @@ const CollapsibleSummary: React.FC<CollapsibleSummaryProps> = ({
       >
         <div
           className={cx(
-            "p-5 rounded-2xl border-l-4",
+            "p-3 sm:p-4 lg:p-5 rounded-2xl border-l-4",
             isDark
               ? "bg-slate-800/60 border-l-indigo-500 border-y border-r border-slate-700/50"
               : "bg-gradient-to-r border-l-indigo-500 border-y border-r border-gray-100 shadow-sm",
@@ -484,7 +484,7 @@ const ProgressSidebar: React.FC<ProgressSidebarProps> = ({
   return (
     <div
       className={cx(
-        "w-64 flex-shrink-0 p-6 border-r",
+        "hidden md:block w-48 lg:w-64 flex-shrink-0 p-4 lg:p-6 border-r",
         isDark ? "bg-slate-900 border-slate-800" : "bg-white border-gray-200",
       )}
     >
@@ -625,7 +625,7 @@ const NavigationButtons: React.FC<NavigationButtonsProps> = ({
   return (
     <div
       className={cx(
-        "flex items-center justify-between mt-8 pt-6 border-t",
+        "flex items-center justify-between mt-6 sm:mt-8 pt-4 sm:pt-6 border-t",
         isDark ? "border-slate-700" : "border-gray-200",
       )}
     >
@@ -691,7 +691,7 @@ const WelcomeStep: React.FC<WelcomeStepProps> = ({
   patientName,
 }) => {
   return (
-    <div className="max-w-2xl mx-auto text-center py-12">
+    <div className="max-w-2xl mx-auto text-center py-6 sm:py-8 lg:py-12">
       <div
         className={cx(
           "w-16 h-16 mx-auto mb-6 rounded-2xl flex items-center justify-center",
@@ -706,7 +706,7 @@ const WelcomeStep: React.FC<WelcomeStepProps> = ({
 
       <h1
         className={cx(
-          "text-2xl font-semibold mb-3",
+          "text-xl sm:text-2xl font-semibold mb-3",
           isDark ? "text-slate-100" : "text-gray-900",
         )}
       >
@@ -771,7 +771,7 @@ const WelcomeStep: React.FC<WelcomeStepProps> = ({
       <button
         onClick={onNext}
         className={cx(
-          "inline-flex items-center gap-2 px-8 py-3 rounded-lg text-base font-medium transition-colors",
+          "inline-flex items-center gap-2 px-6 py-2.5 sm:px-8 sm:py-3 rounded-lg text-sm sm:text-base font-medium transition-colors",
           isDark
             ? "bg-blue-600 text-white hover:bg-blue-500"
             : "bg-blue-600 text-white hover:bg-blue-700",
@@ -794,7 +794,7 @@ interface CompleteStepProps {
 
 const CompleteStep: React.FC<CompleteStepProps> = ({ isDark }) => {
   return (
-    <div className="max-w-2xl mx-auto text-center py-12">
+    <div className="max-w-2xl mx-auto text-center py-6 sm:py-8 lg:py-12">
       <div
         className={cx(
           "w-16 h-16 mx-auto mb-6 rounded-2xl flex items-center justify-center",
@@ -809,7 +809,7 @@ const CompleteStep: React.FC<CompleteStepProps> = ({ isDark }) => {
 
       <h1
         className={cx(
-          "text-2xl font-semibold mb-3",
+          "text-xl sm:text-2xl font-semibold mb-3",
           isDark ? "text-slate-100" : "text-gray-900",
         )}
       >
@@ -937,13 +937,13 @@ const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
       {/* Question Card */}
       <div
         className={cx(
-          "p-6 rounded-xl border",
+          "p-4 sm:p-5 lg:p-6 rounded-xl border",
           isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200",
         )}
       >
         <p
           className={cx(
-            "text-lg font-semibold mb-6 leading-relaxed",
+            "text-base sm:text-lg font-semibold mb-4 sm:mb-6 leading-relaxed",
             isDark ? "text-white" : "text-gray-900",
           )}
         >
@@ -1119,8 +1119,8 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
   // ─────────────────────────────────────────────────────────────────────────
   // 7.1 Hooks & API
   // ─────────────────────────────────────────────────────────────────────────
-  const { patientId } = usePatientId();
-  const { fileId } = useFileId();
+  const patientId = usePatientId((state) => state.patientId);
+  const fileId = useFileId((state) => state.fileId);
   const { fetchSummaryDetail } = usePatientData();
 
   const currentFile = fileId || "quality-coded-nlp-pilot-sid-1.xlsx";
@@ -1535,13 +1535,13 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
           {/* Header */}
           <div
             className={cx(
-              "px-8 py-6 border-b",
+              "px-4 sm:px-6 lg:px-8 py-4 sm:py-6 border-b",
               isDarkMode ? "border-slate-800" : "border-gray-200",
             )}
           >
             <h2
               className={cx(
-                "text-xl font-semibold",
+                "text-lg sm:text-xl font-semibold",
                 isDarkMode ? "text-slate-100" : "text-gray-900",
               )}
             >
@@ -1558,7 +1558,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
           </div>
 
           {/* Step Content */}
-          <div className="px-8 py-6">
+          <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
             {/* Welcome */}
             {currentStep === "welcome" && (
               <WelcomeStep onNext={goNext} isDark={isDarkMode} />

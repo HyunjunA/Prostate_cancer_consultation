@@ -350,7 +350,7 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
           </div>
 
           {/* Score arrow indicator — points down to exact position on scale bar */}
-          <div className="relative h-12 mb-1">
+          <div className="consultation-scoring-scale relative h-12 mb-1">
             <div
               className="absolute flex flex-col items-center -translate-x-1/2"
               style={{ left: `${pct}%` }}
@@ -381,15 +381,24 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
             </div>
           </div>
 
-          {/* Scale numbers and labels - with hover rubric guidance */}
+          {/* Scale numbers and labels - with hover cumulative rubric guidance */}
           <div className="relative mt-4" style={{ height: "80px" }}>
             {scaleItems.map((item, index) => {
-              const rubricEntry = allRubricLevels?.find(
-                (s) => s.targetScore === item.value,
-              );
               const isCurrentScore =
                 highlightPosition !== undefined &&
                 Math.round(highlightPosition) === item.value;
+              // Collect all rubric entries from score 1 (or 0) up to this score
+              const cumulativeEntries = allRubricLevels
+                ?.filter((s) => item.value === 0 ? s.targetScore === 0 : s.targetScore >= 1 && s.targetScore <= item.value)
+                ?.sort((a, b) => a.targetScore - b.targetScore) || [];
+              const badgeColors: Record<number, string> = {
+                0: "bg-slate-400",
+                1: "bg-red-500",
+                2: "bg-pink-500",
+                3: "bg-yellow-500",
+                4: "bg-green-500",
+                5: "bg-emerald-500",
+              };
               return (
                 <div
                   key={item.value}
@@ -409,10 +418,10 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
                     >
                       {item.value}
                     </div>
-                    {/* Hover tooltip: rubric guidance for this score level */}
-                    {rubricEntry && (
+                    {/* Hover tooltip: cumulative rubric guidance up to this score level */}
+                    {cumulativeEntries.length > 0 && (
                       <div
-                        className={`absolute z-50 hidden group-hover:block w-64 p-3 rounded-lg shadow-xl border text-left ${
+                        className={`absolute z-50 hidden group-hover:block w-72 p-3 rounded-lg shadow-xl border text-left ${
                           isDarkMode
                             ? "bg-slate-800 border-slate-600 text-white"
                             : "bg-gray-800 border-gray-700 text-white"
@@ -425,29 +434,41 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
                         }}
                       >
                         <div
-                          className={`text-xs font-semibold mb-1 pb-1 border-b ${
+                          className={`text-xs font-semibold mb-2 pb-1 border-b ${
                             isDarkMode
                               ? "border-slate-600 text-gray-200"
                               : "border-gray-600 text-gray-200"
                           }`}
                         >
-                          Score {item.value}: {item.label.replace(/\n/g, " ")}
+                          Score {item.value === 0 ? "0" : `1–${item.value}`}: {item.label.replace(/\n/g, " ")}
                         </div>
-                        <p
-                          className={`text-xs leading-relaxed ${
-                            isCurrentScore
-                              ? isDarkMode
-                                ? "text-cyan-400 font-semibold"
-                                : "text-cyan-600 font-semibold"
-                              : ""
-                          }`}
-                        >
-                          {rubricEntry.suggestion}
-                        </p>
+                        <div className="space-y-1.5">
+                          {cumulativeEntries.map((entry) => {
+                            const isTop = entry.targetScore === item.value;
+                            return (
+                              <div key={entry.targetScore} className="flex gap-2 items-start">
+                                <span
+                                  className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[9px] font-bold text-white flex-shrink-0 mt-0.5 ${
+                                    badgeColors[entry.targetScore] || "bg-slate-400"
+                                  }`}
+                                >
+                                  {entry.targetScore}
+                                </span>
+                                <span
+                                  className={`text-xs leading-relaxed ${
+                                    isTop ? "text-white font-bold" : "text-gray-400"
+                                  }`}
+                                >
+                                  {entry.suggestion}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
                         {isCurrentScore && (
                           <div
-                            className={`text-[10px] mt-1 ${
-                              isDarkMode ? "text-cyan-500" : "text-cyan-500"
+                            className={`text-[10px] mt-2 pt-1 border-t ${
+                              isDarkMode ? "border-slate-600 text-cyan-400" : "border-gray-600 text-cyan-400"
                             }`}
                           >
                             ← Current score

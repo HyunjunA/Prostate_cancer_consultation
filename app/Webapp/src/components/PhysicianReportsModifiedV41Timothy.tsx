@@ -10,7 +10,7 @@
 //            Suggestions for Improvement, and Suggested Rephrasing
 // - NEW: AI Rewrite integration added
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   LineChart,
   Line,
@@ -26,6 +26,7 @@ import {
 // import ConsultationScoring from "./ConsultationScoringV7Timothy5";
 import ConsultationScoring from "./ConsultationScoringV7Timothy7";
 import HistoryModal from "./HistoryModal";
+import OnboardingTour, { RestartTourButton } from "./OnboardingTour";
 import {
   useDoctorData,
   DoctorSentenceItem,
@@ -138,6 +139,7 @@ interface GridViewProps {
   fetchRewritesFiltered: (file: string, speaker: string) => void;
   fetchScoreSummary: (file: string, speaker: string) => Promise<any>;
   setScoreSummaryLoading: (loading: boolean) => void;
+  onOpenRubric?: (domain: TopicName, score: number) => void;
 }
 
 interface DetailViewProps {
@@ -404,6 +406,779 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
 };
 
 // ═══════════════════════════════════════════════════════════
+// ScoreLegend — "?" popover showing the 0-5 scoring scale
+// ═══════════════════════════════════════════════════════════
+const ScoreLegend: React.FC<{ isDarkMode: boolean }> = ({ isDarkMode }) => {
+  const [open, setOpen] = useState(false);
+  const levels = [
+    { score: 0, label: "No mention", color: "bg-slate-400" },
+    { score: 1, label: "Name Only", color: "bg-red-500" },
+    { score: 2, label: "Generalization", color: "bg-pink-500" },
+    { score: 3, label: "Imprecise Quantification", color: "bg-yellow-500" },
+    { score: 4, label: "Specific Quantification", color: "bg-green-500" },
+    { score: 5, label: "Patient-centered Estimate", color: "bg-emerald-500" },
+  ];
+  return (
+    <div className="relative inline-block">
+      <button
+        onClick={() => setOpen(!open)}
+        onBlur={() => setTimeout(() => setOpen(false), 200)}
+        className={cx(
+          "inline-flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold transition-colors",
+          isDarkMode
+            ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
+            : "bg-slate-200 text-slate-600 hover:bg-slate-300",
+        )}
+        title="Scoring criteria"
+      >
+        ?
+      </button>
+      {open && (
+        <div
+          className={cx(
+            "absolute z-50 mt-1 right-0 w-64 rounded-lg border shadow-xl p-3",
+            isDarkMode
+              ? "bg-slate-800 border-slate-600"
+              : "bg-white border-slate-200",
+          )}
+        >
+          <div
+            className={cx(
+              "text-xs font-semibold mb-2",
+              isDarkMode ? "text-slate-200" : "text-slate-800",
+            )}
+          >
+            Risk Communication Scoring (0–5)
+          </div>
+          <div className="space-y-1.5">
+            {levels.map(({ score, label, color }) => (
+              <div key={score} className="flex items-center gap-2">
+                <span
+                  className={cx(
+                    "inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold text-white",
+                    color,
+                  )}
+                >
+                  {score}
+                </span>
+                <span
+                  className={cx(
+                    "text-xs",
+                    isDarkMode ? "text-slate-300" : "text-slate-600",
+                  )}
+                >
+                  {label}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════
+// RubricFloatingButton — Fixed top-right button with full rubric modal
+// Shows the 0-5 scale chart + per-domain criteria on hover
+// ═══════════════════════════════════════════════════════════
+const RUBRIC_DATA: Record<string, Record<number, string>> = {
+  "Cancer Prognosis": {
+    1: "Discuss potential for risk of cancer death, metastasis, or progression",
+    2: 'Provide a generalization of magnitude of risk ("high"/"low")',
+    3: "Provide a quantified estimate of risk",
+    4: "Provide a quantified estimate of risk both with treatment and without treatment at an arbitrary timepoint",
+    5: "Provide quantified estimates of risk both with and without treatment at the patient's life expectancy",
+  },
+  "Life Expectancy": {
+    1: "Discuss the concept of competing risks of mortality",
+    2: 'Provide a generalization of duration of life expectancy (i.e., "long"/"short")',
+    3: 'Provide a rough quantified estimate of life expectancy (e.g., "about 15-20 years")',
+    4: "Provide a probability of living to an arbitrary timepoint",
+    5: "Provide a specific number of years and mention calculation based on the patient's age and health status",
+  },
+  "Erectile Dysfunction": {
+    1: "Discuss the potential risk of erectile dysfunction",
+    2: 'Provide a generalization of risk (i.e., "high"/"low")',
+    3: 'Provide an average probability of ED without a time horizon (e.g., "45% risk of erectile dysfunction")',
+    4: 'Provide an average probability of ED with a time horizon (e.g., "45% risk of erectile dysfunction at 1 year postop")',
+    5: "Provide a patient-specific probability of ED with a time horizon, mentioning patient-specific factors such as age and baseline function",
+  },
+  "Urinary Incontinence": {
+    1: "Discuss the potential risk of urinary incontinence",
+    2: 'Provide a generalization of risk (i.e., "high"/"low")',
+    3: 'Provide an average probability of UI without a time horizon (e.g., "10% risk of needing pads")',
+    4: 'Provide an average probability of UI with a time horizon (e.g., "10% risk of needing pads beyond 1 year postop")',
+    5: "Provide a patient-specific probability of UI with a time horizon, mentioning patient-specific factors such as age and baseline function",
+  },
+  "Irritative Symptoms": {
+    1: "Discuss the potential risk of irritative urinary symptoms",
+    2: 'Provide a generalization of risk (i.e., "high"/"low")',
+    3: 'Provide an average probability of LUTS without a time horizon (e.g., "30% risk of developing irritative urinary symptoms")',
+    4: 'Provide an average probability of LUTS with a time horizon (e.g., "30% risk of developing irritative urinary symptoms that may or may not resolve over the following year")',
+    5: "Provide a patient-specific probability of LUTS with a time horizon, mentioning patient-specific factors such as age and baseline function",
+  },
+};
+
+const RUBRIC_DOMAINS = [
+  "Cancer Prognosis",
+  "Life Expectancy",
+  "Erectile Dysfunction",
+  "Urinary Incontinence",
+  "Irritative Symptoms",
+] as const;
+
+const RUBRIC_SCORE_LEVELS = [
+  { score: 0, label: "No mention", color: "bg-slate-400" },
+  { score: 1, label: "Name Only", color: "bg-red-500" },
+  { score: 2, label: "Generalization", color: "bg-pink-500" },
+  { score: 3, label: "Imprecise Quantification", color: "bg-yellow-500" },
+  { score: 4, label: "Specific Quantification", color: "bg-green-500" },
+  { score: 5, label: "Patient-centered Estimate", color: "bg-emerald-500" },
+];
+
+// ═══════════════════════════════════════════════════════════
+// RubricTourTooltip — custom inline tooltip for modal mini-tour
+// ═══════════════════════════════════════════════════════════
+interface RubricTourTooltipProps {
+  targetAttr: string;
+  title: string;
+  content: string;
+  stepNum: number;
+  totalSteps: number;
+  isDarkMode: boolean;
+  isFirst: boolean;
+  isLast: boolean;
+  onNext: () => void;
+  onBack: () => void;
+  onSkip: () => void;
+  onDone: () => void;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+}
+
+const RubricTourTooltip: React.FC<RubricTourTooltipProps> = ({
+  targetAttr, title, content, stepNum, totalSteps,
+  isDarkMode, isFirst, isLast, onNext, onBack, onSkip, onDone, containerRef,
+}) => {
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const target = container.querySelector(`[data-tour='${targetAttr}']`) as HTMLElement | null;
+    if (!target) return;
+
+    const update = () => {
+      const containerRect = container.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      setPos({
+        top: targetRect.bottom - containerRect.top + container.scrollTop + 8,
+        left: targetRect.left - containerRect.left + targetRect.width / 2,
+        width: targetRect.width,
+      });
+    };
+
+    update();
+    // Recalculate on scroll
+    container.addEventListener("scroll", update);
+    return () => container.removeEventListener("scroll", update);
+  }, [targetAttr, containerRef]);
+
+  if (!pos) return null;
+
+  return (
+    <>
+      {/* Highlight ring around target */}
+      <style>{`
+        [data-tour='${targetAttr}'] {
+          outline: 2px solid #06b6d4 !important;
+          outline-offset: 4px !important;
+          border-radius: 8px !important;
+          position: relative;
+          z-index: 2;
+        }
+      `}</style>
+
+      {/* Tooltip */}
+      <div
+        className="absolute z-[100]"
+        style={{
+          top: pos.top,
+          left: Math.min(Math.max(pos.left, 200), (containerRef.current?.clientWidth ?? 800) - 200),
+          transform: "translateX(-50%)",
+        }}
+      >
+        {/* Arrow */}
+        <div
+          className={cx(
+            "w-3 h-3 rotate-45 mx-auto -mb-1.5",
+            isDarkMode ? "bg-slate-800" : "bg-white",
+          )}
+          style={{ boxShadow: "-1px -1px 2px rgba(0,0,0,0.1)" }}
+        />
+
+        <div
+          className={cx(
+            "rounded-xl p-4 w-[360px] border",
+            isDarkMode
+              ? "bg-slate-800 border-slate-600 shadow-[0_8px_30px_rgba(0,0,0,0.5)]"
+              : "bg-white border-slate-200 shadow-[0_8px_30px_rgba(0,0,0,0.15)]",
+          )}
+        >
+          <h4 className={cx(
+            "text-sm font-bold mb-1.5",
+            isDarkMode ? "text-cyan-400" : "text-cyan-600",
+          )}>
+            {title}
+          </h4>
+          <p className={cx(
+            "text-[13px] leading-relaxed mb-3",
+            isDarkMode ? "text-slate-300" : "text-slate-600",
+          )}>
+            {content}
+          </p>
+          <div className="flex items-center justify-between">
+            <button
+              onClick={onSkip}
+              className={cx(
+                "text-[11px] transition-colors",
+                isDarkMode ? "text-slate-500 hover:text-slate-300" : "text-slate-400 hover:text-slate-600",
+              )}
+            >
+              Skip tour
+            </button>
+            <div className="flex items-center gap-2">
+              <span className={cx("text-[11px]", isDarkMode ? "text-slate-500" : "text-slate-400")}>
+                {stepNum}/{totalSteps}
+              </span>
+              {!isFirst && (
+                <button
+                  onClick={onBack}
+                  className={cx(
+                    "text-xs font-medium px-2 py-1 rounded transition-colors",
+                    isDarkMode ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-slate-800",
+                  )}
+                >
+                  Back
+                </button>
+              )}
+              <button
+                onClick={isLast ? onDone : onNext}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-cyan-500 text-white hover:bg-cyan-400 transition-colors"
+              >
+                {isLast ? "Got it!" : "Next"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+};
+
+interface RubricFloatingButtonProps {
+  isDarkMode: boolean;
+  externalOpen?: boolean;
+  externalTab?: string;
+  externalScore?: number | null;
+  onExternalHandled?: () => void;
+}
+
+const RubricFloatingButton: React.FC<RubricFloatingButtonProps> = ({
+  isDarkMode,
+  externalOpen,
+  externalTab,
+  externalScore,
+  onExternalHandled,
+}) => {
+  const [open, setOpen] = useState(false);
+  const [hoveredScore, setHoveredScore] = useState<number | null>(null);
+  const [lockedScore, setLockedScore] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<string>("All Domains");
+  const [expandedDomains, setExpandedDomains] = useState<Set<string>>(new Set([RUBRIC_DOMAINS[0]]));
+
+  // Custom mini tour inside rubric modal
+  const RUBRIC_TOUR_KEY = "rubric-modal-tour-completed";
+  const [rubricTourStep, setRubricTourStep] = useState<number | null>(null);
+  const rubricTourStarted = useRef(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  const RUBRIC_MINI_STEPS = [
+    {
+      target: "rubric-scale-bar",
+      title: "Score Scale",
+      content: "This is the scoring scale from 0 to 5. Hover over any number to preview criteria for that score level, or click a number to lock the selection.",
+    },
+    {
+      target: "rubric-tabs",
+      title: "Domain Tabs",
+      content: "Use these tabs to switch between viewing all domains at once or focusing on a single domain (Cancer Prognosis, Life Expectancy, Erectile Dysfunction, Urinary Incontinence, Irritative Symptoms).",
+    },
+    {
+      target: "rubric-content",
+      title: "Rubric Criteria",
+      content: "The rubric criteria appear here. When viewing \"All Domains\", click any domain name to expand or collapse it. The criteria shown are cumulative — selecting score 3 shows all requirements for scores 1 through 3.",
+    },
+  ];
+
+  // Start mini tour on first modal open
+  useEffect(() => {
+    if (open && !rubricTourStarted.current) {
+      const completed = localStorage.getItem(RUBRIC_TOUR_KEY);
+      if (!completed) {
+        rubricTourStarted.current = true;
+        const timer = setTimeout(() => setRubricTourStep(0), 600);
+        return () => clearTimeout(timer);
+      }
+    }
+    if (!open) {
+      setRubricTourStep(null);
+    }
+  }, [open]);
+
+  const dismissRubricTour = useCallback(() => {
+    setRubricTourStep(null);
+    localStorage.setItem(RUBRIC_TOUR_KEY, "true");
+  }, []);
+
+  // Scroll target into view when step changes
+  useEffect(() => {
+    if (rubricTourStep !== null && modalRef.current) {
+      const step = RUBRIC_MINI_STEPS[rubricTourStep];
+      const target = modalRef.current.querySelector(`[data-tour='${step.target}']`);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }
+  }, [rubricTourStep]);
+
+  // Handle external open trigger (from GridView score click)
+  useEffect(() => {
+    if (externalOpen && externalTab !== undefined && externalScore !== undefined) {
+      setOpen(true);
+      setActiveTab(externalTab || "All Domains");
+      setLockedScore(externalScore);
+      setHoveredScore(null);
+      onExternalHandled?.();
+    }
+  }, [externalOpen, externalTab, externalScore, onExternalHandled]);
+
+  // Active score: locked takes priority over hovered
+  const activeScore = lockedScore !== null ? lockedScore : hoveredScore;
+
+  const toggleDomain = (domain: string) => {
+    setExpandedDomains((prev) => {
+      const next = new Set(prev);
+      if (next.has(domain)) next.delete(domain);
+      else next.add(domain);
+      return next;
+    });
+  };
+
+  return (
+    <>
+      {/* Floating button — fixed top-right with pulse + glow */}
+      <div data-tour="rubric-button" className="fixed top-4 right-4 z-[60]">
+        {/* Glow ring — animated */}
+        <div
+          className={cx(
+            "absolute inset-0 rounded-full animate-ping opacity-30",
+            isDarkMode ? "bg-cyan-400" : "bg-cyan-400",
+          )}
+          style={{ animationDuration: "2.5s" }}
+        />
+        {/* Subtle pulse ring */}
+        <div
+          className={cx(
+            "absolute -inset-1 rounded-full animate-pulse opacity-20",
+            isDarkMode ? "bg-cyan-500" : "bg-cyan-300",
+          )}
+          style={{ animationDuration: "2s" }}
+        />
+        <button
+          onClick={() => setOpen(true)}
+          className={cx(
+            "relative flex items-center gap-2 px-4 py-2.5 rounded-full font-semibold text-sm transition-all",
+            "hover:scale-105 active:scale-95 animate-pulse",
+            isDarkMode
+              ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white hover:from-cyan-500 hover:to-blue-500 shadow-[0_0_15px_rgba(6,182,212,0.4)]"
+              : "bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-400 hover:to-blue-400 shadow-[0_0_15px_rgba(6,182,212,0.35)]",
+          )}
+          style={{ animationDuration: "3s" }}
+          title="Scoring Rubric Guide"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Scoring Rubric
+        </button>
+      </div>
+
+      {/* Modal overlay */}
+      {open && (
+        <div
+          className="fixed inset-0 z-[70] flex items-start justify-center pt-16 px-4"
+          onClick={(e) => { if (e.target === e.currentTarget) { setOpen(false); setLockedScore(null); setHoveredScore(null); } }}
+        >
+          {/* Backdrop */}
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { setOpen(false); setLockedScore(null); setHoveredScore(null); }} />
+
+          {/* Modal content — visible scrollbar */}
+          <div
+            ref={modalRef}
+            className={cx(
+              "relative z-[71] w-full max-w-5xl max-h-[80vh] overflow-y-scroll rounded-2xl border shadow-2xl",
+              isDarkMode
+                ? "bg-slate-900 border-slate-700"
+                : "bg-white border-slate-200",
+            )}
+            style={{ scrollbarGutter: "stable" }}
+          >
+            {/* Header */}
+            <div className={cx(
+              "sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b",
+              isDarkMode
+                ? "bg-slate-900 border-slate-700"
+                : "bg-white border-slate-200",
+            )}>
+              <div>
+                <h2 className={cx(
+                  "text-xl font-bold",
+                  isDarkMode ? "text-white" : "text-slate-900",
+                )}>
+                  Risk Communication Scoring Rubric
+                </h2>
+                <p className={cx(
+                  "text-sm mt-0.5",
+                  isDarkMode ? "text-slate-400" : "text-slate-500",
+                )}>
+                  Hover or click a score level to see domain-specific criteria
+                </p>
+              </div>
+              <button
+                onClick={() => { setOpen(false); setLockedScore(null); setHoveredScore(null); }}
+                className={cx(
+                  "p-2 rounded-lg transition-colors",
+                  isDarkMode
+                    ? "hover:bg-slate-800 text-slate-400 hover:text-white"
+                    : "hover:bg-slate-100 text-slate-500 hover:text-slate-900",
+                )}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Scale bar chart — replicated from ConsultationScoring */}
+            <div data-tour="rubric-scale-bar" className="px-8 sm:px-12 pt-6 pb-4 overflow-visible">
+              {/* Scale bar — with horizontal padding so edge labels don't clip */}
+              <div className="mx-12 sm:mx-16">
+                <div className="relative">
+                  <div className={cx("h-2 rounded-full", isDarkMode ? "bg-blue-400" : "bg-blue-600")}>
+                    {/* Ticks */}
+                    {RUBRIC_SCORE_LEVELS.map((_, index) => (
+                      <div
+                        key={index}
+                        className="absolute -top-2 h-6"
+                        style={{
+                          left: `${(index / 5) * 100}%`,
+                          transform: "translateX(-50%)",
+                          borderLeft: `2px dashed ${isDarkMode ? "#93c5fd" : "#2563eb"}`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Scale numbers and labels — hover sets hoveredScore for rubric table */}
+                <div className="relative mt-4" style={{ height: "80px" }}>
+                  {RUBRIC_SCORE_LEVELS.map(({ score, label }, index) => {
+                    const isActive = activeScore === score;
+                    const isLocked = lockedScore === score;
+                    return (
+                      <div
+                        key={score}
+                        className="absolute text-center"
+                        style={{
+                          left: `${(index / 5) * 100}%`,
+                          transform: "translateX(-50%)",
+                          width: "90px",
+                        }}
+                        onMouseEnter={() => { if (lockedScore === null) setHoveredScore(score); }}
+                        onMouseLeave={() => { if (lockedScore === null) setHoveredScore(null); }}
+                        onClick={() => setLockedScore(lockedScore === score ? null : score)}
+                      >
+                        <div
+                          className={cx(
+                            "text-lg font-bold mb-1 cursor-pointer border-b-2 transition-colors",
+                            isLocked ? "border-solid" : "border-dashed",
+                            isActive
+                              ? isDarkMode ? "text-cyan-400 border-cyan-500" : "text-cyan-600 border-cyan-400"
+                              : isDarkMode ? "text-gray-100 border-slate-500" : "text-gray-800 border-slate-400",
+                          )}
+                          style={{ paddingBottom: "2px" }}
+                        >
+                          {score}
+                        </div>
+                        <div
+                          className={cx(
+                            "text-xs whitespace-pre-line leading-tight transition-colors",
+                            isActive
+                              ? isDarkMode ? "text-cyan-400 font-semibold" : "text-cyan-600 font-semibold"
+                              : isDarkMode ? "text-gray-200" : "text-gray-800",
+                          )}
+                        >
+                          {label}
+                        </div>
+                        {isLocked && (
+                          <div className={cx("text-[9px] mt-0.5", isDarkMode ? "text-cyan-500" : "text-cyan-500")}>
+                            (locked)
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Subtitle */}
+              <div className="text-center mt-2">
+                <h3 className={cx(
+                  "text-lg font-semibold",
+                  isDarkMode ? "text-gray-100" : "text-gray-800",
+                )}>
+                  Quality of Risk Communication
+                </h3>
+              </div>
+            </div>
+
+            {/* Domain rubric — tabs + accordion hybrid */}
+            <div className="px-6 pb-6">
+              {/* Status bar */}
+              <div className={cx(
+                "text-xs font-semibold uppercase tracking-wider px-4 py-2 mb-3 rounded-lg text-center",
+                isDarkMode ? "bg-slate-800 text-slate-400" : "bg-slate-100 text-slate-500",
+              )}>
+                {activeScore !== null
+                  ? `Score ${activeScore === 0 ? "0" : `1–${activeScore}`} Criteria${lockedScore !== null ? " — click score again to unlock" : ""}`
+                  : "Hover or click a score above to see criteria"}
+              </div>
+
+              {/* Domain tabs — "All Domains" + individual */}
+              <div data-tour="rubric-tabs" className={cx(
+                "flex border-b overflow-x-auto",
+                isDarkMode ? "border-slate-700" : "border-slate-200",
+              )}>
+                {["All Domains", ...RUBRIC_DOMAINS].map((tab) => {
+                  const shortLabel: Record<string, string> = {
+                    "All Domains": "All",
+                    "Cancer Prognosis": "CP",
+                    "Life Expectancy": "LE",
+                    "Erectile Dysfunction": "ED",
+                    "Urinary Incontinence": "INC",
+                    "Irritative Symptoms": "IUS",
+                  };
+                  return (
+                    <button
+                      key={tab}
+                      onClick={() => setActiveTab(tab)}
+                      className={cx(
+                        "px-3 py-2.5 text-xs sm:text-sm font-medium text-center transition-colors relative whitespace-nowrap",
+                        tab === "All Domains" ? "flex-shrink-0" : "flex-1",
+                        activeTab === tab
+                          ? isDarkMode ? "text-cyan-400" : "text-cyan-600"
+                          : isDarkMode ? "text-slate-400 hover:text-slate-200" : "text-slate-500 hover:text-slate-700",
+                      )}
+                    >
+                      <span className="hidden sm:inline">{tab === "Irritative Symptoms" ? "Irritative Sym." : tab}</span>
+                      <span className="sm:hidden">{shortLabel[tab] || tab}</span>
+                      {activeTab === tab && (
+                        <div className={cx(
+                          "absolute bottom-0 left-0 right-0 h-0.5",
+                          isDarkMode ? "bg-cyan-400" : "bg-cyan-600",
+                        )} />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Tab content */}
+              <div data-tour="rubric-content" className={cx(
+                "rounded-b-xl border border-t-0",
+                isDarkMode ? "border-slate-700" : "border-slate-200",
+              )}>
+                {activeTab === "All Domains" ? (
+                  /* All Domains — accordion view */
+                  <div>
+                    {/* Expand/Collapse All */}
+                    <div className={cx(
+                      "flex justify-end px-4 py-2",
+                      isDarkMode ? "bg-slate-800/30" : "bg-slate-50",
+                    )}>
+                      <button
+                        onClick={() => {
+                          if (expandedDomains.size === RUBRIC_DOMAINS.length) {
+                            setExpandedDomains(new Set());
+                          } else {
+                            setExpandedDomains(new Set(RUBRIC_DOMAINS));
+                          }
+                        }}
+                        className={cx(
+                          "text-xs font-medium px-2 py-1 rounded transition-colors",
+                          isDarkMode ? "hover:bg-slate-700 text-slate-400" : "hover:bg-slate-200 text-slate-500",
+                        )}
+                      >
+                        {expandedDomains.size === RUBRIC_DOMAINS.length ? "Collapse All" : "Expand All"}
+                      </button>
+                    </div>
+
+                    {RUBRIC_DOMAINS.map((domain, idx) => {
+                      const isExpanded = expandedDomains.has(domain);
+                      return (
+                        <div
+                          key={domain}
+                          className={cx(
+                            idx < RUBRIC_DOMAINS.length - 1 && (isDarkMode ? "border-b border-slate-700" : "border-b border-slate-200"),
+                          )}
+                        >
+                          <button
+                            onClick={() => toggleDomain(domain)}
+                            className={cx(
+                              "w-full flex items-center justify-between px-4 py-3 text-sm font-medium transition-colors text-left",
+                              isDarkMode ? "text-slate-200 hover:bg-slate-800" : "text-slate-700 hover:bg-slate-50",
+                            )}
+                          >
+                            <span>{domain}</span>
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              className={cx(
+                                "w-4 h-4 transition-transform duration-200 flex-shrink-0",
+                                isExpanded && "rotate-180",
+                                isDarkMode ? "text-slate-400" : "text-slate-500",
+                              )}
+                              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+
+                          {isExpanded && (
+                            <div className={cx("px-4 pb-3", isDarkMode ? "bg-slate-800/50" : "bg-white")}>
+                              {activeScore === null
+                                ? <span className={cx("text-sm", isDarkMode ? "text-slate-500" : "text-slate-400")}>Select a score above</span>
+                                : (
+                                  <div className="space-y-1.5">
+                                    {Array.from({ length: activeScore + 1 }, (_, s) => s)
+                                      .filter((s) => activeScore === 0 ? true : s > 0)
+                                      .map((s) => {
+                                      const text = s === 0 ? "No mention of this topic" : RUBRIC_DATA[domain][s];
+                                      const isActiveLevel = s === activeScore;
+                                      return (
+                                        <div key={s} className="flex gap-2 items-start">
+                                          <span className={cx(
+                                            "inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold text-white flex-shrink-0 mt-0.5",
+                                            RUBRIC_SCORE_LEVELS[s].color,
+                                          )}>
+                                            {s}
+                                          </span>
+                                          <span className={cx(
+                                            "text-sm leading-snug",
+                                            isActiveLevel
+                                              ? isDarkMode ? "text-white font-bold" : "text-slate-900 font-bold"
+                                              : isDarkMode ? "text-slate-400" : "text-slate-500",
+                                          )}>
+                                            {text}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  /* Individual domain tab — direct content */
+                  <div className="p-4">
+                    {activeScore === null
+                      ? <span className={cx("text-sm", isDarkMode ? "text-slate-500" : "text-slate-400")}>Select a score above to see criteria</span>
+                      : (
+                        <div className="space-y-2">
+                          {Array.from({ length: activeScore + 1 }, (_, s) => s)
+                            .filter((s) => activeScore === 0 ? true : s > 0)
+                            .map((s) => {
+                            const text = s === 0 ? "No mention of this topic" : RUBRIC_DATA[activeTab][s];
+                            const isActiveLevel = s === activeScore;
+                            return (
+                              <div key={s} className="flex gap-2.5 items-start">
+                                <span className={cx(
+                                  "inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold text-white flex-shrink-0 mt-0.5",
+                                  RUBRIC_SCORE_LEVELS[s].color,
+                                )}>
+                                  {s}
+                                </span>
+                                <span className={cx(
+                                  "text-sm leading-snug pt-0.5",
+                                  isActiveLevel
+                                    ? isDarkMode ? "text-white font-bold" : "text-slate-900 font-bold"
+                                    : isDarkMode ? "text-slate-400" : "text-slate-500",
+                                )}>
+                                  {text}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <p className={cx(
+                "text-xs mt-3 text-center",
+                isDarkMode ? "text-slate-500" : "text-slate-400",
+              )}>
+                Score 0 = No mention. Scores 1–5 progress from qualitative to patient-centered quantitative communication.
+              </p>
+            </div>
+
+            {/* Custom mini tour tooltips — rendered inline, no portal */}
+            {rubricTourStep !== null && (() => {
+              const step = RUBRIC_MINI_STEPS[rubricTourStep];
+              const isLast = rubricTourStep === RUBRIC_MINI_STEPS.length - 1;
+              const isFirst = rubricTourStep === 0;
+              return (
+                <RubricTourTooltip
+                  targetAttr={step.target}
+                  title={step.title}
+                  content={step.content}
+                  stepNum={rubricTourStep + 1}
+                  totalSteps={RUBRIC_MINI_STEPS.length}
+                  isDarkMode={isDarkMode}
+                  isFirst={isFirst}
+                  isLast={isLast}
+                  onNext={() => setRubricTourStep(rubricTourStep + 1)}
+                  onBack={() => setRubricTourStep(rubricTourStep - 1)}
+                  onSkip={dismissRubricTour}
+                  onDone={dismissRubricTour}
+                  containerRef={modalRef}
+                />
+              );
+            })()}
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════
 // DashboardViewV1 Component (Original — kept for reference)
 // ═══════════════════════════════════════════════════════════
 const DashboardViewV1: React.FC<DashboardViewProps> = ({
@@ -445,13 +1220,13 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
     </div>
 
     {/* Search & Filters */}
-    <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
+    <div data-tour="search-filters" className="flex flex-col md:flex-row items-start md:items-center gap-4">
       <input
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         placeholder="Search by patient / ID / file..."
         className={cx(
-          "w-full md:max-w-sm px-4 py-2 rounded-lg border",
+          "w-full md:max-w-sm px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg border",
           isDarkMode
             ? "bg-slate-800 border-slate-600 text-slate-200 placeholder-slate-500"
             : "bg-white border-slate-300 text-slate-900 placeholder-slate-500",
@@ -473,7 +1248,7 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
             key={k}
             onClick={() => setScoreBand(k as "ALL" | "HIGH" | "STD" | "LOW")}
             className={cx(
-              "px-3 py-2 text-sm rounded-md",
+              "px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm rounded-md",
               scoreBand === k
                 ? isDarkMode
                   ? "bg-blue-700 text-blue-100"
@@ -490,11 +1265,11 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
     </div>
 
     {/* Summary Cards */}
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+    <div data-tour="summary-cards" className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
       <button
         onClick={() => setScoreBand("ALL")}
         className={cx(
-          "border p-8 rounded-xl shadow-lg text-left transition",
+          "border p-4 sm:p-6 lg:p-8 rounded-xl shadow-lg text-left transition",
           isDarkMode
             ? "bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700 hover:ring-2 hover:ring-cyan-600/30"
             : "bg-gradient-to-br from-white to-slate-50 border-slate-200 hover:ring-2 hover:ring-cyan-400/30",
@@ -502,7 +1277,7 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
       >
         <div
           className={cx(
-            "text-sm font-semibold uppercase tracking-wider mb-2",
+            "text-sm sm:text-base font-semibold uppercase tracking-wider mb-2",
             isDarkMode ? "text-cyan-400" : "text-cyan-600",
           )}
         >
@@ -510,7 +1285,7 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
         </div>
         <div
           className={cx(
-            "text-4xl font-light",
+            "text-2xl sm:text-3xl lg:text-4xl font-light",
             isDarkMode ? "text-slate-100" : "text-slate-900",
           )}
         >
@@ -521,7 +1296,7 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
       <button
         onClick={() => setScoreBand("HIGH")}
         className={cx(
-          "border p-8 rounded-xl shadow-lg text-left transition",
+          "border p-4 sm:p-6 lg:p-8 rounded-xl shadow-lg text-left transition",
           isDarkMode
             ? "bg-gradient-to-br from-emerald-900 to-emerald-800 border-emerald-700 hover:ring-2 hover:ring-emerald-500/30"
             : "bg-gradient-to-br from-emerald-50 to-emerald-100 border-emerald-200 hover:ring-2 hover:ring-emerald-400/30",
@@ -529,7 +1304,7 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
       >
         <div
           className={cx(
-            "text-sm font-semibold uppercase tracking-wider mb-2",
+            "text-sm sm:text-base font-semibold uppercase tracking-wider mb-2",
             isDarkMode ? "text-emerald-300" : "text-emerald-700",
           )}
         >
@@ -537,7 +1312,7 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
         </div>
         <div
           className={cx(
-            "text-4xl font-light",
+            "text-2xl sm:text-3xl lg:text-4xl font-light",
             isDarkMode ? "text-emerald-100" : "text-emerald-900",
           )}
         >
@@ -556,7 +1331,7 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
       <button
         onClick={() => setScoreBand("STD")}
         className={cx(
-          "border p-8 rounded-xl shadow-lg text-left transition",
+          "border p-4 sm:p-6 lg:p-8 rounded-xl shadow-lg text-left transition",
           isDarkMode
             ? "bg-gradient-to-br from-yellow-900 to-yellow-800 border-yellow-700 hover:ring-2 hover:ring-yellow-500/30"
             : "bg-gradient-to-br from-yellow-50 to-yellow-100 border-yellow-200 hover:ring-2 hover:ring-yellow-400/30",
@@ -564,7 +1339,7 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
       >
         <div
           className={cx(
-            "text-sm font-semibold uppercase tracking-wider mb-2",
+            "text-sm sm:text-base font-semibold uppercase tracking-wider mb-2",
             isDarkMode ? "text-yellow-300" : "text-yellow-700",
           )}
         >
@@ -572,7 +1347,7 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
         </div>
         <div
           className={cx(
-            "text-4xl font-light",
+            "text-2xl sm:text-3xl lg:text-4xl font-light",
             isDarkMode ? "text-yellow-100" : "text-yellow-900",
           )}
         >
@@ -594,7 +1369,7 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
       <button
         onClick={() => setScoreBand("LOW")}
         className={cx(
-          "border p-8 rounded-xl shadow-lg text-left transition",
+          "border p-4 sm:p-6 lg:p-8 rounded-xl shadow-lg text-left transition",
           isDarkMode
             ? "bg-gradient-to-br from-red-900 to-pink-900 border-red-700 hover:ring-2 hover:ring-red-500/30"
             : "bg-gradient-to-br from-red-50 to-pink-100 border-red-200 hover:ring-2 hover:ring-red-400/30",
@@ -602,7 +1377,7 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
       >
         <div
           className={cx(
-            "text-sm font-semibold uppercase tracking-wider mb-2",
+            "text-sm sm:text-base font-semibold uppercase tracking-wider mb-2",
             isDarkMode ? "text-red-300" : "text-red-700",
           )}
         >
@@ -610,7 +1385,7 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
         </div>
         <div
           className={cx(
-            "text-4xl font-light",
+            "text-2xl sm:text-3xl lg:text-4xl font-light",
             isDarkMode ? "text-red-100" : "text-red-900",
           )}
         >
@@ -638,7 +1413,7 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
     >
       <div
         className={cx(
-          "px-8 py-6 border-b",
+          "px-4 sm:px-6 lg:px-8 py-4 sm:py-6 border-b",
           isDarkMode
             ? "bg-gradient-to-r from-slate-700 to-slate-800 border-slate-600"
             : "bg-gradient-to-r from-slate-100 to-slate-50 border-slate-200",
@@ -646,7 +1421,7 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
       >
         <h2
           className={cx(
-            "text-xl font-semibold",
+            "text-base sm:text-lg lg:text-xl font-semibold",
             isDarkMode ? "text-slate-100" : "text-slate-900",
           )}
         >
@@ -667,7 +1442,7 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
             <tr>
               <th
                 className={cx(
-                  "px-8 py-4 text-left text-sm font-semibold uppercase tracking-wider",
+                  "px-4 sm:px-6 lg:px-8 py-3 sm:py-4 text-left text-sm font-semibold uppercase tracking-wider",
                   isDarkMode ? "text-slate-300" : "text-slate-700",
                 )}
                 style={{ width: "30%" }}
@@ -685,7 +1460,7 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
               </th>
               <th
                 className={cx(
-                  "px-8 py-4 text-center text-sm font-semibold uppercase tracking-wider",
+                  "px-4 sm:px-6 lg:px-8 py-3 sm:py-4 text-center text-sm font-semibold uppercase tracking-wider",
                   isDarkMode ? "text-slate-300" : "text-slate-700",
                 )}
                 style={{ width: "30%" }}
@@ -712,11 +1487,11 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
                     : "hover:bg-slate-100/50",
                 )}
               >
-                <td className="px-8 py-6" style={{ width: "30%" }}>
+                <td className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6" style={{ width: "30%" }}>
                   <div>
                     <div
                       className={cx(
-                        "text-lg font-semibold",
+                        "text-base sm:text-lg font-semibold",
                         isDarkMode ? "text-slate-100" : "text-slate-900",
                       )}
                     >
@@ -768,14 +1543,14 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
                     </span>
                   </div>
                 </td>
-                <td className="px-8 py-6 text-center" style={{ width: "30%" }}>
+                <td className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6 text-center" style={{ width: "30%" }}>
                   <button
                     onClick={() => {
                       setSelectedPatient(patient);
                       setCurrentView("grid");
                     }}
                     className={cx(
-                      "px-6 py-3 rounded-lg text-sm font-semibold transition-all duration-200",
+                      "px-4 py-2 sm:px-6 sm:py-3 rounded-lg text-sm font-semibold transition-all duration-200",
                       isDarkMode
                         ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white hover:from-cyan-500 hover:to-blue-500 shadow-lg"
                         : "bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-600 hover:to-blue-600 shadow-lg",
@@ -826,23 +1601,25 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
   ).length;
   const lowCount = patients.filter((p) => p.overallScore < 3).length;
 
+  // Overall average score across all patients
+  const overallAvg = useMemo(() => {
+    if (patients.length === 0) return 0;
+    const sum = patients.reduce((acc, p) => acc + p.overallScore, 0);
+    return sum / patients.length;
+  }, [patients]);
+
   const summaryItems: {
     label: string;
     count: number;
+    total: number;
     band: "ALL" | "HIGH" | "STD" | "LOW";
     dotColor: string;
     textColor: string;
   }[] = [
     {
-      label: "Total",
-      count: patients.length,
-      band: "ALL",
-      dotColor: isDarkMode ? "bg-cyan-400" : "bg-cyan-500",
-      textColor: isDarkMode ? "text-cyan-400" : "text-cyan-600",
-    },
-    {
       label: "High (4–5)",
       count: highCount,
+      total: patients.length,
       band: "HIGH",
       dotColor: isDarkMode ? "bg-emerald-400" : "bg-emerald-500",
       textColor: isDarkMode ? "text-emerald-400" : "text-emerald-600",
@@ -850,6 +1627,7 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
     {
       label: "Standard (3)",
       count: stdCount,
+      total: patients.length,
       band: "STD",
       dotColor: isDarkMode ? "bg-yellow-400" : "bg-yellow-500",
       textColor: isDarkMode ? "text-yellow-400" : "text-yellow-600",
@@ -857,6 +1635,7 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
     {
       label: "Low (0–2)",
       count: lowCount,
+      total: patients.length,
       band: "LOW",
       dotColor: isDarkMode ? "bg-red-400" : "bg-red-500",
       textColor: isDarkMode ? "text-red-400" : "text-red-600",
@@ -879,6 +1658,7 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
         file: item.file,
         score: item.overall_score ?? 0,
         patientsCount: item.patients_count,
+        patientsDetail: item.patients_detail ?? [],
       };
     });
   }, [trajectoryData]);
@@ -889,7 +1669,7 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
       <div>
         <h1
           className={cx(
-            "text-3xl font-semibold mb-1",
+            "text-2xl sm:text-3xl lg:text-4xl font-semibold mb-1",
             isDarkMode ? "text-slate-100" : "text-slate-900",
           )}
         >
@@ -897,7 +1677,7 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
         </h1>
         <p
           className={cx(
-            "text-sm",
+            "text-sm sm:text-base",
             isDarkMode ? "text-slate-400" : "text-slate-500",
           )}
         >
@@ -910,8 +1690,9 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
       <div className="flex flex-col md:flex-row gap-4">
         {/* Left 3/4: Trajectory Graph placeholder */}
         <div
+          data-tour="trajectory-chart"
           className={cx(
-            "flex-1 md:w-3/4 rounded-xl border p-6 min-h-[220px] flex flex-col",
+            "flex-1 md:w-3/4 rounded-xl border p-4 sm:p-5 lg:p-6 min-h-[220px] flex flex-col",
             isDarkMode
               ? "bg-slate-800/60 border-slate-700"
               : "bg-white border-slate-200 shadow-sm",
@@ -920,11 +1701,11 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
           <div className="flex items-center justify-between mb-4">
             <h2
               className={cx(
-                "text-sm font-semibold",
+                "text-sm sm:text-base font-semibold",
                 isDarkMode ? "text-slate-300" : "text-slate-700",
               )}
             >
-              Overall Score Trajectory
+              Overall Quality of Risk Communication Score Trajectory
             </h2>
             <span
               className={cx(
@@ -979,19 +1760,59 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                   }}
                 />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: isDarkMode ? "#1e293b" : "#ffffff",
-                    border: `1px solid ${isDarkMode ? "#334155" : "#e2e8f0"}`,
-                    borderRadius: "8px",
-                    fontSize: 12,
-                    color: isDarkMode ? "#e2e8f0" : "#1e293b",
-                  }}
-                  formatter={(value: number) => [value.toFixed(2), "Cumulative Avg"]}
-                  labelFormatter={(_: string, payload: any[]) => {
-                    const item = payload?.[0]?.payload;
-                    if (!item) return "";
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null;
+                    const item = payload[0].payload;
                     const type = item.eventType === "rewrite" ? "Rewrite" : "Consultation";
-                    return `${item.fullTimestamp?.substring(0, 19)} | ${type} | ${item.patientsCount} patients`;
+                    const details = item.patientsDetail ?? [];
+                    return (
+                      <div
+                        className="rounded-lg border p-3 shadow-lg max-h-[300px] overflow-y-auto"
+                        style={{
+                          backgroundColor: isDarkMode ? "#1e293b" : "#ffffff",
+                          borderColor: isDarkMode ? "#334155" : "#e2e8f0",
+                          color: isDarkMode ? "#e2e8f0" : "#1e293b",
+                          fontSize: 12,
+                          minWidth: 220,
+                        }}
+                      >
+                        <div className="font-semibold mb-1">
+                          {item.fullTimestamp?.substring(0, 19)} | {type}
+                        </div>
+                        <div className="mb-2" style={{ color: "#06b6d4" }}>
+                          Cumulative Avg: <span className="font-bold">{item.score.toFixed(2)}</span>
+                          <span className="ml-1 opacity-70">({item.patientsCount} patients)</span>
+                        </div>
+                        {details.length > 0 && (
+                          <>
+                            <div
+                              className="text-xs font-medium mb-1 pt-1 border-t"
+                              style={{ borderColor: isDarkMode ? "#334155" : "#e2e8f0" }}
+                            >
+                              Individual Patient Scores:
+                            </div>
+                            <div className="space-y-0.5">
+                              {details.map((p: { file: string; overall_score: number }) => {
+                                const shortId = p.file.replace(/\.xlsx$/i, "");
+                                return (
+                                  <div
+                                    key={p.file}
+                                    className="flex justify-between text-xs"
+                                  >
+                                    <span className="truncate mr-2 max-w-[160px]" title={shortId}>
+                                      {shortId}
+                                    </span>
+                                    <span className="font-mono font-semibold whitespace-nowrap">
+                                      {p.overall_score.toFixed(2)}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
                   }}
                 />
                 <Line
@@ -1020,15 +1841,45 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
 
         {/* Right 1/4: Compact Summary (Google Scholar h-index style) */}
         <div
+          data-tour="summary-box"
           className={cx(
-            "flex-shrink-0 w-full md:w-1/4 rounded-xl border p-4 flex flex-col justify-center",
+            "flex-shrink-0 w-full md:w-1/4 rounded-xl border p-3 sm:p-4 flex flex-col justify-center",
             isDarkMode
               ? "bg-slate-800/60 border-slate-700"
               : "bg-white border-slate-200 shadow-sm",
           )}
         >
           <div className="space-y-3">
-            {summaryItems.map(({ label, count, band, dotColor, textColor }) => (
+            {/* Overall Average Score */}
+            <div
+              className={cx(
+                "text-center pb-3 border-b",
+                isDarkMode ? "border-slate-700" : "border-slate-200",
+              )}
+            >
+              <div
+                className={cx(
+                  "text-3xl font-bold tabular-nums",
+                  overallAvg >= 4
+                    ? isDarkMode ? "text-emerald-400" : "text-emerald-600"
+                    : overallAvg >= 3
+                      ? isDarkMode ? "text-yellow-400" : "text-yellow-600"
+                      : isDarkMode ? "text-red-400" : "text-red-600",
+                )}
+              >
+                {overallAvg > 0 ? overallAvg.toFixed(2) : "—"}
+              </div>
+              <div
+                className={cx(
+                  "text-xs mt-0.5 flex items-center justify-center gap-1",
+                  isDarkMode ? "text-slate-400" : "text-slate-500",
+                )}
+              >
+                Avg Score ({patients.length} patients)
+              </div>
+            </div>
+
+            {summaryItems.map(({ label, count, total, band, dotColor, textColor }) => (
               <button
                 key={band}
                 onClick={() => setScoreBand(band)}
@@ -1044,9 +1895,11 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                 )}
               >
                 <span className="flex items-center gap-2">
-                  <span
-                    className={cx("w-2.5 h-2.5 rounded-full flex-shrink-0", dotColor)}
-                  />
+                  {dotColor && (
+                    <span
+                      className={cx("w-2.5 h-2.5 rounded-full flex-shrink-0", dotColor)}
+                    />
+                  )}
                   <span
                     className={cx(
                       "text-xs font-medium",
@@ -1059,16 +1912,32 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                 <span
                   className={cx("text-xl font-bold tabular-nums", textColor)}
                 >
-                  {count}
+                  {band === "ALL" ? count : `${count} / ${total}`}
                 </span>
               </button>
             ))}
+
+            {/* Show All link — visible only when a filter is active */}
+            {scoreBand !== "ALL" && (
+              <button
+                onClick={() => setScoreBand("ALL")}
+                className={cx(
+                  "w-full text-center text-xs font-medium pt-2 border-t transition-colors",
+                  isDarkMode
+                    ? "border-slate-700 text-cyan-400 hover:text-cyan-300"
+                    : "border-slate-200 text-cyan-600 hover:text-cyan-500",
+                )}
+              >
+                Show All
+              </button>
+            )}
           </div>
         </div>
       </div>
 
       {/* ── Row 3: Patient List (main content, full width) ── */}
       <div
+        data-tour="patient-list"
         className={cx(
           "border rounded-xl overflow-hidden",
           isDarkMode
@@ -1137,6 +2006,7 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
               </tr>
             </thead>
             <tbody
+              key={`tbody-${scoreBand}-${search}`}
               className={cx(
                 "divide-y",
                 isDarkMode ? "divide-slate-700/50" : "divide-slate-100",
@@ -1277,6 +2147,7 @@ const GridView: React.FC<GridViewProps> = ({
   fetchRewritesFiltered,
   fetchScoreSummary,
   setScoreSummaryLoading,
+  onOpenRubric,
 }) => {
   const isLoadingSentences =
     apiLoading && (!sentences?.data || sentences.data.length === 0);
@@ -1305,38 +2176,43 @@ const GridView: React.FC<GridViewProps> = ({
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div
+      {/* Back Button */}
+      <button
+        onClick={() => {
+          setCurrentView("dashboard");
+          setSelectedPatient(null);
+        }}
         className={cx(
-          "border-b pb-6",
-          isDarkMode ? "border-slate-600" : "border-slate-200",
+          "flex items-center gap-2 text-sm font-medium transition-colors",
+          isDarkMode
+            ? "text-cyan-400 hover:text-cyan-300"
+            : "text-cyan-600 hover:text-cyan-800",
         )}
       >
-        <button
-          onClick={() => {
-            setCurrentView("dashboard");
-            setSelectedPatient(null);
-          }}
-          className={cx(
-            "mb-4 flex items-center gap-2 text-sm font-medium transition-colors",
-            isDarkMode
-              ? "text-cyan-400 hover:text-cyan-300"
-              : "text-cyan-600 hover:text-cyan-800",
-          )}
-        >
-          ← Return to Reports Dashboard
-        </button>
+        ← Return to Reports Dashboard
+      </button>
+
+      {/* ── Overall Performance Card (visually separated from topic details) ── */}
+      <div
+        data-tour="grid-overall"
+        className={cx(
+          "rounded-xl border p-5 sm:p-6",
+          isDarkMode
+            ? "bg-gradient-to-r from-slate-800 to-slate-800/80 border-slate-700 shadow-lg shadow-slate-900/30"
+            : "bg-gradient-to-r from-white to-slate-50 border-slate-200 shadow-md",
+        )}
+      >
         <h1
           className={cx(
-            "text-3xl font-light mb-3",
+            "text-2xl sm:text-3xl lg:text-4xl font-light mb-3",
             isDarkMode ? "text-slate-100" : "text-slate-900",
           )}
         >
-          Grid Summary — {selectedPatient.name}
+          {selectedPatient.name}
         </h1>
         <div
           className={cx(
-            "text-lg flex items-center gap-3",
+            "text-base sm:text-lg flex flex-wrap items-center gap-3",
             isDarkMode ? "text-slate-400" : "text-slate-600",
           )}
         >
@@ -1350,7 +2226,7 @@ const GridView: React.FC<GridViewProps> = ({
               <>
                 <span
                   className={cx(
-                    "inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold",
+                    "inline-flex items-center justify-center w-10 h-10 rounded-full text-base font-bold",
                     getScoreColorForValue(overallScore, isDarkMode),
                   )}
                 >
@@ -1450,6 +2326,7 @@ const GridView: React.FC<GridViewProps> = ({
 
       {/* Topics Table */}
       <div
+        data-tour="grid-topics-table"
         className={cx(
           "border rounded-xl shadow-xl overflow-hidden",
           isDarkMode
@@ -1484,7 +2361,9 @@ const GridView: React.FC<GridViewProps> = ({
                   )}
                   style={{ width: "10%" }}
                 >
-                  Your Score
+                  <div data-tour="grid-your-score" className="flex items-center justify-center gap-1">
+                    Your Score
+                  </div>
                 </th>
                 <th
                   className={cx(
@@ -1540,7 +2419,7 @@ const GridView: React.FC<GridViewProps> = ({
                 const data = topicsData[topicName];
                 const representativeSentence = getRepresentativeSentence(data);
                 const lastScore = getLastSentenceScore(data);
-                const firstSuggestion = getFirstSuggestion(
+                const allSuggestions = getImprovementSuggestions(
                   topicName,
                   lastScore,
                 );
@@ -1579,21 +2458,28 @@ const GridView: React.FC<GridViewProps> = ({
                       </button>
                     </td>
 
-                    {/* Your Score Column - uses last sentence score */}
+                    {/* Your Score Column - uses last sentence score, clickable to open rubric */}
                     <td className="px-4 py-5 text-center">
                       {scoreSummaryLoading ? (
                         <div className="flex justify-center">
                           <LoadingSpinner size="sm" isDarkMode={isDarkMode} />
                         </div>
                       ) : (
-                        <span
+                        <button
+                          onClick={() => {
+                            const score = getLastSentenceScore(data);
+                            if (score !== null && onOpenRubric) {
+                              onOpenRubric(topicName, Math.round(score));
+                            }
+                          }}
                           className={cx(
-                            "inline-flex items-center justify-center w-10 h-10 rounded-full text-sm font-bold",
+                            "inline-flex items-center justify-center w-10 h-10 rounded-full text-sm font-bold cursor-pointer transition-transform hover:scale-110",
                             getScoreColorForValue(getLastSentenceScore(data), isDarkMode),
                           )}
+                          title="Click to view scoring rubric"
                         >
                           {getLastSentenceScore(data) !== null ? Math.round(getLastSentenceScore(data)!) : "—"}
-                        </span>
+                        </button>
                       )}
                     </td>
 
@@ -1609,26 +2495,37 @@ const GridView: React.FC<GridViewProps> = ({
                       </div>
                     </td>
 
-                    {/* How to Improve Column */}
+                    {/* How to Improve Column — ALL levels above current score (highest first, lowest last) */}
                     <td className="px-4 py-5">
-                      {firstSuggestion ? (
-                        <div>
-                          <div
-                            className={cx(
-                              "text-xs font-semibold mb-1",
-                              isDarkMode ? "text-amber-400" : "text-amber-600",
-                            )}
-                          >
-                            To reach Score {firstSuggestion.targetScore}:
-                          </div>
-                          <div
-                            className={cx(
-                              "text-sm leading-relaxed line-clamp-3",
-                              isDarkMode ? "text-slate-400" : "text-slate-600",
-                            )}
-                          >
-                            {firstSuggestion.suggestion}
-                          </div>
+                      {allSuggestions.length > 0 ? (
+                        <div className="space-y-2">
+                          {[...allSuggestions].reverse().map((s) => {
+                            const isNextStep = s.targetScore === (lastScore !== null ? Math.floor(lastScore) + 1 : 1);
+                            return (
+                              <div key={s.targetScore}>
+                                <div
+                                  className={cx(
+                                    "text-xs font-semibold",
+                                    isNextStep
+                                      ? isDarkMode ? "text-cyan-400" : "text-cyan-600"
+                                      : isDarkMode ? "text-slate-300" : "text-slate-600",
+                                  )}
+                                >
+                                  Score {s.targetScore}:{isNextStep && " ← next step"}
+                                </div>
+                                <div
+                                  className={cx(
+                                    "text-xs leading-relaxed",
+                                    isNextStep
+                                      ? isDarkMode ? "text-slate-200" : "text-slate-800"
+                                      : isDarkMode ? "text-slate-300" : "text-slate-600",
+                                  )}
+                                >
+                                  {s.suggestion}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       ) : (
                         <div
@@ -1837,7 +2734,7 @@ const DetailView: React.FC<DetailViewProps> = ({
 
       <div
         className={cx(
-          "border rounded-xl p-8 shadow-xl",
+          "border rounded-xl p-4 sm:p-6 lg:p-8 shadow-xl",
           isDarkMode
             ? "bg-slate-800/70 border-slate-700"
             : "bg-white border-slate-200",
@@ -1846,13 +2743,13 @@ const DetailView: React.FC<DetailViewProps> = ({
         {/* Header */}
         <div
           className={cx(
-            "border-b pb-6 mb-8",
+            "border-b pb-4 sm:pb-6 mb-4 sm:mb-6 lg:mb-8",
             isDarkMode ? "border-slate-700" : "border-slate-200",
           )}
         >
           <h2
             className={cx(
-              "text-3xl font-light mb-2",
+              "text-xl sm:text-2xl lg:text-3xl font-light mb-2",
               isDarkMode ? "text-slate-100" : "text-slate-900",
             )}
           >
@@ -1860,7 +2757,7 @@ const DetailView: React.FC<DetailViewProps> = ({
           </h2>
           <p
             className={cx(
-              "text-lg",
+              "text-sm sm:text-base lg:text-lg",
               isDarkMode ? "text-slate-400" : "text-slate-600",
             )}
           >
@@ -1892,6 +2789,7 @@ const DetailView: React.FC<DetailViewProps> = ({
 
           return (
             <div
+              data-tour="detail-topic-trajectory"
               className={cx(
                 "mb-8 rounded-xl border p-6",
                 isDarkMode
@@ -2044,7 +2942,7 @@ const DetailView: React.FC<DetailViewProps> = ({
         })()}
 
         {/* Consultation Scoring — uses last sentence's score */}
-        <div className="mb-6">
+        <div data-tour="detail-consultation-scoring" className="mb-6">
           <ConsultationScoring
             isDarkMode={isDarkMode}
             title={titleByScore(
@@ -2087,6 +2985,7 @@ const DetailView: React.FC<DetailViewProps> = ({
 
         {/* ═══ Re-write Practice Panel ═══ */}
         <div
+          data-tour="detail-rewrite-panel"
           className={cx(
             "rounded-xl mb-8 overflow-hidden",
             isDarkMode
@@ -2384,8 +3283,8 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   // ═══════════════════════════════════════════════════════════
   // Store
   // ═══════════════════════════════════════════════════════════
-  const { fileId } = useFileId();
-  const { doctorId } = useDoctorId();
+  const fileId = useFileId((state) => state.fileId);
+  const doctorId = useDoctorId((state) => state.doctorId);
 
   // ═══════════════════════════════════════════════════════════
   // useDoctorData hook - WITH AI REWRITE
@@ -2452,6 +3351,22 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   );
   const [selectedSentenceIdx, setSelectedSentenceIdx] = useState(0);
   const [showRewrite, setShowRewrite] = useState(true);
+
+  // Rubric modal external control state
+  const [rubricOpen, setRubricOpen] = useState(false);
+  const [rubricTab, setRubricTab] = useState<string>("All Domains");
+  const [rubricScore, setRubricScore] = useState<number | null>(null);
+
+  const handleOpenRubric = useCallback((domain: TopicName, score: number) => {
+    // Map TopicName to rubric domain string (Irritative Symptoms matches)
+    setRubricTab(domain === "Irritative Symptoms" ? "Irritative Symptoms" : domain);
+    setRubricScore(score);
+    setRubricOpen(true);
+  }, []);
+
+  const handleRubricHandled = useCallback(() => {
+    setRubricOpen(false);
+  }, []);
 
   // ═══════════════════════════════════════════════════════════
   // Store value sync
@@ -2537,21 +3452,24 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   // Update patients with real scores from scoreAverage
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
-    if (scoreAverage?.data && patients.length > 0) {
-      // Group scores by file and calculate overall average
-      const fileScores = new Map<string, { total: number; count: number }>();
+    if (!scoreAverage?.data) return;
 
-      scoreAverage.data.forEach((item) => {
-        if (item.avg_score !== null) {
-          const existing = fileScores.get(item.file) || { total: 0, count: 0 };
-          existing.total += item.avg_score;
-          existing.count += 1;
-          fileScores.set(item.file, existing);
-        }
-      });
+    // Group scores by file and calculate overall average
+    const fileScores = new Map<string, { total: number; count: number }>();
+    scoreAverage.data.forEach((item) => {
+      if (item.avg_score !== null) {
+        const existing = fileScores.get(item.file) || { total: 0, count: 0 };
+        existing.total += item.avg_score;
+        existing.count += 1;
+        fileScores.set(item.file, existing);
+      }
+    });
 
-      // Update patients with calculated overall scores
-      const updatedPatients = patients.map((patient) => {
+    // Use functional setState to always read the LATEST patients (fixes stale closure)
+    setPatients((prev) => {
+      if (prev.length === 0) return prev;
+
+      const updatedPatients = prev.map((patient) => {
         const scoreData = fileScores.get(patient.fileName);
         if (scoreData && scoreData.count > 0) {
           return {
@@ -2564,14 +3482,14 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
 
       // Only update if scores actually changed
       const hasChanges = updatedPatients.some(
-        (p, idx) => p.overallScore !== patients[idx].overallScore,
+        (p, idx) => p.overallScore !== prev[idx].overallScore,
       );
 
       if (hasChanges) {
-        setPatients(updatedPatients);
-        console.log("Patients updated with scores:", updatedPatients);
+        return updatedPatients;
       }
-    }
+      return prev;
+    });
   }, [scoreAverage]);
 
   // ═══════════════════════════════════════════════════════════
@@ -2777,6 +3695,19 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
         isDarkMode ? "bg-slate-900" : "bg-slate-50",
       )}
     >
+      {/* Floating Rubric Guide — always visible */}
+      <RubricFloatingButton
+        isDarkMode={isDarkMode}
+        externalOpen={rubricOpen}
+        externalTab={rubricTab}
+        externalScore={rubricScore}
+        onExternalHandled={handleRubricHandled}
+      />
+
+      {/* Onboarding Tour */}
+      <OnboardingTour isDarkMode={isDarkMode} currentView={currentView} />
+      <RestartTourButton isDarkMode={isDarkMode} />
+
       {currentView === "dashboard" && (
         <DashboardViewV2
           isDarkMode={isDarkMode}
@@ -2814,6 +3745,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           fetchRewritesFiltered={fetchRewritesFiltered}
           fetchScoreSummary={fetchScoreSummary}
           setScoreSummaryLoading={setScoreSummaryLoading}
+          onOpenRubric={handleOpenRubric}
         />
       )}
 

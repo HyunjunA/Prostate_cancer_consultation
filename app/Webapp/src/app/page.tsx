@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
+import { useShallow } from "zustand/react/shallow";
 
 // import PhysicianReports from "@/components/PhysicianReportsModifiedV33";
 
@@ -83,8 +84,14 @@ const DEV_MODE_KEY = "prostatecancerapp_dev_mode";
 
 export default function Home() {
   const searchParams = useSearchParams();
-  const { width, height, setWindowSize } = useWindowSizeStore();
-  const { isDarkMode } = useThemeStore();
+  const { width, height, setWindowSize } = useWindowSizeStore(
+    useShallow((state) => ({
+      width: state.width,
+      height: state.height,
+      setWindowSize: state.setWindowSize,
+    }))
+  );
+  const isDarkMode = useThemeStore((state) => state.isDarkMode);
 
   // ═══════════════════════════════════════════════════════════
   // controls debug UI visibility
@@ -97,7 +104,14 @@ export default function Home() {
     setPatientId,
     clearPatientId,
     initFromStorage: initPatientFromStorage,
-  } = usePatientId();
+  } = usePatientId(
+    useShallow((state) => ({
+      patientId: state.patientId,
+      setPatientId: state.setPatientId,
+      clearPatientId: state.clearPatientId,
+      initFromStorage: state.initFromStorage,
+    }))
+  );
 
   // File ID store
   const {
@@ -105,7 +119,14 @@ export default function Home() {
     setFileId,
     clearFileId,
     initFromStorage: initFileFromStorage,
-  } = useFileId();
+  } = useFileId(
+    useShallow((state) => ({
+      fileId: state.fileId,
+      setFileId: state.setFileId,
+      clearFileId: state.clearFileId,
+      initFromStorage: state.initFromStorage,
+    }))
+  );
 
   // ═══════════════════════════════════════════════════════════
   // Doctor ID store
@@ -115,7 +136,14 @@ export default function Home() {
     setDoctorId,
     clearDoctorId,
     initFromStorage: initDoctorFromStorage,
-  } = useDoctorId();
+  } = useDoctorId(
+    useShallow((state) => ({
+      doctorId: state.doctorId,
+      setDoctorId: state.setDoctorId,
+      clearDoctorId: state.clearDoctorId,
+      initFromStorage: state.initFromStorage,
+    }))
+  );
 
   // ═══════════════════════════════════════════════════════════
   // Current view state - patient/doctor/selection

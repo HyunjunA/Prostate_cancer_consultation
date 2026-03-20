@@ -2252,15 +2252,30 @@ async def get_doctor_score_trajectory(
 
         # For each category, average across all consulted patients
         class_avgs: Dict[str, float] = {}
+        # Also track per-patient per-class scores for tooltip detail
+        patient_class_scores: Dict[str, Dict[str, float]] = {}  # file -> {cls: avg}
         for cls in ["1", "2", "3", "4", "5"]:
             patient_scores = []
             for f in consulted_files:
                 if f in current_state and cls in current_state[f]:
                     scores = list(current_state[f][cls].values())
                     if scores:
-                        patient_scores.append(sum(scores) / len(scores))
+                        avg = sum(scores) / len(scores)
+                        patient_scores.append(avg)
+                        patient_class_scores.setdefault(f, {})[cls] = avg
             if patient_scores:
                 class_avgs[cls] = sum(patient_scores) / len(patient_scores)
+
+        # Compute per-patient overall score (avg of their category avgs)
+        patients_detail = []
+        for f in consulted_files:
+            if f in patient_class_scores and patient_class_scores[f]:
+                p_avgs = patient_class_scores[f]
+                p_overall = sum(p_avgs.values()) / len(p_avgs)
+                patients_detail.append({
+                    "file": f,
+                    "overall_score": round(p_overall, 4),
+                })
 
         # Overall = average of category averages
         if class_avgs:
@@ -2282,6 +2297,7 @@ async def get_doctor_score_trajectory(
             "overall_score": round(overall, 4) if overall is not None else None,
             "by_class": {k: round(v, 4) for k, v in class_avgs.items()},
             "patients_count": len(consulted_files),
+            "patients_detail": patients_detail,
         })
 
     logger.info("[trajectory] Returning %d events", len(trajectory))
