@@ -209,6 +209,8 @@ interface DetailViewProps {
   // Rewrite usage stats (B-5 feedback)
   rewriteStats?: RewriteStatsResponse | null;
   fetchRewriteStats?: (speaker?: string) => void;
+  // Rubric modal trigger
+  onOpenRubric?: (domain: TopicName, score: number) => void;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2593,6 +2595,8 @@ const DetailView: React.FC<DetailViewProps> = ({
   // Rewrite stats
   rewriteStats,
   fetchRewriteStats,
+  // Rubric
+  onOpenRubric,
 }) => {
   const { name: topicName, patient } = selectedTopic;
   const data = topicsData[topicName];
@@ -2980,6 +2984,7 @@ const DetailView: React.FC<DetailViewProps> = ({
             aiRewriteLoading={aiRewriteLoading}
             onGenerateAIRewrite={handleGenerateAIRewrite}
             onUseAIRewrite={handleUseAIRewrite}
+            onScoreClick={(score) => onOpenRubric?.(topicName, score)}
           />
         </div>
 
@@ -3789,6 +3794,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           // Rewrite usage stats (B-5 feedback)
           rewriteStats={rewriteStats}
           fetchRewriteStats={fetchRewriteStats}
+          onOpenRubric={handleOpenRubric}
         />
       )}
     </div>

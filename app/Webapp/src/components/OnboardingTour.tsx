@@ -22,6 +22,7 @@ const DASHBOARD_STEPS: Step[] = [
       "Use the search bar to quickly find patients by name, ID, or file name. The filter buttons let you narrow the list by performance band: All, High Quality (4–5), Standard (3), or Needs Improvement (0–2).",
     title: "Search & Filter",
     placement: "bottom",
+    disableBeacon: true,
   },
   {
     target: "[data-tour='summary-cards']",
@@ -29,6 +30,7 @@ const DASHBOARD_STEPS: Step[] = [
       "These four cards summarize your overall performance. Click any card to filter the patient list below by that performance band. Each card shows the count of patients in that category.",
     title: "Summary Cards",
     placement: "bottom",
+    disableBeacon: true,
   },
   {
     target: "[data-tour='trajectory-chart']",
@@ -36,6 +38,7 @@ const DASHBOARD_STEPS: Step[] = [
       "This chart tracks your Overall Quality of Risk Communication Score over time. Each point represents a cumulative average across all patients scored so far. Hover over data points to see individual patient breakdowns.",
     title: "Score Trajectory",
     placement: "bottom",
+    disableBeacon: true,
   },
   {
     target: "[data-tour='summary-box']",
@@ -43,6 +46,7 @@ const DASHBOARD_STEPS: Step[] = [
       "This summary panel shows your average score and a breakdown by performance band: High (4–5), Standard (3), and Low (0–2). The color-coded dots represent individual patient scores.",
     title: "Performance Summary",
     placement: "left",
+    disableBeacon: true,
   },
   {
     target: "[data-tour='patient-list']",
@@ -50,6 +54,15 @@ const DASHBOARD_STEPS: Step[] = [
       "Here you'll find all patient consultation reports. Each row shows the patient ID, overall score, and a color-coded badge. Click \"View Report\" to see the detailed scoring breakdown for any patient.",
     title: "Patient Reports List",
     placement: "top-start",
+    disableBeacon: true,
+  },
+  {
+    target: "[data-tour='restart-tour-button']",
+    content:
+      "You can replay this guided tour anytime by clicking this button. It will restart the tour for the current page you're viewing.",
+    title: "Replay Tour Anytime",
+    placement: "top-end",
+    disableBeacon: true,
   },
 ];
 
@@ -68,6 +81,7 @@ const GRID_STEPS: Step[] = [
       "This table breaks down the patient's score by each of the five risk communication domains: Cancer Prognosis, Life Expectancy, Erectile Dysfunction, Urinary Incontinence, and Irritative Symptoms.\n\n• Click a topic name to see the detailed sentence-level view\n• The \"How to Improve\" column shows actionable steps to reach the next score level",
     title: "Domain Scores & Details",
     placement: "top-start",
+    disableBeacon: true,
   },
   {
     target: "[data-tour='grid-your-score']",
@@ -75,6 +89,7 @@ const GRID_STEPS: Step[] = [
       "Click any score badge in this column to open the Scoring Rubric for that specific domain. The rubric shows exactly what criteria each score level requires.",
     title: "Score Badges — Click for Rubric",
     placement: "bottom",
+    disableBeacon: true,
   },
   {
     target: "[data-tour='rubric-button']",
@@ -82,6 +97,15 @@ const GRID_STEPS: Step[] = [
       "You can also open the Scoring Rubric anytime by clicking this button. It shows the full 0–5 scoring criteria for all five risk communication domains.",
     title: "Scoring Rubric Guide",
     placement: "bottom-end",
+    disableBeacon: true,
+  },
+  {
+    target: "[data-tour='restart-tour-button']",
+    content:
+      "You can replay this guided tour anytime by clicking this button. It will restart the tour for the current page you're viewing.",
+    title: "Replay Tour Anytime",
+    placement: "top-end",
+    disableBeacon: true,
   },
 ];
 
@@ -100,6 +124,7 @@ const DETAIL_STEPS: Step[] = [
       "This panel displays all relevant sentences from the consultation, ordered by score. Click any sentence to select it for the Re-write Practice below. The score scale at the bottom shows the current score position.",
     title: "Consultation Scoring",
     placement: "top-start",
+    disableBeacon: true,
   },
   {
     target: ".consultation-scoring-scale",
@@ -107,6 +132,7 @@ const DETAIL_STEPS: Step[] = [
       "This is the score scale. The blue indicator shows the current score position. Hover over or click each number (0–5) to see cumulative rubric criteria — what each score level requires for this domain.",
     title: "Score Scale & Rubric",
     placement: "top",
+    disableBeacon: true,
   },
   {
     target: "[data-tour='detail-rewrite-panel']",
@@ -114,6 +140,7 @@ const DETAIL_STEPS: Step[] = [
       "Practice improving your communication here. The original sentence is shown with its current score. Type your improved version in the text box and click \"Try & Score\" to see how your rewrite scores.\n\nTip: Click an improvement suggestion in the scoring panel above to get a targeted hint.",
     title: "Re-write Practice",
     placement: "top-start",
+    disableBeacon: true,
   },
   {
     target: "[data-tour='rubric-button']",
@@ -121,6 +148,15 @@ const DETAIL_STEPS: Step[] = [
       "Remember, you can always open the Scoring Rubric from this button to review the full criteria for all five domains.",
     title: "Scoring Rubric Guide",
     placement: "bottom-end",
+    disableBeacon: true,
+  },
+  {
+    target: "[data-tour='restart-tour-button']",
+    content:
+      "You can replay this guided tour anytime by clicking this button. It will restart the tour for the current page you're viewing.",
+    title: "Replay Tour Anytime",
+    placement: "top-end",
+    disableBeacon: true,
   },
 ];
 
@@ -204,39 +240,48 @@ const OnboardingTour: React.FC<OnboardingTourProps> = ({
   const [steps, setSteps] = useState<Step[]>([]);
   const [stepIndex, setStepIndex] = useState(0);
 
-  // Determine steps based on current view
+  // Determine steps based on current view, filtering out targets not in DOM
   useEffect(() => {
-    let viewSteps: Step[] = [];
+    let allSteps: Step[] = [];
     switch (currentView) {
       case "dashboard":
-        viewSteps = DASHBOARD_STEPS;
+        allSteps = DASHBOARD_STEPS;
         break;
       case "grid":
-        viewSteps = GRID_STEPS;
+        allSteps = GRID_STEPS;
         break;
       case "detail":
-        viewSteps = DETAIL_STEPS;
+        allSteps = DETAIL_STEPS;
         break;
     }
-    setSteps(viewSteps);
-    setStepIndex(0);
 
-    // Check if tour was already completed for this view
-    const completedViews = JSON.parse(
-      localStorage.getItem(TOUR_COMPLETED_KEY) || "{}",
-    );
-    const lastTourView = localStorage.getItem(TOUR_VIEW_KEY);
+    // Wait briefly for DOM to render, then filter to only existing targets
+    const timer = setTimeout(() => {
+      const validSteps = allSteps.filter((step) => {
+        const target = typeof step.target === "string" ? step.target : "";
+        if (!target) return false;
+        return document.querySelector(target) !== null;
+      });
 
-    if (!completedViews[currentView]) {
-      // First visit to this view — auto-start tour after short delay
-      const timer = setTimeout(() => setRun(true), 800);
-      return () => clearTimeout(timer);
-    } else if (lastTourView !== currentView) {
-      // View changed but already completed — don't auto-start
-      setRun(false);
-    }
+      setSteps(validSteps);
+      setStepIndex(0);
 
-    localStorage.setItem(TOUR_VIEW_KEY, currentView);
+      // Check if tour was already completed for this view
+      const completedViews = JSON.parse(
+        localStorage.getItem(TOUR_COMPLETED_KEY) || "{}",
+      );
+      const lastTourView = localStorage.getItem(TOUR_VIEW_KEY);
+
+      if (!completedViews[currentView]) {
+        setRun(true);
+      } else if (lastTourView !== currentView) {
+        setRun(false);
+      }
+
+      localStorage.setItem(TOUR_VIEW_KEY, currentView);
+    }, 800);
+
+    return () => clearTimeout(timer);
   }, [currentView]);
 
   const handleCallback = useCallback(
@@ -328,17 +373,18 @@ export const RestartTourButton: React.FC<RestartTourButtonProps> = ({
 
   return (
     <button
+      data-tour="restart-tour-button"
       onClick={handleRestart}
-      className={`fixed bottom-4 right-4 z-[55] flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium transition-all hover:scale-105 ${
+      className={`fixed bottom-4 right-4 z-[55] flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-semibold transition-all hover:scale-105 ${
         isDarkMode
-          ? "bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700 shadow-lg"
-          : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200 shadow-md"
+          ? "bg-gradient-to-r from-cyan-700 to-blue-700 text-white hover:from-cyan-600 hover:to-blue-600 border border-cyan-600 shadow-lg shadow-cyan-900/30"
+          : "bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-400 hover:to-blue-400 border border-cyan-400 shadow-lg shadow-cyan-500/25"
       }`}
       title="Restart guided tour"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
-        className="w-4 h-4"
+        className="w-5 h-5"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"

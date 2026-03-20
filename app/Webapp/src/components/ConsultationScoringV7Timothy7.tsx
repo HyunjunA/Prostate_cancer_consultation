@@ -55,6 +55,8 @@ interface ConsultationScoringProps {
   onGenerateAIRewrite?: () => void;
   /** Callback when Use AI Re-write button is clicked */
   onUseAIRewrite?: (rewrittenText: string) => void;
+  /** Callback when a score number on the scale is clicked — opens rubric */
+  onScoreClick?: (score: number) => void;
 }
 
 // Score color utility function
@@ -102,6 +104,7 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
   aiRewriteLoading = false,
   onGenerateAIRewrite,
   onUseAIRewrite,
+  onScoreClick,
 }) => {
   // State for collapsible sections
   const [isContextExpanded, setIsContextExpanded] = useState(false);
@@ -306,9 +309,16 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
                 {/* Left: Score badge */}
                 {displaySentences[selectedIdx] && (
                   <div className={`flex-shrink-0 pr-3 border-r flex flex-col items-center gap-1.5 ${isDarkMode ? "border-slate-600" : "border-gray-300"}`}>
-                    <span className={`inline-flex items-center justify-center w-8 h-8 rounded text-sm font-bold ${getScoreBadgeColor(displaySentences[selectedIdx].score, isDarkMode)}`}>
+                    <button
+                      onClick={() => {
+                        const s = displaySentences[selectedIdx].score;
+                        if (s != null && onScoreClick) onScoreClick(Math.round(s));
+                      }}
+                      className={`inline-flex items-center justify-center w-8 h-8 rounded text-sm font-bold transition-transform ${onScoreClick ? "cursor-pointer hover:scale-110" : ""} ${getScoreBadgeColor(displaySentences[selectedIdx].score, isDarkMode)}`}
+                      title={onScoreClick ? "Click to view scoring rubric" : undefined}
+                    >
                       {displaySentences[selectedIdx].score ?? "N/A"}
-                    </span>
+                    </button>
                     {/* Commented out: Rewritten badge
                     {displaySentences[selectedIdx].hasRewrite && (
                       <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500 text-white font-medium">
@@ -411,10 +421,11 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
                 >
                   <div className="relative group inline-block">
                     <div
-                      className={`text-lg font-bold ${numberColor} mb-1 cursor-help border-b-2 border-dashed ${
+                      className={`text-lg font-bold ${numberColor} mb-1 border-b-2 border-dashed ${
                         isDarkMode ? "border-slate-500" : "border-slate-400"
-                      }`}
+                      } ${onScoreClick ? "cursor-pointer hover:scale-110 transition-transform" : "cursor-help"}`}
                       style={{ paddingBottom: "2px" }}
+                      onClick={() => onScoreClick?.(item.value)}
                     >
                       {item.value}
                     </div>
