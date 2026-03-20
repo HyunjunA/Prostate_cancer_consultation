@@ -48,9 +48,6 @@ import PatientFollowUpReport from "@/components/PatientFollowUpReportV31Re";
 import FilterSidebar from "@/components/FilterSidebarV3";
 import Dashboard from "../components/Dashboard";
 import ThemeToggle from "@/components/ThemeToggle";
-import BetaConsentMoal from "@/components/BetaConsentModal";
-import BetaConsentModalNonAIAPI from "@/components/BetaConsentModalNonAIAPI";
-
 import { DashboardFooter } from "@/components/DashboardFooter";
 import { ReportDownload } from "@/components/ReportDownloadNonAIAPI";
 
@@ -562,8 +559,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* <BetaConsentMoal /> */}
-        {/* <BetaConsentModalNonAIAPI /> */}
 
         {/* ═══════════════════════════════════════════════════════
             Conditional Rendering based on currentView and visitType
