@@ -2154,7 +2154,10 @@ const GridView: React.FC<GridViewProps> = ({
   const isLoadingSentences =
     apiLoading && (!sentences?.data || sentences.data.length === 0);
 
-  // Helper function to get representative sentence (last sentence)
+  // ⚠️ WARNING — TEMPORARY SCORING APPROACH (NOT PRODUCTION-READY)
+  // getRepresentativeSentence and getLastSentenceScore use the last sentence as a
+  // simplified placeholder. For production, replace with a proper scoring algorithm
+  // that aggregates across all relevant sentences per domain.
   const getRepresentativeSentence = (data: TopicData): string => {
     if (data.sentenceDetails.length === 0) return "No sentence available";
     // Return the last sentence as representative
