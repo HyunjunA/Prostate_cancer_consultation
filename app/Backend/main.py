@@ -1857,6 +1857,14 @@ async def get_doctor_score_average(
     # Alias for the subquery
     lr = aliased(DoctorRewriteLog, latest_rewrite_subq, name='lr')
     
+    # ⚠️ WARNING — TEMPORARY SCORING APPROACH (NOT PRODUCTION-READY)
+    # Currently this endpoint returns the score of the LAST sentence (highest i, then i2)
+    # per file/speaker/class group. This is a simplified placeholder used during development.
+    # For production, this must be replaced with a proper scoring algorithm that aggregates
+    # across all relevant sentences (e.g., weighted average, rubric-based composite, or
+    # domain-specific scoring logic). The last-sentence score does NOT accurately represent
+    # overall communication quality for a given domain.
+    #
     # Step 2: Get the LAST sentence score (highest i, then i2) per file/speaker/class
     # Subquery to find the max (i, i2) per group
     last_sentence_subq = (

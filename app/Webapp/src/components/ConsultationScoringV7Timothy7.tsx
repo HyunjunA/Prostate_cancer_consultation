@@ -129,7 +129,13 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
   }, [sentences, selectedIdx, highlightedQuote]);
 
   // Process sentences for display
-  // NOTE: Currently showing only the LAST sentence. Original code commented out below.
+  // ⚠️ WARNING — TEMPORARY SCORING APPROACH (NOT PRODUCTION-READY)
+  // Currently showing only the LAST sentence per domain as the representative score.
+  // This is a simplified placeholder used during development. For production, this must
+  // be replaced with a proper scoring algorithm that aggregates across all relevant
+  // sentences. The last-sentence score does NOT accurately represent overall communication
+  // quality for a given domain.
+  // Original multi-sentence display code is commented out below for reference.
   const displaySentences = useMemo(() => {
     if (sentences && sentences.length > 0) {
       // Show only the last sentence
