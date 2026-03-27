@@ -1817,11 +1817,11 @@ async def get_doctor_score_average(
 ):
     """
     Get average score grouped by file, speaker, class
-    
-    Score Priority:
-    - If rewrite exists for (file, i, i2, speaker): Use latest rewrite_log.score
-    - If no rewrite exists: Use original sentence_view.score
-    
+
+    Uses ONLY original NLP scores from doctor_sentence_view.
+    Rewrite scores (doctor_rewrite_log) are NOT used here — rewrites are
+    purely a training/practice tool and do not affect score analysis.
+
     Filter options:
     - No filters: Average for all file/speaker/class combinations
     - file only: Average by speaker/class for the specified file
@@ -1833,30 +1833,7 @@ async def get_doctor_score_average(
     print(f"   file: {file}")
     print(f"   speaker: {speaker}")
     print(f"   class: {class_}")
-    
-    # Step 1: Subquery to get latest rewrite score for each (file, i, i2, speaker)
-    latest_rewrite_subq = (
-        select(
-            DoctorRewriteLog.file,
-            DoctorRewriteLog.i,
-            DoctorRewriteLog.i2,
-            DoctorRewriteLog.speaker,
-            DoctorRewriteLog.score,
-            func.row_number().over(
-                partition_by=[
-                    DoctorRewriteLog.file,
-                    DoctorRewriteLog.i,
-                    DoctorRewriteLog.i2,
-                    DoctorRewriteLog.speaker
-                ],
-                order_by=DoctorRewriteLog.time.desc()
-            ).label('rn')
-        )
-    ).subquery('latest_rewrites')
-    
-    # Alias for the subquery
-    lr = aliased(DoctorRewriteLog, latest_rewrite_subq, name='lr')
-    
+
     # ⚠️ WARNING — TEMPORARY SCORING APPROACH (NOT PRODUCTION-READY)
     # Currently this endpoint returns the score of the LAST sentence (highest i, then i2)
     # per file/speaker/class group. This is a simplified placeholder used during development.
@@ -1989,66 +1966,27 @@ async def get_doctor_score_summary_by_file_speaker(
 ):
     """
     Get score summary for specific file and speaker (all classes)
-    
-    Score Priority:
-    - If rewrite exists for (file, i, i2, speaker): Use latest rewrite_log.score
-    - If no rewrite exists: Use original sentence_view.score
-    
+
+    Uses ONLY original NLP scores from doctor_sentence_view.
+    Rewrite scores (doctor_rewrite_log) are NOT used here — rewrites are
+    purely a training/practice tool and do not affect score analysis.
+
     Returns:
     - Average, count, min/max for each class
     - Overall average across all classes
-    - Breakdown of rewritten vs original scores
     """
     print("=" * 80)
     print("DEBUG [get_doctor_score_summary] - Input Parameters:")
     print(f"   file: {file}")
     print(f"   speaker: {speaker}")
-    
-    # Step 1: Subquery to get latest rewrite score for each (file, i, i2, speaker)
-    latest_rewrite_subq = (
-        select(
-            DoctorRewriteLog.file,
-            DoctorRewriteLog.i,
-            DoctorRewriteLog.i2,
-            DoctorRewriteLog.speaker,
-            DoctorRewriteLog.score,
-            func.row_number().over(
-                partition_by=[
-                    DoctorRewriteLog.file,
-                    DoctorRewriteLog.i,
-                    DoctorRewriteLog.i2,
-                    DoctorRewriteLog.speaker
-                ],
-                order_by=DoctorRewriteLog.time.desc()
-            ).label('rn')
-        )
-    ).subquery('latest_rewrites')
-    
-    # Effective score: rewrite score (if exists) OR original score
-    effective_score = func.coalesce(
-        latest_rewrite_subq.c.score,
-        DoctorSentenceView.score
-    )
-    
-    # Step 2: Statistics by class
+
+    # Statistics by class — original NLP scores only
     class_stats_stmt = select(
         DoctorSentenceView.class_,
-        func.avg(effective_score).label('avg_score'),
-        func.count(effective_score).label('count'),
-        func.min(effective_score).label('min_score'),
-        func.max(effective_score).label('max_score'),
-        func.count(latest_rewrite_subq.c.score).label('rewritten_count')
-    ).select_from(
-        DoctorSentenceView
-    ).outerjoin(
-        latest_rewrite_subq,
-        and_(
-            DoctorSentenceView.file == latest_rewrite_subq.c.file,
-            DoctorSentenceView.i == latest_rewrite_subq.c.i,
-            DoctorSentenceView.i2 == latest_rewrite_subq.c.i2,
-            DoctorSentenceView.speaker == latest_rewrite_subq.c.speaker,
-            latest_rewrite_subq.c.rn == 1
-        )
+        func.avg(DoctorSentenceView.score).label('avg_score'),
+        func.count(DoctorSentenceView.score).label('count'),
+        func.min(DoctorSentenceView.score).label('min_score'),
+        func.max(DoctorSentenceView.score).label('max_score'),
     ).where(
         DoctorSentenceView.file == file,
         DoctorSentenceView.speaker == speaker,
@@ -2059,48 +1997,34 @@ async def get_doctor_score_summary_by_file_speaker(
     ).order_by(
         DoctorSentenceView.class_
     )
-    
+
     class_results = (await db.execute(class_stats_stmt)).all()
-    
-    # Step 3: Overall statistics
+
+    # Overall statistics — original NLP scores only
     overall_stmt = select(
-        func.avg(effective_score).label('avg_score'),
-        func.count(effective_score).label('count'),
-        func.min(effective_score).label('min_score'),
-        func.max(effective_score).label('max_score'),
-        func.count(latest_rewrite_subq.c.score).label('rewritten_count')
-    ).select_from(
-        DoctorSentenceView
-    ).outerjoin(
-        latest_rewrite_subq,
-        and_(
-            DoctorSentenceView.file == latest_rewrite_subq.c.file,
-            DoctorSentenceView.i == latest_rewrite_subq.c.i,
-            DoctorSentenceView.i2 == latest_rewrite_subq.c.i2,
-            DoctorSentenceView.speaker == latest_rewrite_subq.c.speaker,
-            latest_rewrite_subq.c.rn == 1
-        )
+        func.avg(DoctorSentenceView.score).label('avg_score'),
+        func.count(DoctorSentenceView.score).label('count'),
+        func.min(DoctorSentenceView.score).label('min_score'),
+        func.max(DoctorSentenceView.score).label('max_score'),
     ).where(
         DoctorSentenceView.file == file,
         DoctorSentenceView.speaker == speaker,
         DoctorSentenceView.class_ != '-1',
         DoctorSentenceView.score.isnot(None)
     )
-    
+
     overall = (await db.execute(overall_stmt)).one()
-    
+
     print(f"   Found {len(class_results)} classes")
-    print(f"   Total sentences: {overall.count}, Rewritten: {overall.rewritten_count}")
+    print(f"   Total sentences: {overall.count}")
     print("=" * 80)
-    
+
     return {
         "file": file,
         "speaker": speaker,
         "overall": {
             "avg_score": round(overall.avg_score, 2) if overall.avg_score else None,
             "count": overall.count,
-            "rewritten_count": overall.rewritten_count,
-            "original_count": overall.count - overall.rewritten_count,
             "min_score": overall.min_score,
             "max_score": overall.max_score
         },
@@ -2109,8 +2033,6 @@ async def get_doctor_score_summary_by_file_speaker(
                 "class": r.class_,
                 "avg_score": round(r.avg_score, 2) if r.avg_score else None,
                 "count": r.count,
-                "rewritten_count": r.rewritten_count,
-                "original_count": r.count - r.rewritten_count,
                 "min_score": r.min_score,
                 "max_score": r.max_score
             }
@@ -2132,18 +2054,14 @@ async def get_doctor_score_trajectory(
     """
     Get cumulative score trajectory over time (B-2 feedback).
 
-    Each data point = a time event (consultation or rewrite).
+    Uses ONLY original NLP scores from doctor_sentence_view.
+    Rewrite scores (doctor_rewrite_log) are NOT used here — rewrites are
+    purely a training/practice tool and do not affect score analysis.
+
+    Each data point = a consultation event.
     Y-value = cumulative average of all patients seen so far,
               where each patient contributes 5 category averages,
               and the overall = average of 5 category averages.
-
-    Time events:
-    1. Patient consultation: all original sentence scores are loaded
-    2. Rewrite: one sentence score is updated → category avg changes
-
-    At each event, re-compute:
-    - For each category: avg score across all consulted patients
-    - Overall = avg of 5 category averages
     """
     logger.info("[trajectory] speaker=%s", speaker)
 
@@ -2181,92 +2099,32 @@ async def get_doctor_score_trajectory(
     consult_stmt = consult_stmt.group_by(DoctorSentenceView.file)
 
     consult_results = (await db.execute(consult_stmt)).all()
-    consultation_dates = {r.file: r.consultation_date for r in consult_results}
 
-    # ── Step 3: Get rewrite events ──
-    rewrite_stmt = select(
-        DoctorRewriteLog.file,
-        DoctorRewriteLog.i,
-        DoctorRewriteLog.i2,
-        DoctorRewriteLog.class_,
-        DoctorRewriteLog.score,
-        DoctorRewriteLog.original_score,
-        DoctorRewriteLog.time,
-    )
-    if speaker:
-        rewrite_stmt = rewrite_stmt.where(DoctorRewriteLog.speaker == speaker)
-    rewrite_stmt = rewrite_stmt.order_by(DoctorRewriteLog.time)
-
-    rewrite_results = (await db.execute(rewrite_stmt)).all()
-
-    # ── Step 4: Build timeline events ──
+    # ── Step 3: Build consultation timeline (sorted by date) ──
     events = []
-
-    # Consultation events
-    for file, consult_date in consultation_dates.items():
+    for r in consult_results:
         events.append({
-            "type": "consultation",
-            "time": consult_date,
-            "file": file,
-        })
-
-    # Rewrite events (only if score actually changed)
-    for r in rewrite_results:
-        orig = r.original_score
-        if orig is not None and abs(r.score - orig) < 0.001:
-            continue  # score didn't change, skip
-        events.append({
-            "type": "rewrite",
-            "time": r.time,
+            "time": r.consultation_date,
             "file": r.file,
-            "class": r.class_,
-            "i": r.i,
-            "i2": r.i2,
-            "new_score": r.score,
         })
-
     events.sort(key=lambda x: x["time"])
 
-    # ── Step 5: Process timeline → cumulative trajectory ──
-    # State: current_state[file][class][(i,i2)] = effective_score
-    current_state: Dict[str, Dict[str, Dict[tuple, float]]] = {}
-    consulted_files: list = []  # ordered list of consulted files
+    # ── Step 4: Process timeline → cumulative trajectory ──
+    consulted_files: list = []
     trajectory = []
-    prev_overall = None
 
     for event in events:
-        if event["type"] == "consultation":
-            file = event["file"]
-            consulted_files.append(file)
-            # Load original sentence scores for this file
-            current_state[file] = {}
-            for cls, sentences in file_sentences.get(file, {}).items():
-                current_state[file][cls] = dict(sentences)
-
-        elif event["type"] == "rewrite":
-            file = event["file"]
-            cls = event["class"]
-            key = (event["i"], event["i2"])
-            # Update sentence score (only if file already consulted)
-            if file not in current_state:
-                continue
-            if cls not in current_state[file]:
-                current_state[file][cls] = {}
-            current_state[file][cls][key] = event["new_score"]
-
-        # ── Compute cumulative average ──
-        if not consulted_files:
-            continue
+        file = event["file"]
+        consulted_files.append(file)
 
         # For each category, average across all consulted patients
         class_avgs: Dict[str, float] = {}
-        # Also track per-patient per-class scores for tooltip detail
-        patient_class_scores: Dict[str, Dict[str, float]] = {}  # file -> {cls: avg}
+        patient_class_scores: Dict[str, Dict[str, float]] = {}
         for cls in ["1", "2", "3", "4", "5"]:
             patient_scores = []
             for f in consulted_files:
-                if f in current_state and cls in current_state[f]:
-                    scores = list(current_state[f][cls].values())
+                if f in file_sentences and cls in file_sentences[f]:
+                    scores = list(file_sentences[f][cls].values())
                     if scores:
                         avg = sum(scores) / len(scores)
                         patient_scores.append(avg)
@@ -2286,21 +2144,11 @@ async def get_doctor_score_trajectory(
                 })
 
         # Overall = average of category averages
-        if class_avgs:
-            overall = sum(class_avgs.values()) / len(class_avgs)
-        else:
-            overall = None
-
-        # Skip if overall didn't change from previous point (reduce noise)
-        if overall is not None and prev_overall is not None:
-            if abs(overall - prev_overall) < 0.0001 and event["type"] == "rewrite":
-                continue
-
-        prev_overall = overall
+        overall = sum(class_avgs.values()) / len(class_avgs) if class_avgs else None
 
         trajectory.append({
             "timestamp": event["time"].isoformat(),
-            "event_type": event["type"],
+            "event_type": "consultation",
             "file": event["file"],
             "overall_score": round(overall, 4) if overall is not None else None,
             "by_class": {k: round(v, 4) for k, v in class_avgs.items()},
@@ -3299,6 +3147,62 @@ async def get_patient_files(
     print("=" * 80)
     
     return {"files": files}
+
+
+@app.get("/api/patient/sentences/{file}")
+async def get_patient_sentences_by_class(
+    file: str,
+    top_n: int = Query(7, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user)
+):
+    """Get top-scoring sentences from doctor_sentence_view grouped by class.
+
+    Returns the highest-scoring sentences per class for the patient
+    "View relevant sentences from your visit" feature.
+    All speakers in the transcript are included (doctor, patient, etc.).
+    """
+    await check_patient_access(file, user, db)
+
+    stmt = select(
+        DoctorSentenceView.class_,
+        DoctorSentenceView.sentence,
+        DoctorSentenceView.score,
+        DoctorSentenceView.speaker,
+        DoctorSentenceView.i,
+        DoctorSentenceView.i2,
+    ).where(
+        DoctorSentenceView.file == file,
+        DoctorSentenceView.class_ != '-1',
+        DoctorSentenceView.score.isnot(None),
+    ).order_by(
+        DoctorSentenceView.class_,
+        DoctorSentenceView.score.desc(),
+    )
+
+    results = (await db.execute(stmt)).all()
+
+    # Group by class, keep top_n per class
+    by_class: dict[str, list[dict]] = {}
+    for r in results:
+        cls = r.class_
+        if cls not in by_class:
+            by_class[cls] = []
+        if len(by_class[cls]) < top_n:
+            by_class[cls].append({
+                "sentence": r.sentence,
+                "score": r.score,
+                "speaker": r.speaker,
+                "i": r.i,
+                "i2": r.i2,
+            })
+
+    return {
+        "file": file,
+        "top_n": top_n,
+        "by_class": by_class,
+    }
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Dashboard/Stats APIs

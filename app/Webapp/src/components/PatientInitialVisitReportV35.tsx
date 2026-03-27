@@ -41,18 +41,11 @@
  * - [V33] Rating moved to bottom, compact style
  * - [V33] Evidence sentences promoted to main content area
  *
- * ❌ NOT YET IMPLEMENTED (TODO):
+ * ✅ IMPLEMENTED (2026-03-27):
  * - Evidence sentences data connection
- *   Currently `extractedSentences` is always an empty array.
- *   Need to:
- *   1. Identify the API endpoint that returns supporting sentences per class
- *   2. Fetch the sentences data (possibly from a separate API or included in summary response)
- *   3. Map the sentences to each topic in the `consultationTopics` useMemo
- *   Example expected data structure:
- *   {
- *     class_name: "1",
- *     sentences: ["sentence1", "sentence2", ...] // 7 sentences per topic
- *   }
+ *   Connected to GET /api/patient/sentences/{file}/{speaker}
+ *   Fetches top-scoring sentences per class from doctor_sentence_view
+ *   Mapped by class → topic name in consultationTopics useMemo
  *
  * ============================================================================
  *
@@ -1049,7 +1042,7 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
   const patientId = usePatientId((state) => state.patientId);
   const fileId = useFileId((state) => state.fileId);
 
-  const { fetchSummaryDetail, updateSingleClassScore } = usePatientData();
+  const { fetchSummaryDetail, fetchSentencesByClass, updateSingleClassScore } = usePatientData();
 
   usePassiveTracking({
     proximity: { threshold: 150, debounceMs: 100 },
@@ -1090,6 +1083,7 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
   const [summaryData, setSummaryData] = useState<SummaryDetailResponse | null>(
     null,
   );
+  const [evidenceSentences, setEvidenceSentences] = useState<Record<string, string[]>>({});
   const [apiLoading, setApiLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
 
@@ -1117,7 +1111,11 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
         setApiLoading(true);
         setApiError(null);
 
-        const result = await fetchSummaryDetail(currentFile, currentSpeaker);
+        // Fetch summary and evidence sentences in parallel
+        const [result, sentencesResult] = await Promise.all([
+          fetchSummaryDetail(currentFile, currentSpeaker),
+          fetchSentencesByClass(currentFile),
+        ]);
 
         if (result) {
           setSummaryData(result);
@@ -1138,8 +1136,20 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
         } else {
           setApiError("Failed to load summary data");
         }
+
+        // Map evidence sentences by class → topic name
+        if (sentencesResult?.by_class) {
+          const mapped: Record<string, string[]> = {};
+          for (const [cls, sentences] of Object.entries(sentencesResult.by_class)) {
+            const topicName = CLASS_TO_TOPIC_MAP[cls];
+            if (topicName) {
+              mapped[topicName] = (sentences as any[]).map((s: any) => s.sentence);
+            }
+          }
+          setEvidenceSentences(mapped);
+        }
       } catch (err) {
-        console.error("❌ Error loading summary data:", err);
+        console.error("Error loading summary data:", err);
         setApiError(err instanceof Error ? err.message : "Unknown error");
       } finally {
         setApiLoading(false);
@@ -1156,41 +1166,13 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
       { aiSummary: string; extractedSentences: string[] }
     > = {};
 
-    // TODO: extractedSentences should be connected to the analysis pipeline API
-    // to show real sentences from the consultation. Currently showing example
-    // placeholder sentences. Once connected, replace the exampleSentences below
-    // with actual data from: "Relevant sentences will appear here once connected
-    // to the analysis pipeline."
-    const exampleSentences: Record<string, string[]> = {
-      "Cancer Prognosis": [
-        "So your Gleason is a 3+4, which puts you in what we call the intermediate-risk category — it's not the most aggressive type, but it's something we want to address.",
-        "Looking at your MRI and the biopsy, the cancer looks like it's still within the prostate capsule, which is really what we want to see at this stage.",
-      ],
-      "Life Expectancy": [
-        "For someone your age with this grade of cancer, if we treat it, we're looking at a 10-year cancer-specific survival well above 95 percent.",
-        "I always tell my patients — you're far more likely to die with prostate cancer than from it, especially when we catch it at this stage.",
-      ],
-      "Erectile Dysfunction": [
-        "I'll be honest with you — after surgery, most men do notice a change in erections, at least temporarily, and it can take anywhere from 6 to 18 months to see improvement.",
-        "We do nerve-sparing whenever we can, and with your tumor location, I think we have a good shot at preserving those nerves on both sides.",
-      ],
-      "Incontinence": [
-        "Right after the catheter comes out, almost everyone leaks a little — that's normal, and most of my patients are back to one pad or less within about 3 months.",
-        "I'm going to have you start Kegel exercises now, before the surgery, because the guys who do that tend to bounce back a lot faster.",
-      ],
-      "Irritative Urinary Symptoms": [
-        "If we go the radiation route, you might notice some burning when you urinate or needing to go more frequently — that usually peaks around week 4 or 5 of treatment.",
-        "Those symptoms are temporary for most patients, and we have medications like tamsulosin that can really take the edge off while your body adjusts.",
-      ],
-    };
-
     if (summaryData?.summary?.classes) {
       summaryData.summary.classes.forEach((cls: ClassSummary) => {
         const topicName = CLASS_TO_TOPIC_MAP[cls.class_name];
         if (topicName) {
           topics[topicName] = {
             aiSummary: cls.summary || "Summary not available.",
-            extractedSentences: exampleSentences[topicName] || [],
+            extractedSentences: evidenceSentences[topicName] || [],
           };
         }
       });
@@ -1200,13 +1182,13 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
       if (!topics[topic]) {
         topics[topic] = {
           aiSummary: "Summary not available for this topic.",
-          extractedSentences: exampleSentences[topic] || [],
+          extractedSentences: evidenceSentences[topic] || [],
         };
       }
     });
 
     return topics;
-  }, [summaryData]);
+  }, [summaryData, evidenceSentences]);
 
   // Event Handlers
 
@@ -1314,6 +1296,7 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
       const session = getOrCreateSession();
       sendTrackingEvents(
         session.sessionId,
+        "patient",
         currentFile,
         currentSpeaker,
         session.deviceType,
@@ -1348,10 +1331,14 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
       flushEvents();
     };
 
+    // Periodic flush every 30 seconds for real-time dashboard visibility
+    const periodicFlushTimer = setInterval(flushEvents, 30_000);
+
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("beforeunload", handleBeforeUnload);
 
     return () => {
+      clearInterval(periodicFlushTimer);
       recordTimeSpent();
       flushEvents(); // flush on unmount
       document.removeEventListener("visibilitychange", handleVisibilityChange);

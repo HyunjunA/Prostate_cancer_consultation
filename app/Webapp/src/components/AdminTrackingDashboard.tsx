@@ -33,6 +33,7 @@ interface TrackingEvent {
   device_type: string | null;
   client_timestamp: string | null;
   created_at: string | null;
+  role: string | null;
 }
 
 interface TrackingStats {
@@ -41,6 +42,7 @@ interface TrackingStats {
   total_patients: number;
   total_event_types: number;
   event_type_counts: Record<string, number>;
+  role_counts?: Record<string, number>;
 }
 
 interface PatientOption {
@@ -128,6 +130,7 @@ export default function AdminTrackingDashboard() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
 
   // Filter state
+  const [filterRole, setFilterRole] = useState<"" | "patient" | "physician">("");
   const [filterFile, setFilterFile] = useState("");
   const [filterEventType, setFilterEventType] = useState("");
   const [filterSession, setFilterSession] = useState("");
@@ -146,18 +149,24 @@ export default function AdminTrackingDashboard() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/tracking/stats`, {
+      const params = new URLSearchParams();
+      if (filterRole) params.set("role", filterRole);
+      const qs = params.toString();
+      const res = await fetch(`${API_BASE_URL}/api/tracking/stats${qs ? `?${qs}` : ""}`, {
         headers: getHeaders(),
       });
       if (res.ok) setStats(await res.json());
     } catch (e) {
       console.error("[Admin] Failed to fetch stats:", e);
     }
-  }, []);
+  }, [filterRole]);
 
   const fetchPatients = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/tracking/patients`, {
+      const params = new URLSearchParams();
+      if (filterRole) params.set("role", filterRole);
+      const qs = params.toString();
+      const res = await fetch(`${API_BASE_URL}/api/tracking/patients${qs ? `?${qs}` : ""}`, {
         headers: getHeaders(),
       });
       if (res.ok) {
@@ -167,23 +176,27 @@ export default function AdminTrackingDashboard() {
     } catch (e) {
       console.error("[Admin] Failed to fetch patients:", e);
     }
-  }, []);
+  }, [filterRole]);
 
   const fetchAnalytics = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/tracking/analytics`, {
+      const params = new URLSearchParams();
+      if (filterRole) params.set("role", filterRole);
+      const qs = params.toString();
+      const res = await fetch(`${API_BASE_URL}/api/tracking/analytics${qs ? `?${qs}` : ""}`, {
         headers: getHeaders(),
       });
       if (res.ok) setAnalytics(await res.json());
     } catch (e) {
       console.error("[Admin] Failed to fetch analytics:", e);
     }
-  }, []);
+  }, [filterRole]);
 
   const fetchEvents = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
+      if (filterRole) params.set("role", filterRole);
       if (filterFile) params.set("file", filterFile);
       if (filterEventType) params.set("event_type", filterEventType);
       if (filterSession) params.set("session_id", filterSession);
@@ -204,7 +217,7 @@ export default function AdminTrackingDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [filterFile, filterEventType, filterSession, page]);
+  }, [filterRole, filterFile, filterEventType, filterSession, page]);
 
   // ────────────────────────────────────────────────────────────────────────────
   // Effects
@@ -222,7 +235,7 @@ export default function AdminTrackingDashboard() {
 
   useEffect(() => {
     setPage(0);
-  }, [filterFile, filterEventType, filterSession]);
+  }, [filterRole, filterFile, filterEventType, filterSession]);
 
   // ────────────────────────────────────────────────────────────────────────────
   // Derived data for charts
@@ -415,6 +428,42 @@ export default function AdminTrackingDashboard() {
               Refresh All
             </button>
           </div>
+        </div>
+
+        {/* ── Role Filter ───────────────────────────────────────────────── */}
+        <div className={`flex items-center gap-2 mb-4 p-2 rounded-lg border ${cardBg}`}>
+          <span className="text-xs font-medium opacity-60 mr-1">Source:</span>
+          {([
+            { value: "" as const, label: "All", icon: "🔍" },
+            { value: "patient" as const, label: "Patient", icon: "🩺" },
+            { value: "physician" as const, label: "Physician", icon: "👨‍⚕️" },
+          ]).map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => setFilterRole(opt.value)}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                filterRole === opt.value
+                  ? opt.value === "patient"
+                    ? "bg-blue-600 text-white"
+                    : opt.value === "physician"
+                      ? "bg-emerald-600 text-white"
+                      : isDarkMode
+                        ? "bg-gray-600 text-white"
+                        : "bg-gray-800 text-white"
+                  : isDarkMode
+                    ? "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+          {stats?.role_counts && (
+            <div className="ml-auto flex gap-3 text-xs opacity-60">
+              <span>Patient: <strong>{stats.role_counts.patient ?? 0}</strong></span>
+              <span>Physician: <strong>{stats.role_counts.physician ?? 0}</strong></span>
+            </div>
+          )}
         </div>
 
         {/* ── Stats Cards ────────────────────────────────────────────────── */}
@@ -943,9 +992,10 @@ export default function AdminTrackingDashboard() {
                     className={`rounded-md border px-3 py-2 text-sm w-full sm:w-52 ${inputBg}`}
                   />
                 </div>
-                {(filterFile || filterEventType || filterSession) && (
+                {(filterFile || filterEventType || filterSession || filterRole) && (
                   <button
                     onClick={() => {
+                      setFilterRole("");
                       setFilterFile("");
                       setFilterEventType("");
                       setFilterSession("");
@@ -968,6 +1018,7 @@ export default function AdminTrackingDashboard() {
                     <tr className={tableHeaderBg}>
                       <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">#</th>
                       <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Time</th>
+                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Role</th>
                       <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Patient</th>
                       <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Session</th>
                       <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Event Type</th>
@@ -979,13 +1030,13 @@ export default function AdminTrackingDashboard() {
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                     {loading ? (
                       <tr>
-                        <td colSpan={8} className="px-4 py-8 text-center opacity-50">
+                        <td colSpan={9} className="px-4 py-8 text-center opacity-50">
                           Loading…
                         </td>
                       </tr>
                     ) : events.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="px-4 py-8 text-center opacity-50">
+                        <td colSpan={9} className="px-4 py-8 text-center opacity-50">
                           No events found
                         </td>
                       </tr>
@@ -1004,6 +1055,17 @@ export default function AdminTrackingDashboard() {
                             </td>
                             <td className="px-4 py-2 whitespace-nowrap">
                               {formatTimestamp(ev.client_timestamp)}
+                            </td>
+                            <td className="px-4 py-2">
+                              <span
+                                className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
+                                  ev.role === "physician"
+                                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400"
+                                    : "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400"
+                                }`}
+                              >
+                                {ev.role || "patient"}
+                              </span>
                             </td>
                             <td className="px-4 py-2" title={ev.file}>
                               {truncate(ev.file, 25)}
@@ -1039,7 +1101,7 @@ export default function AdminTrackingDashboard() {
                           </tr>
                           {expandedRow === ev.id && (
                             <tr key={`${ev.id}-detail`}>
-                              <td colSpan={8} className="px-2 py-2 sm:px-4 sm:py-3">
+                              <td colSpan={9} className="px-2 py-2 sm:px-4 sm:py-3">
                                 <div
                                   className={`rounded p-3 text-xs font-mono overflow-x-auto ${
                                     isDarkMode ? "bg-gray-900" : "bg-gray-100"

@@ -388,6 +388,23 @@ async def init_database():
     # Check and recreate tables if needed
     await check_and_recreate_tables_if_needed(engine)
 
+    # Add 'role' column to user_interaction_log if it doesn't exist
+    async with engine.begin() as conn:
+        result = await conn.execute(text(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name = 'user_interaction_log' AND column_name = 'role'"
+        ))
+        if result.fetchone() is None:
+            await conn.execute(text(
+                "ALTER TABLE user_interaction_log "
+                "ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'patient'"
+            ))
+            await conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_user_interaction_log_role "
+                "ON user_interaction_log (role)"
+            ))
+            print("   ✅ Added 'role' column to user_interaction_log")
+
     # Create tables (will only create if they don't exist)
     print("Creating database tables...")
     async with engine.begin() as conn:

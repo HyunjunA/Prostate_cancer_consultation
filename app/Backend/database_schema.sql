@@ -233,3 +233,27 @@ CREATE INDEX idx_auth_api_key_hash ON auth_api_key(key_hash);
 CREATE INDEX idx_auth_api_key_user ON auth_api_key(user_id);
 CREATE INDEX idx_patient_access_user ON patient_access(user_id);
 CREATE INDEX idx_patient_access_patient ON patient_access(patient_id);
+
+
+-- =====================================================
+-- 7. User Interaction Tracking
+-- =====================================================
+CREATE TABLE user_interaction_log (
+    id SERIAL PRIMARY KEY,
+    session_id VARCHAR(100) NOT NULL,
+    role VARCHAR(20) NOT NULL DEFAULT 'patient',
+    file VARCHAR(255) NOT NULL,
+    speaker VARCHAR(100) NOT NULL,
+    event_type VARCHAR(50) NOT NULL,
+    element_id VARCHAR(255),
+    event_data TEXT,
+    device_type VARCHAR(20),
+    client_timestamp TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_uil_session ON user_interaction_log(session_id);
+CREATE INDEX idx_uil_role ON user_interaction_log(role);
+CREATE INDEX idx_uil_file ON user_interaction_log(file);
+CREATE INDEX idx_uil_speaker ON user_interaction_log(speaker);
+CREATE INDEX idx_uil_event_type ON user_interaction_log(event_type);

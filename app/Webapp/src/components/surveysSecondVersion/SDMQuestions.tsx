@@ -591,6 +591,7 @@ interface SDMSurveyProps {
     value: YesNoAnswer | ScaleAnswer,
   ) => void;
   onSubmit?: () => void;
+  onProgressSave?: () => void;
   isDark?: boolean;
   interventionName?: string;
   onTrackEvent?: (eventData: {
@@ -604,6 +605,7 @@ export const SDMSurvey: React.FC<SDMSurveyProps> = ({
   answers,
   onChange,
   onSubmit,
+  onProgressSave,
   isDark = false,
   interventionName = "[intervention]",
   onTrackEvent,
@@ -622,6 +624,13 @@ export const SDMSurvey: React.FC<SDMSurveyProps> = ({
   const handleNext = () => {
     if (currentQuestionIndex < totalQuestions - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
+      onProgressSave?.();
+    }
+  };
+
+  const handlePrev = () => {
+    if (currentQuestionIndex > 0) {
+      setCurrentQuestionIndex(currentQuestionIndex - 1);
     }
   };
 
@@ -714,7 +723,22 @@ export const SDMSurvey: React.FC<SDMSurveyProps> = ({
       </div>
 
       {/* Navigation Buttons */}
-      <div className="flex justify-end">
+      <div className="flex justify-between">
+        {currentQuestionIndex > 0 ? (
+          <button
+            onClick={handlePrev}
+            className={cx(
+              "flex items-center gap-1 px-6 py-3 rounded-lg text-sm font-semibold transition-all border",
+              isDark
+                ? "border-purple-700 text-purple-300 hover:bg-purple-900/30"
+                : "border-purple-300 text-purple-600 hover:bg-purple-50",
+            )}
+          >
+            Previous
+          </button>
+        ) : (
+          <div />
+        )}
         {!isLastQuestion ? (
           <button
             onClick={handleNext}

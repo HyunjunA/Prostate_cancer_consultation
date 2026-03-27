@@ -214,6 +214,81 @@ export async function submitQuestions(
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// GET - Fetch previous submissions for a file+speaker
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Response from the by-speaker submissions endpoint
+ */
+export interface SurveySubmissionsByType {
+  speaker: string;
+  total_submissions: number;
+  survey_types: string[];
+  submissions_by_type: Record<
+    string,
+    Array<{
+      id: number;
+      file: string;
+      answers: Record<string, any>;
+      submitted_at: string | null;
+      redcap_synced: boolean;
+    }>
+  >;
+}
+
+/**
+ * Fetch all previous survey submissions for a given file and speaker.
+ * Used to restore state on page refresh.
+ */
+export async function fetchSurveySubmissions(
+  file: string,
+  speaker: string
+): Promise<SurveySubmissionsByType | null> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/surveys/by-speaker/${encodeURIComponent(speaker)}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          ...(process.env.NEXT_PUBLIC_API_KEY && {
+            "X-API-Key": process.env.NEXT_PUBLIC_API_KEY,
+          }),
+        },
+      }
+    );
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data: SurveySubmissionsByType = await response.json();
+
+    // Filter to only submissions for this specific file
+    const filtered: SurveySubmissionsByType = {
+      ...data,
+      submissions_by_type: {},
+      survey_types: [],
+      total_submissions: 0,
+    };
+
+    for (const [type, submissions] of Object.entries(data.submissions_by_type)) {
+      const forFile = submissions.filter((s) => s.file === file);
+      if (forFile.length > 0) {
+        filtered.submissions_by_type[type] = forFile;
+        filtered.survey_types.push(type);
+        filtered.total_submissions += forFile.length;
+      }
+    }
+
+    return filtered;
+  } catch (error) {
+    console.error("Failed to fetch survey submissions:", error);
+    return null;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // Export Default
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -225,4 +300,5 @@ export default {
   submitRiskPerception,
   submitSatisfaction,
   submitQuestions,
+  fetchSurveySubmissions,
 };

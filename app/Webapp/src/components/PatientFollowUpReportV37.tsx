@@ -606,6 +606,7 @@ const PatientFollowUpReport: React.FC<PatientFollowUpReportProps> = ({
       const session = getOrCreateSession();
       sendTrackingEvents(
         session.sessionId,
+        "patient",
         currentFile,
         currentSpeaker,
         session.deviceType,
@@ -625,10 +626,14 @@ const PatientFollowUpReport: React.FC<PatientFollowUpReportProps> = ({
       flushEvents();
     };
 
+    // Periodic flush every 30 seconds for real-time dashboard visibility
+    const periodicFlushTimer = setInterval(flushEvents, 30_000);
+
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("beforeunload", handleBeforeUnload);
 
     return () => {
+      clearInterval(periodicFlushTimer);
       flushEvents();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("beforeunload", handleBeforeUnload);

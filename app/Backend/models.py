@@ -64,7 +64,7 @@
 #         from_attributes=True,
 #         str_strip_whitespace=True
 #     )
-    
+
 #     id: str
 #     covidence_id: Optional[str] = None
 #     pmid: Optional[str] = None
@@ -77,13 +77,13 @@
 #     repository: Optional[str] = None
 #     sequence_ids_reported: Optional[bool] = None
 #     sequence_id_article_location: Optional[str] = None
-    
+
 #     # Demographic data
 #     age_reported: Optional[bool] = None
 #     gender_reported: Optional[bool] = None
 #     race_ethnicity_nationality_reported: Optional[bool] = None
 #     demographic_article_location: Optional[str] = None
-    
+
 #     # Clinical data
 #     comorbidities_reported: Optional[bool] = None
 #     inpatient_outpatient_reported: Optional[bool] = None
@@ -93,17 +93,17 @@
 #     treatment_reported: Optional[bool] = None
 #     vaccination_status_reported: Optional[bool] = None
 #     clinical_article_location: Optional[str] = None
-    
+
 #     created_at: Optional[str] = None
 #     updated_at: Optional[str] = None
-    
+
 #     # Convert UUID to string
 #     @field_serializer('id')
 #     def serialize_id(self, value):
 #         if isinstance(value, PythonUUID):
 #             return str(value)
 #         return value
-    
+
 #     # Convert datetime to ISO string
 #     @field_serializer('created_at', 'updated_at')
 #     def serialize_datetime(self, value):
@@ -118,10 +118,10 @@
 #     # year: Optional[int] = Field(default=None, description="Specific year")
 #     # year_range: Optional[tuple[int, int]] = Field(default=None, description="Year range")
 #     year_list: Optional[List[int]] = Field(default=None, description="Non-contiguous list of years")
-    
+
 #     # PMID filter added (this was missing)
 #     pmid: Optional[str] = Field(default=None, description="Filter by PMID")
-    
+
 #     # Boolean filters
 #     age_reported: Optional[bool] = Field(default=None)
 #     gender_reported: Optional[bool] = Field(default=None)
@@ -134,7 +134,7 @@
 #     treatment_reported: Optional[bool] = Field(default=None)
 #     vaccination_status_reported: Optional[bool] = Field(default=None)
 #     sequence_ids_reported: Optional[bool] = Field(default=None)
-    
+
 #     # Search
 #     search_title: Optional[str] = Field(default=None, description="Search by title")
 #     search_pmid: Optional[str] = Field(default=None, description="Search by PMID")
@@ -162,7 +162,7 @@
 #     studies_with_sequence_ids: int
 #     earliest_year: Optional[int] = None
 #     latest_year: Optional[int] = None
-    
+
 # # CSV upload response model
 # class CSVUploadResponse(BaseModel):
 #     success: bool
@@ -172,27 +172,25 @@
 #     records_updated: int
 
 
-"""
-SQLAlchemy Models for Doctor and Patient Interface Database
-"""
-from datetime import datetime
+"""models.py - SQLAlchemy ORM model definitions for the Backend."""
+
 from sqlalchemy import (
     Column, ForeignKey, ForeignKeyConstraint, LargeBinary, String, Integer, Float,
     Boolean, Text, TIMESTAMP, CheckConstraint, func
 )
-from sqlalchemy.orm import relationship
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship, declarative_base
 
 Base = declarative_base()
+
 
 # =====================================================
 # 1. Doctor Interface Tables
 # =====================================================
 
 class DoctorSentenceView(Base):
-    """Doctor interface render table - displays sentences with scores"""
+    """Doctor interface render table - displays sentences with scores."""
     __tablename__ = 'doctor_sentence_view'
-    
+
     file = Column(String(255), primary_key=True, nullable=False)
     i = Column(Integer, primary_key=True, nullable=False)
     i2 = Column(Integer, primary_key=True, nullable=False)
@@ -201,13 +199,13 @@ class DoctorSentenceView(Base):
     score = Column(Float)
     class_ = Column('class', String(100))
     time = Column(TIMESTAMP(timezone=True))
-    
+
     def __repr__(self):
         return f"<DoctorSentenceView(file={self.file}, i={self.i}, i2={self.i2})>"
 
 
 class DoctorRewriteLog(Base):
-    """Doctor rewriting history - tracks AI-powered sentence revisions"""
+    """Doctor rewriting history - tracks AI-powered sentence revisions."""
     __tablename__ = 'doctor_rewrite_log'
     __table_args__ = (
         ForeignKeyConstraint(
@@ -216,7 +214,7 @@ class DoctorRewriteLog(Base):
             ondelete='CASCADE'
         ),
     )
-    
+
     file = Column(String(255), primary_key=True, nullable=False)
     i = Column(Integer, primary_key=True, nullable=False)
     i2 = Column(Integer, primary_key=True, nullable=False)
@@ -228,7 +226,7 @@ class DoctorRewriteLog(Base):
     score = Column(Float)
     class_ = Column('class', String(100))
     selected = Column(Boolean, default=False)
-    
+
     def __repr__(self):
         return f"<DoctorRewriteLog(file={self.file}, i={self.i}, i2={self.i2}, time={self.time})>"
 
@@ -238,13 +236,13 @@ class DoctorRewriteLog(Base):
 # =====================================================
 
 class PatientSummary(Base):
-    """Patient class summary - categorized summaries for patients"""
+    """Patient class summary - categorized summaries for patients."""
     __tablename__ = 'patient_summary'
-    
+
     file = Column(String(255), primary_key=True, nullable=False)
     speaker = Column(String(100), primary_key=True)
     entire_summary = Column(Text)
-    
+
     class_1 = Column(String(100))
     summary_class_1 = Column(Text)
     class_2 = Column(String(100))
@@ -255,13 +253,13 @@ class PatientSummary(Base):
     summary_class_4 = Column(Text)
     class_5 = Column(String(100))
     summary_class_5 = Column(Text)
-    
+
     def __repr__(self):
         return f"<PatientSummary(file={self.file}, speaker={self.speaker})>"
 
 
 class PatientSummaryScoring(Base):
-    """Patient scoring for each class summary (0-10 scale)"""
+    """Patient scoring for each class summary (0-10 scale)."""
     __tablename__ = 'patient_summary_scoring'
     __table_args__ = (
         ForeignKeyConstraint(
@@ -270,22 +268,22 @@ class PatientSummaryScoring(Base):
             ondelete='CASCADE'
         ),
     )
-    
+
     file = Column(String(255), primary_key=True, nullable=False)
     speaker = Column(String(100), primary_key=True)
-    
+
     class_1_patient_scoring = Column(Integer, CheckConstraint('class_1_patient_scoring BETWEEN 0 AND 10'))
     class_2_patient_scoring = Column(Integer, CheckConstraint('class_2_patient_scoring BETWEEN 0 AND 10'))
     class_3_patient_scoring = Column(Integer, CheckConstraint('class_3_patient_scoring BETWEEN 0 AND 10'))
     class_4_patient_scoring = Column(Integer, CheckConstraint('class_4_patient_scoring BETWEEN 0 AND 10'))
     class_5_patient_scoring = Column(Integer, CheckConstraint('class_5_patient_scoring BETWEEN 0 AND 10'))
-    
+
     def __repr__(self):
         return f"<PatientSummaryScoring(file={self.file}, speaker={self.speaker})>"
 
 
 class PatientResponses(Base):
-    """Patient responses to questions"""
+    """Patient responses to questions."""
     __tablename__ = 'patient_responses'
     __table_args__ = (
         ForeignKeyConstraint(
@@ -294,16 +292,16 @@ class PatientResponses(Base):
             ondelete='CASCADE'
         ),
     )
-    
+
     file = Column(String(255), primary_key=True, nullable=False)
     speaker = Column(String(100), primary_key=True)
-    
+
     answer_1 = Column(Text)
     answer_2 = Column(Text)
     answer_3 = Column(Text)
     answer_4 = Column(Text)
     answer_5 = Column(Text)
-    
+
     def __repr__(self):
         return f"<PatientResponses(file={self.file}, speaker={self.speaker})>"
 
@@ -311,8 +309,9 @@ class PatientResponses(Base):
 # =====================================================
 # 3. Survey Submission Tables
 # =====================================================
+
 class SurveySubmissionLog(Base):
-    """Survey submission log - stores all survey responses"""
+    """Survey submission log - stores all survey responses."""
     __tablename__ = 'survey_submission_log'
     __table_args__ = (
         ForeignKeyConstraint(
@@ -321,7 +320,7 @@ class SurveySubmissionLog(Base):
             ondelete='CASCADE'
         ),
     )
-    
+
     id = Column(Integer, primary_key=True, autoincrement=True)
     file = Column(String(255), nullable=False, index=True)
     speaker = Column(String(100), nullable=False, index=True)
@@ -329,11 +328,11 @@ class SurveySubmissionLog(Base):
     answers = Column(Text, nullable=False)
     extra_data = Column(Text)
     submitted_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-    
+
     redcap_synced = Column(Boolean, default=False)
     redcap_record_id = Column(String(255))
     redcap_error = Column(Text)
-    
+
     def __repr__(self):
         return f"<SurveySubmissionLog(id={self.id}, survey_type={self.survey_type})>"
 
@@ -367,41 +366,20 @@ class TranscriptAnalysisLog(Base):
 # =====================================================
 
 class SentencePrediction(Base):
-    """Individual sentence-level NLP prediction, linked to an analysis run.
-
-    Each row corresponds to one row in one sheet of the output xlsx file.
-    The 5 xlsx sheets (cp, inc, ed, ius, le) are distinguished by the `model` column.
-
-    Column mapping (xlsx → DB):
-        xlsx column    DB column               Description
-        -----------    ---------               -----------
-        (sheet name)   model                   NLP model: cp, inc, ed, ius, le
-        name           patient_id              Patient identifier (e.g. "sid-01")
-        index          sentence_index          Global sentence sequence number (1-based)
-        i              utterance_index         Original utterance number from transcript
-        i2             sentence_in_utterance   Sentence position within the utterance (1-based)
-        speaker        speaker                 Speaker label (e.g. "Interviewer")
-        text           sentence_text           The sentence text (lowercased)
-        .pred_1        pred_score              NLP prediction probability (0.0–1.0)
-        context        context                 Surrounding sentences with <main>target</main> tags
-
-    DB-only columns (not in xlsx):
-        id             Auto-increment primary key
-        analysis_id    FK → transcript_analysis_log.id (which analysis run produced this row)
-    """
+    """Individual sentence-level NLP prediction, linked to an analysis run."""
     __tablename__ = 'sentence_prediction'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     analysis_id = Column(Integer, ForeignKey('transcript_analysis_log.id', ondelete='CASCADE'), nullable=False, index=True)
-    patient_id = Column(String(255), nullable=False)          # xlsx 'name'
-    model = Column(String(10), nullable=False)                # xlsx sheet name (cp/inc/ed/ius/le)
-    sentence_index = Column(Integer, nullable=False)          # xlsx 'index'
-    utterance_index = Column(Integer, nullable=False)         # xlsx 'i'
-    sentence_in_utterance = Column(Integer, nullable=False)   # xlsx 'i2'
-    speaker = Column(String(100))                             # xlsx 'speaker'
-    sentence_text = Column(Text)                              # xlsx 'text'
-    pred_score = Column(Float, nullable=False)                # xlsx '.pred_1'
-    context = Column(Text)                                    # xlsx 'context'
+    patient_id = Column(String(255), nullable=False)
+    model = Column(String(10), nullable=False)
+    sentence_index = Column(Integer, nullable=False)
+    utterance_index = Column(Integer, nullable=False)
+    sentence_in_utterance = Column(Integer, nullable=False)
+    speaker = Column(String(100))
+    sentence_text = Column(Text)
+    pred_score = Column(Float, nullable=False)
+    context = Column(Text)
 
     analysis = relationship("TranscriptAnalysisLog", back_populates="predictions")
 
@@ -414,34 +392,18 @@ class SentencePrediction(Base):
 # =====================================================
 
 class UserInteractionLog(Base):
-    """Tracks user interaction events from patient/physician UI.
-
-    Each row is a single event (topic expand, rating click, scroll depth, etc.)
-    captured by TrackingEventManager on the frontend and batched to the backend.
-
-    Column descriptions:
-        session_id          Browser session identifier (30-min window, from localStorage)
-        file                Patient file identifier (e.g. "quality-coded-nlp-pilot-sid-1.xlsx")
-        speaker             User identifier (e.g. "Patient_quality-coded-nlp-pilot-sid-1")
-        event_type          Event category: topic_expand, topic_collapse, evidence_expand,
-                            evidence_collapse, rating_click, scroll_depth, dwell_time,
-                            proximity_enter, proximity_exit, time_on_component
-        element_id          Target element identifier (e.g. "Topic_CancerPrognosis")
-        event_data          JSON string with full event metadata
-        device_type         Client device: desktop, tablet, mobile
-        client_timestamp    When the event occurred on the client (ISO 8601)
-        created_at          When the server received the event
-    """
+    """Tracks user interaction events from patient/physician UI."""
     __tablename__ = 'user_interaction_log'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(String(100), nullable=False, index=True)
+    role = Column(String(20), nullable=False, server_default="patient", index=True)
     file = Column(String(255), nullable=False, index=True)
     speaker = Column(String(100), nullable=False, index=True)
     event_type = Column(String(50), nullable=False, index=True)
     element_id = Column(String(255))
-    event_data = Column(Text)                                       # JSON string
-    device_type = Column(String(20))                                # desktop | tablet | mobile
+    event_data = Column(Text)
+    device_type = Column(String(20))
     client_timestamp = Column(TIMESTAMP(timezone=True))
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 

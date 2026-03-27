@@ -27,6 +27,7 @@ interface TrackingEvent {
 
 interface TrackingEventBatch {
   session_id: string;
+  role: string;
   file: string;
   speaker: string;
   device_type: string;
@@ -64,6 +65,7 @@ function toApiEvent(event: TrackingEvent) {
  * Send a batch of tracking events to the backend.
  *
  * @param sessionId - Browser session identifier
+ * @param role - "patient" or "physician"
  * @param file - Patient file identifier
  * @param speaker - Patient/user identifier
  * @param deviceType - desktop | tablet | mobile
@@ -73,6 +75,7 @@ function toApiEvent(event: TrackingEvent) {
  */
 export async function sendTrackingEvents(
   sessionId: string,
+  role: string,
   file: string,
   speaker: string,
   deviceType: string,
@@ -83,6 +86,7 @@ export async function sendTrackingEvents(
 
   const batch: TrackingEventBatch = {
     session_id: sessionId,
+    role,
     file,
     speaker,
     device_type: deviceType,

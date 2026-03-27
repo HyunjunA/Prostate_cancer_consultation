@@ -128,8 +128,33 @@ It uses PostgreSQL as the system of record and Redis for short-TTL caching and p
 | postgres | postgres:13          | 5433 → 5432    | Primary database         |
 | backend  | Dockerfile (FastAPI) | 8000 → 8000    | API server (Uvicorn)     |
 | redis    | redis:7              | 6379 → 6379    | Cache & rate-limit store |
+| nlp-classifiers | r01-nlp-classifiers:latest (로컬 이미지) | 내부 8000 | NLP 문장 분류 (3 replicas) |
+| webapp   | ../Webapp/Dockerfile (Next.js) | 내부 3000 | Frontend                 |
+| nginx    | nginx:alpine         | 3000 → 80     | Reverse proxy            |
 
 Compose network: `prostatecancer-network`. Named volumes: `postgres_data`, `redis_data`.
+
+### nlp-classifiers 이미지
+
+`nlp-classifiers` 서비스는 `r01-nlp-classifiers:latest` 로컬 Docker 이미지를 사용한다.
+이 이미지는 Docker Hub에 없으며, 아래 경로의 OCI 이미지 디렉토리에서 로드해야 한다:
+
+```
+~/Downloads/r01-nlp-classifiers-docker-image (2)/
+```
+
+로드 방법:
+```bash
+cd ~/Downloads/r01-nlp-classifiers-docker-image\ \(2\)/
+tar -cf /tmp/r01-nlp-classifiers.tar .
+docker load -i /tmp/r01-nlp-classifiers.tar
+# → Loaded image: r01-nlp-classifiers:latest
+```
+
+원본 R 코드/모델은 별도 폴더에 위치:
+```
+prostate_cancer_project/prostate_cancer_R01_NLP_classifiers_Michael/
+```
 
 ## Project Structure
 
