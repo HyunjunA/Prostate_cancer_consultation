@@ -46,6 +46,7 @@ class TrackingEvent(BaseModel):
 class TrackingEventBatch(BaseModel):
     """Batch of events to store."""
     session_id: str
+    role: str = "patient"                      # "patient" | "physician"
     file: str
     speaker: str
     device_type: Optional[str] = "desktop"
@@ -63,6 +64,7 @@ class TrackingEventDetail(BaseModel):
     """Single event returned from query."""
     id: int
     session_id: str
+    role: str
     file: str
     speaker: str
     event_type: str
@@ -100,6 +102,7 @@ async def store_tracking_events(
 
             row = UserInteractionLog(
                 session_id=batch.session_id,
+                role=batch.role,
                 file=batch.file,
                 speaker=batch.speaker,
                 event_type=event.event_type,
@@ -136,6 +139,7 @@ async def store_tracking_events(
 
 @router.get("/events")
 async def get_tracking_events(
+    role: Optional[str] = Query(None, description="Filter by role (patient/physician)"),
     file: Optional[str] = Query(None, description="Filter by patient file"),
     speaker: Optional[str] = Query(None, description="Filter by speaker"),
     session_id: Optional[str] = Query(None, description="Filter by session"),
@@ -149,6 +153,8 @@ async def get_tracking_events(
     Returns events ordered by client_timestamp descending.
     """
     conditions = []
+    if role:
+        conditions.append(UserInteractionLog.role == role)
     if file:
         conditions.append(UserInteractionLog.file == file)
     if speaker:
@@ -187,6 +193,7 @@ async def get_tracking_events(
         events.append({
             "id": row.id,
             "session_id": row.session_id,
+            "role": getattr(row, 'role', 'patient'),
             "file": row.file,
             "speaker": row.speaker,
             "event_type": row.event_type,
@@ -211,28 +218,34 @@ async def get_tracking_events(
 
 @router.get("/stats")
 async def get_tracking_stats(
+    role: Optional[str] = Query(None, description="Filter by role (patient/physician)"),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Return summary statistics: total events, unique sessions, unique patients,
-    and event counts by type.
+    and event counts by type. Optionally filtered by role.
     """
-    total_result = await db.execute(
-        select(func.count(UserInteractionLog.id))
-    )
+    base_condition = UserInteractionLog.role == role if role else None
+
+    total_stmt = select(func.count(UserInteractionLog.id))
+    if base_condition is not None:
+        total_stmt = total_stmt.where(base_condition)
+    total_result = await db.execute(total_stmt)
     total_events = total_result.scalar() or 0
 
-    session_result = await db.execute(
-        select(func.count(distinct(UserInteractionLog.session_id)))
-    )
+    session_stmt = select(func.count(distinct(UserInteractionLog.session_id)))
+    if base_condition is not None:
+        session_stmt = session_stmt.where(base_condition)
+    session_result = await db.execute(session_stmt)
     total_sessions = session_result.scalar() or 0
 
-    patient_result = await db.execute(
-        select(func.count(distinct(UserInteractionLog.file)))
-    )
+    patient_stmt = select(func.count(distinct(UserInteractionLog.file)))
+    if base_condition is not None:
+        patient_stmt = patient_stmt.where(base_condition)
+    patient_result = await db.execute(patient_stmt)
     total_patients = patient_result.scalar() or 0
 
-    type_result = await db.execute(
+    type_stmt = (
         select(
             UserInteractionLog.event_type,
             func.count(UserInteractionLog.id).label("count"),
@@ -240,7 +253,18 @@ async def get_tracking_stats(
         .group_by(UserInteractionLog.event_type)
         .order_by(desc("count"))
     )
+    if base_condition is not None:
+        type_stmt = type_stmt.where(base_condition)
+    type_result = await db.execute(type_stmt)
     event_type_counts = {row.event_type: row.count for row in type_result.all()}
+
+    # Role breakdown (always returned)
+    role_stmt = select(
+        UserInteractionLog.role,
+        func.count(UserInteractionLog.id).label("count"),
+    ).group_by(UserInteractionLog.role)
+    role_result = await db.execute(role_stmt)
+    role_counts = {(row.role or "patient"): row.count for row in role_result.all()}
 
     return {
         "total_events": total_events,
@@ -248,6 +272,7 @@ async def get_tracking_stats(
         "total_patients": total_patients,
         "total_event_types": len(event_type_counts),
         "event_type_counts": event_type_counts,
+        "role_counts": role_counts,
     }
 
 
@@ -257,18 +282,20 @@ async def get_tracking_stats(
 
 @router.get("/patients")
 async def get_tracked_patients(
+    role: Optional[str] = Query(None, description="Filter by role (patient/physician)"),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Return distinct patient file identifiers that have tracking events.
     """
+    stmt = select(
+        UserInteractionLog.file,
+        func.count(UserInteractionLog.id).label("event_count"),
+    )
+    if role:
+        stmt = stmt.where(UserInteractionLog.role == role)
     result = await db.execute(
-        select(
-            UserInteractionLog.file,
-            func.count(UserInteractionLog.id).label("event_count"),
-        )
-        .group_by(UserInteractionLog.file)
-        .order_by(UserInteractionLog.file)
+        stmt.group_by(UserInteractionLog.file).order_by(UserInteractionLog.file)
     )
     patients = [
         {"file": row.file, "event_count": row.event_count}
@@ -284,6 +311,7 @@ async def get_tracked_patients(
 
 @router.get("/analytics")
 async def get_tracking_analytics(
+    role: Optional[str] = Query(None, description="Filter by role (patient/physician)"),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -296,15 +324,20 @@ async def get_tracking_analytics(
     - hourly_heatmap: activity by hour of day
     """
 
+    role_condition = UserInteractionLog.role == role if role else None
+
     # ── 1. Timeline: events grouped by hour ──────────────────────────────────
-    timeline_result = await db.execute(
+    timeline_stmt = (
         select(
             func.date_trunc("hour", UserInteractionLog.client_timestamp).label("hour"),
             func.count(UserInteractionLog.id).label("count"),
         )
         .where(UserInteractionLog.client_timestamp.isnot(None))
-        .group_by("hour")
-        .order_by(asc("hour"))
+    )
+    if role_condition is not None:
+        timeline_stmt = timeline_stmt.where(role_condition)
+    timeline_result = await db.execute(
+        timeline_stmt.group_by("hour").order_by(asc("hour"))
     )
     timeline = [
         {"hour": row.hour.isoformat() if row.hour else None, "count": row.count}
@@ -312,12 +345,15 @@ async def get_tracking_analytics(
     ]
 
     # ── 2. Events by patient ─────────────────────────────────────────────────
+    by_patient_stmt = select(
+        UserInteractionLog.file,
+        UserInteractionLog.event_type,
+        func.count(UserInteractionLog.id).label("count"),
+    )
+    if role_condition is not None:
+        by_patient_stmt = by_patient_stmt.where(role_condition)
     patient_result = await db.execute(
-        select(
-            UserInteractionLog.file,
-            UserInteractionLog.event_type,
-            func.count(UserInteractionLog.id).label("count"),
-        )
+        by_patient_stmt
         .group_by(UserInteractionLog.file, UserInteractionLog.event_type)
         .order_by(UserInteractionLog.file, desc("count"))
     )
@@ -331,15 +367,18 @@ async def get_tracking_analytics(
     by_patient_list = list(by_patient.values())
 
     # ── 3. Per-session summary ───────────────────────────────────────────────
+    session_stmt = select(
+        UserInteractionLog.session_id,
+        UserInteractionLog.file,
+        UserInteractionLog.device_type,
+        func.count(UserInteractionLog.id).label("event_count"),
+        func.min(UserInteractionLog.client_timestamp).label("first_event"),
+        func.max(UserInteractionLog.client_timestamp).label("last_event"),
+    )
+    if role_condition is not None:
+        session_stmt = session_stmt.where(role_condition)
     session_result = await db.execute(
-        select(
-            UserInteractionLog.session_id,
-            UserInteractionLog.file,
-            UserInteractionLog.device_type,
-            func.count(UserInteractionLog.id).label("event_count"),
-            func.min(UserInteractionLog.client_timestamp).label("first_event"),
-            func.max(UserInteractionLog.client_timestamp).label("last_event"),
-        )
+        session_stmt
         .group_by(
             UserInteractionLog.session_id,
             UserInteractionLog.file,
@@ -363,13 +402,14 @@ async def get_tracking_analytics(
         })
 
     # ── 4. Device breakdown ──────────────────────────────────────────────────
+    device_stmt = select(
+        UserInteractionLog.device_type,
+        func.count(UserInteractionLog.id).label("count"),
+    )
+    if role_condition is not None:
+        device_stmt = device_stmt.where(role_condition)
     device_result = await db.execute(
-        select(
-            UserInteractionLog.device_type,
-            func.count(UserInteractionLog.id).label("count"),
-        )
-        .group_by(UserInteractionLog.device_type)
-        .order_by(desc("count"))
+        device_stmt.group_by(UserInteractionLog.device_type).order_by(desc("count"))
     )
     device_breakdown = [
         {"device": row.device_type or "unknown", "count": row.count}
@@ -377,13 +417,15 @@ async def get_tracking_analytics(
     ]
 
     # ── 5. Top interacted elements ───────────────────────────────────────────
+    element_stmt = select(
+        UserInteractionLog.element_id,
+        UserInteractionLog.event_type,
+        func.count(UserInteractionLog.id).label("count"),
+    ).where(UserInteractionLog.element_id.isnot(None))
+    if role_condition is not None:
+        element_stmt = element_stmt.where(role_condition)
     element_result = await db.execute(
-        select(
-            UserInteractionLog.element_id,
-            UserInteractionLog.event_type,
-            func.count(UserInteractionLog.id).label("count"),
-        )
-        .where(UserInteractionLog.element_id.isnot(None))
+        element_stmt
         .group_by(UserInteractionLog.element_id, UserInteractionLog.event_type)
         .order_by(desc("count"))
         .limit(20)
@@ -394,14 +436,14 @@ async def get_tracking_analytics(
     ]
 
     # ── 6. Hourly heatmap (hour of day) ──────────────────────────────────────
+    hourly_stmt = select(
+        extract("hour", UserInteractionLog.client_timestamp).label("hour_of_day"),
+        func.count(UserInteractionLog.id).label("count"),
+    ).where(UserInteractionLog.client_timestamp.isnot(None))
+    if role_condition is not None:
+        hourly_stmt = hourly_stmt.where(role_condition)
     hourly_result = await db.execute(
-        select(
-            extract("hour", UserInteractionLog.client_timestamp).label("hour_of_day"),
-            func.count(UserInteractionLog.id).label("count"),
-        )
-        .where(UserInteractionLog.client_timestamp.isnot(None))
-        .group_by("hour_of_day")
-        .order_by(asc("hour_of_day"))
+        hourly_stmt.group_by("hour_of_day").order_by(asc("hour_of_day"))
     )
     hourly_heatmap = [
         {"hour": int(row.hour_of_day), "count": row.count}

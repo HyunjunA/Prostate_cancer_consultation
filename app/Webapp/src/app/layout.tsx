@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
-import { PostHogProvider } from "./providers/PostHogProvider";
+// import { PostHogProvider } from "./providers/PostHogProvider"; // PostHog disabled — not in use
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -29,7 +29,8 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <PostHogProvider>{children}</PostHogProvider>
+        {/* <PostHogProvider>{children}</PostHogProvider> */}{/* PostHog disabled */}
+        {children}
       </body>
     </html>
   );

@@ -65,7 +65,7 @@ import {
   MessageSquareText,
 } from "lucide-react";
 
-import { submitSurvey } from "@/api/surveyApi";
+import { submitSurvey, fetchSurveySubmissions } from "@/api/surveyApi";
 import { sendTrackingEvents } from "@/api/trackingApi";
 import { getOrCreateSession } from "@/tracking/utils/session.utils";
 
@@ -854,6 +854,7 @@ interface RiskPerceptionWithSummaryProps {
   answers: RiskPerceptionAnswers;
   onChange: (questionId: keyof RiskPerceptionAnswers, value: string) => void;
   onSubmit?: () => void;
+  onProgressSave?: () => void;
   isSubmitting?: boolean;
   summaries: TopicSummaryMap;
   isDark?: boolean;
@@ -864,6 +865,7 @@ const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
   answers,
   onChange,
   onSubmit,
+  onProgressSave,
   isSubmitting = false,
   summaries,
   isDark,
@@ -884,6 +886,13 @@ const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
   const handleNext = () => {
     if (currentQuestionIndex < totalQuestions - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
+      onProgressSave?.();
+    }
+  };
+
+  const handlePrev = () => {
+    if (currentQuestionIndex > 0) {
+      setCurrentQuestionIndex(currentQuestionIndex - 1);
     }
   };
 
@@ -1065,7 +1074,22 @@ const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
       </div>
 
       {/* Navigation Buttons */}
-      <div className="flex justify-end">
+      <div className="flex justify-between">
+        {currentQuestionIndex > 0 ? (
+          <button
+            onClick={handlePrev}
+            className={cx(
+              "flex items-center gap-1 px-6 py-3 rounded-lg text-sm font-semibold transition-all border",
+              isDark
+                ? "border-rose-700 text-rose-300 hover:bg-rose-900/30"
+                : "border-rose-300 text-rose-600 hover:bg-rose-50",
+            )}
+          >
+            Previous
+          </button>
+        ) : (
+          <div />
+        )}
         {!isLastQuestion ? (
           <button
             onClick={handleNext}
@@ -1197,6 +1221,59 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
   }, [currentFile, currentSpeaker]);
 
   // ─────────────────────────────────────────────────────────────────────────
+  // 7.3a Restore previous survey submissions on page load
+  // ─────────────────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    const restoreSurveyState = async () => {
+      try {
+        const submissions = await fetchSurveySubmissions(currentFile, currentSpeaker);
+        if (!submissions || submissions.total_submissions === 0) return;
+
+        const restored = new Set<SurveyStep>();
+
+        // Restore each survey type if previously submitted
+        if (submissions.submissions_by_type["sdm"]?.length) {
+          const latest = submissions.submissions_by_type["sdm"][0];
+          setSdmAnswers(latest.answers as SDMAnswers);
+          setSdmSubmitted(true);
+          restored.add("sdm");
+        }
+
+        if (submissions.submissions_by_type["dcs"]?.length) {
+          const latest = submissions.submissions_by_type["dcs"][0];
+          setDcsAnswers(latest.answers as DecisionalConflictAnswers);
+          setDcsSubmitted(true);
+          restored.add("dcs");
+        }
+
+        if (submissions.submissions_by_type["risk_perception"]?.length) {
+          const latest = submissions.submissions_by_type["risk_perception"][0];
+          setRiskAnswers(latest.answers as RiskPerceptionAnswers);
+          setRiskSubmitted(true);
+          restored.add("risk");
+        }
+
+        if (submissions.submissions_by_type["satisfaction"]?.length) {
+          const latest = submissions.submissions_by_type["satisfaction"][0];
+          setSatisfactionAnswers(latest.answers as PatientSatisfactionAnswers);
+          setSatisfactionSubmitted(true);
+          restored.add("satisfaction");
+        }
+
+        if (restored.size > 0) {
+          setCompletedSteps(restored);
+          console.log(`Restored ${restored.size} survey submissions from DB`);
+        }
+      } catch (err) {
+        console.error("Error restoring survey state:", err);
+      }
+    };
+
+    restoreSurveyState();
+  }, [currentFile, currentSpeaker]);
+
+  // ─────────────────────────────────────────────────────────────────────────
   // 7.3b Track time spent on report page (Feedback 2-9)
   //       + Send tracking events to backend on page unload / visibility change
   // ─────────────────────────────────────────────────────────────────────────
@@ -1210,6 +1287,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
       const session = getOrCreateSession();
       sendTrackingEvents(
         session.sessionId,
+        "patient",
         currentFile,
         currentSpeaker,
         session.deviceType,
@@ -1243,10 +1321,14 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
       flushEvents();
     };
 
+    // Periodic flush every 30 seconds for real-time dashboard visibility
+    const periodicFlushTimer = setInterval(flushEvents, 30_000);
+
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("beforeunload", handleBeforeUnload);
 
     return () => {
+      clearInterval(periodicFlushTimer);
       recordTimeSpent();
       flushEvents(); // flush on unmount
       document.removeEventListener("visibilitychange", handleVisibilityChange);
@@ -1477,6 +1559,40 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
   };
 
   // ─────────────────────────────────────────────────────────────────────────
+  // 7.7b Progress Save (auto-save on Next click)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const saveSDMProgress = () => {
+    submitSurvey({
+      survey_type: "sdm",
+      file: currentFile,
+      speaker: currentSpeaker,
+      answers: sdmAnswers,
+      metadata: { partial: true },
+    }).catch((err) => console.error("SDM progress save failed:", err));
+  };
+
+  const saveDCSProgress = () => {
+    submitSurvey({
+      survey_type: "dcs",
+      file: currentFile,
+      speaker: currentSpeaker,
+      answers: dcsAnswers,
+      metadata: { partial: true },
+    }).catch((err) => console.error("DCS progress save failed:", err));
+  };
+
+  const saveRiskProgress = () => {
+    submitSurvey({
+      survey_type: "risk_perception",
+      file: currentFile,
+      speaker: currentSpeaker,
+      answers: riskAnswers,
+      metadata: { partial: true },
+    }).catch((err) => console.error("Risk progress save failed:", err));
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
   // 7.8 Loading State
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -1571,6 +1687,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
                   answers={sdmAnswers}
                   onChange={handleSDMChange}
                   onSubmit={handleSubmitSDM}
+                  onProgressSave={saveSDMProgress}
                   isDark={isDarkMode}
                   interventionName="treatment"
                   onTrackEvent={handleTrackEvent}
@@ -1620,6 +1737,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
                   answers={dcsAnswers}
                   onChange={handleDCSChange}
                   onSubmit={handleSubmitDCS}
+                  onProgressSave={saveDCSProgress}
                   isDark={isDarkMode}
                   onTrackEvent={handleTrackEvent}
                 />
@@ -1686,6 +1804,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
                   answers={riskAnswers}
                   onChange={handleRiskChange}
                   onSubmit={handleSubmitRisk}
+                  onProgressSave={saveRiskProgress}
                   isSubmitting={isSubmittingRisk}
                   summaries={topicSummaries}
                   isDark={isDarkMode}

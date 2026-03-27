@@ -11,6 +11,10 @@
 // - NEW: AI Rewrite integration added
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { sendTrackingEvents } from "@/api/trackingApi";
+import { getOrCreateSession } from "@/tracking/utils/session.utils";
+import { TrackingEventManager } from "@/tracking/lib/TrackingEventManager";
+import type { TrackingEvent } from "@/tracking/lib/TrackingEventManager";
 import {
   LineChart,
   Line,
@@ -684,6 +688,7 @@ interface RubricFloatingButtonProps {
   externalTab?: string;
   externalScore?: number | null;
   onExternalHandled?: () => void;
+  onTrackEvent?: (eventType: string, elementId: string, metadata?: Record<string, any>) => void;
 }
 
 const RubricFloatingButton: React.FC<RubricFloatingButtonProps> = ({
@@ -692,6 +697,7 @@ const RubricFloatingButton: React.FC<RubricFloatingButtonProps> = ({
   externalTab,
   externalScore,
   onExternalHandled,
+  onTrackEvent,
 }) => {
   const [open, setOpen] = useState(false);
   const [hoveredScore, setHoveredScore] = useState<number | null>(null);
@@ -771,8 +777,10 @@ const RubricFloatingButton: React.FC<RubricFloatingButtonProps> = ({
   const toggleDomain = (domain: string) => {
     setExpandedDomains((prev) => {
       const next = new Set(prev);
-      if (next.has(domain)) next.delete(domain);
-      else next.add(domain);
+      const expanding = !next.has(domain);
+      if (expanding) next.add(domain);
+      else next.delete(domain);
+      onTrackEvent?.(expanding ? "rubric_domain_expand" : "rubric_domain_collapse", `rubric_domain_${domain}`, { domain });
       return next;
     });
   };
@@ -798,7 +806,7 @@ const RubricFloatingButton: React.FC<RubricFloatingButtonProps> = ({
           style={{ animationDuration: "2s" }}
         />
         <button
-          onClick={() => setOpen(true)}
+          onClick={() => { setOpen(true); onTrackEvent?.("rubric_modal_open", "rubric_floating_button"); }}
           className={cx(
             "relative flex items-center gap-2 px-4 py-2.5 rounded-full font-semibold text-sm transition-all",
             "hover:scale-105 active:scale-95 animate-pulse",
@@ -820,10 +828,10 @@ const RubricFloatingButton: React.FC<RubricFloatingButtonProps> = ({
       {open && (
         <div
           className="fixed inset-0 z-[70] flex items-start justify-center pt-16 px-4"
-          onClick={(e) => { if (e.target === e.currentTarget) { setOpen(false); setLockedScore(null); setHoveredScore(null); } }}
+          onClick={(e) => { if (e.target === e.currentTarget) { setOpen(false); setLockedScore(null); setHoveredScore(null); onTrackEvent?.("rubric_modal_close", "rubric_overlay"); } }}
         >
           {/* Backdrop */}
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { setOpen(false); setLockedScore(null); setHoveredScore(null); }} />
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { setOpen(false); setLockedScore(null); setHoveredScore(null); onTrackEvent?.("rubric_modal_close", "rubric_backdrop"); }} />
 
           {/* Modal content — visible scrollbar */}
           <div
@@ -858,7 +866,7 @@ const RubricFloatingButton: React.FC<RubricFloatingButtonProps> = ({
                 </p>
               </div>
               <button
-                onClick={() => { setOpen(false); setLockedScore(null); setHoveredScore(null); }}
+                onClick={() => { setOpen(false); setLockedScore(null); setHoveredScore(null); onTrackEvent?.("rubric_modal_close", "rubric_close_button"); }}
                 className={cx(
                   "p-2 rounded-lg transition-colors",
                   isDarkMode
@@ -909,7 +917,11 @@ const RubricFloatingButton: React.FC<RubricFloatingButtonProps> = ({
                         }}
                         onMouseEnter={() => { if (lockedScore === null) setHoveredScore(score); }}
                         onMouseLeave={() => { if (lockedScore === null) setHoveredScore(null); }}
-                        onClick={() => setLockedScore(lockedScore === score ? null : score)}
+                        onClick={() => {
+                          const newLocked = lockedScore === score ? null : score;
+                          setLockedScore(newLocked);
+                          onTrackEvent?.(newLocked !== null ? "rubric_score_lock" : "rubric_score_unlock", `rubric_score_${score}`, { score });
+                        }}
                       >
                         <div
                           className={cx(
@@ -984,7 +996,7 @@ const RubricFloatingButton: React.FC<RubricFloatingButtonProps> = ({
                   return (
                     <button
                       key={tab}
-                      onClick={() => setActiveTab(tab)}
+                      onClick={() => { setActiveTab(tab); onTrackEvent?.("rubric_tab_change", `rubric_tab_${tab}`, { tab }); }}
                       className={cx(
                         "px-3 py-2.5 text-xs sm:text-sm font-medium text-center transition-colors relative whitespace-nowrap",
                         tab === "All Domains" ? "flex-shrink-0" : "flex-1",
@@ -2615,10 +2627,16 @@ const DetailView: React.FC<DetailViewProps> = ({
   // NEW: AI Rewrite state
   const [aiRewriteText, setAiRewriteText] = useState<string | null>(null);
 
-  // Reset AI Rewrite when sentence changes
+  // Reset AI Rewrite and restore saved rewrite when sentence changes
   useEffect(() => {
     setAiRewriteText(null);
-  }, [selectedSentenceIdx]);
+    // Restore previously saved rewrite from DB into the textarea
+    if (currentSentence?.revisedSentence) {
+      setNewSentence(currentSentence.revisedSentence);
+    } else {
+      setNewSentence("");
+    }
+  }, [selectedSentenceIdx, currentSentence?.revisedSentence]);
 
   // Handle view history click
   const handleViewHistory = async () => {
@@ -2684,6 +2702,27 @@ const DetailView: React.FC<DetailViewProps> = ({
       const newScore = scoreResult?.score ?? null;
 
       setRescoring(false);
+
+      // Save rewrite to DB
+      if (newScore !== null) {
+        try {
+          await saveRewriteWithTimestamp(
+            selectedFile,
+            selectedSpeaker,
+            currentSentence.i,
+            currentSentence.i2,
+            currentSentence.sentence,
+            newSentence,
+            newScore,
+            classNumber,
+            true,
+          );
+          // Refresh rewrites data so it persists on page reload
+          fetchRewritesFiltered(selectedFile, selectedSpeaker);
+        } catch (saveErr) {
+          console.error("Error saving rewrite to DB:", saveErr);
+        }
+      }
 
       setSaveStatus({
         status: "success",
@@ -3377,6 +3416,101 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, []);
 
   // ═══════════════════════════════════════════════════════════
+  // Physician Interaction Tracking
+  // ═══════════════════════════════════════════════════════════
+  const physicianTrackingRef = useRef(new TrackingEventManager());
+  const pageLoadTimeRef = useRef<number>(Date.now());
+  const rewriteInputFiredRef = useRef(false);
+
+  const trackEvent = useCallback((eventType: string, elementId: string, metadata?: Record<string, any>) => {
+    physicianTrackingRef.current.recordEvent({
+      eventType,
+      elementId,
+      timestamp: new Date().toISOString(),
+      metadata,
+    } as TrackingEvent);
+  }, []);
+
+  // Flush events to backend
+  useEffect(() => {
+    const flushEvents = () => {
+      const events = physicianTrackingRef.current.getEvents();
+      if (events.length === 0) return;
+      const session = getOrCreateSession();
+      const file = selectedPatient?.fileName || "physician_dashboard";
+      sendTrackingEvents(
+        session.sessionId,
+        "physician",
+        file,
+        selectedSpeaker || "Interviewer:",
+        session.deviceType,
+        events,
+        true,
+      );
+      physicianTrackingRef.current.clear();
+    };
+
+    const recordTimeSpent = () => {
+      const durationMs = Date.now() - pageLoadTimeRef.current;
+      if (durationMs < 1000) return;
+      trackEvent("dwell_time", "page_total_time", { dwellTimeMs: durationMs, page: "physician_dashboard" });
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        recordTimeSpent();
+        flushEvents();
+        pageLoadTimeRef.current = Date.now();
+      }
+    };
+
+    const handleBeforeUnload = () => {
+      recordTimeSpent();
+      flushEvents();
+    };
+
+    // page_enter on mount
+    trackEvent("page_enter", "physician_dashboard");
+
+    // Periodic flush every 30 seconds for real-time dashboard visibility
+    const periodicFlushTimer = setInterval(flushEvents, 30_000);
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      clearInterval(periodicFlushTimer);
+      recordTimeSpent();
+      flushEvents();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [selectedSpeaker, selectedPatient?.fileName, trackEvent]);
+
+  // Track view changes
+  useEffect(() => {
+    trackEvent("view_change", `${currentView}_view`, {
+      view: currentView,
+      ...(selectedPatient && { fileId: selectedPatient.fileName, overallScore: selectedPatient.overallScore }),
+      ...(selectedTopic && { topicName: selectedTopic.topicName }),
+    });
+    rewriteInputFiredRef.current = false; // reset rewrite input tracking on view change
+  }, [currentView, trackEvent]);
+
+  // Track search (debounced) — moved after filteredPatients definition
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const pendingSearchTrack = useRef<{ search: string } | null>(null);
+  useEffect(() => {
+    if (search !== "") pendingSearchTrack.current = { search };
+  }, [search]);
+
+  // Track score band filter — moved after filteredPatients definition
+  const pendingScoreBandTrack = useRef<string | null>(null);
+  useEffect(() => {
+    if (scoreBand !== "ALL") pendingScoreBandTrack.current = scoreBand;
+  }, [scoreBand]);
+
+  // ═══════════════════════════════════════════════════════════
   // Store value sync
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
@@ -3618,6 +3752,24 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
     return arr;
   }, [patients, search, scoreBand]);
 
+  // Deferred search tracking (needs filteredPatients to be defined)
+  useEffect(() => {
+    if (search === "" || !pendingSearchTrack.current) return;
+    clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      trackEvent("search_input", "dashboard_search", { queryLength: search.length, resultCount: filteredPatients.length });
+      pendingSearchTrack.current = null;
+    }, 500);
+    return () => clearTimeout(searchTimerRef.current);
+  }, [search, filteredPatients.length, trackEvent]);
+
+  // Deferred score band tracking (needs filteredPatients to be defined)
+  useEffect(() => {
+    if (scoreBand === "ALL" || !pendingScoreBandTrack.current) return;
+    trackEvent("score_band_filter", `dashboard_filter_${scoreBand}`, { band: scoreBand, resultCount: filteredPatients.length });
+    pendingScoreBandTrack.current = null;
+  }, [scoreBand, filteredPatients.length, trackEvent]);
+
   // ═══════════════════════════════════════════════════════════
   // Loading & Error States
   // ═══════════════════════════════════════════════════════════
@@ -3710,6 +3862,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
         externalTab={rubricTab}
         externalScore={rubricScore}
         onExternalHandled={handleRubricHandled}
+        onTrackEvent={trackEvent}
       />
 
       {/* Onboarding Tour */}
@@ -3726,7 +3879,10 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           setSearch={setSearch}
           scoreBand={scoreBand}
           setScoreBand={setScoreBand}
-          setSelectedPatient={setSelectedPatient}
+          setSelectedPatient={(patient) => {
+            trackEvent("patient_select", `dashboard_patient_${patient.id}`, { fileId: patient.fileName, overallScore: patient.overallScore });
+            setSelectedPatient(patient);
+          }}
           setCurrentView={setCurrentView}
           trajectoryData={trajectoryData?.trajectory}
         />
@@ -3743,9 +3899,15 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           apiLoading={apiLoading}
           apiError={apiError}
           sentences={sentences}
-          setCurrentView={setCurrentView}
+          setCurrentView={(view) => {
+            if (view === "dashboard") trackEvent("button_click", "grid_back_to_dashboard", { patientId: selectedPatient.id });
+            setCurrentView(view);
+          }}
           setSelectedPatient={setSelectedPatient}
-          setSelectedTopic={setSelectedTopic}
+          setSelectedTopic={(topic) => {
+            if (topic) trackEvent("topic_select", `grid_topic_${topic.topicName}`, { topicName: topic.topicName });
+            setSelectedTopic(topic);
+          }}
           setSelectedSuggestion={setSelectedSuggestion}
           setSelectedSentenceIdx={setSelectedSentenceIdx}
           setShowRewrite={setShowRewrite}
@@ -3753,7 +3915,10 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           fetchRewritesFiltered={fetchRewritesFiltered}
           fetchScoreSummary={fetchScoreSummary}
           setScoreSummaryLoading={setScoreSummaryLoading}
-          onOpenRubric={handleOpenRubric}
+          onOpenRubric={(domain, score) => {
+            trackEvent("score_click", `grid_score_${domain}`, { topicName: domain, score });
+            handleOpenRubric(domain, score);
+          }}
         />
       )}
 
@@ -3763,32 +3928,57 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           selectedTopic={selectedTopic}
           topicsData={topicsData}
           selectedSentenceIdx={selectedSentenceIdx}
-          setSelectedSentenceIdx={setSelectedSentenceIdx}
+          setSelectedSentenceIdx={(idx) => {
+            trackEvent("sentence_select", `detail_sentence_${idx}`, { sentenceIdx: idx, topicName: selectedTopic.topicName });
+            setSelectedSentenceIdx(idx);
+          }}
           showRewrite={showRewrite}
           setShowRewrite={setShowRewrite}
           newSentence={newSentence}
-          setNewSentence={setNewSentence}
+          setNewSentence={(val) => {
+            if (!rewriteInputFiredRef.current && val.length > 0) {
+              trackEvent("rewrite_input", "detail_rewrite_textarea", { topicName: selectedTopic.topicName });
+              rewriteInputFiredRef.current = true;
+            }
+            setNewSentence(val);
+          }}
           selectedSuggestion={selectedSuggestion}
-          setSelectedSuggestion={setSelectedSuggestion}
+          setSelectedSuggestion={(suggestion) => {
+            if (suggestion) trackEvent("suggestion_click", `detail_suggestion_${suggestion.targetScore}`, { topicName: selectedTopic.topicName, targetScore: suggestion.targetScore });
+            setSelectedSuggestion(suggestion);
+          }}
           saveStatus={saveStatus}
           setSaveStatus={setSaveStatus}
           rescoring={rescoring}
           setRescoring={setRescoring}
           selectedFile={selectedFile}
           selectedSpeaker={selectedSpeaker}
-          scoreSentence={scoreSentence}
+          scoreSentence={async (...args) => {
+            trackEvent("rewrite_score_click", "detail_try_score", { topicName: selectedTopic.topicName });
+            const result = await scoreSentence(...args);
+            if (result) trackEvent("rewrite_score_result", "detail_score_result", { topicName: selectedTopic.topicName, newScore: result });
+            return result;
+          }}
           saveRewriteWithTimestamp={saveRewriteWithTimestamp}
           fetchRewritesFiltered={fetchRewritesFiltered}
           fetchScoreSummary={fetchScoreSummary}
           setScoreSummaryLoading={setScoreSummaryLoading}
-          setCurrentView={setCurrentView}
+          setCurrentView={(view) => {
+            if (view === "grid") trackEvent("button_click", "detail_back_to_grid", { topicName: selectedTopic.topicName });
+            setCurrentView(view);
+          }}
           setSelectedTopic={setSelectedTopic}
           // History props
           fetchRewriteHistory={fetchRewriteHistory}
           rewriteHistory={rewriteHistory}
           clearRewriteHistory={clearRewriteHistory}
           // NEW: AI Rewrite props
-          generateAIRewrite={generateAIRewrite}
+          generateAIRewrite={async (...args) => {
+            trackEvent("ai_rewrite_generate", "detail_ai_rewrite_generate", { topicName: selectedTopic.topicName });
+            const result = await generateAIRewrite(...args);
+            trackEvent("ai_rewrite_result", "detail_ai_rewrite_result", { topicName: selectedTopic.topicName, success: !!result });
+            return result;
+          }}
           aiRewriteLoading={aiRewriteLoading}
           // Topic trajectory: all patients' per-topic scores
           scoreAverageData={scoreAverage?.data}
@@ -3797,7 +3987,10 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           // Rewrite usage stats (B-5 feedback)
           rewriteStats={rewriteStats}
           fetchRewriteStats={fetchRewriteStats}
-          onOpenRubric={handleOpenRubric}
+          onOpenRubric={(domain, score) => {
+            trackEvent("score_click", `detail_rubric_score_${score}`, { topicName: domain, score });
+            handleOpenRubric(domain, score);
+          }}
         />
       )}
     </div>

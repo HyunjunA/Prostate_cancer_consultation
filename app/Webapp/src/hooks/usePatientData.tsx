@@ -299,6 +299,29 @@ export const usePatientData = () => {
     }
   };
 
+  // 9) Get Evidence Sentences by Class
+  const fetchSentencesByClass = async (
+    file: string,
+    top_n: number = 7
+  ): Promise<any | null> => {
+    try {
+      const params = new URLSearchParams({ top_n: top_n.toString() });
+      const response = await fetch(
+        `${BASE_URL}/api/patient/sentences/${encodeURIComponent(file)}?${params.toString()}`,
+        {
+          method: "GET",
+          headers: getHeaders(),
+        }
+      );
+      if (!response.ok) throw new Error("Failed to fetch evidence sentences");
+      const data = await response.json();
+      return data;
+    } catch (err) {
+      console.error("Error loading evidence sentences:", err);
+      return null;
+    }
+  };
+
   // ============================================================================
   // PUT APIs
   // ============================================================================
@@ -461,6 +484,7 @@ export const usePatientData = () => {
     fetchScoringFiltered,
     fetchResponsesAll,
     fetchResponsesFiltered,
+    fetchSentencesByClass,
 
     // PUT APIs
     updateScoring,

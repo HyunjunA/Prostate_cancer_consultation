@@ -285,6 +285,7 @@ interface DecisionalConflictSurveyProps {
     value: LikertAnswer,
   ) => void;
   onSubmit?: () => void;
+  onProgressSave?: () => void;
   isDark?: boolean;
   physicianName?: string;
   onTrackEvent?: (eventData: {
@@ -300,6 +301,7 @@ export const DecisionalConflictSurvey: React.FC<
   answers,
   onChange,
   onSubmit,
+  onProgressSave,
   isDark = false,
   // physicianName removed — survey text now uses generic "your doctor" phrasing
   onTrackEvent,
@@ -316,6 +318,13 @@ export const DecisionalConflictSurvey: React.FC<
   const handleNext = () => {
     if (currentQuestionIndex < totalQuestions - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
+      onProgressSave?.();
+    }
+  };
+
+  const handlePrev = () => {
+    if (currentQuestionIndex > 0) {
+      setCurrentQuestionIndex(currentQuestionIndex - 1);
     }
   };
 
@@ -398,7 +407,22 @@ export const DecisionalConflictSurvey: React.FC<
       </div>
 
       {/* Navigation Buttons */}
-      <div className="flex justify-end">
+      <div className="flex justify-between">
+        {currentQuestionIndex > 0 ? (
+          <button
+            onClick={handlePrev}
+            className={cx(
+              "flex items-center gap-1 px-6 py-3 rounded-lg text-sm font-semibold transition-all border",
+              isDark
+                ? "border-teal-700 text-teal-300 hover:bg-teal-900/30"
+                : "border-teal-300 text-teal-600 hover:bg-teal-50",
+            )}
+          >
+            Previous
+          </button>
+        ) : (
+          <div />
+        )}
         {!isLastQuestion ? (
           <button
             onClick={handleNext}
