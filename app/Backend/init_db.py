@@ -222,6 +222,7 @@ from models import (
     PatientSummaryScoring,
     PatientResponses,
     SentencePrediction,
+    TranscriptAnalysisLog,
     UserInteractionLog,
 )
 # Auth models share the same Base — import so create_all picks them up
@@ -740,27 +741,168 @@ async def migrate_patient_questions_responses(csv_file_path: str, Session: async
     print(f"   ✅ Created: {created_count}, Errors: {error_count}")
     return created_count, error_count
 
+async def migrate_transcript_analysis_log(csv_file_path: str, Session: async_sessionmaker):
+    """Migrate transcript_analysis_log.csv (pipeline analysis run records)"""
+    if not os.path.exists(csv_file_path):
+        print(f"⚠️  CSV file not found: {csv_file_path}")
+        return 0, 0
+
+    print(f"\n📊 Processing: {csv_file_path}")
+
+    try:
+        df = read_csv_with_encoding(csv_file_path)
+        df.columns = [col.lower().strip() for col in df.columns]
+    except Exception as e:
+        print(f"   ❌ Failed to read CSV: {str(e)}")
+        return 0, 1
+
+    print(f"   Found {len(df)} records")
+    print(f"   Columns: {list(df.columns)}")
+
+    created_count = 0
+    error_count = 0
+
+    async with Session() as session:
+        for index, row in df.iterrows():
+            try:
+                record = TranscriptAnalysisLog(
+                    patient_id=normalize_string(row.get('patient_id')),
+                    total_sentences=normalize_int(row.get('total_sentences')) or 0,
+                    top_n=normalize_int(row.get('top_n')) or 10,
+                    context_window=normalize_int(row.get('context_window')) or 3,
+                    source_filename=normalize_string(row.get('source_filename')),
+                    analyzed_at=normalize_timestamp(row.get('analyzed_at')),
+                )
+                session.add(record)
+                await session.flush()  # get auto-generated id
+                created_count += 1
+
+            except IntegrityError as e:
+                error_count += 1
+                await session.rollback()
+                print(f"   ⚠️  IntegrityError at row {index}: {str(e)}")
+                continue
+            except Exception as e:
+                error_count += 1
+                await session.rollback()
+                print(f"   ⚠️  Error at row {index}: {str(e)}")
+                continue
+
+        await session.commit()
+
+    print(f"   ✅ Created: {created_count}, Errors: {error_count}")
+    return created_count, error_count
+
+async def migrate_sentence_prediction(csv_file_path: str, Session: async_sessionmaker):
+    """Migrate sentence_prediction.csv (pipeline per-sentence NLP scores)"""
+    if not os.path.exists(csv_file_path):
+        print(f"⚠️  CSV file not found: {csv_file_path}")
+        return 0, 0
+
+    print(f"\n📊 Processing: {csv_file_path}")
+
+    try:
+        df = read_csv_with_encoding(csv_file_path)
+        df.columns = [col.lower().strip() for col in df.columns]
+    except Exception as e:
+        print(f"   ❌ Failed to read CSV: {str(e)}")
+        return 0, 1
+
+    print(f"   Found {len(df)} records")
+    print(f"   Columns: {list(df.columns)}")
+
+    # We need analysis_id FK. Look up existing analysis runs by patient_id.
+    # If transcript_analysis_log was loaded first, we can match by patient_id.
+    analysis_id_cache: dict[str, int] = {}
+
+    async with Session() as session:
+        result = await session.execute(
+            select(TranscriptAnalysisLog.id, TranscriptAnalysisLog.patient_id)
+        )
+        for row_id, pid in result.all():
+            analysis_id_cache[pid] = row_id
+
+    if not analysis_id_cache:
+        print("   ⚠️  No transcript_analysis_log records found. Load transcript_analysis_log.csv first.")
+        print("   ⚠️  Skipping sentence_prediction migration.")
+        return 0, 0
+
+    print(f"   📌 Found {len(analysis_id_cache)} analysis runs: {list(analysis_id_cache.keys())}")
+
+    created_count = 0
+    error_count = 0
+
+    async with Session() as session:
+        for index, row in df.iterrows():
+            try:
+                patient_id = normalize_string(row.get('patient_id'))
+                analysis_id = analysis_id_cache.get(patient_id)
+
+                if analysis_id is None:
+                    error_count += 1
+                    if error_count <= 3:
+                        print(f"   ⚠️  No analysis_id for patient '{patient_id}' at row {index}")
+                    continue
+
+                record = SentencePrediction(
+                    analysis_id=analysis_id,
+                    patient_id=patient_id,
+                    model=normalize_string(row.get('model')),
+                    sentence_index=normalize_int(row.get('sentence_index')) or 0,
+                    utterance_index=normalize_int(row.get('utterance_index')) or 0,
+                    sentence_in_utterance=normalize_int(row.get('sentence_in_utterance')) or 0,
+                    speaker=normalize_string(row.get('speaker')),
+                    sentence_text=normalize_string(row.get('sentence_text')),
+                    pred_score=normalize_float(row.get('pred_score')) or 0.0,
+                    context=normalize_string(row.get('context')),
+                )
+                session.add(record)
+                created_count += 1
+
+                if created_count % 100 == 0:
+                    await session.commit()
+                    print(f"   ✓ Committed {created_count} records...")
+
+            except IntegrityError as e:
+                error_count += 1
+                await session.rollback()
+                print(f"   ⚠️  IntegrityError at row {index}")
+                continue
+            except Exception as e:
+                error_count += 1
+                await session.rollback()
+                print(f"   ⚠️  Error at row {index}: {str(e)}")
+                continue
+
+        await session.commit()
+
+    print(f"   ✅ Created: {created_count}, Errors: {error_count}")
+    return created_count, error_count
+
 # ---------------------------
 # Main Migration
 # ---------------------------
 
 async def migrate_all_csv_files(data_dir: str, Session: async_sessionmaker):
     """Migrate all CSV files from the fake_csv_files directory"""
-    
+
     print("\n" + "="*60)
     print("🚀 Starting CSV Data Migration")
     print("="*60)
-    
+
     total_created = 0
     total_errors = 0
-    
+
     # Define CSV files and their migration functions
+    # NOTE: transcript_analysis_log must come BEFORE sentence_prediction (FK dependency)
     migrations = [
         ("docter_interface_render_processed.csv", migrate_doctor_render),
         ("docter_interface_ai_rewriting_history.csv", migrate_doctor_rewriting_history),
         ("Patient_interface_class_summary.csv", migrate_patient_class_summary),
         ("Patient_interface_class_summary_scoring.csv", migrate_patient_class_summary_scoring),
         ("Patient_interface_questions_responses.csv", migrate_patient_questions_responses),
+        ("transcript_analysis_log.csv", migrate_transcript_analysis_log),
+        ("sentence_prediction.csv", migrate_sentence_prediction),
     ]
     
     for csv_filename, migration_func in migrations:
@@ -777,25 +919,99 @@ async def migrate_all_csv_files(data_dir: str, Session: async_sessionmaker):
     print("="*60 + "\n")
 
 # ---------------------------
+# Single CSV Migration (for CLI --file usage)
+# ---------------------------
+
+# Map CSV filenames to their migration functions
+CSV_MIGRATION_MAP = {
+    "docter_interface_render_processed.csv": migrate_doctor_render,
+    "docter_interface_render.csv": migrate_doctor_render,
+    "docter_interface_ai_rewriting_history.csv": migrate_doctor_rewriting_history,
+    "Patient_interface_class_summary.csv": migrate_patient_class_summary,
+    "patient_interface_class_summary.csv": migrate_patient_class_summary,
+    "Patient_interface_class_summary_scoring.csv": migrate_patient_class_summary_scoring,
+    "patient_interface_class_summary_scoring.csv": migrate_patient_class_summary_scoring,
+    "Patient_interface_questions_responses.csv": migrate_patient_questions_responses,
+    "patient_interface_questions_responses.csv": migrate_patient_questions_responses,
+    "transcript_analysis_log.csv": migrate_transcript_analysis_log,
+    "sentence_prediction.csv": migrate_sentence_prediction,
+}
+
+async def migrate_single_csv(csv_path: str, Session: async_sessionmaker):
+    """Migrate a single CSV file by matching its filename to a migration function."""
+    filename = os.path.basename(csv_path).lower()
+
+    # Find matching migration function
+    migration_func = None
+    for known_name, func in CSV_MIGRATION_MAP.items():
+        if filename == known_name.lower():
+            migration_func = func
+            break
+
+    if migration_func is None:
+        print(f"❌ Unknown CSV file: {filename}")
+        print(f"   Supported files: {', '.join(set(CSV_MIGRATION_MAP.keys()))}")
+        return
+
+    created, errors = await migration_func(csv_path, Session)
+    print(f"\n📈 Result: Created={created}, Errors={errors}")
+
+# ---------------------------
 # Main
 # ---------------------------
 
 async def main():
-    """Main execution function"""
+    """Main execution function.
+
+    Usage:
+        python init_db.py                              # Full init + all CSVs
+        python init_db.py --data-dir /path/to/csvs     # Full init with custom CSV dir
+        python init_db.py --file path/to/specific.csv  # Load a single CSV only
+        python init_db.py --skip-init --file ...       # Skip table creation, just load CSV
+    """
+    import argparse
+    parser = argparse.ArgumentParser(description="Database initialization and CSV migration")
+    parser.add_argument(
+        "--data-dir",
+        type=str,
+        default=None,
+        help="CSV data directory (default: CSV_DATA_DIR env or 'fake_csv_files')",
+    )
+    parser.add_argument(
+        "--file",
+        type=str,
+        default=None,
+        help="Load a single CSV file instead of all files",
+    )
+    parser.add_argument(
+        "--skip-init",
+        action="store_true",
+        help="Skip database table creation (use when tables already exist)",
+    )
+    args = parser.parse_args()
+
     print("\n" + "="*60)
     print("🚀 Database Initialization Script")
     print("="*60 + "\n")
-    
+
     # Initialize database
     engine, Session = await init_database()
-    
-    # Migrate CSV data
-    data_dir = os.getenv("CSV_DATA_DIR", "fake_csv_files")
-    await migrate_all_csv_files(data_dir, Session)
-    
+
+    if args.file:
+        # Single CSV mode
+        csv_path = args.file
+        if not os.path.exists(csv_path):
+            print(f"❌ File not found: {csv_path}")
+        else:
+            await migrate_single_csv(csv_path, Session)
+    else:
+        # Full migration mode
+        data_dir = args.data_dir or os.getenv("CSV_DATA_DIR", "fake_csv_files")
+        await migrate_all_csv_files(data_dir, Session)
+
     # Cleanup
     await engine.dispose()
-    
+
     print("\n" + "="*60)
     print("✅ Database initialization completed successfully!")
     print("="*60 + "\n")
