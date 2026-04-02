@@ -1255,6 +1255,7 @@ FastAPI Main Application - Prostate Cancer Doctor-Patient Conversation Archive A
 Provides API for doctor-patient consultation interface data
 """
 
+from contextlib import asynccontextmanager
 from typing import List, Optional, Dict, Any
 import logging
 import os
@@ -1297,12 +1298,41 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────────────
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 
+from routes_surveys import router as surveys_router
+from routes_nlp import router as nlp_router
+from routes_transcript import router as transcript_router
+from routes_tracking import router as tracking_router
+from auth.admin_routes import router as auth_router
+from redis_client import init_redis, close_redis, get_redis
+from nlp_service import close_http_client, nlp_health_check, predict_single, CLASS_TO_MODEL, NLPServiceError
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# App lifecycle (replaces deprecated on_event)
+# ──────────────────────────────────────────────────────────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    redis = await init_redis()
+    if redis:
+        try:
+            from fastapi_limiter import FastAPILimiter
+            await FastAPILimiter.init(redis, prefix="prostate:rl")
+        except Exception:
+            pass
+    yield
+    # Shutdown
+    await close_http_client()
+    await close_redis()
+
+
 app = FastAPI(
     title="Prostate Cancer Doctor-Patient Conversation Archive API",
     description="API for doctor-patient consultation interface data",
     version="1.0.0",
     docs_url="/docs" if ENVIRONMENT == "development" else None,
     redoc_url="/redoc" if ENVIRONMENT == "development" else None,
+    lifespan=lifespan,
 )
 
 cors_origins = os.getenv(
@@ -1319,39 +1349,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-
-from routes_surveys import router as surveys_router
-from routes_nlp import router as nlp_router
-from routes_transcript import router as transcript_router
-from routes_tracking import router as tracking_router
-from auth.admin_routes import router as auth_router
-from redis_client import init_redis, close_redis, get_redis
-from nlp_service import close_http_client, nlp_health_check, predict_single, CLASS_TO_MODEL, NLPServiceError
-
 app.include_router(surveys_router)
 app.include_router(nlp_router)
 app.include_router(transcript_router)
 app.include_router(tracking_router)
 app.include_router(auth_router)
-
-# ──────────────────────────────────────────────────────────────────────────────
-# App lifecycle events (Redis + NLP HTTP client)
-# ──────────────────────────────────────────────────────────────────────────────
-@app.on_event("startup")
-async def on_startup():
-    redis = await init_redis()
-    if redis:
-        try:
-            from fastapi_limiter import FastAPILimiter
-            await FastAPILimiter.init(redis, prefix="prostate:rl")
-        except Exception:
-            pass  # rate-limiting disabled if init fails
-
-@app.on_event("shutdown")
-async def on_shutdown():
-    await close_http_client()
-    await close_redis()
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Basic routes
@@ -1427,11 +1429,11 @@ class DoctorRewriteUpdateFull(BaseModel):
 class PatientScoringUpdate(BaseModel):
     file: str
     speaker: str
-    class_1_patient_scoring: Optional[float] = None
-    class_2_patient_scoring: Optional[float] = None
-    class_3_patient_scoring: Optional[float] = None
-    class_4_patient_scoring: Optional[float] = None
-    class_5_patient_scoring: Optional[float] = None
+    class_1_patient_scoring: Optional[int] = None
+    class_2_patient_scoring: Optional[int] = None
+    class_3_patient_scoring: Optional[int] = None
+    class_4_patient_scoring: Optional[int] = None
+    class_5_patient_scoring: Optional[int] = None
 
 @app.get("/api/doctor/sentences/{file}/{speaker}")
 async def get_doctor_sentences(

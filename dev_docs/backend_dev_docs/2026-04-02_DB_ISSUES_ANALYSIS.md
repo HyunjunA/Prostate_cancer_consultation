@@ -185,12 +185,28 @@ SQLAlchemy 예외에 테이블명, 쿼리 구조 등이 포함될 수 있음.
 
 ---
 
-## 수정 우선순위 권장 순서
+## 수정 이력 (2026-04-02 적용 완료)
 
-1. **DDL-ORM 컬럼명 불일치** — 실제 런타임 에러 가능 (즉시 수정)
-2. **history 엔드포인트 BYTEA 전체 로드** — 메모리 폭발 가능 (즉시 수정)
-3. **batch 트랜잭션 격리** — 데이터 무결성 위험
-4. **누락 인덱스 추가** — 데이터 증가 시 성능 저하
-5. **TEXT → JSONB 전환** — 데이터 무결성 + 쿼리 성능
-6. **Alembic migration 체계 수립** — 장기 유지보수 필수
-7. **나머지 MEDIUM/LOW 항목들** — 점진적 개선
+| # | 항목 | 상태 | 커밋 |
+|---|------|------|------|
+| 1 | DDL-ORM 컬럼명 불일치 (sentences→sentence 등 3개) | ✅ 완료 | acf9aa7 |
+| 2 | history 엔드포인트 BYTEA 전체 로드 방지 | ✅ 완료 | acf9aa7 |
+| 3 | batch 트랜잭션 격리 (독립 세션) | ✅ 완료 | acf9aa7 |
+| 4 | 누락 인덱스 5개 추가 | ✅ 완료 | acf9aa7 |
+| 5 | 인덱스 심층 최적화 (7추가, 3제거) | ✅ 완료 | acf9aa7 |
+| 6 | TEXT → JSONB 전환 (4개 컬럼) | ✅ 완료 | acf9aa7 |
+| 7 | analytics 6개 쿼리 병렬화 (asyncio.gather) | ✅ 완료 | (this commit) |
+| 8 | download-batch 순차→단일 쿼리 (DISTINCT ON) | ✅ 완료 | (this commit) |
+| 9 | predictions top_n DB window function | ✅ 완료 | (this commit) |
+| 10 | 에러 메시지 내부 정보 노출 방지 | ✅ 완료 | (this commit) |
+| 11 | tracking rate limiting (30 req/min) | ✅ 완료 | (this commit) |
+| 12 | PatientScoringUpdate float→int | ✅ 완료 | (this commit) |
+| 13 | deprecated on_event → lifespan | ✅ 완료 | (this commit) |
+| 14 | routes_tracking 조건식 가독성 개선 | ✅ 완료 | (this commit) |
+
+### 미적용 항목
+| 항목 | 상태 | 사유 |
+|------|------|------|
+| Alembic migration 체계 | 미적용 | 구조적 변경으로 별도 작업 필요 |
+| 주석 코드 정리 (main.py 1-1252줄 등) | 미적용 | 대규모 삭제로 별도 커밋 권장 |
+| model_results/sentence_prediction 이중 저장 | 미적용 | backfill 호환성 유지 필요 |
