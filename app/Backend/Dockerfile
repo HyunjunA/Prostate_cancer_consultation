@@ -41,7 +41,7 @@ RUN mkdir -p /app/logs /app/uploads /app/data /app/static \
 USER appuser
 EXPOSE ${PORT}
 
-# prestart hook (DB wait / seed; Alembic is commented)
+# prestart hook (DB wait / seed / migrate)
 ENV PRE_START_PATH=/app/prestart.sh
 RUN printf '%s\n' \
   '#!/usr/bin/env bash' \
@@ -53,10 +53,11 @@ RUN printf '%s\n' \
   '# Initialize database if script exists' \
   '[ -f /app/init_db.py ] && python /app/init_db.py || true' \
   '' \
-  '# [MIGRATION-RELATED] Uncomment to enable Alembic migrations at startup' \
-  '# if [ -f /app/alembic.ini ]; then' \
-  '#   alembic upgrade head || true' \
-  '# fi' \
+  '# Run Alembic migrations (stamp baseline if first run, then upgrade)' \
+  'if [ -f /app/alembic.ini ]; then' \
+  '  alembic stamp head 2>/dev/null || true' \
+  '  alembic upgrade head || true' \
+  'fi' \
   > /app/prestart.sh \
  && chmod +x /app/prestart.sh
 

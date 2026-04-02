@@ -462,10 +462,14 @@ async def _save_to_db(
     xlsx_bytes: bytes,
     source_filename: Optional[str],
 ) -> None:
-    """Persist analysis results to transcript_analysis_log.
+    """Persist analysis results to transcript_analysis_log + sentence_prediction.
 
     Wrapped in try/except so a DB failure never blocks the primary response.
     Each call inserts a new row (preserving analysis history for the same patient).
+
+    Note: model_results is no longer populated (set to None). All per-sentence
+    data is stored in the normalized sentence_prediction table. The column is
+    kept for backward compatibility with legacy rows that predate sentence_prediction.
     """
     try:
         record = TranscriptAnalysisLog(
@@ -473,7 +477,7 @@ async def _save_to_db(
             total_sentences=total_sentences,
             top_n=top_n,
             context_window=context_window,
-            model_results=models,  # JSONB column — dict stored directly
+            model_results=None,  # deprecated: use sentence_prediction table instead
             xlsx_data=xlsx_bytes,
             source_filename=source_filename,
         )
