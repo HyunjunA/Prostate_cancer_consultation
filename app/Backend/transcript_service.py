@@ -45,6 +45,7 @@ Dependencies
 * ``pandas``, ``openpyxl`` — Excel I/O and data manipulation.
 """
 
+import asyncio
 import logging
 import re
 from io import BytesIO
@@ -202,25 +203,41 @@ def split_sentences(df: pd.DataFrame) -> pd.DataFrame:
 async def run_predictions(df: pd.DataFrame) -> pd.DataFrame:
     """Run all 5 NLP models on each sentence via r01-nlp-classifiers Docker.
 
-    Calls nlp_service.predict_batch() in chunks of BATCH_SIZE.
+    All 5 models are executed concurrently per batch via asyncio.gather(),
+    reducing total prediction time by ~5x compared to sequential execution.
+
     Returns the original DataFrame with 5 new columns (one per model).
     """
     texts = df["text"].tolist()
     total = len(texts)
 
+    # Initialize prediction columns
+    all_preds: Dict[str, List[float]] = {model: [] for model in ALL_MODELS}
+
+    # Process in batches — within each batch, run 5 models concurrently
+    for start in range(0, total, BATCH_SIZE):
+        chunk = texts[start : start + BATCH_SIZE]
+
+        # Fire all 5 models at the same time for this batch
+        batch_results = await asyncio.gather(
+            *[predict_batch(chunk, model) for model in ALL_MODELS]
+        )
+
+        # Collect results per model
+        for model, results in zip(ALL_MODELS, batch_results):
+            all_preds[model].extend(r["pred_1"] for r in results)
+
+        logger.info(
+            "Step 4: Batch [%d:%d] / %d — 5 models parallel",
+            start, min(start + BATCH_SIZE, total), total,
+        )
+
+    # Assign predictions to DataFrame
     for model in ALL_MODELS:
         outcome = MODEL_TO_OUTCOME[model]
-        all_preds: List[float] = []
+        df[outcome] = all_preds[model]
 
-        # Chunk into batches of BATCH_SIZE
-        for start in range(0, total, BATCH_SIZE):
-            chunk = texts[start : start + BATCH_SIZE]
-            results = await predict_batch(chunk, model)
-            all_preds.extend(r["pred_1"] for r in results)
-
-        df[outcome] = all_preds
-        logger.info("Step 4: Model %s (%s) — %d predictions", model, outcome, total)
-
+    logger.info("Step 4: All 5 models complete — %d sentences", total)
     return df
 
 
