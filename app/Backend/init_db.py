@@ -125,13 +125,6 @@ async def check_and_recreate_tables_if_needed(engine):
                     print("   ⚠️  Table 'doctor_sentence_view' exists but missing 'sentence' column")
                     tables_to_recreate.append('doctor_sentence_view')
             
-            # Check doctor_rewrite_log
-            if 'doctor_rewrite_log' in inspector.get_table_names():
-                columns = {col['name'] for col in inspector.get_columns('doctor_rewrite_log')}
-                if 'original_score' not in columns:
-                    print("   ⚠️  Table 'doctor_rewrite_log' exists but missing 'original_score' column")
-                    tables_to_recreate.append('doctor_rewrite_log')
-            
             return len(tables_to_recreate) == 0, tables_to_recreate
         
         schema_ok, tables_to_recreate = await conn.run_sync(check_table_schema)
@@ -315,7 +308,6 @@ async def migrate_doctor_rewriting_history(csv_file_path: str, Session: async_se
         print(f"        i2: {row.get('i2')}")
         print(f"        speaker: {row.get('speaker')}")
         print(f"        original_sentence: {row.get('original_sentence')}")
-        print(f"        original_score: {row.get('original_score')}")
         print(f"        revised_sentence: {row.get('revised_sentence')}")
         print(f"        score: {row.get('score')}")
         print(f"        class: {row.get('class')}")
@@ -340,7 +332,6 @@ async def migrate_doctor_rewriting_history(csv_file_path: str, Session: async_se
                     speaker=normalize_string(row.get('speaker')),
                     time=time_value,
                     original_sentence=normalize_string(row.get('original_sentence')),
-                    original_score=normalize_float(row.get('original_score')),
                     revised_sentence=normalize_string(row.get('revised_sentence')),
                     score=normalize_float(row.get('score')),
                     class_=normalize_string(row.get('class')),

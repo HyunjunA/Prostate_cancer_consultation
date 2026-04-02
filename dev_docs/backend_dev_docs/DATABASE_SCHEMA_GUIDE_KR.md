@@ -121,7 +121,6 @@ erDiagram
 | `time` | TIMESTAMP WITH TIME ZONE | PK4 | 재작성 시도 시각. 같은 문장의 여러 재작성을 허용하기 위해 PK의 일부. |
 | `speaker` | VARCHAR(100) | | 의사 화자 라벨 (`doctor_sentence_view`와 동일). |
 | `original_sentence` | TEXT | | 재작성된 원본 문장 텍스트. 자체 완결적 이력을 위해 중복 저장. |
-| `original_score` | FLOAT | | 원본 문장의 NLP 점수 (0.0–1.0). |
 | `revised_sentence` | TEXT | | 의사가 재작성한 문장. |
 | `score` | FLOAT | | 재작성된 문장의 NLP 점수. **현재 5로 하드코딩** (임시 — 실제 NLP 재채점으로 교체 예정). |
 | `class` | VARCHAR(100) | | 도메인 이름 (예: `cancer_prognosis`). 도메인별 재작성 필터링용. |

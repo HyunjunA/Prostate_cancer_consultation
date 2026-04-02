@@ -29,7 +29,6 @@ CREATE TABLE doctor_rewrite_log (
     speaker VARCHAR(100),             -- DoctorID
     time TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     original_sentence TEXT,
-    original_score FLOAT,
     revised_sentence TEXT,
     score FLOAT,
     class VARCHAR(100),

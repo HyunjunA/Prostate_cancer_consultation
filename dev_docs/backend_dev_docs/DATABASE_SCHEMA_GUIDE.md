@@ -121,7 +121,6 @@ Physicians can practice improving low-scoring sentences by rewriting them and ge
 | `time` | TIMESTAMP WITH TIME ZONE | PK4 | Timestamp of this rewrite attempt. Part of PK to allow multiple rewrites of the same sentence. |
 | `speaker` | VARCHAR(100) | | Doctor speaker label (same as in `doctor_sentence_view`). |
 | `original_sentence` | TEXT | | The original sentence text that was rewritten. Stored redundantly for self-contained history. |
-| `original_score` | FLOAT | | The NLP score of the original sentence (0.0–1.0). |
 | `revised_sentence` | TEXT | | The physician's rewritten version of the sentence. |
 | `score` | FLOAT | | The NLP score of the rewritten sentence. **Currently hardcoded to 5** (temporary — will be replaced with actual NLP re-scoring). |
 | `class` | VARCHAR(100) | | Domain name (e.g., `cancer_prognosis`). Stored for filtering rewrites by domain. |

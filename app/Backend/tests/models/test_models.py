@@ -142,7 +142,7 @@ class TestDoctorRewriteLog:
             select(DoctorRewriteLog).where(DoctorRewriteLog.file == "fk.xlsx")
         )
         row = result.scalar_one()
-        assert row.original_score == 0.85
+        assert row.original_sentence == "Original sentence."
 
 
 # ── PatientSummary ────────────────────────────────────────────────────────
