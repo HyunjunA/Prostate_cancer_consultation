@@ -204,9 +204,8 @@ SQLAlchemy 예외에 테이블명, 쿼리 구조 등이 포함될 수 있음.
 | 13 | deprecated on_event → lifespan | ✅ 완료 | (this commit) |
 | 14 | routes_tracking 조건식 가독성 개선 | ✅ 완료 | (this commit) |
 
-### 미적용 항목
-| 항목 | 상태 | 사유 |
-|------|------|------|
-| Alembic migration 체계 | 미적용 | 구조적 변경으로 별도 작업 필요 |
-| 주석 코드 정리 (main.py 1-1252줄 등) | 미적용 | 대규모 삭제로 별도 커밋 권장 |
-| model_results/sentence_prediction 이중 저장 | 미적용 | backfill 호환성 유지 필요 |
+| 15 | 주석 코드 정리 (4파일, -2002줄) | ✅ 완료 | (this commit) |
+| 16 | Alembic migration 체계 수립 | ✅ 완료 | (this commit) |
+| 17 | model_results 이중 저장 해소 | ✅ 완료 | (this commit) |
+
+### 전체 완료. 미적용 항목 없음.
