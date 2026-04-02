@@ -1,0 +1,41 @@
+# ── Core Framework ───────────────────────────────────────────────────────────
+fastapi==0.135.1
+uvicorn[standard]==0.42.0
+gunicorn==25.1.0
+python-multipart==0.0.22
+
+# ── Database ─────────────────────────────────────────────────────────────────
+sqlalchemy==2.0.48
+asyncpg==0.31.0
+psycopg2-binary==2.9.11          # sync driver for Alembic migrations
+alembic==1.18.4
+
+# ── Data Processing ──────────────────────────────────────────────────────────
+pandas==2.3.3
+numpy==2.2.6
+openpyxl==3.1.5
+
+# ── Environment & Config ─────────────────────────────────────────────────────
+python-dotenv==1.2.2
+
+# ── Validation & Serialization ───────────────────────────────────────────────
+pydantic==2.12.5
+
+# ── Redis & Rate Limiting ────────────────────────────────────────────────────
+redis==7.3.0
+fastapi-limiter==0.1.6
+
+# ── Authentication (JWT + OAuth2) ────────────────────────────────────────────
+python-jose[cryptography]==3.5.0
+
+# ── HTTP Client (NLP service calls) ──────────────────────────────────────────
+httpx==0.28.1
+
+# ── Compression ──────────────────────────────────────────────────────────────
+brotli-asgi==1.6.0
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+structlog==25.5.0
+
+# ── Dev Server (hot reload) ──────────────────────────────────────────────────
+watchfiles==1.1.1
