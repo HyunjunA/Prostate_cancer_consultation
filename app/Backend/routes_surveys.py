@@ -523,7 +523,7 @@ async def get_submissions(
         "pages": (total + size - 1) // size,
         "has_next": page * size < total,
         "has_prev": page > 1,
-        "submissions": [
+        "data": [
             {
                 "id": r.id,
                 "file": r.file,
@@ -627,7 +627,7 @@ async def get_submissions_by_file(
     return {
         "file": file,
         "total_submissions": len(records),
-        "submissions": [
+        "data": [
             {
                 "id": r.id,
                 "speaker": r.speaker,
@@ -675,7 +675,7 @@ async def get_submissions_by_type(
         "total": total,
         "page": page,
         "size": size,
-        "submissions": [
+        "data": [
             {
                 "id": r.id,
                 "file": r.file,

@@ -588,7 +588,7 @@ async def history(
         "total": total,
         "page": page,
         "size": size,
-        "items": items,
+        "data": items,
     }
 
 

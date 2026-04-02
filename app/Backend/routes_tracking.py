@@ -208,7 +208,7 @@ async def get_tracking_events(
         "total": total,
         "limit": limit,
         "offset": offset,
-        "events": events,
+        "data": events,
     }
 
 

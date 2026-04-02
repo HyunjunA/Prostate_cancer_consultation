@@ -1,20 +1,27 @@
-# ========= Base =========
+# ========= Stage 1: Build dependencies =========
+FROM python:3.10-slim AS builder
+
+WORKDIR /build
+
+COPY requirements.txt .
+RUN python -m pip install --upgrade pip \
+ && pip install --no-cache-dir --prefix=/install -r requirements.txt \
+ && pip install --no-cache-dir --prefix=/install 'uvicorn[standard]'
+
+
+# ========= Stage 2: Runtime =========
 FROM python:3.10-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     DEBIAN_FRONTEND=noninteractive \
-    # Default runtime settings (can be overridden at runtime)
     APP_MODULE=main:app \
     WEB_CONCURRENCY=3 \
     GUNICORN_TIMEOUT=60 \
     PORT=8000 \
-    # Trust proxy headers only from Docker internal network (Nginx)
     FORWARDED_ALLOW_IPS="172.16.0.0/12,10.0.0.0/8,192.168.0.0/16" \
-    # Optional: reduce glibc arena fragmentation
     MALLOC_ARENA_MAX=2 \
-    # Optional: normalize timezone
     TZ=UTC
 
 WORKDIR /app
@@ -24,11 +31,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl tini libpq5 \
  && rm -rf /var/lib/apt/lists/*
 
-# Dependencies (cacheable)
-COPY requirements.txt /app/requirements.txt
-RUN python -m pip install --upgrade pip \
- && pip install -r /app/requirements.txt \
- && pip install 'uvicorn[standard]' --no-cache-dir || true
+# Copy pre-built Python packages from builder (no build tools in final image)
+COPY --from=builder /install /usr/local
 
 # App code (non-root)
 RUN useradd -m appuser
@@ -68,18 +72,13 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 # tini as PID 1
 ENTRYPOINT ["/usr/bin/tini","--"]
 
-# Suggestive ENV hooks for DB pool tuning (your app should read these)
+# DB pool tuning
 ENV DATABASE_POOL_SIZE=10 \
     DATABASE_MAX_OVERFLOW=20 \
     DATABASE_POOL_TIMEOUT=30
 
-# Run mode
 ENV RUN_ENV=prod
 
-# Start command:
-# - compute default WEB_CONCURRENCY = 2 * nproc + 1 (if not set)
-# - raise file descriptor limit (best-effort)
-# - pass gunicorn flags directly (no env-indirection that breaks quoting)
 CMD ["/bin/bash","-lc","\
   : \"${WEB_CONCURRENCY:=$(( 2 * $(getconf _NPROCESSORS_ONLN) + 1 ))}\"; \
   ulimit -n 1048576 >/dev/null 2>&1 || true; \
