@@ -17,7 +17,6 @@ df = pd.read_csv(input_path, encoding="utf-8-sig")
 # ===== Step 2. 컬럼 이름 변경 및 복사 =====
 df = df.rename(columns={"sentences": "original_sentence"})
 df["revised_sentence"] = df["original_sentence"]
-df["original_score"] = df["score"]  # 👈 추가!
 
 # ===== Step 3. class = -1 제거 =====
 df = df[df["class"] != -1].copy()
@@ -40,7 +39,6 @@ ordered_columns = [
     "speaker",
     "time",
     "original_sentence",
-    "original_score",
     "revised_sentence",
     "score",
     "class",

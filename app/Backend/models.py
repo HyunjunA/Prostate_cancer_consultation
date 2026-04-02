@@ -48,7 +48,6 @@ class DoctorRewriteLog(Base):
     time = Column(TIMESTAMP(timezone=True), primary_key=True, default=func.now())
     speaker = Column(String(100))
     original_sentence = Column(Text)
-    original_score = Column(Float)
     revised_sentence = Column(Text)
     score = Column(Float)
     class_ = Column('class', String(100))

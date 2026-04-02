@@ -426,9 +426,9 @@ HTTP 커넥션 풀:
   │─────────────────────────│        │─────────────────────────────│
   │ PK: file, i, i2, time  │        │ PK: id (SERIAL)             │
   │    original_sentence    │        │    analysis_id (FK)         │
-  │    rewritten_sentence   │        │    patient_id, model        │
-  │    original_score       │        │    sentence_text            │
-  │    rewritten_score      │        │    pred_score, context      │
+  │    revised_sentence     │        │    patient_id, model        │
+  │    score                │        │    sentence_text            │
+  │    selected             │        │    pred_score, context      │
   └─────────────────────────┘        └─────────────────────────────┘
 
 
