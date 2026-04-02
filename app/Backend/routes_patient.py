@@ -353,23 +353,14 @@ async def get_patient_responses(
 
 @router.get("/api/patient/files")
 async def get_patient_files(
+    limit: int = Query(default=500, ge=1, le=5000, description="Max files to return"),
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user)
 ):
     """Get list of unique files in patient interface"""
-    print("=" * 80)
-    print("🔍 DEBUG [get_patient_files] - Querying distinct files")
-    
-    stmt = select(PatientSummary.file).distinct().order_by(PatientSummary.file)
+    stmt = select(PatientSummary.file).distinct().order_by(PatientSummary.file).limit(limit)
     files_raw = (await db.execute(stmt)).scalars().all()
-    
-    # Filter out None values
     files = [f for f in files_raw if f is not None]
-    none_count = len(files_raw) - len(files)
-    
-    print(f"   Found {len(files)} files ({none_count} NULL values filtered)")
-    print("=" * 80)
-    
     return {"files": files}
 
 

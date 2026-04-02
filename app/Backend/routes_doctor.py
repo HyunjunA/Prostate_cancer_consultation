@@ -384,27 +384,14 @@ async def get_doctor_rewrite_stats(
 
 @router.get("/files")
 async def get_doctor_files(
+    limit: int = Query(default=500, ge=1, le=5000, description="Max files to return"),
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user)
 ):
     """Get list of unique files in doctor interface"""
-    print("=" * 80)
-    print("🔍 DEBUG [get_doctor_files] - Querying distinct files")
-    
-    stmt = select(DoctorSentenceView.file).distinct().order_by(DoctorSentenceView.file)
+    stmt = select(DoctorSentenceView.file).distinct().order_by(DoctorSentenceView.file).limit(limit)
     files_raw = (await db.execute(stmt)).scalars().all()
-    
-    # Filter out None values
     files = [f for f in files_raw if f is not None]
-    none_count = len(files_raw) - len(files)
-    
-    print(f"   Found {len(files)} files ({none_count} NULL values filtered)")
-    for idx, f in enumerate(files[:5]):
-        print(f"   [{idx}] {f}")
-    if len(files) > 5:
-        print(f"   ... and {len(files) - 5} more")
-    print("=" * 80)
-    
     return {"files": files}
 
 
