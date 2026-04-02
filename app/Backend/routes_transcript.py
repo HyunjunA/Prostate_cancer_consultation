@@ -340,34 +340,42 @@ async def download_batch(
     # Collect existing result files (disk first, then DB fallback)
     found: List[tuple] = []  # (patient_id, xlsx_bytes)
     missing: List[str] = []
+    db_needed: List[str] = []  # patients not found on disk
 
     for pid in ids:
         filepath = _xlsx_path(pid)
         if filepath.exists():
             found.append((pid, filepath.read_bytes()))
         else:
-            # DB fallback: same logic as single /download endpoint
-            try:
-                stmt = (
-                    select(TranscriptAnalysisLog.xlsx_data)
-                    .where(TranscriptAnalysisLog.patient_id == pid)
-                    .where(TranscriptAnalysisLog.xlsx_data.isnot(None))
-                    .order_by(TranscriptAnalysisLog.analyzed_at.desc())
-                    .limit(1)
-                )
-                result = await db.execute(stmt)
-                xlsx_data = result.scalar_one_or_none()
-            except Exception:
-                logger.warning("DB fallback failed for patient %s in batch download", pid, exc_info=True)
-                xlsx_data = None
+            db_needed.append(pid)
 
+    # Single DB query for all missing patients (instead of N individual queries)
+    if db_needed:
+        try:
+            # Use DISTINCT ON to get the latest row per patient_id
+            stmt = (
+                select(
+                    TranscriptAnalysisLog.patient_id,
+                    TranscriptAnalysisLog.xlsx_data,
+                )
+                .where(TranscriptAnalysisLog.patient_id.in_(db_needed))
+                .where(TranscriptAnalysisLog.xlsx_data.isnot(None))
+                .order_by(TranscriptAnalysisLog.patient_id, TranscriptAnalysisLog.analyzed_at.desc())
+                .distinct(TranscriptAnalysisLog.patient_id)
+            )
+            result = await db.execute(stmt)
+            db_rows = {row.patient_id: row.xlsx_data for row in result.all()}
+        except Exception:
+            logger.warning("DB batch fallback failed", exc_info=True)
+            db_rows = {}
+
+        for pid in db_needed:
+            xlsx_data = db_rows.get(pid)
             if xlsx_data is not None:
                 logger.info("Serving %s from DB fallback (batch)", pid)
                 found.append((pid, xlsx_data))
-                # Re-save to disk so future requests skip the DB lookup
                 try:
                     _save_xlsx(pid, xlsx_data)
-                    logger.info("Re-saved %s to disk from DB fallback", pid)
                 except Exception:
                     logger.debug("Failed to re-save %s to disk (non-fatal)", pid)
             else:
@@ -660,15 +668,33 @@ async def get_predictions(
             result = await db.execute(stmt)
             rows = result.scalars().all()
 
-    # Apply top_n per model if requested
-    if top_n is not None:
-        from collections import defaultdict
-        by_model: dict[str, list] = defaultdict(list)
-        for row in rows:
-            by_model[row.model].append(row)
-        rows = []
-        for model_rows in by_model.values():
-            rows.extend(model_rows[:top_n])
+    # Apply top_n per model at DB level using window function
+    if top_n is not None and rows:
+        from sqlalchemy import over, func as wfunc
+        ranked = (
+            select(
+                SentencePrediction,
+                wfunc.row_number().over(
+                    partition_by=SentencePrediction.model,
+                    order_by=SentencePrediction.pred_score.desc(),
+                ).label("rn"),
+            )
+            .where(SentencePrediction.analysis_id == resolved_analysis_id)
+        )
+        if model:
+            ranked = ranked.where(SentencePrediction.model == model)
+        if min_score is not None:
+            ranked = ranked.where(SentencePrediction.pred_score >= min_score)
+        ranked_sub = ranked.subquery()
+
+        topn_stmt = (
+            select(SentencePrediction)
+            .join(ranked_sub, SentencePrediction.id == ranked_sub.c.id)
+            .where(ranked_sub.c.rn <= top_n)
+            .order_by(SentencePrediction.model, SentencePrediction.pred_score.desc())
+        )
+        result = await db.execute(topn_stmt)
+        rows = result.scalars().all()
 
     predictions = [
         {
