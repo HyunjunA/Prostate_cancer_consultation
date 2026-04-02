@@ -31,8 +31,9 @@ export {
 export {
   DecisionalConflictSurvey,
   LikertQuestion,
-  QuestionGroup,
+  QuestionSection,
   DCS_QUESTIONS,
+  DCS_SECTIONS,
   DCS_SUBSCALES,
   LIKERT_OPTIONS,
   INITIAL_DCS_ANSWERS,
@@ -54,11 +55,8 @@ export {
 // Patient Satisfaction Survey
 export {
   PatientSatisfactionSurvey,
-  SatisfactionRatingInput,
-  StarRatingInput,
   FeedbackTextInput,
-  SATISFACTION_QUESTIONS,
+  SATISFACTION_QUESTION_TEXT,
   INITIAL_SATISFACTION_ANSWERS,
-  type SatisfactionRating,
   type PatientSatisfactionAnswers,
 } from "./PatientSatisfactionSurvey";
