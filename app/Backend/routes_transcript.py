@@ -60,7 +60,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth import get_current_user
 from auth.access_control import check_patient_access
 from auth.base import AuthUser
-from db import get_db
+from db import get_db, AsyncSessionLocal
 from models import SentencePrediction, TranscriptAnalysisLog
 from transcript_service import analyze_transcript
 
@@ -274,17 +274,19 @@ async def analyze_batch(
         # Save xlsx to disk
         _save_xlsx(result["patient_id"], result["xlsx_bytes"])
 
-        # Save to database
-        await _save_to_db(
-            db,
-            patient_id=result["patient_id"],
-            total_sentences=result["total_sentences"],
-            top_n=top_n,
-            context_window=context_window,
-            models=result["models"],
-            xlsx_bytes=result["xlsx_bytes"],
-            source_filename=file.filename,
-        )
+        # Save to database — use independent session per file to isolate transactions.
+        # A rollback in one file must not affect the session state of subsequent files.
+        async with AsyncSessionLocal() as file_db:
+            await _save_to_db(
+                file_db,
+                patient_id=result["patient_id"],
+                total_sentences=result["total_sentences"],
+                top_n=top_n,
+                context_window=context_window,
+                models=result["models"],
+                xlsx_bytes=result["xlsx_bytes"],
+                source_filename=file.filename,
+            )
 
         successful += 1
         results.append({
@@ -463,7 +465,7 @@ async def _save_to_db(
             total_sentences=total_sentences,
             top_n=top_n,
             context_window=context_window,
-            model_results=json.dumps(models),
+            model_results=models,  # JSONB column — dict stored directly
             xlsx_data=xlsx_bytes,
             source_filename=source_filename,
         )
@@ -535,16 +537,25 @@ async def history(
     count_result = await db.execute(count_stmt)
     total = count_result.scalar() or 0
 
-    # Fetch page
+    # Fetch page — explicitly select columns to avoid loading xlsx_data BYTEA
     stmt = (
-        select(TranscriptAnalysisLog)
+        select(
+            TranscriptAnalysisLog.id,
+            TranscriptAnalysisLog.patient_id,
+            TranscriptAnalysisLog.total_sentences,
+            TranscriptAnalysisLog.top_n,
+            TranscriptAnalysisLog.context_window,
+            TranscriptAnalysisLog.source_filename,
+            TranscriptAnalysisLog.analyzed_at,
+            TranscriptAnalysisLog.xlsx_data.isnot(None).label("has_xlsx"),
+        )
         .where(TranscriptAnalysisLog.patient_id == patient_id)
         .order_by(TranscriptAnalysisLog.analyzed_at.desc())
         .offset(offset)
         .limit(size)
     )
     result = await db.execute(stmt)
-    rows = result.scalars().all()
+    rows = result.all()
 
     items = []
     for row in rows:
@@ -556,7 +567,7 @@ async def history(
             "context_window": row.context_window,
             "source_filename": row.source_filename,
             "analyzed_at": row.analyzed_at.isoformat() if row.analyzed_at else None,
-            "has_xlsx": row.xlsx_data is not None,
+            "has_xlsx": row.has_xlsx,
         }
         items.append(item)
 
@@ -693,7 +704,7 @@ async def _backfill_predictions(db: AsyncSession, analysis_id: int) -> list:
         if not record or not record.model_results:
             return []
 
-        models = json.loads(record.model_results)
+        models = record.model_results  # JSONB column — already a dict
         prediction_rows = []
         for model_key, sentences in models.items():
             for sent in sentences:

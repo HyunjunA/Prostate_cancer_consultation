@@ -14,10 +14,10 @@ CREATE TABLE doctor_sentence_view (
     i INT NOT NULL,
     i2 INT NOT NULL,
     speaker VARCHAR(100),             -- PatientID or DoctorID
-    sentences TEXT,
+    sentence TEXT,
     score FLOAT,
     class VARCHAR(100),
-    time TIMESTAMP,
+    time TIMESTAMP WITH TIME ZONE,
     PRIMARY KEY (file, i, i2)
 );
 
@@ -27,10 +27,10 @@ CREATE TABLE doctor_rewrite_log (
     i INT NOT NULL,
     i2 INT NOT NULL,
     speaker VARCHAR(100),             -- DoctorID
-    time TIMESTAMP DEFAULT NOW(),
-    original_sentences TEXT,
+    time TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    original_sentence TEXT,
     original_score FLOAT,
-    revised_sentences TEXT,
+    revised_sentence TEXT,
     score FLOAT,
     class VARCHAR(100),
     selected BOOLEAN DEFAULT FALSE,
@@ -96,13 +96,17 @@ CREATE TABLE patient_responses (
 );
 
 -- =====================================================
--- 3. Optional Indexing
+-- 3. Indexing
 -- =====================================================
-CREATE INDEX idx_doctor_render_file ON doctor_sentence_view(file);
+-- Note: idx_doctor_render_file (file) removed — redundant with PK (file, i, i2)
 CREATE INDEX idx_doctor_rewrite_file ON doctor_rewrite_log(file);
 CREATE INDEX idx_patient_summary_file ON patient_summary(file);
 CREATE INDEX idx_patient_scoring_file ON patient_summary_scoring(file);
 CREATE INDEX idx_patient_response_file ON patient_responses(file);
+
+-- #1: Partial + composite index for scores/average 3-stage subquery (class != '-1' filter)
+CREATE INDEX idx_dsv_file_speaker_class_i ON doctor_sentence_view (file, speaker, class, i DESC, i2 DESC)
+    WHERE class != '-1' AND score IS NOT NULL;
 
 
 
@@ -114,8 +118,8 @@ CREATE TABLE survey_submission_log (
     file VARCHAR(255) NOT NULL,
     speaker VARCHAR(100) NOT NULL,
     survey_type VARCHAR(50) NOT NULL,
-    answers TEXT NOT NULL,
-    extra_data TEXT,
+    answers JSONB NOT NULL,
+    extra_data JSONB,
     submitted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     redcap_synced BOOLEAN DEFAULT FALSE,
     redcap_record_id VARCHAR(255),
@@ -130,6 +134,13 @@ CREATE INDEX idx_survey_submission_file ON survey_submission_log(file);
 CREATE INDEX idx_survey_submission_speaker ON survey_submission_log(speaker);
 CREATE INDEX idx_survey_submission_type ON survey_submission_log(survey_type);
 
+-- #9: Composite indexes for WHERE + ORDER BY DESC patterns in survey endpoints
+CREATE INDEX idx_survey_speaker_submitted ON survey_submission_log(speaker, submitted_at DESC);
+CREATE INDEX idx_survey_file_submitted ON survey_submission_log(file, submitted_at DESC);
+
+-- #10: Partial index for REDCap sync pending items (only unsynced rows indexed)
+CREATE INDEX idx_survey_redcap_pending ON survey_submission_log(id) WHERE redcap_synced = FALSE;
+
 
 -- =====================================================
 -- 4. Transcript Analysis Log (ML Pipeline Results)
@@ -140,14 +151,23 @@ CREATE TABLE transcript_analysis_log (
     total_sentences INT NOT NULL DEFAULT 0,
     top_n INT NOT NULL DEFAULT 0,
     context_window INT NOT NULL DEFAULT 3,
-    model_results TEXT,                    -- JSON string of per-model scores
+    model_results JSONB,                   -- per-model NLP scores (validated JSON)
     xlsx_data BYTEA,                       -- binary xlsx file for DB-backed download
     source_filename VARCHAR(500),
     analyzed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE INDEX idx_transcript_log_patient_id ON transcript_analysis_log(patient_id);
+-- Note: idx_transcript_log_patient_id removed — redundant with composite (patient_id, analyzed_at DESC)
 CREATE INDEX idx_transcript_log_analyzed_at ON transcript_analysis_log(analyzed_at);
+CREATE INDEX idx_transcript_log_patient_analyzed ON transcript_analysis_log(patient_id, analyzed_at DESC);
+
+-- #6: Partial index for download endpoint (only rows with xlsx_data)
+CREATE INDEX idx_transcript_log_patient_xlsx ON transcript_analysis_log(patient_id, analyzed_at DESC)
+    WHERE xlsx_data IS NOT NULL;
+
+-- #8: Covering index for history endpoint (index-only scan, no heap access)
+CREATE INDEX idx_transcript_log_history ON transcript_analysis_log(patient_id, analyzed_at DESC)
+    INCLUDE (id, total_sentences, top_n, context_window, source_filename);
 
 -- =====================================================
 -- 5. Sentence-Level Predictions (per-row NLP scores)
@@ -186,9 +206,10 @@ CREATE TABLE sentence_prediction (
     context TEXT                              -- xlsx 'context' : surrounding sentences
 );
 
-CREATE INDEX idx_sp_analysis_id ON sentence_prediction(analysis_id);
+-- Note: idx_sp_analysis_id removed — redundant with composite (analysis_id, model)
 CREATE INDEX idx_sp_patient_model ON sentence_prediction(patient_id, model);
 CREATE INDEX idx_sp_pred_score ON sentence_prediction(pred_score DESC);
+CREATE INDEX idx_sp_analysis_model ON sentence_prediction(analysis_id, model);
 
 
 -- =====================================================
@@ -229,6 +250,7 @@ CREATE TABLE patient_access (
     UNIQUE(user_id, patient_id)
 );
 
+CREATE INDEX idx_auth_user_username ON auth_user(username);
 CREATE INDEX idx_auth_api_key_hash ON auth_api_key(key_hash);
 CREATE INDEX idx_auth_api_key_user ON auth_api_key(user_id);
 CREATE INDEX idx_patient_access_user ON patient_access(user_id);
@@ -246,7 +268,7 @@ CREATE TABLE user_interaction_log (
     speaker VARCHAR(100) NOT NULL,
     event_type VARCHAR(50) NOT NULL,
     element_id VARCHAR(255),
-    event_data TEXT,
+    event_data JSONB,
     device_type VARCHAR(20),
     client_timestamp TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -257,3 +279,13 @@ CREATE INDEX idx_uil_role ON user_interaction_log(role);
 CREATE INDEX idx_uil_file ON user_interaction_log(file);
 CREATE INDEX idx_uil_speaker ON user_interaction_log(speaker);
 CREATE INDEX idx_uil_event_type ON user_interaction_log(event_type);
+CREATE INDEX idx_uil_client_timestamp ON user_interaction_log(client_timestamp);
+CREATE INDEX idx_uil_file_event_type ON user_interaction_log(file, event_type);
+
+-- #4: Expression index for analytics timeline (GROUP BY date_trunc)
+CREATE INDEX idx_uil_client_ts_hour ON user_interaction_log (date_trunc('hour', client_timestamp))
+    WHERE client_timestamp IS NOT NULL;
+
+-- #5: Expression index for hourly heatmap (GROUP BY extract hour)
+CREATE INDEX idx_uil_client_ts_hour_of_day ON user_interaction_log (extract(hour FROM client_timestamp))
+    WHERE client_timestamp IS NOT NULL;

@@ -175,9 +175,10 @@
 """models.py - SQLAlchemy ORM model definitions for the Backend."""
 
 from sqlalchemy import (
-    Column, ForeignKey, ForeignKeyConstraint, LargeBinary, String, Integer, Float,
+    Column, ForeignKey, ForeignKeyConstraint, Index, LargeBinary, String, Integer, Float,
     Boolean, Text, TIMESTAMP, CheckConstraint, func
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship, declarative_base
 
 Base = declarative_base()
@@ -319,14 +320,16 @@ class SurveySubmissionLog(Base):
             ['patient_summary.file', 'patient_summary.speaker'],
             ondelete='CASCADE'
         ),
+        # Note: composite indexes (speaker, submitted_at DESC) and (file, submitted_at DESC)
+        # are defined in database_schema.sql DDL. DESC ordering requires DDL-level definition.
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     file = Column(String(255), nullable=False, index=True)
     speaker = Column(String(100), nullable=False, index=True)
     survey_type = Column(String(50), nullable=False, index=True)
-    answers = Column(Text, nullable=False)
-    extra_data = Column(Text)
+    answers = Column(JSONB, nullable=False)
+    extra_data = Column(JSONB)
     submitted_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
     redcap_synced = Column(Boolean, default=False)
@@ -346,11 +349,11 @@ class TranscriptAnalysisLog(Base):
     __tablename__ = 'transcript_analysis_log'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    patient_id = Column(String(255), nullable=False, index=True)
+    patient_id = Column(String(255), nullable=False)  # indexed via composite idx_transcript_log_patient_analyzed
     total_sentences = Column(Integer, nullable=False, default=0)
     top_n = Column(Integer, nullable=False, default=0)
     context_window = Column(Integer, nullable=False, default=3)
-    model_results = Column(Text)            # JSON string of per-model scores
+    model_results = Column(JSONB)            # per-model scores (auto dict↔JSON)
     xlsx_data = Column(LargeBinary)         # binary xlsx for DB-backed download
     source_filename = Column(String(500))
     analyzed_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), index=True)
@@ -368,9 +371,12 @@ class TranscriptAnalysisLog(Base):
 class SentencePrediction(Base):
     """Individual sentence-level NLP prediction, linked to an analysis run."""
     __tablename__ = 'sentence_prediction'
+    __table_args__ = (
+        Index('idx_sp_analysis_model', 'analysis_id', 'model'),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    analysis_id = Column(Integer, ForeignKey('transcript_analysis_log.id', ondelete='CASCADE'), nullable=False, index=True)
+    analysis_id = Column(Integer, ForeignKey('transcript_analysis_log.id', ondelete='CASCADE'), nullable=False)  # indexed via composite idx_sp_analysis_model
     patient_id = Column(String(255), nullable=False)
     model = Column(String(10), nullable=False)
     sentence_index = Column(Integer, nullable=False)
@@ -394,6 +400,9 @@ class SentencePrediction(Base):
 class UserInteractionLog(Base):
     """Tracks user interaction events from patient/physician UI."""
     __tablename__ = 'user_interaction_log'
+    __table_args__ = (
+        Index('idx_uil_file_event_type', 'file', 'event_type'),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(String(100), nullable=False, index=True)
@@ -402,9 +411,9 @@ class UserInteractionLog(Base):
     speaker = Column(String(100), nullable=False, index=True)
     event_type = Column(String(50), nullable=False, index=True)
     element_id = Column(String(255))
-    event_data = Column(Text)
+    event_data = Column(JSONB)
     device_type = Column(String(20))
-    client_timestamp = Column(TIMESTAMP(timezone=True))
+    client_timestamp = Column(TIMESTAMP(timezone=True), index=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
     def __repr__(self):

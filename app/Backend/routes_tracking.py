@@ -107,7 +107,7 @@ async def store_tracking_events(
                 speaker=batch.speaker,
                 event_type=event.event_type,
                 element_id=event.element_id,
-                event_data=json.dumps(event.metadata) if event.metadata else None,
+                event_data=event.metadata,  # JSONB column — dict stored directly
                 device_type=batch.device_type,
                 client_timestamp=client_ts,
             )
@@ -183,13 +183,6 @@ async def get_tracking_events(
 
     events = []
     for row in rows:
-        event_data = None
-        if row.event_data:
-            try:
-                event_data = json.loads(row.event_data)
-            except (json.JSONDecodeError, TypeError):
-                event_data = row.event_data
-
         events.append({
             "id": row.id,
             "session_id": row.session_id,
@@ -198,7 +191,7 @@ async def get_tracking_events(
             "speaker": row.speaker,
             "event_type": row.event_type,
             "element_id": row.element_id,
-            "event_data": event_data,
+            "event_data": row.event_data,  # JSONB column — already a dict
             "device_type": row.device_type,
             "client_timestamp": row.client_timestamp.isoformat() if row.client_timestamp else None,
             "created_at": row.created_at.isoformat() if row.created_at else None,
