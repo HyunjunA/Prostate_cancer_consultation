@@ -24,7 +24,7 @@ class AuthUser(Base):
     __tablename__ = "auth_user"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    username = Column(String(150), nullable=False)
+    username = Column(String(150), nullable=False, index=True)
     email = Column(String(255), unique=True)
     password_hash = Column(String(255))
     role = Column(

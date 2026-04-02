@@ -818,8 +818,8 @@ async def submit_survey(
         file=submission.file,
         speaker=submission.speaker,
         survey_type=submission.survey_type,
-        answers=json.dumps(submission.answers, ensure_ascii=False),
-        extra_data=json.dumps(submission.metadata, ensure_ascii=False) if submission.metadata else None,
+        answers=submission.answers,        # JSONB column — dict stored directly
+        extra_data=submission.metadata,    # JSONB column — dict stored directly
         redcap_synced=False
     )
     
@@ -909,8 +909,8 @@ async def get_submissions(
                 "file": r.file,
                 "speaker": r.speaker,
                 "survey_type": r.survey_type,
-                "answers": json.loads(r.answers),
-                "extra_data": json.loads(r.extra_data) if r.extra_data else None,  
+                "answers": r.answers,            # JSONB — already a dict
+                "extra_data": r.extra_data,      # JSONB — already a dict or None
                 "submitted_at": r.submitted_at.isoformat() if r.submitted_at else None,
                 "redcap_synced": r.redcap_synced,
                 "redcap_record_id": r.redcap_record_id
@@ -942,8 +942,8 @@ async def get_submission_by_id(
         "file": record.file,
         "speaker": record.speaker,
         "survey_type": record.survey_type,
-        "answers": json.loads(record.answers),
-        "extra_data": json.loads(record.extra_data) if record.extra_data else None, 
+        "answers": record.answers,            # JSONB — already a dict
+        "extra_data": record.extra_data,      # JSONB — already a dict or None
         "submitted_at": record.submitted_at.isoformat() if record.submitted_at else None,
         "redcap_synced": record.redcap_synced,
         "redcap_record_id": record.redcap_record_id,
@@ -975,11 +975,11 @@ async def get_submissions_by_speaker(
         grouped[r.survey_type].append({
             "id": r.id,
             "file": r.file,
-            "answers": json.loads(r.answers),
+            "answers": r.answers,  # JSONB — already a dict
             "submitted_at": r.submitted_at.isoformat() if r.submitted_at else None,
             "redcap_synced": r.redcap_synced
         })
-    
+
     return {
         "speaker": speaker,
         "total_submissions": len(records),
@@ -1012,7 +1012,7 @@ async def get_submissions_by_file(
                 "id": r.id,
                 "speaker": r.speaker,
                 "survey_type": r.survey_type,
-                "answers": json.loads(r.answers),
+                "answers": r.answers,  # JSONB — already a dict
                 "submitted_at": r.submitted_at.isoformat() if r.submitted_at else None,
                 "redcap_synced": r.redcap_synced
             }
@@ -1060,7 +1060,7 @@ async def get_submissions_by_type(
                 "id": r.id,
                 "file": r.file,
                 "speaker": r.speaker,
-                "answers": json.loads(r.answers),
+                "answers": r.answers,  # JSONB — already a dict
                 "submitted_at": r.submitted_at.isoformat() if r.submitted_at else None,
                 "redcap_synced": r.redcap_synced
             }
