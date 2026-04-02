@@ -1147,8 +1147,8 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
   const fileId = useFileId((state) => state.fileId);
   const { fetchSummaryDetail } = usePatientData();
 
-  const currentFile = fileId || "quality-coded-nlp-pilot-sid-1.xlsx";
-  const currentSpeaker = patientId || "Patient_quality-coded-nlp-pilot-sid-1";
+  const currentFile = fileId || "Input_Keystrokes REC001 (SID 14).xlsx";
+  const currentSpeaker = patientId || "Patient_Input_Keystrokes REC001 (SID 14)";
 
   // ─────────────────────────────────────────────────────────────────────────
   // 7.2 State

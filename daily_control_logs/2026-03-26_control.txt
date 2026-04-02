@@ -1,0 +1,75 @@
+Prostate Cancer Consultation Dashboard - Work Log
+=======================================================
+
+March 26, 2026 (Wednesday)
+
+Context: Dashboard data flow analysis for Ivan's DB persistence directive.
+Goal: Map every piece of data the dashboard displays back to its pipeline source.
+
+---
+
+1. Full Dashboard Data Flow Documentation (1,677 lines)
+   - Created meeting_notes/DASHBOARD_DB_API_DATA_FLOW_KR.md
+   - Scope: all 3 dashboard pages × all DB tables × all API endpoints × pipeline connections
+   - Sections covered:
+     * Section 1 — Doctor Dashboard
+       - Pipeline Steps 1-5 → doctor_sentence_view, sentence_prediction, transcript_analysis_log
+       - 15 API endpoints mapped: sentences, rewrites, scores/average, scores/summary,
+         scores/trajectory, class-distribution, ai-rewrite, score-sentence, improvement-suggestions,
+         transcript/history, transcript/predictions, files
+       - Rewrite Practice flow: textarea → Try & Score → scoreSentence() → saveRewriteWithTimestamp()
+         → PUT /api/doctor/rewrites → doctor_rewrite_log INSERT
+       - Page refresh restoration chain: DB → fetchRewritesFiltered → rewriteMap → useEffect → textarea
+       - Score analysis: uses ONLY doctor_sentence_view.score (original NLP), never rewrite scores
+       - AI placeholder status: score-sentence always returns 5, ai-rewrite returns dummy text
+     * Section 2 — Patient First Visit
+       - patient_summary (AI summaries — temporary data from convert_output_to_csv.py)
+       - doctor_sentence_view (Evidence sentences — class-grouped, score DESC, top 7)
+       - patient_summary_scoring (NIH PROMIS 1-5 ratings, upsert on click)
+       - API: GET /api/patient/summaries/{file}/{speaker}, GET /api/patient/sentences/{file},
+         PUT /api/patient/scoring
+     * Section 3 — Patient Follow-Up
+       - 6-step survey flow: Welcome → SDM → DCS → Risk Perception → Satisfaction → Complete
+       - Question-level navigation: one question at a time, Next saves partial (metadata.partial=true)
+       - survey_submission_log: POST /api/surveys/submit per survey_type
+       - patient_responses: PUT /api/patient/responses for free-text answers
+       - Risk Perception only survey using AI summary (CollapsibleSummary toggle)
+       - State restoration: GET /api/surveys/by-speaker/{speaker} → restore answers + completed steps
+     * Section 4 — Common tables
+       - user_interaction_log: POST /api/tracking/events (both dashboards, role="physician"|"patient")
+     * Section 5 — DB seeding (CSV → init_db.py → PostgreSQL)
+       - 5 CSV files mapped to 5 tables
+       - Docker startup flow: PostgreSQL schema → wait_for_db.py → init_db.py migrations
+     * Section 6 — Pipeline file processing
+       - Input/output directory structure with actual file listing (6 patients)
+       - Steps 0-10 detailed flow with intermediate file outputs
+       - DataFrame column → DB column mapping tables
+       - File output vs DB output independence (same in-memory DataFrame, two sinks)
+     * Section 7 — Summary tables
+       - Writer/Reader matrix for all 9 tables
+       - Page comparison table (component, URL, pipeline source, DB read/write, auto-save)
+
+2. DB Table Relationship Diagram
+   - ASCII ER diagram showing FK relationships:
+     * transcript_analysis_log 1:N → sentence_prediction (analysis_id FK, CASCADE)
+     * doctor_sentence_view 1:N → doctor_rewrite_log ((file,i,i2) FK, CASCADE)
+     * patient_summary 1:1 → patient_summary_scoring ((file,speaker) FK, CASCADE)
+     * patient_summary 1:N → survey_submission_log ((file,speaker) FK, CASCADE)
+     * patient_summary 1:1 → patient_responses ((file,speaker) FK, CASCADE)
+
+3. Dashboard Module Assessment (Ivan's 4th directive)
+   - Ivan asked: "We need a similar module in the dashboard to handle queries and writing"
+   - Finding: Backend already has these modules implemented:
+     * routes_doctor.py — GET /api/doctor/sentences (read), PUT /api/doctor/rewrites (write)
+     * routes_patient.py — GET /api/patient/summaries (read), PUT /api/patient/scoring (write)
+     * routes_survey.py — POST /api/surveys/submit (write), GET /api/surveys/by-speaker (read)
+   - Conclusion: no new dashboard-side module needed; pipeline persistence writes data,
+     existing Backend API serves it to frontend
+
+Modified Files:
+   - meeting_notes/DASHBOARD_DB_API_DATA_FLOW_KR.md (new, 1,677 lines)
+
+Next Steps:
+   - Migrate all dashboard seed data from fake CSV to real pipeline output
+   - Fix frontend hardcoded file references (quality-coded-nlp-pilot-sid-1.xlsx)
+   - Fix Doctor Demo page issues (auto-select, SID regex, speaker format)

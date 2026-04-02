@@ -688,7 +688,7 @@
 # ):
 #     """Get doctor sentence view data for specific file and speaker where class != -1"""
     
-#     # 🔍 디버깅 1: 입력값 확인
+#     # 🔍 Debug 1: Verify input values
 #     print("=" * 80)
 #     print("🔍 DEBUG - Input Parameters:")
 #     print(f"   file: '{file}'")
@@ -696,7 +696,7 @@
 #     print(f"   speaker length: {len(speaker)}")
 #     print(f"   speaker repr: {repr(speaker)}")
     
-#     # 🔍 디버깅 2: 해당 파일의 모든 speaker 확인
+#     # 🔍 Debug 2: Check all speakers in the given file
 #     all_speakers_stmt = select(DoctorSentenceView.speaker).distinct().where(
 #         DoctorSentenceView.file == file
 #     )
@@ -705,7 +705,7 @@
 #     for s in all_speakers:
 #         print(f"   - '{s}' (len: {len(s)}, repr: {repr(s)})")
     
-#     # 🔍 디버깅 3: class != '-1' 조건 없이 먼저 확인
+#     # 🔍 Debug 3: Check without the class != '-1' condition first
 #     test_stmt = select(DoctorSentenceView).where(
 #         DoctorSentenceView.file == file,
 #         DoctorSentenceView.speaker == speaker
@@ -715,7 +715,7 @@
 #     for r in test_results[:3]:
 #         print(f"   - i={r.i}, i2={r.i2}, class='{r.class_}', sentence='{r.sentence[:50] if r.sentence else None}'")
     
-#     # 🔍 디버깅 4: 실제 쿼리 실행
+#     # 🔍 Debug 4: Execute the actual query
 #     stmt = select(DoctorSentenceView).where(
 #         DoctorSentenceView.file == file,
 #         DoctorSentenceView.speaker == speaker,

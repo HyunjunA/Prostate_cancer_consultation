@@ -1087,8 +1087,8 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
   const [apiLoading, setApiLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  const currentFile = fileId || "quality-coded-nlp-pilot-sid-1.xlsx";
-  const currentSpeaker = patientId || "Patient_quality-coded-nlp-pilot-sid-1";
+  const currentFile = fileId || "Input_Keystrokes REC001 (SID 14).xlsx";
+  const currentSpeaker = patientId || "Patient_Input_Keystrokes REC001 (SID 14)";
   const visitId = `visit_${currentFile}_${Date.now()}`;
 
   // First topic (Cancer Prognosis) expanded by default, rest collapsed

@@ -347,8 +347,12 @@ docker compose build webapp && docker compose up -d webapp
    - ✅ Executes `init_db.py` which:
      - Creates database tables if they don't exist
      - Checks if data exists in the database
-     - Loads CSV data if database is empty (first run only)
+     - Loads CSV data from `fake_csv_files/` if database is empty (first run only)
      - Skips data loading if records already exist (subsequent runs)
+     - **Note (2026-03-27)**: All CSV files are now generated from `AI_physician_patient_communication` pipeline output
+       via `convert_output_to_csv.py`. Legacy manually-created fake data is no longer used.
+     - **AI summaries are temporary**: Patient summary text is currently top-3 NLP-scored sentences concatenated.
+       Will be replaced by Guillermo's AI sub-pipeline (Step 9) output.
    - ✅ Starts Uvicorn server (dev mode) or Gunicorn (prod mode)
 3. **On app startup**, `main.py`:
    - Creates an async Redis client

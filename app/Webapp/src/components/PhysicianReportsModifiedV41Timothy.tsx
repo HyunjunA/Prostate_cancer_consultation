@@ -389,6 +389,21 @@ const leftLabelByTopic = (topic: TopicName): string => {
 };
 
 // ═══════════════════════════════════════════════════════════
+// Placeholder consultation score generator (TEMPORARY)
+// Will be replaced by Guillermo's AI scoring sub-pipeline (Step 8)
+// ═══════════════════════════════════════════════════════════
+const getPlaceholderScore = (fileName: string, topicName: string): number => {
+  // Deterministic pseudo-random: same inputs always produce same score
+  let hash = 0;
+  const seed = `${fileName}::${topicName}`;
+  for (let i = 0; i < seed.length; i++) {
+    hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
+  }
+  // Map to 1-5 range (never 0 — 0 means "no mention" which is misleading for placeholder)
+  return (Math.abs(hash) % 5) + 1;
+};
+
+// ═══════════════════════════════════════════════════════════
 // LoadingSpinner Component (Outside)
 // ═══════════════════════════════════════════════════════════
 const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
@@ -2176,10 +2191,13 @@ const GridView: React.FC<GridViewProps> = ({
     return data.sentenceDetails[data.sentenceDetails.length - 1]?.sentence || "No sentence available";
   };
 
-  // Helper: get last sentence's score for grid display
-  const getLastSentenceScore = (data: TopicData): number | null => {
-    if (data.sentenceDetails.length === 0) return data.score;
-    return data.sentenceDetails[data.sentenceDetails.length - 1]?.score ?? data.score;
+  // Helper: get consultation score for grid display
+  // TEMPORARY: Uses placeholder random scores (1-5) until Guillermo's AI scoring (Step 8) is implemented
+  // The .pred_1 values from NLP models are sentence relevance probabilities (0.0-1.0),
+  // NOT consultation quality scores, so they must NOT be used here.
+  const getLastSentenceScore = (_data: TopicData, topicName?: TopicName): number | null => {
+    if (!selectedPatient) return null;
+    return getPlaceholderScore(selectedPatient.fileName, topicName || "default");
   };
 
   // Helper function to get first improvement suggestion
@@ -2435,7 +2453,7 @@ const GridView: React.FC<GridViewProps> = ({
               {ALL_TOPICS.map((topicName) => {
                 const data = topicsData[topicName];
                 const representativeSentence = getRepresentativeSentence(data);
-                const lastScore = getLastSentenceScore(data);
+                const lastScore = getLastSentenceScore(data, topicName);
                 const allSuggestions = getImprovementSuggestions(
                   topicName,
                   lastScore,
@@ -2484,18 +2502,18 @@ const GridView: React.FC<GridViewProps> = ({
                       ) : (
                         <button
                           onClick={() => {
-                            const score = getLastSentenceScore(data);
+                            const score = getLastSentenceScore(data, topicName);
                             if (score !== null && onOpenRubric) {
                               onOpenRubric(topicName, Math.round(score));
                             }
                           }}
                           className={cx(
                             "inline-flex items-center justify-center w-10 h-10 rounded-full text-sm font-bold cursor-pointer transition-transform hover:scale-110",
-                            getScoreColorForValue(getLastSentenceScore(data), isDarkMode),
+                            getScoreColorForValue(getLastSentenceScore(data, topicName), isDarkMode),
                           )}
                           title="Click to view scoring rubric"
                         >
-                          {getLastSentenceScore(data) !== null ? Math.round(getLastSentenceScore(data)!) : "—"}
+                          {getLastSentenceScore(data, topicName) !== null ? Math.round(getLastSentenceScore(data, topicName)!) : "—"}
                         </button>
                       )}
                     </td>
@@ -2823,7 +2841,8 @@ const DetailView: React.FC<DetailViewProps> = ({
                 index: idx + 1,
                 file: item.file,
                 label: patientInfo?.name || `Patient ${idx + 1}`,
-                score: item.avg_score ?? 0, // Backend now returns last sentence score
+                // TEMPORARY: placeholder score instead of .pred_1 avg
+                score: getPlaceholderScore(item.file, topicName),
                 isCurrentPatient,
               };
             })
@@ -2987,14 +3006,13 @@ const DetailView: React.FC<DetailViewProps> = ({
           );
         })()}
 
-        {/* Consultation Scoring — uses last sentence's score */}
+        {/* Consultation Scoring — TEMPORARY: uses placeholder random scores (1-5)
+            Will be replaced by Guillermo's AI scoring sub-pipeline (Step 8) */}
         <div data-tour="detail-consultation-scoring" className="mb-6">
           <ConsultationScoring
             isDarkMode={isDarkMode}
             title={titleByScore(
-              data.sentenceDetails.length > 0
-                ? (data.sentenceDetails[data.sentenceDetails.length - 1].score ?? data.score)
-                : data.score
+              getPlaceholderScore(patient.fileName, topicName)
             )}
             subtitle="Quality of Risk Communication"
             sentences={data.sentenceDetails.map((detail) => ({
@@ -3005,17 +3023,13 @@ const DetailView: React.FC<DetailViewProps> = ({
               revisedScore: detail.revisedScore,
             }))}
             highlightPosition={
-              data.sentenceDetails.length > 0
-                ? (data.sentenceDetails[data.sentenceDetails.length - 1].score ?? data.score ?? 0)
-                : (data.score ?? 0)
+              getPlaceholderScore(patient.fileName, topicName)
             }
             leftLabel={leftLabelByTopic(topicName)}
             selectedIdx={selectedSentenceIdx}
             onSentenceClick={(idx) => setSelectedSentenceIdx(idx)}
             suggestions={getImprovementSuggestions(topicName,
-              data.sentenceDetails.length > 0
-                ? (data.sentenceDetails[data.sentenceDetails.length - 1].score ?? data.score)
-                : data.score
+              getPlaceholderScore(patient.fileName, topicName)
             )}
             allRubricLevels={getImprovementSuggestions(topicName, 0)}
             onSuggestionClick={(suggestion) => {
@@ -3554,7 +3568,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   useEffect(() => {
     if (files && files.length > 0) {
       const patientList: PatientRow[] = files.map((fileName, idx) => {
-        const match = fileName.match(/sid-(\d+)/i);
+        const match = fileName.match(/sid[- ]?(\d+)/i);
         const id = match
           ? `SID-${match[1]}`
           : `P${String(idx + 1).padStart(3, "0")}`;
@@ -3591,35 +3605,42 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [files, selectedSpeaker]);
 
   // ═══════════════════════════════════════════════════════════
+  // Auto-select patient when fileId is provided via URL (once only)
+  // ═══════════════════════════════════════════════════════════
+  const autoSelectDone = React.useRef(false);
+  useEffect(() => {
+    if (patients.length > 0 && selectedFile && !autoSelectDone.current) {
+      const match = patients.find((p) => p.fileName === selectedFile);
+      if (match) {
+        setSelectedPatient(match);
+        setCurrentView("grid");
+        autoSelectDone.current = true;
+      }
+    }
+  }, [patients, selectedFile]);
+
+  // ═══════════════════════════════════════════════════════════
   // Update patients with real scores from scoreAverage
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (!scoreAverage?.data) return;
 
-    // Group scores by file and calculate overall average
-    const fileScores = new Map<string, { total: number; count: number }>();
-    scoreAverage.data.forEach((item) => {
-      if (item.avg_score !== null) {
-        const existing = fileScores.get(item.file) || { total: 0, count: 0 };
-        existing.total += item.avg_score;
-        existing.count += 1;
-        fileScores.set(item.file, existing);
-      }
-    });
-
-    // Use functional setState to always read the LATEST patients (fixes stale closure)
+    // TEMPORARY: Use placeholder random scores (1-5) instead of .pred_1 averages
+    // Will be replaced by Guillermo's AI scoring sub-pipeline (Step 8)
+    // The .pred_1 values are sentence relevance probabilities, NOT consultation quality scores.
     setPatients((prev) => {
       if (prev.length === 0) return prev;
 
       const updatedPatients = prev.map((patient) => {
-        const scoreData = fileScores.get(patient.fileName);
-        if (scoreData && scoreData.count > 0) {
-          return {
-            ...patient,
-            overallScore: scoreData.total / scoreData.count,
-          };
-        }
-        return patient;
+        // Average of placeholder scores across all 5 topics
+        const topicScores = ALL_TOPICS.map((topic) =>
+          getPlaceholderScore(patient.fileName, topic)
+        );
+        const avgScore = topicScores.reduce((a, b) => a + b, 0) / topicScores.length;
+        return {
+          ...patient,
+          overallScore: Math.round(avgScore * 10) / 10,
+        };
       });
 
       // Only update if scores actually changed
@@ -3721,15 +3742,15 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   // ═══════════════════════════════════════════════════════════
   // Overall score calculation
   // ═══════════════════════════════════════════════════════════
+  // TEMPORARY: Use average of placeholder random scores (1-5) instead of .pred_1 average
+  // Will be replaced by Guillermo's AI scoring sub-pipeline (Step 8)
   const overallScore = useMemo(() => {
-    if (
-      scoreSummary?.overall?.avg_score !== null &&
-      scoreSummary?.overall?.avg_score !== undefined
-    ) {
-      return scoreSummary.overall.avg_score;
-    }
-    return null;
-  }, [scoreSummary]);
+    if (!selectedPatient) return null;
+    const topicScores = ALL_TOPICS.map((topic) =>
+      getPlaceholderScore(selectedPatient.fileName, topic)
+    );
+    return Math.round((topicScores.reduce((a, b) => a + b, 0) / topicScores.length) * 10) / 10;
+  }, [selectedPatient]);
 
   // ═══════════════════════════════════════════════════════════
   // Filtered Patients
@@ -3882,6 +3903,10 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           setSelectedPatient={(patient) => {
             trackEvent("patient_select", `dashboard_patient_${patient.id}`, { fileId: patient.fileName, overallScore: patient.overallScore });
             setSelectedPatient(patient);
+            // Update URL with fileid so the page is bookmarkable / shareable
+            const url = new URL(window.location.href);
+            url.searchParams.set("fileid", patient.fileName);
+            window.history.replaceState({}, "", url.toString());
           }}
           setCurrentView={setCurrentView}
           trajectoryData={trajectoryData?.trajectory}
@@ -3900,7 +3925,13 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           apiError={apiError}
           sentences={sentences}
           setCurrentView={(view) => {
-            if (view === "dashboard") trackEvent("button_click", "grid_back_to_dashboard", { patientId: selectedPatient.id });
+            if (view === "dashboard") {
+              trackEvent("button_click", "grid_back_to_dashboard", { patientId: selectedPatient.id });
+              // Remove fileid from URL when returning to dashboard
+              const url = new URL(window.location.href);
+              url.searchParams.delete("fileid");
+              window.history.replaceState({}, "", url.toString());
+            }
             setCurrentView(view);
           }}
           setSelectedPatient={setSelectedPatient}

@@ -439,18 +439,29 @@ async def migrate_doctor_render(csv_file_path: str, Session: async_sessionmaker)
     # Check for sentence/sentences column
     has_sentence = 'sentence' in df.columns
     has_sentences = 'sentences' in df.columns
+    has_class = 'class' in df.columns
     print(f"   📌 Has 'sentence' column: {has_sentence}")
     print(f"   📌 Has 'sentences' column: {has_sentences}")
-    
+    print(f"   📌 Has 'class' column: {has_class}")
+
     created_count = 0
     error_count = 0
-    
-    async with Session() as session:
-        for index, row in df.iterrows():
-            try:
+
+    for index, row in df.iterrows():
+        try:
+            async with Session() as session:
                 # Use 'sentences' column (as per CSV)
                 sentence_value = normalize_string(row.get('sentences')) or normalize_string(row.get('sentence'))
-                
+
+                # Determine class value
+                if has_class:
+                    class_value = normalize_string(row.get('class'))
+                else:
+                    # Legacy CSV without class column: use score (int 0-5) as class
+                    # score=0 → unclassified (None), score=1-5 → class "1"-"5"
+                    raw_score = normalize_int(row.get('score'))
+                    class_value = str(raw_score) if raw_score and 1 <= raw_score <= 5 else None
+
                 record = DoctorSentenceView(
                     file=normalize_string(row.get('file')),
                     i=normalize_int(row.get('i')),
@@ -458,29 +469,23 @@ async def migrate_doctor_render(csv_file_path: str, Session: async_sessionmaker)
                     speaker=normalize_string(row.get('speaker')),
                     sentence=sentence_value,
                     score=normalize_float(row.get('score')),
-                    class_=normalize_string(row.get('class')),
+                    class_=class_value,
                     time=normalize_timestamp(row.get('time'))
                 )
                 session.add(record)
+                await session.commit()
                 created_count += 1
-                
-                if created_count % 100 == 0:
-                    await session.commit()
-                    print(f"   ✓ Committed {created_count} records...")
-                    
-            except IntegrityError as e:
-                error_count += 1
-                await session.rollback()
-                print(f"   ⚠️  IntegrityError at row {index}: Primary key conflict")
-                continue
-            except Exception as e:
-                error_count += 1
-                await session.rollback()
-                print(f"   ⚠️  Error at row {index}: {str(e)}")
-                continue
-        
-        await session.commit()
-    
+
+        except IntegrityError:
+            error_count += 1
+            if error_count <= 3:
+                print(f"   ⚠️  IntegrityError at row {index}: Primary key conflict (skipped)")
+            continue
+        except Exception as e:
+            error_count += 1
+            print(f"   ⚠️  Error at row {index}: {str(e)}")
+            continue
+
     print(f"   ✅ Created: {created_count}, Errors: {error_count}")
     return created_count, error_count
 
@@ -520,15 +525,15 @@ async def migrate_doctor_rewriting_history(csv_file_path: str, Session: async_se
     
     created_count = 0
     error_count = 0
-    
-    async with Session() as session:
-        for index, row in df.iterrows():
-            try:
+
+    for index, row in df.iterrows():
+        try:
+            async with Session() as session:
                 # Time handling with timezone
                 time_value = normalize_timestamp(row.get('time'))
                 if time_value is None:
                     time_value = datetime.now(timezone.utc)
-                
+
                 record = DoctorRewriteLog(
                     file=normalize_string(row.get('file')),
                     i=normalize_int(row.get('i')),
@@ -543,27 +548,19 @@ async def migrate_doctor_rewriting_history(csv_file_path: str, Session: async_se
                     selected=normalize_bool(row.get('selected'))
                 )
                 session.add(record)
+                await session.commit()
                 created_count += 1
-                
-                if created_count % 100 == 0:
-                    await session.commit()
-                    print(f"   ✓ Committed {created_count} records...")
-                    
-            except IntegrityError as e:
-                error_count += 1
-                await session.rollback()
-                print(f"   ⚠️  IntegrityError at row {index}: Primary key conflict")
-                print(f"       Data: file={row.get('file')}, i={row.get('i')}, i2={row.get('i2')}, time={row.get('time')}")
-                continue
-            except Exception as e:
-                error_count += 1
-                await session.rollback()
-                print(f"   ⚠️  Error at row {index}: {str(e)}")
-                print(f"       Data: file={row.get('file')}, i={row.get('i')}, i2={row.get('i2')}")
-                continue
-        
-        await session.commit()
-    
+
+        except IntegrityError:
+            error_count += 1
+            if error_count <= 3:
+                print(f"   ⚠️  IntegrityError at row {index}: Primary key conflict (skipped)")
+            continue
+        except Exception as e:
+            error_count += 1
+            print(f"   ⚠️  Error at row {index}: {str(e)}")
+            continue
+
     print(f"   ✅ Created: {created_count}, Errors: {error_count}")
     return created_count, error_count
 
@@ -588,9 +585,9 @@ async def migrate_patient_class_summary(csv_file_path: str, Session: async_sessi
     created_count = 0
     error_count = 0
     
-    async with Session() as session:
-        for index, row in df.iterrows():
-            try:
+    for index, row in df.iterrows():
+        try:
+            async with Session() as session:
                 record = PatientSummary(
                     file=normalize_string(row.get('file')),
                     speaker=normalize_string(row.get('speaker')),
@@ -607,25 +604,19 @@ async def migrate_patient_class_summary(csv_file_path: str, Session: async_sessi
                     summary_class_5=normalize_string(row.get('summary_class_5'))
                 )
                 session.add(record)
+                await session.commit()
                 created_count += 1
-                
-                if created_count % 100 == 0:
-                    await session.commit()
-                    print(f"   ✓ Committed {created_count} records...")
-                    
-            except IntegrityError as e:
-                error_count += 1
-                await session.rollback()
-                print(f"   ⚠️  IntegrityError at row {index}: Primary key conflict")
-                continue
-            except Exception as e:
-                error_count += 1
-                await session.rollback()
-                print(f"   ⚠️  Error at row {index}: {str(e)}")
-                continue
-        
-        await session.commit()
-    
+
+        except IntegrityError:
+            error_count += 1
+            if error_count <= 3:
+                print(f"   ⚠️  IntegrityError at row {index}: Primary key conflict (skipped)")
+            continue
+        except Exception as e:
+            error_count += 1
+            print(f"   ⚠️  Error at row {index}: {str(e)}")
+            continue
+
     print(f"   ✅ Created: {created_count}, Errors: {error_count}")
     return created_count, error_count
 
@@ -649,10 +640,10 @@ async def migrate_patient_class_summary_scoring(csv_file_path: str, Session: asy
     
     created_count = 0
     error_count = 0
-    
-    async with Session() as session:
-        for index, row in df.iterrows():
-            try:
+
+    for index, row in df.iterrows():
+        try:
+            async with Session() as session:
                 record = PatientSummaryScoring(
                     file=normalize_string(row.get('file')),
                     speaker=normalize_string(row.get('speaker')),
@@ -663,25 +654,19 @@ async def migrate_patient_class_summary_scoring(csv_file_path: str, Session: asy
                     class_5_patient_scoring=normalize_int(row.get('class_5_patient_scoring'))
                 )
                 session.add(record)
+                await session.commit()
                 created_count += 1
-                
-                if created_count % 100 == 0:
-                    await session.commit()
-                    print(f"   ✓ Committed {created_count} records...")
-                    
-            except IntegrityError as e:
-                error_count += 1
-                await session.rollback()
-                print(f"   ⚠️  IntegrityError at row {index}: Primary key conflict")
-                continue
-            except Exception as e:
-                error_count += 1
-                await session.rollback()
-                print(f"   ⚠️  Error at row {index}: {str(e)}")
-                continue
-        
-        await session.commit()
-    
+
+        except IntegrityError:
+            error_count += 1
+            if error_count <= 3:
+                print(f"   ⚠️  IntegrityError at row {index}: Primary key conflict (skipped)")
+            continue
+        except Exception as e:
+            error_count += 1
+            print(f"   ⚠️  Error at row {index}: {str(e)}")
+            continue
+
     print(f"   ✅ Created: {created_count}, Errors: {error_count}")
     return created_count, error_count
 
@@ -705,10 +690,10 @@ async def migrate_patient_questions_responses(csv_file_path: str, Session: async
     
     created_count = 0
     error_count = 0
-    
-    async with Session() as session:
-        for index, row in df.iterrows():
-            try:
+
+    for index, row in df.iterrows():
+        try:
+            async with Session() as session:
                 record = PatientResponses(
                     file=normalize_string(row.get('file')),
                     speaker=normalize_string(row.get('speaker')),
@@ -719,25 +704,19 @@ async def migrate_patient_questions_responses(csv_file_path: str, Session: async
                     answer_5=normalize_string(row.get('answer_5'))
                 )
                 session.add(record)
+                await session.commit()
                 created_count += 1
-                
-                if created_count % 100 == 0:
-                    await session.commit()
-                    print(f"   ✓ Committed {created_count} records...")
-                    
-            except IntegrityError as e:
-                error_count += 1
-                await session.rollback()
-                print(f"   ⚠️  IntegrityError at row {index}: Primary key conflict")
-                continue
-            except Exception as e:
-                error_count += 1
-                await session.rollback()
-                print(f"   ⚠️  Error at row {index}: {str(e)}")
-                continue
-        
-        await session.commit()
-    
+
+        except IntegrityError:
+            error_count += 1
+            if error_count <= 3:
+                print(f"   ⚠️  IntegrityError at row {index}: Primary key conflict (skipped)")
+            continue
+        except Exception as e:
+            error_count += 1
+            print(f"   ⚠️  Error at row {index}: {str(e)}")
+            continue
+
     print(f"   ✅ Created: {created_count}, Errors: {error_count}")
     return created_count, error_count
 
@@ -832,18 +811,18 @@ async def migrate_sentence_prediction(csv_file_path: str, Session: async_session
     created_count = 0
     error_count = 0
 
-    async with Session() as session:
-        for index, row in df.iterrows():
-            try:
-                patient_id = normalize_string(row.get('patient_id'))
-                analysis_id = analysis_id_cache.get(patient_id)
+    for index, row in df.iterrows():
+        try:
+            patient_id = normalize_string(row.get('patient_id'))
+            analysis_id = analysis_id_cache.get(patient_id)
 
-                if analysis_id is None:
-                    error_count += 1
-                    if error_count <= 3:
-                        print(f"   ⚠️  No analysis_id for patient '{patient_id}' at row {index}")
-                    continue
+            if analysis_id is None:
+                error_count += 1
+                if error_count <= 3:
+                    print(f"   ⚠️  No analysis_id for patient '{patient_id}' at row {index}")
+                continue
 
+            async with Session() as session:
                 record = SentencePrediction(
                     analysis_id=analysis_id,
                     patient_id=patient_id,
@@ -857,24 +836,18 @@ async def migrate_sentence_prediction(csv_file_path: str, Session: async_session
                     context=normalize_string(row.get('context')),
                 )
                 session.add(record)
+                await session.commit()
                 created_count += 1
 
-                if created_count % 100 == 0:
-                    await session.commit()
-                    print(f"   ✓ Committed {created_count} records...")
-
-            except IntegrityError as e:
-                error_count += 1
-                await session.rollback()
+        except IntegrityError:
+            error_count += 1
+            if error_count <= 3:
                 print(f"   ⚠️  IntegrityError at row {index}")
-                continue
-            except Exception as e:
-                error_count += 1
-                await session.rollback()
-                print(f"   ⚠️  Error at row {index}: {str(e)}")
-                continue
-
-        await session.commit()
+            continue
+        except Exception as e:
+            error_count += 1
+            print(f"   ⚠️  Error at row {index}: {str(e)}")
+            continue
 
     print(f"   ✅ Created: {created_count}, Errors: {error_count}")
     return created_count, error_count
@@ -924,8 +897,8 @@ async def migrate_all_csv_files(data_dir: str, Session: async_sessionmaker):
 
 # Map CSV filenames to their migration functions
 CSV_MIGRATION_MAP = {
-    "docter_interface_render_processed.csv": migrate_doctor_render,
     "docter_interface_render.csv": migrate_doctor_render,
+    "docter_interface_render_processed.csv": migrate_doctor_render,
     "docter_interface_ai_rewriting_history.csv": migrate_doctor_rewriting_history,
     "Patient_interface_class_summary.csv": migrate_patient_class_summary,
     "patient_interface_class_summary.csv": migrate_patient_class_summary,

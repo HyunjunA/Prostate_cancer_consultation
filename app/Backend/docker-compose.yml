@@ -8,8 +8,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-    # ports:                   # DB는 Docker 내부 네트워크 전용 (외부 노출 제거)
-    #   - "5433:5432"
+    ports:
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
@@ -72,7 +72,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       NLP_API_URL: http://nlp-classifiers:8000
       AUTH_MODE: ${AUTH_MODE:-api_key}
-      CORS_ORIGINS: '["http://localhost:3000","http://localhost"]'
+      CORS_ORIGINS: '["http://localhost:3000","http://localhost:3001","http://localhost"]'
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
@@ -134,7 +134,7 @@ services:
     image: nginx:alpine
     container_name: prostatecancer-nginx
     ports:
-      - "127.0.0.1:3000:80"
+      - "127.0.0.1:3001:80"
     volumes:
       - ../Webapp/nginx_setup/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:

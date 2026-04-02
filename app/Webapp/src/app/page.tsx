@@ -31,7 +31,7 @@ import PatientConsultationReports from "@/components/PatientConsultationReports"
 import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV35";
 
 // // These below components are the one with feedback from Dr. Timothy
-// 수정되었으나 한질문이 한페이지에 나오는 버전은 아님.
+// Modified but not the version where one question appears per page.
 // import PatientFollowUpReport from "@/components/PatientFollowUpReportV31";
 
 import PatientFollowUpReport from "@/components/PatientFollowUpReportV31Re";
@@ -196,6 +196,9 @@ export default function Home() {
     if (doctorIdFromUrl) {
       setDoctorId(doctorIdFromUrl);
       clearPatientId(); // Patient ID Clear
+      if (!fileIdFromUrl) {
+        clearFileId(); // No fileid in URL → start at landing view (all patients)
+      }
       setCurrentView("doctor");
       console.log("👨‍⚕️ Doctor ID from URL:", doctorIdFromUrl);
       console.log("🏥 Switching to Doctor View");
@@ -445,7 +448,7 @@ export default function Home() {
           </p>
           <div className="flex flex-wrap justify-center gap-3">
             <a
-              href="/?fileid=quality-coded-nlp-pilot-sid-1.xlsx&patid=Patient_quality-coded-nlp-pilot-sid-1&visit=first"
+              href="/?fileid=Input_Keystrokes REC001 (SID 14).xlsx&patid=Patient_Input_Keystrokes REC001 (SID 14)&visit=first"
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 isDarkMode
                   ? "bg-blue-600 text-white hover:bg-blue-500"
@@ -455,7 +458,7 @@ export default function Home() {
               Patient First Visit
             </a>
             <a
-              href="/?fileid=quality-coded-nlp-pilot-sid-1.xlsx&patid=Patient_quality-coded-nlp-pilot-sid-1&visit=followup"
+              href="/?fileid=Input_Keystrokes REC001 (SID 14).xlsx&patid=Patient_Input_Keystrokes REC001 (SID 14)&visit=followup"
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 isDarkMode
                   ? "bg-cyan-600 text-white hover:bg-cyan-500"
@@ -465,7 +468,7 @@ export default function Home() {
               Patient Follow-up
             </a>
             <a
-              href="/?fileid=quality-coded-nlp-pilot-sid-1.xlsx&doctorid=Interviewer:"
+              href="/?doctorid=Interviewer:"
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 isDarkMode
                   ? "bg-green-600 text-white hover:bg-green-500"
