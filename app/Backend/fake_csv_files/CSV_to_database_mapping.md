@@ -1,5 +1,13 @@
 # CSV → Database 매핑 상세 설명
 
+> **⚠️ 데이터 출처 변경 (2026-03-27)**
+>
+> 모든 CSV 파일은 이제 `AI_physician_patient_communication` 파이프라인 output에서 `convert_output_to_csv.py`로 생성됩니다.
+> 기존 수동 작성된 fake 데이터는 더 이상 사용하지 않습니다.
+>
+> **AI-Generated Summary (임시 구현)**: `Patient_interface_class_summary.csv`의 요약 텍스트는
+> 현재 NLP 점수 상위 3개 문장을 단순 연결한 것이며, Guillermo의 AI sub-pipeline (Step 9)으로 대체 예정입니다.
+
 ## 📊 전체 아키텍처
 
 ```
@@ -404,19 +412,19 @@ df = df.rename(columns=column_mapping)
 ```sql
 -- 1. patient_summary (환자 요약)
 SELECT * FROM patient_summary
-WHERE speaker = 'Patient_quality-coded-nlp-pilot-sid-1';
+WHERE speaker = 'Patient_Input_Keystrokes REC001 (SID 14)';
 
 -- 2. patient_summary_scoring (평가 점수)
 SELECT * FROM patient_summary_scoring
-WHERE speaker = 'Patient_quality-coded-nlp-pilot-sid-1';
+WHERE speaker = 'Patient_Input_Keystrokes REC001 (SID 14)';
 
 -- 3. patient_responses (Q&A 응답)
 SELECT * FROM patient_responses
-WHERE speaker = 'Patient_quality-coded-nlp-pilot-sid-1';
+WHERE speaker = 'Patient_Input_Keystrokes REC001 (SID 14)';
 
 -- 4. survey_submission_log (설문 제출 로그)
 SELECT * FROM survey_submission_log
-WHERE speaker = 'Patient_quality-coded-nlp-pilot-sid-1';
+WHERE speaker = 'Patient_Input_Keystrokes REC001 (SID 14)';
 ```
 
 ### 전체 데이터 JOIN 조회
@@ -439,7 +447,7 @@ SELECT
 FROM patient_summary ps
 LEFT JOIN patient_summary_scoring pss ON ps.file = pss.file AND ps.speaker = pss.speaker
 LEFT JOIN patient_responses pr ON ps.file = pr.file AND ps.speaker = pr.speaker
-WHERE ps.speaker = 'Patient_quality-coded-nlp-pilot-sid-1';
+WHERE ps.speaker = 'Patient_Input_Keystrokes REC001 (SID 14)';
 ```
 
 ### Docker에서 SQL 실행
@@ -449,10 +457,11 @@ WHERE ps.speaker = 'Patient_quality-coded-nlp-pilot-sid-1';
 docker exec -it prostatecancer-postgres psql -U prostatecancer_user -d prostatecancer_db
 
 # 또는 한 줄로 실행
-docker exec -it prostatecancer-postgres psql -U prostatecancer_user -d prostatecancer_db -c "SELECT * FROM patient_summary WHERE speaker = 'Patient_quality-coded-nlp-pilot-sid-1';"
+docker exec -it prostatecancer-postgres psql -U prostatecancer_user -d prostatecancer_db -c "SELECT * FROM patient_summary WHERE speaker = 'Patient_Input_Keystrokes REC001 (SID 14)';"
 ```
 
 ---
 
-**문서 작성일:** 2025-12-17  
+**문서 작성일:** 2025-12-17
+**최종 수정:** 2026-03-27 (파이프라인 데이터 전환 반영, SQL 예시 업데이트)
 **작성자:** Claude AI Assistant

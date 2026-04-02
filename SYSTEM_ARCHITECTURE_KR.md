@@ -1,9 +1,16 @@
 # 전립선암 상담 대시보드 — 통합 시스템 아키텍처
 
-> **버전:** 2.0
-> **날짜:** 2026-03-16
+> **버전:** 2.1
+> **날짜:** 2026-03-27 (2026-03-16에서 업데이트)
 > **범위:** AI_physician_patient_communication + Dashboard Backend + Dashboard Webapp
 > **대상:** 개발자, 연구자, 리뷰어
+>
+> **⚠️ 주요 변경 (2026-03-27)**: 모든 대시보드 데이터가 이제 `AI_physician_patient_communication` 파이프라인 output에서만 생성됨.
+> 기존 수동 작성된 fake CSV는 더 이상 사용하지 않음. 변환 스크립트: `convert_output_to_csv.py` (6개 CSV 생성).
+>
+> **⚠️ AI-Generated Summary (임시 구현)**: 환자용 AI 요약 (`patient_summary.summary_class_1~5`)은 현재
+> 각 도메인별 NLP 점수 상위 3개 문장을 단순 연결한 것임. 이는 **Guillermo의 AI sub-pipeline (Step 9: AI reformat)**으로
+> 대체 예정 — 환자 친화적 언어로 재작성된 요약을 생성할 것.
 
 ---
 
