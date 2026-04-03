@@ -134,7 +134,7 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./uploads:/app/uploads
-      # - ./Processed_Data_DB.csv:/app/Processed_Data_DB.csv
+      - ../../../AI_physician_patient_communication/data/input:/app/data/transcripts:ro
     depends_on:
       postgres:
         condition: service_healthy
