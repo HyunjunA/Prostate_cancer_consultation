@@ -142,6 +142,10 @@ services:
         condition: service_healthy
       nlp-classifiers:
         condition: service_healthy
+      consultation-scorer:
+        condition: service_healthy
+      patient-summary-rewriter:
+        condition: service_healthy
     networks: [prostatecancer-network]
     restart: unless-stopped
     healthcheck:
