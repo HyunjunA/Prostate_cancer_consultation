@@ -344,15 +344,12 @@ docker compose build webapp && docker compose up -d webapp
 2. **Backend container starts** and executes startup script:
    - ✅ Runs `prestart.sh` (automatically created by Dockerfile)
    - ✅ Executes `wait_for_db.py` to ensure database is ready
-   - ✅ Executes `init_db.py` which:
-     - Creates database tables if they don't exist
-     - Checks if data exists in the database
-     - Loads CSV data from `fake_csv_files/` if database is empty (first run only)
-     - Skips data loading if records already exist (subsequent runs)
-     - **Note (2026-03-27)**: All CSV files are now generated from `AI_physician_patient_communication` pipeline output
-       via `convert_output_to_csv.py`. Legacy manually-created fake data is no longer used.
-     - **AI summaries are temporary**: Patient summary text is currently top-3 NLP-scored sentences concatenated.
-       Will be replaced by Guillermo's AI sub-pipeline (Step 9) output.
+   - ✅ Executes `init_db.py` which creates database tables (idempotent)
+   - ✅ Executes `pipeline_runner.py` which processes real transcript files:
+     - Reads xlsx files from `/app/data/transcripts/` (mounted from `AI_physician_patient_communication/data/input/`)
+     - Runs Steps 1-7 (NLP pipeline), Step 8 (consultation-scorer → 0-5 scores), Step 9 (patient-summary-rewriter)
+     - Saves directly to DB (no CSV intermediate)
+     - Skips files already in DB
    - ✅ Starts Uvicorn server (dev mode) or Gunicorn (prod mode)
 3. **On app startup**, `main.py`:
    - Creates an async Redis client
