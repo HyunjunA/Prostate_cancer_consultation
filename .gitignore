@@ -36,3 +36,5 @@ Processed_Data_DB.csv
 
 # Archive (large, contains node_modules copies)
 archive/
+!docs/archive/
+!dev_docs/archive/

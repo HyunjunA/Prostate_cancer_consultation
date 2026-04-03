@@ -30,7 +30,7 @@ API_BASE="http://localhost:8000"
 API_KEY="$(docker exec "$BACKEND_CONTAINER" printenv API_KEY 2>/dev/null || echo "default-dev-key")"
 
 # Default test file (override with first non-flag argument)
-DEFAULT_TEST_FILE="$SCRIPT_DIR/../../data/From_Luu_Michael/Data_processing_script_for_NLP_input/processed_transcripts_sid-01.xlsx"
+DEFAULT_TEST_FILE="$SCRIPT_DIR/../../../prostate_cancer_R01_NLP_classifiers_Michael/Data_processing_script_for_NLP_input/processed_transcripts_sid-01.xlsx"
 
 # ── Colors ───────────────────────────────────────────────────────────────────
 RED='\033[0;31m'
