@@ -113,14 +113,14 @@ async def save_all(
 
             await session.commit()
             logger.info(
-                "  ✅ Saved: %d doctor sentences, %d predictions, 1 patient summary",
+                "  [OK] Saved: %d doctor sentences, %d predictions, 1 patient summary",
                 len(scorer_keys), sum(len(df) for df in final_results.values()),
             )
             return True
 
         except Exception as e:
             await session.rollback()
-            logger.error("  ❌ DB save failed: %s", e)
+            logger.error("  [ERROR] DB save failed: %s", e)
             return False
 
 

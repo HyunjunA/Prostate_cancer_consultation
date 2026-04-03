@@ -90,7 +90,7 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
   subtitle = "Quality of Risk Communication",
   highlightedQuote,
   sentences = [],
-  highlightPosition = 3,
+  highlightPosition = null,
   leftLabel = "Cancer\nPrognosis",
   maxSentenceChars = 120,
   isDarkMode = false,
@@ -118,7 +118,9 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
     { value: 5, label: "Patient-\ncentered\nEstimate" },
   ];
 
-  const pct = (highlightPosition / 5) * 100;
+  const pct = highlightPosition !== null && highlightPosition !== undefined
+    ? (highlightPosition / 5) * 100
+    : null;
 
   // Get the selected sentence for highlighting in full context
   const selectedSentence = useMemo(() => {
@@ -313,8 +315,8 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
           <div className={`mx-auto mb-4 max-w-2xl w-full ${bubbleBg} ${bubbleText} rounded-xl shadow-lg border ${bubbleBorder}`}>
             {displaySentences.length > 0 ? (
               <div className="p-3 text-sm leading-relaxed flex gap-3">
-                {/* Left: Score badge */}
-                {displaySentences[selectedIdx] && (
+                {/* Left: Score badge — always show (displaySentences has 1 item) */}
+                {displaySentences[0] && (
                   <div className={`flex-shrink-0 pr-3 border-r flex flex-col items-center gap-1.5 ${isDarkMode ? "border-slate-600" : "border-gray-300"}`}>
                     <button
                       onClick={() => {
@@ -368,13 +370,15 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
 
           {/* Score arrow indicator — points down to exact position on scale bar */}
           <div className="consultation-scoring-scale relative h-12 mb-1">
-            <div
-              className="absolute flex flex-col items-center -translate-x-1/2"
-              style={{ left: `${pct}%` }}
-            >
-              <div className="w-0.5 h-3 bg-blue-600" />
-              <div className="text-blue-600 text-lg leading-none">▼</div>
-            </div>
+            {pct !== null && (
+              <div
+                className="absolute flex flex-col items-center -translate-x-1/2"
+                style={{ left: `${pct}%` }}
+              >
+                <div className="w-0.5 h-3 bg-blue-600" />
+                <div className="text-blue-600 text-lg leading-none">▼</div>
+              </div>
+            )}
           </div>
 
           {/* Scale bar */}

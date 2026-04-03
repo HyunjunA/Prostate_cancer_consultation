@@ -48,7 +48,7 @@ async def process_single_file(
 
     # Skip if already processed
     if await persistence.file_already_processed(Session, filename):
-        logger.info("⏭️  Skipping %s — already in DB", filename)
+        logger.info("[SKIP] Skipping %s — already in DB", filename)
         return None
 
     file_bytes = Path(filepath).read_bytes()

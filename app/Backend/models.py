@@ -201,9 +201,9 @@ class UserInteractionLog(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(String(100), nullable=False, index=True)
-    role = Column(String(20), nullable=False, server_default="patient", index=True)
-    file = Column(String(255), nullable=False, index=True)
-    speaker = Column(String(100), nullable=False, index=True)
+    role = Column(String(20), nullable=False, server_default="patient")  # low cardinality, no index
+    file = Column(String(255), nullable=False)  # covered by composite idx_uil_file_event_type
+    speaker = Column(String(100), nullable=False)  # rarely queried alone
     event_type = Column(String(50), nullable=False, index=True)
     element_id = Column(String(255))
     event_data = Column(JSONB)

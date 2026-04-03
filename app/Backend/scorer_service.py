@@ -5,15 +5,15 @@ Sends sentences to the consultation-scorer container and receives
 """
 
 import logging
-import os
 from typing import Dict, List
 
 import httpx
+import config
 
 logger = logging.getLogger(__name__)
 
-SCORER_API_URL = os.getenv("SCORER_API_URL", "http://consultation-scorer:8001")
-SCORER_TIMEOUT = int(os.getenv("SCORER_TIMEOUT", "30"))
+SCORER_API_URL = config.get("scoring.scorer_url", "http://consultation-scorer:8001")
+SCORER_TIMEOUT = int(config.get("scoring.scorer_timeout", 30))
 
 
 async def score_sentence(text: str, domain: str = "") -> int:
