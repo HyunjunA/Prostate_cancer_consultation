@@ -683,7 +683,7 @@ curl -X GET "http://localhost:8000/api/transcript/download-batch?patient_ids=sid
 | `i2` | Sentence number within utterance |
 | `speaker` | Always "Interviewer" |
 | `text` | Sentence text (lowercase) |
-| `.pred_1` | Model prediction score (0~1) |
+| `.pred_1` | Model prediction probability (0.0~1.0) |
 | `context` | ±3 surrounding sentences with `<main>` tag on target |
 
 ### 5 NLP Models

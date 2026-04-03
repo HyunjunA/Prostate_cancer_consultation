@@ -487,7 +487,7 @@ Retry backoff: 2^attempt seconds (1s → 2s)
   │ speaker   │ VARCHAR    │ Speaker label                │
   │ class_    │ VARCHAR    │ Domain (1-5, -1=none)        │
   │ sentence  │ TEXT       │ Lowercased sentence text     │
-  │ score     │ FLOAT      │ NLP prediction (0.0-1.0)     │
+  │ score     │ FLOAT      │ Quality score (0-5)          │
   │ context   │ TEXT       │ ±3 context (<main> tags)     │
   │ time      │ TIMESTAMP  │ Record timestamp             │
   └───────────┴────────────┴──────────────────────────────┘
