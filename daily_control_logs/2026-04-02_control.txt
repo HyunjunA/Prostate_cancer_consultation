@@ -1,0 +1,228 @@
+Prostate Cancer Consultation Dashboard - Work Log
+=======================================================
+
+April 2, 2026 (Wednesday)
+
+Context: Comprehensive Backend DB optimization, ML pipeline integration,
+Webapp optimization, and full pipeline restructuring (fake CSV elimination).
+29 commits pushed to origin/main.
+
+---
+
+## Part 1: Backend DB Optimization (17 items)
+
+### Commit acf9aa7 — DB Core Fixes (#1-6)
+1. DDL-ORM column name alignment
+   - database_schema.sql: sentences→sentence, original_sentences→original_sentence,
+     revised_sentences→revised_sentence (3 columns)
+   - TIMESTAMP → TIMESTAMP WITH TIME ZONE (doctor tables, 2 columns)
+2. History endpoint BYTEA optimization
+   - SELECT * → explicit 7 columns + IS NOT NULL check
+   - Prevents loading multi-MB xlsx_data binary for has_xlsx boolean
+3. Batch endpoint transaction isolation
+   - analyze-batch: shared db session → independent AsyncSessionLocal per file
+4. Missing indexes (5 added)
+   - (patient_id, analyzed_at DESC), (analysis_id, model), (client_timestamp),
+     (file, event_type), auth_user(username)
+5. Index deep optimization (7 added, 3 removed)
+   - Added: partial (scores/average, download), expression (analytics timeline,
+     hourly heatmap), covering (history), composite (survey)
+   - Removed: 3 redundant indexes (PK overlap, composite overlap)
+6. TEXT → JSONB conversion (4 columns)
+   - model_results, answers, extra_data, event_data
+   - Removed json.dumps (4) + json.loads (7) across 3 route files
+
+### Commit b64e51a — Query/Security/API (#7-14)
+7. Analytics 6 queries parallelized (asyncio.gather + independent sessions)
+8. Download-batch: N queries → single DISTINCT ON query
+9. Predictions top_n: Python slice → DB ROW_NUMBER window function
+10. Error message hardening (removed str(e) from HTTPException)
+11. Tracking rate limiting (30 req/min on POST /api/tracking/events)
+12. PatientScoringUpdate: Optional[float] → Optional[int]
+13. Deprecated on_event → lifespan context manager
+14. routes_tracking conditional expression clarity
+
+### Commit ff5cf97 — Cleanup + Infrastructure (#15-17)
+15. Legacy commented code removal (-2,002 lines across 4 files)
+    - main.py: -1,247 lines, routes_surveys.py: -380, init_db.py: -201, models.py: -174
+16. Alembic migration framework setup
+    - alembic.ini, env.py rewritten, 001_baseline.py, Dockerfile prestart activated
+17. model_results dual storage deprecation (set to None, sentence_prediction is source of truth)
+
+---
+
+## Part 2: Additional Backend Optimization
+
+### Commit d617b89 — Dependencies + Router Separation
+- requirements.txt: 77→28 lines (duplicates removed, versions pinned, unused removed)
+- requirements-dev.txt: test dependencies separated
+- main.py: 2,174→143 lines (-93%) via router extraction
+  - routes_doctor.py (1,421 lines, 15 endpoints)
+  - routes_patient.py (636 lines, 8+ endpoints)
+
+### Commit 54b0b52 — Docker/API Optimization
+- Response format unified: events/items/submissions → "data" key
+- Docker multi-stage build: 522MB → 428MB (-18%)
+- Pagination safety: /api/doctor/files, /api/patient/files with limit param
+- .dockerignore created for Backend
+- Container resource limits: backend 1G/2CPU, postgres 512M/1CPU, redis 256M/0.5CPU
+
+---
+
+## Part 3: ML Model Pipeline
+
+### Commit e1fbe2e — NLP Prediction Parallelization
+- transcript_service.py: sequential 5-model loop → asyncio.gather (~5x speedup)
+- Verified: 15/15 predictions identical (diff=0.00000000)
+
+---
+
+## Part 4: Webapp Optimization
+
+### Commit c210e0b — Dependency Cleanup
+- Removed 17 unused npm packages (~210MB): plotly.js, maplibre, mapbox,
+  timelinejs, posthog-js, openai, chart.js, react-dnd, react-grid-layout, etc.
+- @types moved to devDependencies
+- .dockerignore cleaned (removed duplicates, added test/doc exclusions)
+- Build warnings fixed (4→0): surveysSecondVersion/index.tsx exports corrected
+- Docker image: 1.25GB → 860MB (-31%)
+
+---
+
+## Part 5: Documentation
+
+### Commits 0a74943, 538aa0d, c24fdcd, d87ebc8, 9d2d3f5
+- dev_docs/backend_dev_docs/2026-04-02_DB_ISSUES_ANALYSIS.md (17 items + detailed changes)
+- dev_docs/backend_dev_docs/2026-04-02_ML_MODEL_DEPLOYMENT_OPTIMIZATION.md (8 items)
+- dev_docs/webapp_dev_docs/2026-04-02_WEBAPP_OPTIMIZATION_ANALYSIS.md (10 items)
+- dev_docs/backend_dev_docs/DATABASE_SCHEMA_GUIDE.md (moved into repo + updated)
+- dev_docs/backend_dev_docs/DATABASE_SCHEMA_GUIDE_KR.md (Korean version)
+- dev_docs/2026-04-02_PROJECT_STRUCTURE_ANALYSIS.md (full project structure)
+
+### Commits e0a9420, bd8df7e — Score Description Fixes
+- doctor_sentence_view.score: "NLP prediction (0.0-1.0)" → "Quality score (0-5)"
+- .pred_1 references: "score" → "probability" across all docs
+
+---
+
+## Part 6: Schema Cleanup
+
+### Commits fcc3489, 69752e7 — Redundant Column Removal
+- doctor_rewrite_log.original_score removed (redundant with FK JOIN to doctor_sentence_view)
+  - 11 files updated: DDL, ORM, routes, tests, CSV generator, 5 doc files
+- doctor_rewrite_log.selected removed (unnecessary boolean)
+  - 14 files updated: DDL, ORM, routes, tests, frontend types/UI, 5 doc files
+
+### Commit 2f6e87a — Unused Script Removal
+- generate_real_scores.py deleted (was incorrectly writing .pred_1 as score)
+
+---
+
+## Part 7: Step 8/9 Placeholder Services (Guillermo)
+
+### Commits 4f37548, 5eb5255 — New Docker Services
+- consultation-scorer (Step 8): POST /score → 0-5 integer quality score
+  - prostatecancer-scorer container, port 8001, 188MB image
+  - Deterministic pseudo-random (hash-based, same input = same score)
+- patient-summary-rewriter (Step 9): POST /rewrite → summary text
+  - prostatecancer-rewriter container, port 8002
+  - Pass-through placeholder (joins input sentences as-is)
+
+### Commit 42810b1 — DB Integration
+- scorer_service.py + rewriter_service.py: async httpx clients
+- init_db.py post-seed: calls scorer (0-5 scores) + rewriter (summaries)
+
+---
+
+## Part 8: Full Pipeline (No Fake CSV)
+
+### Commit 6b24d6c — pipeline_runner.py
+- New: processes real transcript xlsx files through complete pipeline
+  - Steps 1-3: read, filter doctor (dynamic), split sentences
+  - Step 4: NLP 5 models parallel (asyncio.gather)
+  - Steps 5-7: top-N selection, context generation, xlsx export
+  - Step 8: consultation-scorer → 0-5 quality scores
+  - Step 9: patient-summary-rewriter → domain summaries
+  - Step 10: direct DB INSERT (no CSV intermediate)
+- init_db.py rewritten: table creation only (-600 lines)
+- Dockerfile prestart: init_db → alembic → pipeline_runner
+- docker-compose: mounts AI_physician_patient_communication/data/input as transcripts
+
+### Commit d23dcae — Fake CSV Elimination
+- fake_csv_files/ directory entirely deleted (-958 lines)
+  - 8 CSV files, 5 Python generators, 2 mapping docs removed
+
+---
+
+## Part 9: Dynamic Doctor Speaker Identification
+
+### Commit fed885a — Ivan's Rule
+- Replaced hardcoded PHYSICIAN_IDS list with dynamic identification
+- Ivan's rule: "group by speaker, sum text length, the bigger is the doctor"
+- Now handles all formats: Keystrokes (Interviewer:), processed (Interviewer),
+  TurboScribe (Speaker 1/Speaker 2)
+- Result: all 6 transcript files processed (including previously-failing TurboScribe)
+
+### Commits 1b769ab, db0d409, 0fac8e4, 65102c9 — Frontend Dynamic Speaker
+- /api/doctor/files returns file_details with speaker per file
+- Doctor Demo: file-specific speaker lookup via fileSpeakerMap
+- doctorid=auto: auto-detect speaker from first file
+- Each patient selection uses that file's actual speaker
+
+---
+
+## Part 10: Frontend CLASS_TO_TOPIC Mapping
+
+### Commits b3e8c10, e5c62a8 — Domain Name Keys
+- Pipeline stores full domain names (cancer_prognosis, continence, etc.)
+  but frontend CLASS_TO_TOPIC only had numeric keys ("1"-"5")
+- Added full domain name mappings to:
+  - PatientInitialVisitReportV35.tsx (CLASS_TO_TOPIC_MAP)
+  - PatientFollowUpReportV31Re.tsx (CLASS_TO_TOPIC_MAP)
+  - PhysicianReportsModifiedV41Timothy.tsx (CLASS_TO_TOPIC + TOPIC_TO_CLASS)
+
+---
+
+## Summary Statistics
+
+| Metric | Before | After | Change |
+|--------|--------|-------|--------|
+| Backend main.py | 3,421 lines | 143 lines | -96% |
+| Backend total commented code | ~2,000 lines | 0 | removed |
+| Backend Docker image | 522MB | 428MB | -18% |
+| Webapp Docker image | 1.25GB | 860MB | -31% |
+| DB indexes | basic only | +12 optimized | partial, expression, covering |
+| Redundant indexes | 3 | 0 | removed |
+| TEXT→JSONB | 4 columns | done | data integrity |
+| json.dumps/loads | 11 calls | 0 | code simplification |
+| NLP prediction | sequential (5×) | parallel (asyncio.gather) | ~5x speed |
+| npm unused packages | 17 (~210MB) | removed | bundle reduction |
+| Build warnings | 4 | 0 | clean build |
+| Fake CSV files | 15 files | 0 | eliminated |
+| Pipeline | CSV intermediate | direct DB | real data only |
+| Doctor identification | hardcoded IDs | dynamic (text length) | all formats |
+| Docker services | 8 | 10 | +scorer, +rewriter |
+| Transcript files processed | 1 (sid-01 only) | 6 (all files) | 6× |
+| Total commits | | 29 | |
+
+## Files Created
+- dev_docs/backend_dev_docs/2026-04-02_DB_ISSUES_ANALYSIS.md
+- dev_docs/backend_dev_docs/2026-04-02_ML_MODEL_DEPLOYMENT_OPTIMIZATION.md
+- dev_docs/webapp_dev_docs/2026-04-02_WEBAPP_OPTIMIZATION_ANALYSIS.md
+- dev_docs/backend_dev_docs/DATABASE_SCHEMA_GUIDE.md
+- dev_docs/backend_dev_docs/DATABASE_SCHEMA_GUIDE_KR.md
+- dev_docs/2026-04-02_PROJECT_STRUCTURE_ANALYSIS.md
+- app/Backend/pipeline_runner.py
+- app/Backend/scorer_service.py
+- app/Backend/rewriter_service.py
+- app/Backend/routes_doctor.py
+- app/Backend/routes_patient.py
+- app/Backend/requirements-dev.txt
+- app/Backend/.dockerignore
+- prostate_cancer_R01_Guille/consultation-scorer/ (main.py, Dockerfile, requirements.txt)
+- prostate_cancer_R01_Guille/patient-summary-rewriter/ (main.py, Dockerfile, requirements.txt)
+
+## Remaining Work
+- ML model deployment: NLP replicas, connection pool, retry jitter, adaptive timeout, cache
+- Webapp: Docker standalone (~250MB), dynamic imports, legacy component cleanup
+- TurboScribe: Speaker 1/2 auto-identification working, but no manual speaker label
