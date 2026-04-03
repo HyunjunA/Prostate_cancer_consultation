@@ -3463,7 +3463,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
         session.sessionId,
         "physician",
         file,
-        selectedSpeaker || "Interviewer:",
+        selectedSpeaker || "unknown",
         session.deviceType,
         events,
         true,
@@ -3539,20 +3539,24 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [fileId]);
 
   useEffect(() => {
-    if (doctorId) setSelectedSpeaker(doctorId);
+    if (doctorId && doctorId !== "auto") setSelectedSpeaker(doctorId);
   }, [doctorId]);
 
   useEffect(() => {
-    fetchFiles();
-    fetchTrajectory("Interviewer:");
+    const init = async () => {
+      const result = await fetchFiles();
+      // Set default speaker from first file's actual speaker (dynamic identification)
+      if (result?.file_details?.length > 0 && !doctorId) {
+        const defaultSpeaker = result.file_details[0].speaker;
+        setSelectedSpeaker(defaultSpeaker);
+        fetchTrajectory(defaultSpeaker);
+      } else if (doctorId) {
+        fetchTrajectory(doctorId);
+      }
+    };
+    init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    if (!selectedSpeaker && !doctorId) {
-      setSelectedSpeaker("Interviewer:");
-    }
-  }, [selectedSpeaker, doctorId]);
 
   // ═══════════════════════════════════════════════════════════
   // Re-fetch scores when returning to dashboard

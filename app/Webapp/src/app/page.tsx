@@ -468,7 +468,7 @@ export default function Home() {
               Patient Follow-up
             </a>
             <a
-              href="/?doctorid=Interviewer:"
+              href="/?doctorid=auto"
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 isDarkMode
                   ? "bg-green-600 text-white hover:bg-green-500"

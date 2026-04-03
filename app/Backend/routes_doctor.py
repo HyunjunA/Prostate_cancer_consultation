@@ -379,11 +379,35 @@ async def get_doctor_files(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user)
 ):
-    """Get list of unique files in doctor interface"""
-    stmt = select(DoctorSentenceView.file).distinct().order_by(DoctorSentenceView.file).limit(limit)
-    files_raw = (await db.execute(stmt)).scalars().all()
-    files = [f for f in files_raw if f is not None]
-    return {"files": files}
+    """Get list of unique files with their doctor speaker label."""
+    stmt = (
+        select(
+            DoctorSentenceView.file,
+            DoctorSentenceView.speaker,
+            func.count().label("sentence_count"),
+        )
+        .group_by(DoctorSentenceView.file, DoctorSentenceView.speaker)
+        .order_by(DoctorSentenceView.file)
+        .limit(limit)
+    )
+    rows = (await db.execute(stmt)).all()
+
+    # Build file list — pick the speaker with most sentences per file
+    file_map: dict = {}
+    for row in rows:
+        if row.file is None:
+            continue
+        if row.file not in file_map or row.sentence_count > file_map[row.file]["count"]:
+            file_map[row.file] = {"speaker": row.speaker, "count": row.sentence_count}
+
+    # Return both formats: "files" (legacy list) + "file_details" (with speaker)
+    files = list(file_map.keys())
+    file_details = [
+        {"file": f, "speaker": info["speaker"], "sentence_count": info["count"]}
+        for f, info in file_map.items()
+    ]
+
+    return {"files": files, "file_details": file_details}
 
 
 
