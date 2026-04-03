@@ -311,7 +311,7 @@ async def migrate_doctor_rewriting_history(csv_file_path: str, Session: async_se
         print(f"        revised_sentence: {row.get('revised_sentence')}")
         print(f"        score: {row.get('score')}")
         print(f"        class: {row.get('class')}")
-        print(f"        selected: {row.get('selected')}")
+        print(f"        class: {row.get('class')}")
         print()
     
     created_count = 0
@@ -334,8 +334,7 @@ async def migrate_doctor_rewriting_history(csv_file_path: str, Session: async_se
                     original_sentence=normalize_string(row.get('original_sentence')),
                     revised_sentence=normalize_string(row.get('revised_sentence')),
                     score=normalize_float(row.get('score')),
-                    class_=normalize_string(row.get('class')),
-                    selected=normalize_bool(row.get('selected'))
+                    class_=normalize_string(row.get('class'))
                 )
                 session.add(record)
                 await session.commit()

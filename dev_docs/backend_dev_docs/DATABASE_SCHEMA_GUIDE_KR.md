@@ -124,7 +124,6 @@ erDiagram
 | `revised_sentence` | TEXT | | 의사가 재작성한 문장. |
 | `score` | FLOAT | | 재작성된 문장의 NLP 점수. **현재 5로 하드코딩** (임시 — 실제 NLP 재채점으로 교체 예정). |
 | `class` | VARCHAR(100) | | 도메인 이름 (예: `cancer_prognosis`). 도메인별 재작성 필터링용. |
-| `selected` | BOOLEAN | | 이 재작성이 의사가 선호하는 버전으로 지정되었는지. 기본값 `FALSE`. |
 
 ### 외래 키
 

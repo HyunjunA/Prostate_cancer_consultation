@@ -51,7 +51,6 @@ class DoctorRewriteLog(Base):
     revised_sentence = Column(Text)
     score = Column(Float)
     class_ = Column('class', String(100))
-    selected = Column(Boolean, default=False)
 
     def __repr__(self):
         return f"<DoctorRewriteLog(file={self.file}, i={self.i}, i2={self.i2}, time={self.time})>"

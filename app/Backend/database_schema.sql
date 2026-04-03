@@ -32,7 +32,6 @@ CREATE TABLE doctor_rewrite_log (
     revised_sentence TEXT,
     score FLOAT,
     class VARCHAR(100),
-    selected BOOLEAN DEFAULT FALSE,
     PRIMARY KEY (file, i, i2, time),
     CONSTRAINT fk_rewrite_to_sentence
         FOREIGN KEY (file, i, i2)

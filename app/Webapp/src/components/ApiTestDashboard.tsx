@@ -95,7 +95,6 @@ export default function APITestDashboard() {
     revised_sentence: "",
     score: "3",
     class_: "1",
-    selected: true,
   });
 
   // ✅ Selected sentence index
@@ -362,7 +361,6 @@ export default function APITestDashboard() {
       revised_sentence: rewriteInputs.revised_sentence,
       score: parseFloat(rewriteInputs.score),
       class_: rewriteInputs.class_,
-      selected: rewriteInputs.selected,
     };
 
     const result = await saveRewrite(data);
@@ -391,8 +389,7 @@ export default function APITestDashboard() {
       rewriteInputs.original_sentence,
       rewriteInputs.revised_sentence,
       parseFloat(rewriteInputs.score),
-      rewriteInputs.class_,
-      rewriteInputs.selected
+      rewriteInputs.class_
     );
 
     logResult(
@@ -848,22 +845,6 @@ export default function APITestDashboard() {
             />
           </div>
 
-          <div style={{ marginBottom: "15px" }}>
-            <label style={{ fontSize: "12px", fontWeight: "bold" }}>
-              <input
-                type="checkbox"
-                checked={rewriteInputs.selected}
-                onChange={(e) =>
-                  setRewriteInputs((prev) => ({
-                    ...prev,
-                    selected: e.target.checked,
-                  }))
-                }
-                style={{ marginRight: "8px" }}
-              />
-              Selected (Active)
-            </label>
-          </div>
 
           <div style={{ display: "flex", gap: "10px" }}>
             <button

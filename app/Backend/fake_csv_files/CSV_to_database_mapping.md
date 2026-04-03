@@ -81,7 +81,7 @@
 │  CSV: docter_interface_ai_rewriting_history.csv                              │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  file,i,i2,speaker,time,original_sentence,                                   │
-│  revised_sentence,score,class,selected                                       │
+│  revised_sentence,score,class                                                │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
@@ -98,7 +98,6 @@
 │      revised_sentence TEXT,                                                   │
 │      score FLOAT,                                                            │
 │      class VARCHAR(100),                                                     │
-│      selected BOOLEAN DEFAULT FALSE,                                         │
 │      PRIMARY KEY (file, i, i2, time),   -- 복합 기본키 (time 포함)           │
 │      CONSTRAINT fk_rewrite_to_sentence                                       │
 │          FOREIGN KEY (file, i, i2)                                           │

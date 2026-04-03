@@ -124,7 +124,6 @@ Physicians can practice improving low-scoring sentences by rewriting them and ge
 | `revised_sentence` | TEXT | | The physician's rewritten version of the sentence. |
 | `score` | FLOAT | | The NLP score of the rewritten sentence. **Currently hardcoded to 5** (temporary — will be replaced with actual NLP re-scoring). |
 | `class` | VARCHAR(100) | | Domain name (e.g., `cancer_prognosis`). Stored for filtering rewrites by domain. |
-| `selected` | BOOLEAN | | Whether this rewrite was marked as the physician's preferred version. Default `FALSE`. |
 
 ### Foreign Key
 
