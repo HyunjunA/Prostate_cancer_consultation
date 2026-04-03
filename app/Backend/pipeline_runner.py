@@ -144,6 +144,11 @@ async def process_single_file(filepath: str, Session) -> Optional[Dict[str, Any]
             if key not in sentence_domain_map or pred > sentence_domain_map[key][1]:
                 sentence_domain_map[key] = (outcome, pred)
 
+    # Determine speaker identifiers (needed for Steps 8-10)
+    file_id = filename
+    doctor_speaker = df_filtered["speaker"].iloc[0] if len(df_filtered) > 0 else "Unknown"
+    patient_speaker = f"Patient_{Path(filename).stem}"
+
     # Score via consultation-scorer
     scorer_input = []
     scorer_keys = []
@@ -176,12 +181,6 @@ async def process_single_file(filepath: str, Session) -> Optional[Dict[str, Any]
 
     # ── Step 10: Save everything to DB ───────────────────────────────────
     logger.info("  Step 10: Saving to database...")
-
-    # Determine file identifier and speaker
-    file_id = filename
-    # Use the dynamically identified doctor speaker from Step 2
-    doctor_speaker = df_filtered["speaker"].iloc[0] if len(df_filtered) > 0 else "Unknown"
-    patient_speaker = f"Patient_{Path(filename).stem}"
 
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
