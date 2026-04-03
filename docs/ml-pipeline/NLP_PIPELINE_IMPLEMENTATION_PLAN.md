@@ -318,7 +318,7 @@ def main() -> None:
 
 | Dataset | Input | Reference Output |
 |---|---|---|
-| sid-01 (Keystroke) | `data/From_Luu_Michael/Data_processing_script_for_NLP_input/processed_transcripts_sid-01.xlsx` | `prostate_cancer_R01_NLP_classifiers_Michael/prediction_pipeline_and_results/original-study-physician-predictions-top-context.xlsx` |
+| sid-01 (Keystroke) | `prostate_cancer_R01_NLP_classifiers_Michael/Data_processing_script_for_NLP_input/processed_transcripts_sid-01.xlsx` | `prostate_cancer_R01_NLP_classifiers_Michael/prediction_pipeline_and_results/original-study-physician-predictions-top-context.xlsx` |
 | SID14 (Keystroke) | `prostate_cancer_R01_Guille/Input_Keystrokes REC001 (SID 14).xlsx` | `prostate_cancer_R01_Guille/Output_Keystrokes nlp-pilot-processed-results-sid14.xlsx` |
 | SID33 (TurboScribe) | `prostate_cancer_R01_Guille/Input_TurboScribe SID 33.csv` | (Doctor = Speaker 1 verification) |
 

@@ -364,15 +364,19 @@ docker compose down -v --rmi local
 
 ## Documentation
 
+**Full index:** [`docs/INDEX.md`](docs/INDEX.md)
+
 | Document | Path | Description |
 |----------|------|-------------|
-| Architecture | `dev_docs/ARCHITECTURE.md` | Full system architecture with Mermaid diagrams |
-| DB Schema Guide | `dev_docs/backend_dev_docs/DATABASE_SCHEMA_GUIDE.md` | 12 tables detailed (EN + KR) |
-| DB Optimization | `dev_docs/backend_dev_docs/2026-04-02_DB_ISSUES_ANALYSIS.md` | 17 issues identified + fixed |
-| ML Pipeline | `dev_docs/backend_dev_docs/2026-04-02_ML_MODEL_DEPLOYMENT_OPTIMIZATION.md` | NLP model deployment analysis |
-| Webapp Analysis | `dev_docs/webapp_dev_docs/2026-04-02_WEBAPP_OPTIMIZATION_ANALYSIS.md` | Frontend optimization report |
-| Project Structure | `dev_docs/2026-04-02_PROJECT_STRUCTURE_ANALYSIS.md` | Full codebase analysis |
-| System Architecture | `SYSTEM_ARCHITECTURE.md` | Integrated system overview (EN + KR) |
+| Documentation Index | `docs/INDEX.md` | Central navigation for all documentation |
+| System Architecture | `docs/architecture/SYSTEM_ARCHITECTURE.md` | Integrated system overview (EN + KR) |
+| Architecture Diagrams | `docs/architecture/ARCHITECTURE_DIAGRAMS.md` | 12 Mermaid diagrams |
+| DB Schema Guide | `docs/architecture/DATABASE_SCHEMA.md` | 12 tables detailed (EN + KR) |
+| Pipeline Guide | `docs/architecture/FULL_PIPELINE_GUIDE.md` | Steps 1-10 detailed |
+| Docker Setup | `docs/setup/DOCKER_SETUP.md` | Consolidated Docker setup guide |
+| Local Setup | `docs/setup/LOCAL_SETUP.md` | Running without Docker |
+| ML Pipeline | `docs/ml-pipeline/` | 7 pipeline documents |
+| Security Audit | `docs/security/SECURITY_AUDIT.md` | OWASP vulnerability audit |
 | Ivan's Standards | `../../IVAN_CODE_REVIEW_STANDARDS.md` | Code review principles |
 
 ---
