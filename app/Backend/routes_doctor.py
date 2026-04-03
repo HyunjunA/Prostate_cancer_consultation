@@ -17,7 +17,7 @@ from auth import get_current_user
 from auth.access_control import check_patient_access
 from auth.base import AuthUser
 from db import get_db
-from models import DoctorSentenceView, DoctorRewriteLog
+from models import DoctorSentenceView, DoctorRewriteLog, SentencePrediction, TranscriptAnalysisLog
 from nlp_service import predict_single, CLASS_TO_MODEL, NLPServiceError
 
 logger = logging.getLogger(__name__)
@@ -443,99 +443,45 @@ async def get_doctor_score_average(
     print(f"   speaker: {speaker}")
     print(f"   class: {class_}")
 
-    # ⚠️ WARNING — TEMPORARY SCORING APPROACH (NOT PRODUCTION-READY)
-    # Currently this endpoint returns the score of the LAST sentence (highest i, then i2)
-    # per file/speaker/class group. This is a simplified placeholder used during development.
-    # For production, this must be replaced with a proper scoring algorithm that aggregates
-    # across all relevant sentences (e.g., weighted average, rubric-based composite, or
-    # domain-specific scoring logic). The last-sentence score does NOT accurately represent
-    # overall communication quality for a given domain.
-    #
-    # Step 2: Get the LAST sentence score (highest i, then i2) per file/speaker/class
-    # Subquery to find the max (i, i2) per group
-    last_sentence_subq = (
-        select(
-            DoctorSentenceView.file,
-            DoctorSentenceView.speaker,
-            DoctorSentenceView.class_,
-            func.max(DoctorSentenceView.i).label('max_i')
-        )
-        .where(
-            DoctorSentenceView.class_ != '-1',
-            DoctorSentenceView.score.isnot(None)
-        )
-        .group_by(
-            DoctorSentenceView.file,
-            DoctorSentenceView.speaker,
-            DoctorSentenceView.class_
-        )
-    ).subquery('last_sent')
-
-    # Get the actual last sentence row (max i, then max i2 within that i)
-    last_i2_subq = (
-        select(
-            DoctorSentenceView.file,
-            DoctorSentenceView.speaker,
-            DoctorSentenceView.class_,
-            DoctorSentenceView.i,
-            func.max(DoctorSentenceView.i2).label('max_i2')
-        )
-        .join(
-            last_sentence_subq,
-            and_(
-                DoctorSentenceView.file == last_sentence_subq.c.file,
-                DoctorSentenceView.speaker == last_sentence_subq.c.speaker,
-                DoctorSentenceView.class_ == last_sentence_subq.c.class_,
-                DoctorSentenceView.i == last_sentence_subq.c.max_i,
-            )
-        )
-        .where(
-            DoctorSentenceView.class_ != '-1',
-            DoctorSentenceView.score.isnot(None)
-        )
-        .group_by(
-            DoctorSentenceView.file,
-            DoctorSentenceView.speaker,
-            DoctorSentenceView.class_,
-            DoctorSentenceView.i
-        )
-    ).subquery('last_i2')
-
-    # Final query: join back to get the score of the last sentence
-    stmt = select(
-        DoctorSentenceView.file,
-        DoctorSentenceView.speaker,
-        DoctorSentenceView.class_,
-        DoctorSentenceView.score.label('avg_score'),  # Named avg_score for frontend compatibility
-        DoctorSentenceView.i,
-        DoctorSentenceView.i2,
+    # For each file×model: get quality score of the sentence with highest pred_score
+    ranked = select(
+        TranscriptAnalysisLog.source_filename.label('file'),
+        SentencePrediction.speaker,
+        SentencePrediction.model.label('class_'),
+        SentencePrediction.pred_score,
+        SentencePrediction.utterance_index,
+        SentencePrediction.sentence_in_utterance,
+        func.row_number().over(
+            partition_by=[TranscriptAnalysisLog.source_filename, SentencePrediction.model],
+            order_by=SentencePrediction.pred_score.desc()
+        ).label('rn')
     ).join(
-        last_i2_subq,
+        TranscriptAnalysisLog, SentencePrediction.analysis_id == TranscriptAnalysisLog.id
+    ).subquery()
+
+    stmt = select(
+        ranked.c.file,
+        ranked.c.speaker,
+        ranked.c.class_,
+        DoctorSentenceView.score.label('avg_score'),  # named avg_score for frontend compat
+    ).join(
+        DoctorSentenceView,
         and_(
-            DoctorSentenceView.file == last_i2_subq.c.file,
-            DoctorSentenceView.speaker == last_i2_subq.c.speaker,
-            DoctorSentenceView.class_ == last_i2_subq.c.class_,
-            DoctorSentenceView.i == last_i2_subq.c.i,
-            DoctorSentenceView.i2 == last_i2_subq.c.max_i2,
+            DoctorSentenceView.file == ranked.c.file,
+            DoctorSentenceView.i == ranked.c.utterance_index,
+            DoctorSentenceView.i2 == ranked.c.sentence_in_utterance,
         )
-    ).where(
-        DoctorSentenceView.class_ != '-1',
-        DoctorSentenceView.score.isnot(None)
-    )
+    ).where(ranked.c.rn == 1)
 
     # Apply filters
     if file:
-        stmt = stmt.where(DoctorSentenceView.file == file)
+        stmt = stmt.where(ranked.c.file == file)
     if speaker:
-        stmt = stmt.where(DoctorSentenceView.speaker == speaker)
+        stmt = stmt.where(ranked.c.speaker == speaker)
     if class_:
-        stmt = stmt.where(DoctorSentenceView.class_ == class_)
+        stmt = stmt.where(ranked.c.class_ == class_)
 
-    stmt = stmt.order_by(
-        DoctorSentenceView.file,
-        DoctorSentenceView.speaker,
-        DoctorSentenceView.class_
-    )
+    stmt = stmt.order_by(ranked.c.file, ranked.c.class_)
 
     results = (await db.execute(stmt)).all()
 
@@ -554,12 +500,12 @@ async def get_doctor_score_average(
                 "file": r.file,
                 "speaker": r.speaker,
                 "class": r.class_,
-                "avg_score": round(r.avg_score, 2) if r.avg_score else None,
+                "avg_score": int(r.avg_score) if r.avg_score is not None else None,
                 "count": 1,
                 "rewritten_count": 0,
                 "original_count": 1,
-                "min_score": r.avg_score,
-                "max_score": r.avg_score
+                "min_score": int(r.avg_score) if r.avg_score is not None else None,
+                "max_score": int(r.avg_score) if r.avg_score is not None else None,
             }
             for r in results
         ]
@@ -567,86 +513,99 @@ async def get_doctor_score_average(
 
 
 @router.get("/scores/summary/{file}/{speaker}")
+@router.get("/scores/summary/{file}")
 async def get_doctor_score_summary_by_file_speaker(
     file: str,
-    speaker: str,
+    speaker: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user)
 ):
     """
-    Get score summary for specific file and speaker (all classes)
+    Get score summary for specific patient (all classes).
 
-    Uses ONLY original NLP scores from doctor_sentence_view.
-    Rewrite scores (doctor_rewrite_log) are NOT used here — rewrites are
-    purely a training/practice tool and do not affect score analysis.
-
-    Returns:
-    - Average, count, min/max for each class
-    - Overall average across all classes
+    For each domain: returns the quality score (0-5) of the sentence with
+    the highest NLP pred_score (most relevant sentence per domain).
     """
     print("=" * 80)
     print("DEBUG [get_doctor_score_summary] - Input Parameters:")
     print(f"   file: {file}")
     print(f"   speaker: {speaker}")
 
-    # Statistics by class — original NLP scores only
-    class_stats_stmt = select(
-        DoctorSentenceView.class_,
-        func.avg(DoctorSentenceView.score).label('avg_score'),
-        func.count(DoctorSentenceView.score).label('count'),
-        func.min(DoctorSentenceView.score).label('min_score'),
-        func.max(DoctorSentenceView.score).label('max_score'),
+    if not speaker:
+        sp_stmt = select(DoctorSentenceView.speaker).where(
+            DoctorSentenceView.file == file
+        ).distinct().limit(1)
+        speaker = (await db.execute(sp_stmt)).scalar_one_or_none() or ""
+
+    # Find analysis_id for this file
+    analysis_stmt = select(TranscriptAnalysisLog.id).where(
+        TranscriptAnalysisLog.source_filename == file
+    ).order_by(TranscriptAnalysisLog.analyzed_at.desc()).limit(1)
+    analysis_id = (await db.execute(analysis_stmt)).scalar_one_or_none()
+
+    if not analysis_id:
+        return {"file": file, "speaker": speaker, "overall": {"score": None, "count": 0}, "by_class": []}
+
+    # For each model: rank by pred_score DESC, pick top-1, join to doctor_sentence_view for quality score
+    ranked = select(
+        SentencePrediction.model,
+        SentencePrediction.pred_score,
+        SentencePrediction.utterance_index,
+        SentencePrediction.sentence_in_utterance,
+        func.row_number().over(
+            partition_by=SentencePrediction.model,
+            order_by=SentencePrediction.pred_score.desc()
+        ).label('rn')
     ).where(
-        DoctorSentenceView.file == file,
-        DoctorSentenceView.speaker == speaker,
-        DoctorSentenceView.class_ != '-1',
-        DoctorSentenceView.score.isnot(None)
-    ).group_by(
-        DoctorSentenceView.class_
-    ).order_by(
-        DoctorSentenceView.class_
-    )
+        SentencePrediction.analysis_id == analysis_id,
+    ).subquery()
 
-    class_results = (await db.execute(class_stats_stmt)).all()
+    top_stmt = select(
+        ranked.c.model,
+        ranked.c.pred_score,
+        ranked.c.utterance_index,
+        ranked.c.sentence_in_utterance,
+        DoctorSentenceView.score,
+        DoctorSentenceView.sentence,
+    ).join(
+        DoctorSentenceView,
+        and_(
+            DoctorSentenceView.file == file,
+            DoctorSentenceView.i == ranked.c.utterance_index,
+            DoctorSentenceView.i2 == ranked.c.sentence_in_utterance,
+        )
+    ).where(ranked.c.rn == 1).order_by(ranked.c.model)
 
-    # Overall statistics — original NLP scores only
-    overall_stmt = select(
-        func.avg(DoctorSentenceView.score).label('avg_score'),
-        func.count(DoctorSentenceView.score).label('count'),
-        func.min(DoctorSentenceView.score).label('min_score'),
-        func.max(DoctorSentenceView.score).label('max_score'),
-    ).where(
-        DoctorSentenceView.file == file,
-        DoctorSentenceView.speaker == speaker,
-        DoctorSentenceView.class_ != '-1',
-        DoctorSentenceView.score.isnot(None)
-    )
+    top_results = (await db.execute(top_stmt)).all()
 
-    overall = (await db.execute(overall_stmt)).one()
+    by_class = []
+    scores_list = []
+    for r in top_results:
+        score_val = int(r.score) if r.score is not None else None
+        by_class.append({
+            "class": r.model,
+            "score": score_val,
+            "pred_score": round(float(r.pred_score), 4),
+            "sentence": r.sentence,
+            "i": r.utterance_index,
+            "i2": r.sentence_in_utterance,
+        })
+        if score_val is not None:
+            scores_list.append(score_val)
 
-    print(f"   Found {len(class_results)} classes")
-    print(f"   Total sentences: {overall.count}")
+    overall_score = round(sum(scores_list) / len(scores_list), 2) if scores_list else None
+
+    print(f"   Found {len(by_class)} classes, overall={overall_score}")
     print("=" * 80)
 
     return {
         "file": file,
         "speaker": speaker,
         "overall": {
-            "avg_score": round(overall.avg_score, 2) if overall.avg_score else None,
-            "count": overall.count,
-            "min_score": overall.min_score,
-            "max_score": overall.max_score
+            "score": overall_score,
+            "count": len(scores_list),
         },
-        "by_class": [
-            {
-                "class": r.class_,
-                "avg_score": round(r.avg_score, 2) if r.avg_score else None,
-                "count": r.count,
-                "min_score": r.min_score,
-                "max_score": r.max_score
-            }
-            for r in class_results
-        ]
+        "by_class": by_class,
     }
 
 
@@ -729,7 +688,7 @@ async def get_doctor_score_trajectory(
         # For each category, average across all consulted patients
         class_avgs: Dict[str, float] = {}
         patient_class_scores: Dict[str, Dict[str, float]] = {}
-        for cls in ["1", "2", "3", "4", "5"]:
+        for cls in ["cancer_prognosis", "life_expectancy", "erectile_dysfunction_potency", "continence", "irritative_urinary_symptoms"]:
             patient_scores = []
             for f in consulted_files:
                 if f in file_sentences and cls in file_sentences[f]:
