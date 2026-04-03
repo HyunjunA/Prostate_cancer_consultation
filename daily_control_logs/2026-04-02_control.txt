@@ -222,7 +222,112 @@ Webapp optimization, and full pipeline restructuring (fake CSV elimination).
 - prostate_cancer_R01_Guille/consultation-scorer/ (main.py, Dockerfile, requirements.txt)
 - prostate_cancer_R01_Guille/patient-summary-rewriter/ (main.py, Dockerfile, requirements.txt)
 
+---
+
+## Part 11: Ivan Code Review Standards Compliance (Commit 5d4045c)
+
+Applied all partially-compliant and non-compliant items from IVAN_CODE_REVIEW_STANDARDS.md:
+
+1. Config-driven (4-1): Created config.yaml + config.py
+   - All pipeline parameters (top_n, context_window, batch_size, paths, worker settings)
+   - Environment variable overrides supported
+   - transcript_service.py BATCH_SIZE constant → _get_batch_size() from config
+
+2. Persistence module separation (2-1, 1-3): Created persistence.py
+   - save_all(): single function for all 6 table INSERTs
+   - file_already_processed(): duplicate check
+   - pipeline_runner.py no longer does direct DB INSERT
+
+3. Thin Main (1-1): pipeline_runner.py refactored
+   - Each Step = one function call
+   - Scoring/rewriting logic extracted to _run_scoring() and _run_rewriting()
+   - DB persistence = one call: persistence.save_all()
+
+4. Worker/Monitor pattern (1-7): --watch flag added
+   - Continuous scanning with configurable sleep interval
+   - Config: worker.enabled + worker.scan_interval_seconds
+
+5. Output folder traceability (3-1): _save_output_files()
+   - output/{filename_stem}/{patient_id}_predictions.xlsx
+
+6. Python version documented (7-4): requirements.txt comment
+
+---
+
+## Part 12: Architecture Documentation (Commit 82e48e9)
+
+Created dev_docs/ARCHITECTURE.md — professional architecture document with 12 Mermaid diagrams:
+1. High-level system architecture
+2. Docker service topology + resource limits table
+3. Data flow (full pipeline Steps 1-10)
+4. Database ER diagram (12 tables + FK relationships)
+5. API endpoint map (75 endpoints, 8 router groups)
+6. NLP model architecture + cache sequence diagram
+7. Frontend page architecture (Patient/Doctor views)
+8. Deployment flow (run_all.sh + prestart.sh)
+9. Technology stack table
+10. Key architectural decisions (10 items + rationale)
+11. Clinical domain mapping
+12. Security architecture
+
+---
+
+## Part 13: README Rewrite (Commit 4da7fa5)
+
+Complete README.md rewrite with:
+- Architecture overview diagram
+- Quick Start: run_all.sh (automated) + Manual
+- .env + config.yaml configuration details
+- 10 Docker services table (image sizes, memory, ports)
+- Dashboard access URLs (Patient, Doctor, Admin, API Docs)
+- Data pipeline flow (Steps 1-10)
+- Adding new transcripts guide
+- Worker/Monitor mode setup
+- DB schema + Alembic migration usage
+- 75 API endpoints grouped by router
+- Example API calls
+- Development structure (Backend + Webapp file tree)
+- Test execution commands
+- Documentation links
+- Troubleshooting guide
+
+---
+
+## Part 14: Full Pipeline Guide (Commit 3e39261)
+
+Created dev_docs/FULL_PIPELINE_GUIDE.md:
+- Step-by-step detailed explanation with actual data examples
+- Each Step: function name, what it does, input/output DataFrame examples
+- NLP prediction flow with asyncio.gather parallelization
+- Score distinction: pred_score (0.0-1.0 probability) vs score (0-5 quality)
+- Dashboard API calls that read from each DB table
+- Processing results for all 6 transcript files
+
+---
+
+## Updated Summary Statistics
+
+| Metric | Before | After | Change |
+|--------|--------|-------|--------|
+| Total commits today | 29 | 33 | +4 |
+| Backend main.py | 3,421 lines | 143 lines | -96% |
+| Backend Docker image | 522MB | 428MB | -18% |
+| Webapp Docker image | 1.25GB | 860MB | -31% |
+| Docker services | 8 | 10 | +scorer, +rewriter |
+| Transcript files processed | 1 | 6 | all files |
+| Fake CSV files | 15 files | 0 | eliminated |
+| Hardcoded values | multiple | 0 | config.yaml |
+| DB persistence | inline in pipeline | persistence.py module | separated |
+| Worker/Monitor | not available | --watch flag | added |
+
+## Files Created (additional)
+- app/Backend/config.yaml
+- app/Backend/config.py
+- app/Backend/persistence.py
+- dev_docs/ARCHITECTURE.md
+- dev_docs/FULL_PIPELINE_GUIDE.md
+
 ## Remaining Work
 - ML model deployment: NLP replicas, connection pool, retry jitter, adaptive timeout, cache
 - Webapp: Docker standalone (~250MB), dynamic imports, legacy component cleanup
-- TurboScribe: Speaker 1/2 auto-identification working, but no manual speaker label
+- Import style (1-4): module.function() pattern in pipeline files (cosmetic)
