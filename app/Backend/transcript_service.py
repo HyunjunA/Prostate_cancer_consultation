@@ -81,7 +81,13 @@ MODEL_TO_OUTCOME = {
     "ius": "irritative_urinary_symptoms_frequency_urgency_nocturnia",
 }
 
-BATCH_SIZE = 50  # nlp_service.predict_batch() max
+def _get_batch_size() -> int:
+    """Get batch size from config (config-driven, no hardcoding)."""
+    try:
+        import config
+        return config.get("pipeline.batch_size", 50)
+    except Exception:
+        return 50
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Step 1: Read transcript xlsx
@@ -247,8 +253,9 @@ async def run_predictions(df: pd.DataFrame) -> pd.DataFrame:
     all_preds: Dict[str, List[float]] = {model: [] for model in ALL_MODELS}
 
     # Process in batches — within each batch, run 5 models concurrently
-    for start in range(0, total, BATCH_SIZE):
-        chunk = texts[start : start + BATCH_SIZE]
+    batch_size = _get_batch_size()
+    for start in range(0, total, batch_size):
+        chunk = texts[start : start + batch_size]
 
         # Fire all 5 models at the same time for this batch
         batch_results = await asyncio.gather(
@@ -261,7 +268,7 @@ async def run_predictions(df: pd.DataFrame) -> pd.DataFrame:
 
         logger.info(
             "Step 4: Batch [%d:%d] / %d — 5 models parallel",
-            start, min(start + BATCH_SIZE, total), total,
+            start, min(start + batch_size, total), total,
         )
 
     # Assign predictions to DataFrame

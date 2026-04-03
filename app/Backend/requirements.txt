@@ -17,6 +17,10 @@ openpyxl==3.1.5
 
 # ── Environment & Config ─────────────────────────────────────────────────────
 python-dotenv==1.2.2
+pyyaml==6.0.3                    # config.yaml loader
+
+# ── Python Version ──────────────────────────────────────────────────────────
+# Requires Python 3.10+ (matches Dockerfile: python:3.10-slim)
 
 # ── Validation & Serialization ───────────────────────────────────────────────
 pydantic==2.12.5
