@@ -38,3 +38,6 @@ Processed_Data_DB.csv
 archive/
 !docs/archive/
 !dev_docs/archive/
+
+# Korean-only document versions (local only, not pushed)
+*_KR.md
