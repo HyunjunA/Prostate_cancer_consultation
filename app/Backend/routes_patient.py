@@ -7,12 +7,14 @@ dashboard statistics, and REDCap integration.
 import logging
 import os
 from typing import Optional, List, Dict, Any
+from collections import defaultdict
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from auth import get_current_user
 from auth.access_control import check_patient_access
@@ -22,8 +24,7 @@ from models import (
     DoctorSentenceView,
     DoctorRewriteLog,
     PatientSummary,
-    PatientSummaryScoring,
-    PatientResponses,
+    PatientSummaryDomain,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,14 +32,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Patient Interface"])
 
 
-class PatientScoringUpdate(BaseModel):
+class PatientDomainScoringUpdate(BaseModel):
     file: str
     speaker: str
-    class_1_patient_scoring: Optional[int] = None
-    class_2_patient_scoring: Optional[int] = None
-    class_3_patient_scoring: Optional[int] = None
-    class_4_patient_scoring: Optional[int] = None
-    class_5_patient_scoring: Optional[int] = None
+    domain: str
+    patient_scoring: int
+
+
+class PatientDomainResponseUpdate(BaseModel):
+    file: str
+    speaker: str
+    domain: str
+    patient_response: str
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -60,22 +65,27 @@ async def get_patient_summaries(
     print(f"   file: {file}")
     print(f"   speaker: {speaker}")
     print(f"   skip: {skip}, limit: {limit}")
-    
-    stmt = select(PatientSummary)
-    
+
+    stmt = select(PatientSummary).options(selectinload(PatientSummary.domains))
+
     if file:
         stmt = stmt.where(PatientSummary.file == file)
     if speaker:
         stmt = stmt.where(PatientSummary.speaker == speaker)
-    
+
     # Get total count
-    count_stmt = select(func.count()).select_from(stmt.subquery())
+    count_stmt = select(func.count()).select_from(
+        select(PatientSummary.file, PatientSummary.speaker).where(
+            *([PatientSummary.file == file] if file else []),
+            *([PatientSummary.speaker == speaker] if speaker else []),
+        ).subquery()
+    )
     total = (await db.execute(count_stmt)).scalar_one()
-    
+
     # Get paginated results
     stmt = stmt.offset(skip).limit(limit)
-    results = (await db.execute(stmt)).scalars().all()
-    
+    results = (await db.execute(stmt)).scalars().unique().all()
+
     return {
         "total": total,
         "skip": skip,
@@ -87,25 +97,10 @@ async def get_patient_summaries(
                 "entire_summary": r.entire_summary,
                 "classes": [
                     {
-                        "class_name": r.class_1,
-                        "summary": r.summary_class_1
-                    },
-                    {
-                        "class_name": r.class_2,
-                        "summary": r.summary_class_2
-                    },
-                    {
-                        "class_name": r.class_3,
-                        "summary": r.summary_class_3
-                    },
-                    {
-                        "class_name": r.class_4,
-                        "summary": r.summary_class_4
-                    },
-                    {
-                        "class_name": r.class_5,
-                        "summary": r.summary_class_5
+                        "class_name": d.domain,
+                        "summary": d.summary_text
                     }
+                    for d in r.domains
                 ]
             }
             for r in results
@@ -126,23 +121,18 @@ async def get_patient_summary_detail(
     print(f"   file: {file}")
     print(f"   speaker: {speaker}")
 
-    # Get summary
-    summary_stmt = select(PatientSummary).where(
+    # Get summary with domains eager-loaded
+    summary_stmt = select(PatientSummary).options(
+        selectinload(PatientSummary.domains)
+    ).where(
         PatientSummary.file == file,
         PatientSummary.speaker == speaker
     )
-    summary = (await db.execute(summary_stmt)).scalar_one_or_none()
-    
+    summary = (await db.execute(summary_stmt)).scalars().unique().first()
+
     if not summary:
         raise HTTPException(status_code=404, detail="Summary not found")
-    
-    # Get scoring
-    scoring_stmt = select(PatientSummaryScoring).where(
-        PatientSummaryScoring.file == file,
-        PatientSummaryScoring.speaker == speaker
-    )
-    scoring = (await db.execute(scoring_stmt)).scalar_one_or_none()
-    
+
     return {
         "file": file,
         "speaker": speaker,
@@ -150,30 +140,11 @@ async def get_patient_summary_detail(
             "entire_summary": summary.entire_summary,
             "classes": [
                 {
-                    "class_name": summary.class_1,
-                    "summary": summary.summary_class_1,
-                    "score": scoring.class_1_patient_scoring if scoring else None
-                },
-                {
-                    "class_name": summary.class_2,
-                    "summary": summary.summary_class_2,
-                    "score": scoring.class_2_patient_scoring if scoring else None
-                },
-                {
-                    "class_name": summary.class_3,
-                    "summary": summary.summary_class_3,
-                    "score": scoring.class_3_patient_scoring if scoring else None
-                },
-                {
-                    "class_name": summary.class_4,
-                    "summary": summary.summary_class_4,
-                    "score": scoring.class_4_patient_scoring if scoring else None
-                },
-                {
-                    "class_name": summary.class_5,
-                    "summary": summary.summary_class_5,
-                    "score": scoring.class_5_patient_scoring if scoring else None
+                    "class_name": d.domain,
+                    "summary": d.summary_text,
+                    "score": d.patient_scoring
                 }
+                for d in summary.domains
             ]
         }
     }
@@ -191,123 +162,96 @@ async def get_patient_scoring(
     print("🔍 DEBUG [get_patient_scoring] - Input Parameters:")
     print(f"   file: {file}")
     print(f"   speaker: {speaker}")
-    
-    stmt = select(PatientSummaryScoring)
-    
+
+    stmt = select(PatientSummaryDomain).where(
+        PatientSummaryDomain.patient_scoring.isnot(None)
+    ).order_by(
+        PatientSummaryDomain.file,
+        PatientSummaryDomain.speaker,
+        PatientSummaryDomain.display_order
+    )
+
     if file:
-        stmt = stmt.where(PatientSummaryScoring.file == file)
+        stmt = stmt.where(PatientSummaryDomain.file == file)
     if speaker:
-        stmt = stmt.where(PatientSummaryScoring.speaker == speaker)
-    
+        stmt = stmt.where(PatientSummaryDomain.speaker == speaker)
+
     results = (await db.execute(stmt)).scalars().all()
-    
+
+    # Group by (file, speaker)
+    grouped: Dict[tuple, list] = defaultdict(list)
+    for r in results:
+        grouped[(r.file, r.speaker)].append(r)
+
+    data = []
+    for (f, s), domains in grouped.items():
+        scores = {d.domain: d.patient_scoring for d in domains}
+        valid_scores = [v for v in scores.values() if v is not None]
+        average = round(sum(valid_scores) / len(valid_scores), 2) if valid_scores else None
+        data.append({
+            "file": f,
+            "speaker": s,
+            "scores": scores,
+            "average": average
+        })
+
     return {
-        "total": len(results),
-        "data": [
-            {
-                "file": r.file,
-                "speaker": r.speaker,
-                "scores": {
-                    "class_1": r.class_1_patient_scoring,
-                    "class_2": r.class_2_patient_scoring,
-                    "class_3": r.class_3_patient_scoring,
-                    "class_4": r.class_4_patient_scoring,
-                    "class_5": r.class_5_patient_scoring
-                },
-                "average": round(sum(filter(None, [
-                    r.class_1_patient_scoring,
-                    r.class_2_patient_scoring,
-                    r.class_3_patient_scoring,
-                    r.class_4_patient_scoring,
-                    r.class_5_patient_scoring
-                ])) / len(list(filter(None, [
-                    r.class_1_patient_scoring,
-                    r.class_2_patient_scoring,
-                    r.class_3_patient_scoring,
-                    r.class_4_patient_scoring,
-                    r.class_5_patient_scoring
-                ]))), 2) if any([
-                    r.class_1_patient_scoring,
-                    r.class_2_patient_scoring,
-                    r.class_3_patient_scoring,
-                    r.class_4_patient_scoring,
-                    r.class_5_patient_scoring
-                ]) else None
-            }
-            for r in results
-        ]
+        "total": len(data),
+        "data": data
     }
 
 @router.put("/api/patient/scoring")
 async def update_patient_scoring(
-    update_data: PatientScoringUpdate,
+    update_data: PatientDomainScoringUpdate,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user)
 ):
-    """Update or create patient scoring record"""
+    """Update or create patient scoring for a single domain"""
     print("=" * 80)
     print("🔍 DEBUG [update_patient_scoring] - Input Data:")
     print(f"   file: {update_data.file}")
     print(f"   speaker: {update_data.speaker}")
-    print(f"   class_1: {update_data.class_1_patient_scoring}")
-    print(f"   class_2: {update_data.class_2_patient_scoring}")
-    print(f"   class_3: {update_data.class_3_patient_scoring}")
-    print(f"   class_4: {update_data.class_4_patient_scoring}")
-    print(f"   class_5: {update_data.class_5_patient_scoring}")
-    
-    # Find existing record by file and speaker
-    stmt = select(PatientSummaryScoring).where(
-        (PatientSummaryScoring.file == update_data.file) &
-        (PatientSummaryScoring.speaker == update_data.speaker)
+    print(f"   domain: {update_data.domain}")
+    print(f"   patient_scoring: {update_data.patient_scoring}")
+
+    # Find existing domain row
+    stmt = select(PatientSummaryDomain).where(
+        PatientSummaryDomain.file == update_data.file,
+        PatientSummaryDomain.speaker == update_data.speaker,
+        PatientSummaryDomain.domain == update_data.domain
     )
-    existing_record = (await db.execute(stmt)).scalars().first()
-    
-    # If exists, update; if not, create new
-    if existing_record:
-        record = existing_record
+    record = (await db.execute(stmt)).scalars().first()
+
+    if record:
+        record.patient_scoring = update_data.patient_scoring
     else:
-        record = PatientSummaryScoring(
+        record = PatientSummaryDomain(
             file=update_data.file,
-            speaker=update_data.speaker
+            speaker=update_data.speaker,
+            domain=update_data.domain,
+            patient_scoring=update_data.patient_scoring
         )
-    
-    # Update only provided fields
-    if update_data.class_1_patient_scoring is not None:
-        record.class_1_patient_scoring = update_data.class_1_patient_scoring
-    if update_data.class_2_patient_scoring is not None:
-        record.class_2_patient_scoring = update_data.class_2_patient_scoring
-    if update_data.class_3_patient_scoring is not None:
-        record.class_3_patient_scoring = update_data.class_3_patient_scoring
-    if update_data.class_4_patient_scoring is not None:
-        record.class_4_patient_scoring = update_data.class_4_patient_scoring
-    if update_data.class_5_patient_scoring is not None:
-        record.class_5_patient_scoring = update_data.class_5_patient_scoring
-    
+
     db.add(record)
     await db.commit()
     await db.refresh(record)
-    
-    # Calculate average
-    scores = [
-        record.class_1_patient_scoring,
-        record.class_2_patient_scoring,
-        record.class_3_patient_scoring,
-        record.class_4_patient_scoring,
-        record.class_5_patient_scoring
-    ]
-    valid_scores = [s for s in scores if s is not None]
+
+    # Return all scores for this file/speaker for convenience
+    all_stmt = select(PatientSummaryDomain).where(
+        PatientSummaryDomain.file == update_data.file,
+        PatientSummaryDomain.speaker == update_data.speaker,
+        PatientSummaryDomain.patient_scoring.isnot(None)
+    ).order_by(PatientSummaryDomain.display_order)
+    all_domains = (await db.execute(all_stmt)).scalars().all()
+
+    scores = {d.domain: d.patient_scoring for d in all_domains}
+    valid_scores = [v for v in scores.values() if v is not None]
     average = round(sum(valid_scores) / len(valid_scores), 2) if valid_scores else None
-    
+
     return {
         "file": record.file,
         "speaker": record.speaker,
-        "scores": {
-            "class_1": record.class_1_patient_scoring,
-            "class_2": record.class_2_patient_scoring,
-            "class_3": record.class_3_patient_scoring,
-            "class_4": record.class_4_patient_scoring,
-            "class_5": record.class_5_patient_scoring
-        },
+        "scores": scores,
         "average": average
     }
 
@@ -323,33 +267,93 @@ async def get_patient_responses(
     print("🔍 DEBUG [get_patient_responses] - Input Parameters:")
     print(f"   file: {file}")
     print(f"   speaker: {speaker}")
-    
-    stmt = select(PatientResponses)
-    
+
+    stmt = select(PatientSummaryDomain).where(
+        PatientSummaryDomain.patient_response.isnot(None)
+    ).order_by(
+        PatientSummaryDomain.file,
+        PatientSummaryDomain.speaker,
+        PatientSummaryDomain.display_order
+    )
+
     if file:
-        stmt = stmt.where(PatientResponses.file == file)
+        stmt = stmt.where(PatientSummaryDomain.file == file)
     if speaker:
-        stmt = stmt.where(PatientResponses.speaker == speaker)
-    
+        stmt = stmt.where(PatientSummaryDomain.speaker == speaker)
+
     results = (await db.execute(stmt)).scalars().all()
-    
+
+    # Group by (file, speaker)
+    grouped: Dict[tuple, list] = defaultdict(list)
+    for r in results:
+        grouped[(r.file, r.speaker)].append(r)
+
+    data = []
+    for (f, s), domains in grouped.items():
+        answers = {d.domain: d.patient_response for d in domains}
+        data.append({
+            "file": f,
+            "speaker": s,
+            "answers": answers
+        })
+
     return {
-        "total": len(results),
-        "data": [
-            {
-                "file": r.file,
-                "speaker": r.speaker,
-                "answers": {
-                    "answer_1": r.answer_1,
-                    "answer_2": r.answer_2,
-                    "answer_3": r.answer_3,
-                    "answer_4": r.answer_4,
-                    "answer_5": r.answer_5
-                }
-            }
-            for r in results
-        ]
+        "total": len(data),
+        "data": data
     }
+
+@router.put("/api/patient/responses")
+async def update_patient_responses(
+    update_data: PatientDomainResponseUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user)
+):
+    """Update or create patient response for a single domain"""
+    print("=" * 80)
+    print("🔍 DEBUG [update_patient_responses] - Input Data:")
+    print(f"   file: {update_data.file}")
+    print(f"   speaker: {update_data.speaker}")
+    print(f"   domain: {update_data.domain}")
+    print(f"   patient_response: {update_data.patient_response[:30] if update_data.patient_response else None}...")
+
+    # Find existing domain row
+    stmt = select(PatientSummaryDomain).where(
+        PatientSummaryDomain.file == update_data.file,
+        PatientSummaryDomain.speaker == update_data.speaker,
+        PatientSummaryDomain.domain == update_data.domain
+    )
+    record = (await db.execute(stmt)).scalars().first()
+
+    if record:
+        record.patient_response = update_data.patient_response
+    else:
+        record = PatientSummaryDomain(
+            file=update_data.file,
+            speaker=update_data.speaker,
+            domain=update_data.domain,
+            patient_response=update_data.patient_response
+        )
+
+    db.add(record)
+    await db.commit()
+    await db.refresh(record)
+
+    # Return all responses for this file/speaker for convenience
+    all_stmt = select(PatientSummaryDomain).where(
+        PatientSummaryDomain.file == update_data.file,
+        PatientSummaryDomain.speaker == update_data.speaker,
+        PatientSummaryDomain.patient_response.isnot(None)
+    ).order_by(PatientSummaryDomain.display_order)
+    all_domains = (await db.execute(all_stmt)).scalars().all()
+
+    answers = {d.domain: d.patient_response for d in all_domains}
+
+    return {
+        "file": record.file,
+        "speaker": record.speaker,
+        "answers": answers
+    }
+
 
 @router.get("/api/patient/files")
 async def get_patient_files(
@@ -431,41 +435,49 @@ async def get_dashboard_stats(
     """Get overall dashboard statistics"""
     print("=" * 80)
     print("🔍 DEBUG [get_dashboard_stats] - Querying statistics")
-    
+
     # Doctor stats
     print("   Querying doctor interface stats...")
     doctor_sentences_count = (await db.execute(
         select(func.count()).select_from(DoctorSentenceView)
     )).scalar_one()
     print(f"   - doctor_sentences_count: {doctor_sentences_count}")
-    
+
     doctor_rewrites_count = (await db.execute(
         select(func.count()).select_from(DoctorRewriteLog)
     )).scalar_one()
-    
+
     doctor_files_count = (await db.execute(
         select(func.count(func.distinct(DoctorSentenceView.file)))
     )).scalar_one()
-    
+
     # Patient stats
     patient_summaries_count = (await db.execute(
         select(func.count()).select_from(PatientSummary)
     )).scalar_one()
-    
+
     patient_files_count = (await db.execute(
         select(func.count(func.distinct(PatientSummary.file)))
     )).scalar_one()
-    
-    # Average patient scoring
+
+    # Average patient scoring per domain
     avg_scores_stmt = select(
-        func.avg(PatientSummaryScoring.class_1_patient_scoring).label('avg_class_1'),
-        func.avg(PatientSummaryScoring.class_2_patient_scoring).label('avg_class_2'),
-        func.avg(PatientSummaryScoring.class_3_patient_scoring).label('avg_class_3'),
-        func.avg(PatientSummaryScoring.class_4_patient_scoring).label('avg_class_4'),
-        func.avg(PatientSummaryScoring.class_5_patient_scoring).label('avg_class_5')
+        PatientSummaryDomain.domain,
+        func.avg(PatientSummaryDomain.patient_scoring).label('avg_score')
+    ).where(
+        PatientSummaryDomain.patient_scoring.isnot(None)
+    ).group_by(
+        PatientSummaryDomain.domain
+    ).order_by(
+        PatientSummaryDomain.domain
     )
-    avg_scores = (await db.execute(avg_scores_stmt)).one()
-    
+    avg_rows = (await db.execute(avg_scores_stmt)).all()
+
+    average_scores = {
+        row.domain: round(row.avg_score, 2) if row.avg_score is not None else None
+        for row in avg_rows
+    }
+
     return {
         "doctor_interface": {
             "total_sentences": doctor_sentences_count,
@@ -475,93 +487,7 @@ async def get_dashboard_stats(
         "patient_interface": {
             "total_summaries": patient_summaries_count,
             "unique_files": patient_files_count,
-            "average_scores": {
-                "class_1": round(avg_scores.avg_class_1, 2) if avg_scores.avg_class_1 else None,
-                "class_2": round(avg_scores.avg_class_2, 2) if avg_scores.avg_class_2 else None,
-                "class_3": round(avg_scores.avg_class_3, 2) if avg_scores.avg_class_3 else None,
-                "class_4": round(avg_scores.avg_class_4, 2) if avg_scores.avg_class_4 else None,
-                "class_5": round(avg_scores.avg_class_5, 2) if avg_scores.avg_class_5 else None
-            }
-        }
-    }
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Pydantic Model for Patient Responses Update
-# ──────────────────────────────────────────────────────────────────────────────
-
-class PatientResponsesUpdate(BaseModel):
-    file: str
-    speaker: str
-    answer_1: Optional[str] = None
-    answer_2: Optional[str] = None
-    answer_3: Optional[str] = None
-    answer_4: Optional[str] = None
-    answer_5: Optional[str] = None
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# PUT endpoint for Patient Responses
-# ──────────────────────────────────────────────────────────────────────────────
-
-@router.put("/api/patient/responses")
-async def update_patient_responses(
-    update_data: PatientResponsesUpdate,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user)
-):
-    """Update or create patient question responses"""
-    print("=" * 80)
-    print("🔍 DEBUG [update_patient_responses] - Input Data:")
-    print(f"   file: {update_data.file}")
-    print(f"   speaker: {update_data.speaker}")
-    print(f"   answer_1: {update_data.answer_1[:30] if update_data.answer_1 else None}...")
-    print(f"   answer_2: {update_data.answer_2[:30] if update_data.answer_2 else None}...")
-    print(f"   answer_3: {update_data.answer_3[:30] if update_data.answer_3 else None}...")
-    print(f"   answer_4: {update_data.answer_4[:30] if update_data.answer_4 else None}...")
-    print(f"   answer_5: {update_data.answer_5[:30] if update_data.answer_5 else None}...")
-    
-    # Find existing record by file and speaker
-    stmt = select(PatientResponses).where(
-        (PatientResponses.file == update_data.file) &
-        (PatientResponses.speaker == update_data.speaker)
-    )
-    existing_record = (await db.execute(stmt)).scalars().first()
-    
-    # If exists, update; if not, create new
-    if existing_record:
-        record = existing_record
-    else:
-        record = PatientResponses(
-            file=update_data.file,
-            speaker=update_data.speaker
-        )
-    
-    # Update only provided fields (partial update support)
-    if update_data.answer_1 is not None:
-        record.answer_1 = update_data.answer_1
-    if update_data.answer_2 is not None:
-        record.answer_2 = update_data.answer_2
-    if update_data.answer_3 is not None:
-        record.answer_3 = update_data.answer_3
-    if update_data.answer_4 is not None:
-        record.answer_4 = update_data.answer_4
-    if update_data.answer_5 is not None:
-        record.answer_5 = update_data.answer_5
-    
-    db.add(record)
-    await db.commit()
-    await db.refresh(record)
-    
-    return {
-        "file": record.file,
-        "speaker": record.speaker,
-        "answers": {
-            "answer_1": record.answer_1,
-            "answer_2": record.answer_2,
-            "answer_3": record.answer_3,
-            "answer_4": record.answer_4,
-            "answer_5": record.answer_5
+            "average_scores": average_scores
         }
     }
 
@@ -591,7 +517,7 @@ async def import_to_redcap(
     print(f"   Number of records: {len(request_data.records)}")
     print(f"   overwrite: {request_data.overwrite}")
     print(f"   return_content: {request_data.return_content}")
-    
+
     if not REDCAP_API_URL or not REDCAP_API_TOKEN:
         print("   ❌ ERROR: REDCap API configuration missing")
         print("=" * 80)
@@ -599,7 +525,7 @@ async def import_to_redcap(
             status_code=500,
             detail="REDCap API configuration missing"
         )
-    
+
     payload = {
         'token': REDCAP_API_TOKEN,
         'content': 'record',
@@ -610,18 +536,17 @@ async def import_to_redcap(
         'returnFormat': 'json',
         'data': json.dumps(request_data.records)
     }
-    
+
     async with httpx.AsyncClient() as client:
         response = await client.post(REDCAP_API_URL, data=payload)
-    
+
     if response.status_code != 200:
         raise HTTPException(
             status_code=response.status_code,
             detail=f"REDCap API error: {response.text}"
         )
-    
+
     return {
         "status": "success",
         "redcap_response": response.json()
     }
-

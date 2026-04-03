@@ -61,31 +61,25 @@ class DoctorRewriteLog(Base):
 # =====================================================
 
 class PatientSummary(Base):
-    """Patient class summary - categorized summaries for patients."""
+    """Patient summary — one row per patient."""
     __tablename__ = 'patient_summary'
 
     file = Column(String(255), primary_key=True, nullable=False)
-    speaker = Column(String(100), primary_key=True)
+    speaker = Column(String(100), primary_key=True, nullable=False)
     entire_summary = Column(Text)
 
-    class_1 = Column(String(100))
-    summary_class_1 = Column(Text)
-    class_2 = Column(String(100))
-    summary_class_2 = Column(Text)
-    class_3 = Column(String(100))
-    summary_class_3 = Column(Text)
-    class_4 = Column(String(100))
-    summary_class_4 = Column(Text)
-    class_5 = Column(String(100))
-    summary_class_5 = Column(Text)
+    domains = relationship("PatientSummaryDomain", back_populates="summary",
+                           cascade="all, delete-orphan", order_by="PatientSummaryDomain.display_order")
 
     def __repr__(self):
         return f"<PatientSummary(file={self.file}, speaker={self.speaker})>"
 
 
-class PatientSummaryScoring(Base):
-    """Patient scoring for each class summary (0-10 scale)."""
-    __tablename__ = 'patient_summary_scoring'
+class PatientSummaryDomain(Base):
+    """Per-domain summary, scoring, and response — one row per patient per domain.
+    Replaces the old patient_summary class_1~5 columns, patient_summary_scoring,
+    and patient_responses tables."""
+    __tablename__ = 'patient_summary_domain'
     __table_args__ = (
         ForeignKeyConstraint(
             ['file', 'speaker'],
@@ -95,40 +89,17 @@ class PatientSummaryScoring(Base):
     )
 
     file = Column(String(255), primary_key=True, nullable=False)
-    speaker = Column(String(100), primary_key=True)
+    speaker = Column(String(100), primary_key=True, nullable=False)
+    domain = Column(String(100), primary_key=True, nullable=False)
+    display_order = Column(Integer, nullable=False, default=0)
+    summary_text = Column(Text)
+    patient_scoring = Column(Integer, CheckConstraint('patient_scoring BETWEEN 0 AND 10'))
+    patient_response = Column(Text)
 
-    class_1_patient_scoring = Column(Integer, CheckConstraint('class_1_patient_scoring BETWEEN 0 AND 10'))
-    class_2_patient_scoring = Column(Integer, CheckConstraint('class_2_patient_scoring BETWEEN 0 AND 10'))
-    class_3_patient_scoring = Column(Integer, CheckConstraint('class_3_patient_scoring BETWEEN 0 AND 10'))
-    class_4_patient_scoring = Column(Integer, CheckConstraint('class_4_patient_scoring BETWEEN 0 AND 10'))
-    class_5_patient_scoring = Column(Integer, CheckConstraint('class_5_patient_scoring BETWEEN 0 AND 10'))
-
-    def __repr__(self):
-        return f"<PatientSummaryScoring(file={self.file}, speaker={self.speaker})>"
-
-
-class PatientResponses(Base):
-    """Patient responses to questions."""
-    __tablename__ = 'patient_responses'
-    __table_args__ = (
-        ForeignKeyConstraint(
-            ['file', 'speaker'],
-            ['patient_summary.file', 'patient_summary.speaker'],
-            ondelete='CASCADE'
-        ),
-    )
-
-    file = Column(String(255), primary_key=True, nullable=False)
-    speaker = Column(String(100), primary_key=True)
-
-    answer_1 = Column(Text)
-    answer_2 = Column(Text)
-    answer_3 = Column(Text)
-    answer_4 = Column(Text)
-    answer_5 = Column(Text)
+    summary = relationship("PatientSummary", back_populates="domains")
 
     def __repr__(self):
-        return f"<PatientResponses(file={self.file}, speaker={self.speaker})>"
+        return f"<PatientSummaryDomain(file={self.file}, domain={self.domain})>"
 
 
 # =====================================================

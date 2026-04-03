@@ -18,46 +18,28 @@ export interface DistributionData {
 export interface PatientScoringUpdate {
   file: string;
   speaker: string;
-  class_1_patient_scoring?: number | null;
-  class_2_patient_scoring?: number | null;
-  class_3_patient_scoring?: number | null;
-  class_4_patient_scoring?: number | null;
-  class_5_patient_scoring?: number | null;
+  domain: string;
+  patient_scoring: number | null;
 }
 
 export interface PatientResponsesUpdate {
   file: string;
   speaker: string;
-  answer_1?: string | null;
-  answer_2?: string | null;
-  answer_3?: string | null;
-  answer_4?: string | null;
-  answer_5?: string | null;
+  domain: string;
+  patient_response: string | null;
 }
 
 export interface ScoringResult {
   file: string;
   speaker: string;
-  scores: {
-    class_1: number | null;
-    class_2: number | null;
-    class_3: number | null;
-    class_4: number | null;
-    class_5: number | null;
-  };
+  scores: { [domain: string]: number | null };
   average: number | null;
 }
 
 export interface ResponsesResult {
   file: string;
   speaker: string;
-  answers: {
-    answer_1: string | null;
-    answer_2: string | null;
-    answer_3: string | null;
-    answer_4: string | null;
-    answer_5: string | null;
-  };
+  answers: { [domain: string]: string | null };
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -402,58 +384,52 @@ export const usePatientData = () => {
   };
 
   // 11) Update Single Class Score (Convenience function)
-  // 개별 class score만 업데이트하는 편의 함수
+  // 개별 domain score만 업데이트하는 편의 함수
   const updateSingleClassScore = async (
     file: string,
     speaker: string,
-    classNumber: 1 | 2 | 3 | 4 | 5,
+    domain: string,
     score: number
   ): Promise<ScoringResult | null> => {
     const data: PatientScoringUpdate = {
       file,
       speaker,
-      [`class_${classNumber}_patient_scoring`]: score,
+      domain,
+      patient_scoring: score,
     };
     return updateScoring(data);
   };
 
   // 12) Update All Class Scores at Once (Convenience function)
-  // 모든 class scores를 한번에 업데이트하는 편의 함수
+  // 모든 domain scores를 한번에 업데이트하는 편의 함수
   const updateAllClassScores = async (
     file: string,
     speaker: string,
-    scores: {
-      class_1?: number;
-      class_2?: number;
-      class_3?: number;
-      class_4?: number;
-      class_5?: number;
-    }
+    scores: { [domain: string]: number }
   ): Promise<ScoringResult | null> => {
-    const data: PatientScoringUpdate = {
-      file,
-      speaker,
-      class_1_patient_scoring: scores.class_1,
-      class_2_patient_scoring: scores.class_2,
-      class_3_patient_scoring: scores.class_3,
-      class_4_patient_scoring: scores.class_4,
-      class_5_patient_scoring: scores.class_5,
-    };
-    return updateScoring(data);
+    // With normalized table, each domain is a separate row.
+    // Send updates sequentially and return the last result.
+    let lastResult: ScoringResult | null = null;
+    for (const [domain, score] of Object.entries(scores)) {
+      lastResult = await updateSingleClassScore(file, speaker, domain, score);
+      if (!lastResult) break;
+    }
+    return lastResult;
   };
 
   // 13) Update Single Answer (Convenience function)
-  // 개별 answer만 업데이트하는 편의 함수
+  // 개별 domain answer만 업데이트하는 편의 함수
   const updateSingleAnswer = async (
     file: string,
     speaker: string,
-    answerNumber: 1 | 2 | 3 | 4 | 5,
+    domain: string,
     answer: string
   ): Promise<ResponsesResult | null> => {
     const data: PatientResponsesUpdate = {
       file,
       speaker,
-      [`answer_${answerNumber}`]: answer,
+      domain,
+      patient_response: answer,
     };
     return updateResponses(data);
   };

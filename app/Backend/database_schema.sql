@@ -43,51 +43,26 @@ CREATE TABLE doctor_rewrite_log (
 -- 2. Patient Interface Tables
 -- =====================================================
 
--- (A) Patient_interface_class_summary.csv
+-- (A) Patient summary — one row per patient
 CREATE TABLE patient_summary (
     file VARCHAR(255) NOT NULL,
-    speaker VARCHAR(100),             -- PatientID
+    speaker VARCHAR(100) NOT NULL,
     entire_summary TEXT,
-    class_1 VARCHAR(100),
-    summary_class_1 TEXT,
-    class_2 VARCHAR(100),
-    summary_class_2 TEXT,
-    class_3 VARCHAR(100),
-    summary_class_3 TEXT,
-    class_4 VARCHAR(100),
-    summary_class_4 TEXT,
-    class_5 VARCHAR(100),
-    summary_class_5 TEXT,
     PRIMARY KEY (file, speaker)
 );
 
--- (B) Patient_interface_class_summary_scoring.csv
-CREATE TABLE patient_summary_scoring (
+-- (B) Patient summary per domain — one row per patient per domain (replaces
+--     the old patient_summary class_1~5 columns, patient_summary_scoring, and patient_responses)
+CREATE TABLE patient_summary_domain (
     file VARCHAR(255) NOT NULL,
-    speaker VARCHAR(100),             -- PatientID
-    class_1_patient_scoring INT CHECK (class_1_patient_scoring BETWEEN 0 AND 10),
-    class_2_patient_scoring INT CHECK (class_2_patient_scoring BETWEEN 0 AND 10),
-    class_3_patient_scoring INT CHECK (class_3_patient_scoring BETWEEN 0 AND 10),
-    class_4_patient_scoring INT CHECK (class_4_patient_scoring BETWEEN 0 AND 10),
-    class_5_patient_scoring INT CHECK (class_5_patient_scoring BETWEEN 0 AND 10),
-    PRIMARY KEY (file, speaker),
-    CONSTRAINT fk_scoring_to_summary
-        FOREIGN KEY (file, speaker)
-        REFERENCES patient_summary(file, speaker)
-        ON DELETE CASCADE
-);
-
--- (C) Patient_interface_questions_responses.csv
-CREATE TABLE patient_responses (
-    file VARCHAR(255) NOT NULL,
-    speaker VARCHAR(100),
-    answer_1 TEXT,
-    answer_2 TEXT,
-    answer_3 TEXT,
-    answer_4 TEXT,
-    answer_5 TEXT,
-    PRIMARY KEY (file, speaker),
-    CONSTRAINT fk_responses_to_summary
+    speaker VARCHAR(100) NOT NULL,
+    domain VARCHAR(100) NOT NULL,        -- e.g. 'cancer_prognosis', 'continence', ...
+    display_order INT NOT NULL DEFAULT 0,-- display order in UI (1-based)
+    summary_text TEXT,                   -- AI-generated summary for this domain
+    patient_scoring INT CHECK (patient_scoring BETWEEN 0 AND 10),  -- patient usefulness rating
+    patient_response TEXT,               -- free-text feedback from patient
+    PRIMARY KEY (file, speaker, domain),
+    CONSTRAINT fk_domain_to_summary
         FOREIGN KEY (file, speaker)
         REFERENCES patient_summary(file, speaker)
         ON DELETE CASCADE
@@ -99,8 +74,8 @@ CREATE TABLE patient_responses (
 -- Note: idx_doctor_render_file (file) removed — redundant with PK (file, i, i2)
 CREATE INDEX idx_doctor_rewrite_file ON doctor_rewrite_log(file);
 CREATE INDEX idx_patient_summary_file ON patient_summary(file);
-CREATE INDEX idx_patient_scoring_file ON patient_summary_scoring(file);
-CREATE INDEX idx_patient_response_file ON patient_responses(file);
+CREATE INDEX idx_patient_domain_file ON patient_summary_domain(file);
+CREATE INDEX idx_patient_domain_order ON patient_summary_domain(file, speaker, display_order);
 
 -- #1: Partial + composite index for scores/average 3-stage subquery (class != '-1' filter)
 CREATE INDEX idx_dsv_file_speaker_class_i ON doctor_sentence_view (file, speaker, class, i DESC, i2 DESC)

@@ -554,95 +554,214 @@ X-API-Key: {{api_key}}
 
 
 ############################################################
-### 11) Patient Interface - Get Scoring
-# return all scoring from the patient_responses table
+### 11) Patient Interface - Get Scoring (All)
+# Returns all domain scores from patient_summary_domain
+# where patient_scoring IS NOT NULL
 ############################################################
 GET {{base}}/api/patient/scoring
 X-API-Key: {{api_key}}
 
 
 ############################################################
-### 12) Patient Interface - Get Scoring (Filtered)
-# return scoring for a given file and speaker from the patient_responses table
-# first
+### 12) Patient Interface - Get Scoring (Filtered by file)
 ############################################################
-GET {{base}}/api/patient/scoring?file=quality-coded-nlp-pilot-sid-1.xlsx&speaker=Patient_quality-coded-nlp-pilot-sid-1
+GET {{base}}/api/patient/scoring?file=Input_Keystrokes REC001 (SID 14).xlsx
 X-API-Key: {{api_key}}
 
 
-# Used in the frontend to get scoring info for a specific file and speaker
-#####################################################
-### 13) Patient Interface - Update Scoring
-#####################################################
+############################################################
+### 13) Patient Interface - Update Scoring (single domain)
+# New structure: one domain per request
+# Stores patient_scoring in patient_summary_domain row
+############################################################
 PUT {{base}}/api/patient/scoring
 Content-Type: {{json}}
 X-API-Key: {{api_key}}
 
 {
-  "file": "quality-coded-nlp-pilot-sid-1.xlsx",
-  "speaker": "Patient_quality-coded-nlp-pilot-sid-1",
-  "class_1_patient_scoring": 1,
-  "class_2_patient_scoring": 1,
-  "class_3_patient_scoring": 1,
-  "class_4_patient_scoring": 1,
-  "class_5_patient_scoring": 1
+  "file": "Input_Keystrokes REC001 (SID 14).xlsx",
+  "speaker": "Patient_Input_Keystrokes REC001 (SID 14)",
+  "domain": "cancer_prognosis",
+  "patient_scoring": 4
 }
 
+###
+### 13-2) Update Scoring - continence domain
+PUT {{base}}/api/patient/scoring
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "file": "Input_Keystrokes REC001 (SID 14).xlsx",
+  "speaker": "Patient_Input_Keystrokes REC001 (SID 14)",
+  "domain": "continence",
+  "patient_scoring": 3
+}
+
+###
+### 13-3) Update Scoring - erectile_dysfunction_potency domain
+PUT {{base}}/api/patient/scoring
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "file": "Input_Keystrokes REC001 (SID 14).xlsx",
+  "speaker": "Patient_Input_Keystrokes REC001 (SID 14)",
+  "domain": "erectile_dysfunction_potency",
+  "patient_scoring": 5
+}
+
+###
+### 13-4) Update Scoring - irritative_urinary_symptoms domain
+PUT {{base}}/api/patient/scoring
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "file": "Input_Keystrokes REC001 (SID 14).xlsx",
+  "speaker": "Patient_Input_Keystrokes REC001 (SID 14)",
+  "domain": "irritative_urinary_symptoms_frequency_urgency_nocturnia",
+  "patient_scoring": 2
+}
+
+###
+### 13-5) Update Scoring - life_expectancy domain
+PUT {{base}}/api/patient/scoring
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "file": "Input_Keystrokes REC001 (SID 14).xlsx",
+  "speaker": "Patient_Input_Keystrokes REC001 (SID 14)",
+  "domain": "life_expectancy",
+  "patient_scoring": 4
+}
+
+###
+### 13-6) Verify all 5 scores saved
+GET {{base}}/api/patient/scoring?file=Input_Keystrokes REC001 (SID 14).xlsx
+X-API-Key: {{api_key}}
+
+
 ############################################################
-### 14) Patient Interface - Get Responses
-# return responses from the patient_responses table
+### 14) Patient Interface - Get Responses (All)
+# Returns all domain responses from patient_summary_domain
+# where patient_response IS NOT NULL
 ############################################################
 GET {{base}}/api/patient/responses
 X-API-Key: {{api_key}}
 
 
 ############################################################
-### 15) Patient Interface - Get Responses (Filtered)
-# return responses for a given file and speaker from the patient_responses table
+### 15) Patient Interface - Get Responses (Filtered by file)
 ############################################################
-# GET {{base}}/api/patient/responses?file=quality-coded-nlp-pilot-sid-1.xlsx&speaker=Patient_quality-coded-nlp-pilot-sid-1
-# X-API-Key: {{api_key}}
-
-GET {{base}}/api/patient/responses?file=test_consultation_001.txt&speaker=TEST_PATIENT_100
+GET {{base}}/api/patient/responses?file=Input_Keystrokes REC001 (SID 14).xlsx
 X-API-Key: {{api_key}}
 
 
-
-
-
-##############################################################
-### 16) Patient Interface - Update Responses
-### Update Patient Responses (CREATE)
-##############################################################
-PUT {{base}}/api/patient/responses
-Content-Type: {{json}}
-X-API-Key: {{api_key}}
-
-{
-  "file": "quality-coded-nlp-pilot-sid-1.xlsx",
-  "speaker": "Patient_quality-coded-nlp-pilot-sid-1",
-  "answer_1": "I feel good about the treatment",
-  "answer_2": "The doctor explained everything clearly",
-  "answer_3": "I understand the risks"
-}
-
 ############################################################
-### 17) Patient Interface - Get Responses (Verify)
-### Update Patient Responses (UPDATE - partial)
+### 16) Patient Interface - Update Response (single domain)
+# New structure: one domain per request
+# Stores patient_response in patient_summary_domain row
 ############################################################
 PUT {{base}}/api/patient/responses
 Content-Type: {{json}}
 X-API-Key: {{api_key}}
 
 {
-  "file": "quality-coded-nlp-pilot-sid-1.xlsx",
-  "speaker": "Patient_quality-coded-nlp-pilot-sid-1",
-  "answer_4": "I have some concerns about recovery time",
-  "answer_5": "Overall I'm satisfied"
+  "file": "Input_Keystrokes REC001 (SID 14).xlsx",
+  "speaker": "Patient_Input_Keystrokes REC001 (SID 14)",
+  "domain": "cancer_prognosis",
+  "patient_response": "I feel good about the treatment plan"
 }
 
-### Get Patient Responses (Verify)
-GET {{base}}/api/patient/responses?file=quality-coded-nlp-pilot-sid-1.xlsx&speaker=Patient_quality-coded-nlp-pilot-sid-1
+###
+### 16-2) Update Response - continence domain
+PUT {{base}}/api/patient/responses
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "file": "Input_Keystrokes REC001 (SID 14).xlsx",
+  "speaker": "Patient_Input_Keystrokes REC001 (SID 14)",
+  "domain": "continence",
+  "patient_response": "The doctor explained everything clearly"
+}
+
+###
+### 16-3) Update Response - life_expectancy domain
+PUT {{base}}/api/patient/responses
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "file": "Input_Keystrokes REC001 (SID 14).xlsx",
+  "speaker": "Patient_Input_Keystrokes REC001 (SID 14)",
+  "domain": "life_expectancy",
+  "patient_response": "I understand the risks involved"
+}
+
+###
+### 17) Verify Responses saved
+GET {{base}}/api/patient/responses?file=Input_Keystrokes REC001 (SID 14).xlsx
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 17-2) Transcript Analysis API (missing from original .rest)
+############################################################
+
+###
+### Transcript - Get Predictions for patient
+GET {{base}}/api/transcript/predictions/SID_14?model=cp&top_n=5
+X-API-Key: {{api_key}}
+
+###
+### Transcript - Get Analysis History
+GET {{base}}/api/transcript/history/SID_14
+X-API-Key: {{api_key}}
+
+###
+### Transcript - Download Results
+GET {{base}}/api/transcript/download?patient_id=SID_14
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 17-3) User Tracking API (missing from original .rest)
+############################################################
+
+###
+### Tracking - Submit Events (batch)
+POST {{base}}/api/tracking/events
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "session_id": "test-session-001",
+  "role": "patient",
+  "file": "Input_Keystrokes REC001 (SID 14).xlsx",
+  "speaker": "Patient_Input_Keystrokes REC001 (SID 14)",
+  "events": [
+    {
+      "event_type": "page_view",
+      "element_id": "patient-report",
+      "device_type": "desktop",
+      "client_timestamp": "2026-04-03T10:00:00Z"
+    },
+    {
+      "event_type": "click",
+      "element_id": "summary-card-cp",
+      "device_type": "desktop",
+      "client_timestamp": "2026-04-03T10:00:05Z",
+      "event_data": {"domain": "cancer_prognosis"}
+    }
+  ]
+}
+
+###
+### Tracking - Get Analytics
+GET {{base}}/api/tracking/analytics
 X-API-Key: {{api_key}}
 
 

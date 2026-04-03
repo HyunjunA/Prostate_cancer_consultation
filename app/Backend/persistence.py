@@ -95,25 +95,21 @@ async def save_all(
                     time=now,
                 ))
 
-            # 4. patient_summary
-            summary_kwargs = {"file": filename, "speaker": patient_speaker}
-            for domain_full, slot in domain_slot_map.items():
-                short = domain_short_map.get(domain_full, "")
-                summary_kwargs[f"class_{slot}"] = domain_full
-                summary_kwargs[f"summary_class_{slot}"] = summaries_by_domain.get(short, "")
-
-            session.add(models.PatientSummary(**summary_kwargs))
+            # 4. patient_summary + domain rows
+            session.add(models.PatientSummary(
+                file=filename, speaker=patient_speaker,
+            ))
             await session.flush()
 
-            # 5. patient_summary_scoring (initial NULLs)
-            session.add(models.PatientSummaryScoring(
-                file=filename, speaker=patient_speaker,
-            ))
-
-            # 6. patient_responses (initial NULLs)
-            session.add(models.PatientResponses(
-                file=filename, speaker=patient_speaker,
-            ))
+            for order, (domain_full, slot) in enumerate(domain_slot_map.items(), start=1):
+                short = domain_short_map.get(domain_full, "")
+                session.add(models.PatientSummaryDomain(
+                    file=filename,
+                    speaker=patient_speaker,
+                    domain=domain_full,
+                    display_order=order,
+                    summary_text=summaries_by_domain.get(short, ""),
+                ))
 
             await session.commit()
             logger.info(
