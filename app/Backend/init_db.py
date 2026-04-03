@@ -719,6 +719,126 @@ async def migrate_single_csv(csv_path: str, Session: async_sessionmaker):
     print(f"\n📈 Result: Created={created}, Errors={errors}")
 
 # ---------------------------
+# Post-seed: call Step 8 (scorer) + Step 9 (rewriter)
+# ---------------------------
+
+DOMAIN_ABBREV_TO_SLOT = {
+    "cancer_prognosis": "1",
+    "continence": "2",
+    "erectile_dysfunction_potency": "3",
+    "irritative_urinary_symptoms_frequency_urgency_nocturnia": "4",
+    "life_expectancy": "5",
+}
+DOMAIN_ABBREV_TO_SHORT = {
+    "cancer_prognosis": "cp",
+    "continence": "inc",
+    "erectile_dysfunction_potency": "ed",
+    "irritative_urinary_symptoms_frequency_urgency_nocturnia": "ius",
+    "life_expectancy": "le",
+}
+
+async def _post_seed_update(Session: async_sessionmaker):
+    """After CSV seeding, call Step 8 (scorer) and Step 9 (rewriter) to update DB."""
+    from scorer_service import score_batch, scorer_health
+    from rewriter_service import rewrite_batch, rewriter_health
+
+    print("\n" + "=" * 60)
+    print("🔄 Post-seed: updating scores (Step 8) and summaries (Step 9)")
+    print("=" * 60)
+
+    # Check if services are available
+    scorer_ok = await scorer_health()
+    rewriter_ok = await rewriter_health()
+
+    if not scorer_ok:
+        print("   ⚠️  consultation-scorer not available — skipping score update")
+    if not rewriter_ok:
+        print("   ⚠️  patient-summary-rewriter not available — skipping summary update")
+
+    if not scorer_ok and not rewriter_ok:
+        print("   ⏭️  Both services unavailable, skipping post-seed update")
+        return
+
+    # ── Step 8: Update doctor_sentence_view.score ────────────────────────
+    if scorer_ok:
+        try:
+            async with Session() as session:
+                from sqlalchemy import select, update
+                from models import DoctorSentenceView
+
+                rows = (await session.execute(select(DoctorSentenceView))).scalars().all()
+                if not rows:
+                    print("   ℹ️  No doctor_sentence_view rows to score")
+                else:
+                    # Build batch request
+                    batch = [
+                        {"text": r.sentence or "", "domain": DOMAIN_ABBREV_TO_SHORT.get(r.class_, "")}
+                        for r in rows
+                    ]
+                    scores = await score_batch(batch)
+
+                    # Update each row
+                    updated = 0
+                    for row, new_score in zip(rows, scores):
+                        if row.score != new_score:
+                            row.score = float(new_score)
+                            updated += 1
+
+                    await session.commit()
+                    print(f"   ✅ Step 8: Updated {updated}/{len(rows)} sentence scores (0-5)")
+        except Exception as e:
+            print(f"   ⚠️  Step 8 scoring failed (non-fatal): {e}")
+
+    # ── Step 9: Update patient_summary.summary_class_* ───────────────────
+    if rewriter_ok:
+        try:
+            async with Session() as session:
+                from sqlalchemy import select
+                from models import PatientSummary, DoctorSentenceView
+
+                summaries = (await session.execute(select(PatientSummary))).scalars().all()
+                if not summaries:
+                    print("   ℹ️  No patient_summary rows to rewrite")
+                else:
+                    for summary in summaries:
+                        # For each domain slot, get top sentences and rewrite
+                        domains_to_rewrite = []
+                        for domain_full, slot in DOMAIN_ABBREV_TO_SLOT.items():
+                            short = DOMAIN_ABBREV_TO_SHORT.get(domain_full, "")
+                            # Get top 3 sentences for this file + domain
+                            stmt = (
+                                select(DoctorSentenceView.sentence)
+                                .where(
+                                    DoctorSentenceView.file == summary.file,
+                                    DoctorSentenceView.class_ == domain_full,
+                                )
+                                .order_by(DoctorSentenceView.score.desc())
+                                .limit(3)
+                            )
+                            result = await session.execute(stmt)
+                            sentences = [r[0] for r in result.all() if r[0]]
+
+                            if sentences:
+                                domains_to_rewrite.append({
+                                    "sentences": sentences,
+                                    "domain": short,
+                                })
+
+                        if domains_to_rewrite:
+                            rewritten = await rewrite_batch(domains_to_rewrite)
+
+                            for domain_full, slot in DOMAIN_ABBREV_TO_SLOT.items():
+                                short = DOMAIN_ABBREV_TO_SHORT.get(domain_full, "")
+                                if short in rewritten:
+                                    setattr(summary, f"summary_class_{slot}", rewritten[short])
+
+                    await session.commit()
+                    print(f"   ✅ Step 9: Updated {len(summaries)} patient summaries")
+        except Exception as e:
+            print(f"   ⚠️  Step 9 rewriting failed (non-fatal): {e}")
+
+
+# ---------------------------
 # Main
 # ---------------------------
 
@@ -770,6 +890,9 @@ async def main():
         # Full migration mode
         data_dir = args.data_dir or os.getenv("CSV_DATA_DIR", "fake_csv_files")
         await migrate_all_csv_files(data_dir, Session)
+
+    # Post-seed: update scores and summaries from Step 8/9 services
+    await _post_seed_update(Session)
 
     # Cleanup
     await engine.dispose()
