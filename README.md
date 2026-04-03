@@ -1,348 +1,423 @@
 # Prostate Cancer Consultation Dashboard
 
-A dashboard for prostate cancer consultation data visualization and NLP-based risk feedback analysis.
+A medical research dashboard that analyzes prostate cancer consultation transcripts using NLP, provides physician feedback on communication quality, and generates patient-friendly summaries.
 
-## Project Structure
+> **Updated:** 2026-04-02 | **Python:** 3.10+ | **Node.js:** 18+ | **Docker Compose:** 3.8
+
+---
+
+## Architecture Overview
 
 ```
-Prostate_cancer_consultation_dashboard/
-├── app/
-│   ├── Backend/          # FastAPI backend (Python) + PostgreSQL + Redis + NLP API
-│   └── Webapp/           # Next.js frontend (React)
-├── data/                 # Data files (CSV, XLSX) and external contributions
-├── docs/                 # Project documentation and technical specs
-├── dev_docs/             # Developer documentation (backend + ML pipeline)
-├── daily_control_logs/   # Daily work logs (EN/KR, detail/summary)
-├── playground/           # REDCap API test scripts
-├── archive/              # Unused/deprecated code
-└── README.md
+Browser → Nginx (:3001) → Webapp (Next.js :3000) + Backend (FastAPI :8000)
+                                                        ↓
+                              ┌──────────────────────────┼──────────────────────────┐
+                              ↓                          ↓                          ↓
+                    NLP Classifiers (R ×3)    Consultation Scorer     Patient Summary Rewriter
+                    5 Random Forest models    Step 8 (0-5 scores)    Step 9 (summaries)
+                              ↓                          ↓                          ↓
+                         PostgreSQL 13 ←─────────────────┴──────────────────────────┘
+                              ↑
+                           Redis 7 (cache + rate limit)
 ```
 
-### Folder Details
+**10 Docker services** | **12 DB tables** | **75 API endpoints** | **5 NLP models**
 
-#### `daily_control_logs/`
-
-Daily work logs following the [Collaboration Principles](../../Collaboration_Principles.md) Section 6 standard. Each date produces 4 files:
-
-| File | Language | Detail Level |
-|------|----------|-------------|
-| `YYYY-MM-DD_control.txt` | English | Technical Detail (file names, functions, line numbers) |
-| `YYYY-MM-DD_control_summary.txt` | English | Summary (high-level overview) |
-| `YYYY-MM-DD_control_kr.txt` | Korean | Technical Detail |
-| `YYYY-MM-DD_control_kr_summary.txt` | Korean | Summary |
-
-All four files cover the same work items with consistent numbering.
-
-#### `dev_docs/`
-
-Developer documentation organized by area:
-
-- **`backend_dev_docs/`** — Backend improvement TODO list, security audit items
-- **`ml_pipeline_dev_docs/`** — ML pipeline architecture, development status, Michael's NLP classifier analysis, comparison documents (all in EN/KR pairs)
-
-#### `docs/`
-
-Project documentation and technical specifications:
-
-- **`md/`** — REDCap field mapping, API access management, data persistence checklists, PHI compliance notes
-- Presentation files (PDF/PPTX): visualization plans, system integration, manual scoring references
-
-#### `app/Backend/`
-
-FastAPI backend with:
-- `main.py` — Main application with all doctor/patient/score endpoints
-- `routes_surveys.py` — Survey submission + REDCap integration
-- `routes_transcript.py` — Transcript analysis pipeline (NLP predictions)
-- `routes_nlp.py` — NLP model proxy endpoints
-- `auth/` — Modular authentication system (4 backends: api_key, multi_key, jwt, oauth2)
-- `database_schema.sql` — Full PostgreSQL schema
-- `docker-compose.yml` — All service definitions
-- `api_call_test.rest` — Comprehensive API test file (60+ endpoints)
-
-#### `app/Webapp/`
-
-Next.js (React) frontend with doctor interface, patient interface, survey forms, and risk feedback visualization.
-
-#### `playground/`
-
-REDCap API test scripts for development and debugging (`Redcap_api_playground/`).
-
-#### `archive/`
-
-Deprecated code and earlier development iterations. Not used in the current application.
+---
 
 ## Prerequisites
 
-- **Docker Desktop** (includes Docker Engine 20.10+ and Compose v2.10+)
-- ~4 GB disk space (for all Docker images)
+- **Docker Desktop** (Docker Engine 20.10+ and Compose v2.10+)
+- ~8 GB disk space (NLP image 1.4GB + other images + data)
+- ~10 GB RAM recommended (NLP classifiers: 2GB × 3 replicas)
 - macOS, Linux, or Windows
+
+---
 
 ## Quick Start
 
-### Step 1: Load the NLP Classifier Image (first time only)
-
-The NLP classifier Docker image is stored as an OCI directory in a separate repository. You need to load it into Docker before running the application.
+### Option A: Automated (recommended)
 
 ```bash
-cd ~/Documents/GitHub/Graciela_Lab_Collab/prostate_cancer_R01_NLP_classifiers_Michael
-tar -cf /tmp/r01-nlp.tar -C r01-nlp-classifiers-docker-image .
+cd prostate_cancer_project
+./run_all.sh
+```
+
+This single script handles everything:
+1. Loads the NLP Docker image (if not already loaded)
+2. Builds and starts all 10 containers
+3. Waits for all healthchecks to pass
+4. Processes real transcripts through the full pipeline (Steps 1-10)
+5. Runs NLP 5-model verification test
+6. Runs 1000-request stress test
+7. Reports final status
+
+**First run:** ~5-8 minutes (image builds + NLP startup + pipeline processing)  
+**Subsequent runs:** ~3-4 minutes (cached builds)
+
+### Option B: Manual
+
+```bash
+# 1. Load NLP image (first time only)
+cd prostate_cancer_R01_NLP_classifiers_Michael/r01-nlp-classifiers-docker-image
+tar -cf /tmp/r01-nlp.tar -C . .
 docker load -i /tmp/r01-nlp.tar
-```
 
-Verify the image is loaded:
-```bash
-docker images r01-nlp-classifiers
-# Should show: r01-nlp-classifiers   latest   ...   1.41GB
-```
-
-> **Note:** This step is only needed once. The image persists in Docker until you manually remove it (`docker rmi r01-nlp-classifiers:latest`) or reset Docker.
-
-### Step 2: Configure Environment Variables
-
-```bash
-cd ~/Documents/GitHub/Graciela_Lab_Collab/prostate_cancer_project/Prostate_cancer_consultation_dashboard/app/Backend
+# 2. Configure environment
+cd ../../Prostate_cancer_consultation_dashboard/app/Backend
 cp .env.example .env
+# Edit .env with your values
+
+# 3. Start all services
+docker compose up -d --build
+
+# 4. Verify
+docker ps   # All 10 containers should show "healthy"
 ```
 
-Edit `.env` and set the required values:
+---
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `POSTGRES_USER` | Yes | Database username |
-| `POSTGRES_PASSWORD` | Yes | Database password (change from default) |
-| `POSTGRES_DB` | Yes | Database name |
-| `API_KEY` | Yes | API key for backend authentication |
-| `AUTH_MODE` | No | Authentication mode: `api_key` (default), `multi_key`, `jwt`, `oauth2` |
-| `REDCAP_API_URL` | No | REDCap API endpoint (if using REDCap integration) |
-| `REDCAP_API_TOKEN` | No | REDCap API token (if using REDCap integration) |
+## Environment Configuration
 
-> **Important:** Never commit `.env` to git. It is already in `.gitignore`.
-
-### Step 3: Start All Services
+### `.env` file (`app/Backend/.env`)
 
 ```bash
-docker compose up -d
+# Database (required)
+POSTGRES_USER=prostatecancer_user
+POSTGRES_PASSWORD=your_secure_password
+POSTGRES_DB=prostatecancer_db
+
+# Authentication (required)
+API_KEY=your_api_key_here
+AUTH_MODE=api_key              # api_key | multi_key | jwt | oauth2
+
+# REDCap Integration (optional)
+REDCAP_ENABLED=false
+REDCAP_API_URL=https://redcap.example.edu/api/
+REDCAP_API_TOKEN=your_token
+
+# PostHog Analytics (optional)
+POSTHOG_KEY=
+POSTHOG_HOST=
 ```
 
-This single command starts all services in the correct order:
+### `config.yaml` (`app/Backend/config.yaml`)
 
+Pipeline parameters — **no hardcoded values in code** (Ivan's rule):
+
+```yaml
+pipeline:
+  top_n: 10                    # Top-N sentences per domain
+  context_window: 3            # ±N surrounding sentences
+  batch_size: 50               # NLP API batch size
+
+paths:
+  transcript_dir: "/app/data/transcripts"
+  output_dir: "/app/data/output"
+
+worker:
+  enabled: false               # true = continuous monitoring mode
+  scan_interval_seconds: 3600  # Sleep between scans
+
+scoring:
+  scorer_url: "http://consultation-scorer:8001"
+  rewriter_url: "http://patient-summary-rewriter:8002"
+  summary_top_k: 3
 ```
-1. postgres + redis + nlp-classifiers (x3)   (start in parallel)
-2. backend                                    (waits for all three above to be healthy)
-3. webapp                                     (waits for backend to be healthy)
-4. nginx                                      (waits for backend + webapp)
-```
 
-> **First run** takes longer because Docker needs to build the backend and webapp images. Subsequent runs use cached images and start in ~1-2 minutes.
+All values can be overridden via environment variables (e.g., `PIPELINE_TOP_N=20`).
 
-> **NLP classifier** (amd64 image on Apple Silicon) takes ~30-60 seconds to start due to Rosetta emulation. The healthcheck has a 90-second grace period to accommodate this.
+---
 
-### Step 4: Verify All Services Are Running
+## Docker Services
 
-```bash
-docker ps
-```
+| Service | Container | Port | Image Size | Memory | Purpose |
+|---------|-----------|------|-----------|--------|---------|
+| nginx | prostatecancer-nginx | 127.0.0.1:**3001** | 43MB | — | Reverse proxy |
+| webapp | prostatecancer-webapp | 3000 (internal) | 860MB | — | Next.js frontend |
+| backend | prostatecancer-backend | 127.0.0.1:**8000** | 428MB | 1G | FastAPI API server |
+| postgres | prostatecancer-postgres | 127.0.0.1:**5433** | 374MB | 512M | PostgreSQL 13 |
+| redis | prostatecancer-redis | 6379 (internal) | 138MB | 256M | Cache + rate limit |
+| nlp-classifiers ×3 | backend-nlp-classifiers-{1,2,3} | 8000 (internal) | 1.4GB | 2G each | R plumber NLP models |
+| consultation-scorer | prostatecancer-scorer | 8001 (internal) | 188MB | 256M | Step 8: quality scores (0-5) |
+| patient-summary-rewriter | prostatecancer-rewriter | 8002 (internal) | 188MB | 256M | Step 9: patient summaries |
 
-All containers should show `healthy` status:
+All external ports bound to `127.0.0.1` (localhost only).
 
-```
-NAMES                       STATUS              PORTS
-prostatecancer-nginx        Up (healthy)        127.0.0.1:3000->80/tcp
-prostatecancer-webapp       Up (healthy)        3000/tcp
-prostatecancer-backend      Up (healthy)        127.0.0.1:8000->8000/tcp
-prostatecancer-postgres     Up (healthy)        5432/tcp
-prostatecancer-redis        Up (healthy)        6379/tcp
-backend-nlp-classifiers-1   Up (healthy)        8000/tcp
-backend-nlp-classifiers-2   Up (healthy)        8000/tcp
-backend-nlp-classifiers-3   Up (healthy)        8000/tcp
-```
+---
 
 ## Accessing the Application
 
 | Page | URL | Description |
 |------|-----|-------------|
-| Dashboard | http://localhost:3000 | Main web application |
-| Backend API Docs | http://localhost:8000/docs | FastAPI Swagger UI |
+| **Dashboard** | http://localhost:3001 | Main web application (via Nginx) |
+| **Patient First Visit** | http://localhost:3001/?fileid=...&patid=...&visit=first | AI summaries + star ratings |
+| **Patient Follow-Up** | http://localhost:3001/?fileid=...&patid=...&visit=followup | 4 validated surveys |
+| **Doctor Demo** | http://localhost:3001/?doctorid=auto | Physician dashboard (auto-detect speaker) |
+| **Admin Tracking** | http://localhost:3001/admin/tracking | User interaction analytics |
+| **API Docs** | http://localhost:8000/docs | FastAPI Swagger UI |
+| **Backend Health** | http://localhost:8000/health | DB + Redis + NLP status |
 
-> **Security note:** All ports are bound to `127.0.0.1` (localhost only). They are not accessible from other machines on the network.
+---
 
-## Services
+## Data Pipeline
 
-| Service | Container | Port | Description |
-|---------|-----------|------|-------------|
-| nginx | prostatecancer-nginx | 127.0.0.1:3000 → 80 | Reverse proxy for webapp + backend |
-| webapp | prostatecancer-webapp | 3000 (internal) | Next.js frontend |
-| backend | prostatecancer-backend | 127.0.0.1:8000 | FastAPI backend |
-| postgres | prostatecancer-postgres | 5432 (internal) | PostgreSQL 13 database |
-| redis | prostatecancer-redis | 6379 (internal) | Redis 7 cache |
-| nlp-classifiers | backend-nlp-classifiers-{1,2,3} | 8000 (internal) | R plumber NLP classifier API (3 replicas) |
-
-### Service Dependencies
+Real transcript files are processed automatically at Docker startup:
 
 ```
-nginx ──→ webapp ──→ backend ──→ postgres
-                        │──→ redis
-                        └──→ nlp-classifiers (x3, load-balanced)
+Input: AI_physician_patient_communication/data/input/*.xlsx
+  ↓ (mounted as /app/data/transcripts/ in Docker)
+
+pipeline_runner.py (Thin Main — each Step = one function call):
+  Step 1:  Read transcript (.xlsx or .csv)
+  Step 2:  Identify doctor (speaker with most text — Ivan's dynamic rule)
+  Step 3:  Split into sentences (regex tokenizer)
+  Step 4:  NLP prediction (5 models × asyncio.gather — parallel)
+  Step 5:  Select top-N per domain (from config.yaml)
+  Step 6:  Generate context (±N surrounding sentences)
+  Step 7:  Export xlsx (5 sheets)
+  Step 8:  Score sentences (consultation-scorer → 0-5 quality)
+  Step 9:  Rewrite summaries (patient-summary-rewriter → patient-friendly text)
+  Step 10: Save to PostgreSQL (persistence.py — separate module)
+
+Output: /app/data/output/{filename_stem}/predictions.xlsx
+        + 6 DB tables populated directly
 ```
 
-### Internal Network Communication
+### Adding New Transcripts
 
-All services are on the same Docker network (`prostatecancer-network`). Inside the network, services communicate by service name:
+1. Place `.xlsx` file in `AI_physician_patient_communication/data/input/`
+2. Restart backend: `docker compose restart backend`
+3. `pipeline_runner.py` auto-processes new files (skips already-processed)
 
-| From | To | URL |
-|------|----|-----|
-| backend | postgres | `postgresql://...@postgres:5432/...` |
-| backend | redis | `redis://redis:6379/0` |
-| backend | NLP API | `http://nlp-classifiers:8000` |
+### Worker/Monitor Mode
 
-## NLP Classifier API
-
-5 NLP classification models that predict clinical topic relevance from prostate cancer consultation transcripts. The NLP classifiers run as 3 replicas for load balancing and are accessible only through the backend proxy.
-
-### Prediction via Backend Proxy
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/nlp/predict` | Single model prediction |
-| POST | `/api/nlp/predict/batch` | Batch prediction (multiple texts) |
-| POST | `/api/nlp/predict/all` | Predict with all 5 models |
-| POST | `/api/nlp/predict/by-class` | Predict by class number |
-| GET | `/api/nlp/models` | List available models |
-| GET | `/api/nlp/health` | NLP service health status |
-
-### Available Models
-
-| Model | Topic |
-|-------|-------|
-| `cp` | Cancer Prognosis |
-| `ed` | Erectile Dysfunction |
-| `inc` | Continence |
-| `ius` | Irritative Urinary Symptoms |
-| `le` | Life Expectancy |
-
-### Example API Call
+For continuous processing (production):
 
 ```bash
-curl -X POST http://localhost:8000/api/nlp/predict \
-  -H "X-API-Key: YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"text": "the risk of dying from prostate cancer without treatment is relatively low.", "model": "cp"}'
+# Via config.yaml
+worker:
+  enabled: true
+  scan_interval_seconds: 3600
+
+# Or via command line
+docker exec prostatecancer-backend python pipeline_runner.py --watch
 ```
 
-All API calls require the `X-API-Key` header for authentication.
+---
 
-## Authentication
+## Database
 
-The backend supports 4 authentication modes, configurable via the `AUTH_MODE` environment variable:
+12 tables across 5 groups. Schema managed by Alembic migrations.
 
-| Mode | AUTH_MODE | Description |
-|------|-----------|-------------|
-| Single API Key | `api_key` (default) | Single shared API key via `X-API-Key` header. Backward compatible. |
-| Multi-Key | `multi_key` | Per-user API keys stored in DB. Supports patient-level access control. |
-| JWT | `jwt` | Login with username/password, authenticate with Bearer token. |
-| OAuth2 | `oauth2` | External Identity Provider (Google, Okta, Azure AD). |
+| Group | Tables | Purpose |
+|-------|--------|---------|
+| Physician Interface | `doctor_sentence_view`, `doctor_rewrite_log` | NLP sentences + rewrite practice |
+| Patient Interface | `patient_summary`, `patient_summary_scoring`, `patient_responses` | AI summaries + patient feedback |
+| Survey System | `survey_submission_log` | SDM, DCS, Risk Perception, Satisfaction |
+| ML Pipeline | `transcript_analysis_log`, `sentence_prediction` | Pipeline run records + predictions |
+| Infrastructure | `user_interaction_log`, `auth_user`, `auth_api_key`, `patient_access` | Tracking + access control |
 
-For `multi_key` mode, an admin user and API key must be registered in the database after first startup. See `dev_docs/backend_dev_docs/` for setup instructions.
-
-## API Testing
-
-Use the REST Client extension in VS Code to test all API endpoints:
-
-```
-app/Backend/api_call_test.rest
-```
-
-This file includes tests for:
-- Backend health checks and all CRUD endpoints
-- Doctor interface (sentences, rewrites, scores, class distribution)
-- Patient interface (summaries, scoring, responses)
-- NLP classifier predictions (single, batch, all 5 models)
-- Survey submission and REDCap integration
-- Authentication and error handling
-
-## Stopping the Application
+### Schema Changes
 
 ```bash
-cd ~/Documents/GitHub/Graciela_Lab_Collab/prostate_cancer_project/Prostate_cancer_consultation_dashboard/app/Backend
-
-# Stop all services (preserves database data)
-docker compose down
-
-# Stop and remove all data (database, cache)
-docker compose down -v
+# 1. Edit models.py
+# 2. Generate migration
+docker exec prostatecancer-backend alembic revision --autogenerate -m "description"
+# 3. Apply
+docker exec prostatecancer-backend alembic upgrade head
 ```
 
-## Rebuilding After Code Changes
+### Direct DB Access
 
 ```bash
-# Rebuild backend only
+docker exec -it prostatecancer-postgres psql -U prostatecancer_user -d prostatecancer_db
+```
+
+---
+
+## API Endpoints (75 total)
+
+| Group | Count | Prefix | Router File |
+|-------|-------|--------|-------------|
+| System | 3 | `/`, `/health`, `/ready` | `main.py` |
+| Doctor Interface | 17 | `/api/doctor/*` | `routes_doctor.py` |
+| Patient Interface | 10 | `/api/patient/*`, `/api/stats/*` | `routes_patient.py` |
+| Transcript Analysis | 6 | `/api/transcript/*` | `routes_transcript.py` |
+| NLP Proxy | 6 | `/api/nlp/*` | `routes_nlp.py` |
+| Surveys | 14 | `/api/surveys/*` | `routes_surveys.py` |
+| User Tracking | 5 | `/api/tracking/*` | `routes_tracking.py` |
+| Auth Admin | 14 | `/api/auth/*` | `auth/admin_routes.py` |
+
+All endpoints require `X-API-Key` header (except `/health` and `/ready`).
+
+### Example API Calls
+
+```bash
+API_KEY="your_api_key"
+
+# Health check
+curl http://localhost:8000/health
+
+# List patient files
+curl -H "X-API-Key: $API_KEY" http://localhost:8000/api/doctor/files
+
+# Get sentences for a patient
+curl -H "X-API-Key: $API_KEY" \
+  "http://localhost:8000/api/doctor/sentences/INPUT_FILE.xlsx/SPEAKER"
+
+# NLP prediction
+curl -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
+  -d '{"text": "the risk of cancer is 12 percent", "model": "cp"}' \
+  http://localhost:8000/api/nlp/predict
+```
+
+---
+
+## Development
+
+### Project Structure
+
+```
+app/Backend/
+├── main.py              # FastAPI app (143 lines — thin main)
+├── config.yaml          # All pipeline parameters
+├── config.py            # Config loader with env var overrides
+├── pipeline_runner.py   # Full pipeline (Steps 1-10, thin main)
+├── persistence.py       # DB persistence module (Step 10)
+├── transcript_service.py # Steps 1-7 (NLP pipeline)
+├── scorer_service.py    # Step 8 client (consultation-scorer)
+├── rewriter_service.py  # Step 9 client (patient-summary-rewriter)
+├── nlp_service.py       # NLP Docker client (cache + retry)
+├── routes_doctor.py     # Doctor API (17 endpoints)
+├── routes_patient.py    # Patient API (10 endpoints)
+├── routes_transcript.py # Transcript API (6 endpoints)
+├── routes_surveys.py    # Survey API (14 endpoints)
+├── routes_tracking.py   # Tracking API (5 endpoints)
+├── routes_nlp.py        # NLP proxy API (6 endpoints)
+├── models.py            # SQLAlchemy ORM (12 tables)
+├── db.py                # Async DB engine
+├── redis_client.py      # Redis client
+├── auth/                # Authentication (4 backends)
+├── migrations/          # Alembic migrations
+├── tests/               # pytest (23 test files)
+├── Dockerfile           # Multi-stage build (428MB)
+├── docker-compose.yml   # 10 services
+├── requirements.txt     # Python deps (pinned versions)
+└── requirements-dev.txt # Test deps (not in Docker)
+
+app/Webapp/
+├── src/app/page.tsx     # Main page (URL param routing)
+├── src/components/      # React components (160 files, ~10 active)
+├── src/hooks/           # Data hooks (useDoctorData, usePatientData)
+├── src/stores/          # Zustand state (8 stores)
+├── src/tracking/        # User behavior tracking system
+├── server.js            # Custom Express server
+├── next.config.js       # standalone output mode
+└── Dockerfile           # Multi-stage build (860MB)
+```
+
+### Running Tests
+
+```bash
+# Backend tests
+docker exec prostatecancer-backend pytest tests/ -v
+
+# Or locally (requires test DB)
+cd app/Backend
+pip install -r requirements.txt -r requirements-dev.txt
+pytest tests/ -v
+```
+
+### Rebuilding
+
+```bash
+# Backend only
 docker compose build backend && docker compose up -d backend
 
-# Rebuild webapp only
-docker compose build webapp && docker compose up -d webapp
+# Webapp only
+docker compose build webapp && docker compose up -d webapp nginx
 
-# Rebuild everything
-docker compose build && docker compose up -d
+# Full rebuild (clean)
+docker compose down -v --rmi local
+./run_all.sh   # from prostate_cancer_project/
 ```
 
-> The backend server takes ~10-15 seconds to become ready after restart.
+---
+
+## Stopping / Cleanup
+
+```bash
+cd app/Backend
+
+# Stop services (preserves DB data)
+docker compose down
+
+# Stop + delete all data (DB, cache, volumes)
+docker compose down -v
+
+# Full cleanup (remove images too)
+docker compose down -v --rmi local
+```
+
+---
+
+## Documentation
+
+| Document | Path | Description |
+|----------|------|-------------|
+| Architecture | `dev_docs/ARCHITECTURE.md` | Full system architecture with Mermaid diagrams |
+| DB Schema Guide | `dev_docs/backend_dev_docs/DATABASE_SCHEMA_GUIDE.md` | 12 tables detailed (EN + KR) |
+| DB Optimization | `dev_docs/backend_dev_docs/2026-04-02_DB_ISSUES_ANALYSIS.md` | 17 issues identified + fixed |
+| ML Pipeline | `dev_docs/backend_dev_docs/2026-04-02_ML_MODEL_DEPLOYMENT_OPTIMIZATION.md` | NLP model deployment analysis |
+| Webapp Analysis | `dev_docs/webapp_dev_docs/2026-04-02_WEBAPP_OPTIMIZATION_ANALYSIS.md` | Frontend optimization report |
+| Project Structure | `dev_docs/2026-04-02_PROJECT_STRUCTURE_ANALYSIS.md` | Full codebase analysis |
+| System Architecture | `SYSTEM_ARCHITECTURE.md` | Integrated system overview (EN + KR) |
+| Ivan's Standards | `../../IVAN_CODE_REVIEW_STANDARDS.md` | Code review principles |
+
+---
 
 ## Troubleshooting
 
-### NLP classifier fails to start (unhealthy)
+### NLP classifier fails to start
 
-On Apple Silicon Macs, the NLP image (linux/amd64) runs via Rosetta emulation and takes longer to initialize. If `backend-nlp-classifiers-*` shows `unhealthy`:
+On Apple Silicon Macs, the NLP image (linux/amd64) runs via Rosetta. Wait ~60-90 seconds.
 
 ```bash
-# Check logs
-docker logs backend-nlp-classifiers-1
-
-# Wait for "Running plumber API at http://0.0.0.0:8000" message
-# If it never appears, restart:
-docker compose restart nlp-classifiers
+docker logs backend-nlp-classifiers-1  # Check for "Running plumber API" message
 ```
 
-### "r01-nlp-classifiers:latest not found" error
+### Backend unhealthy after startup
 
-The NLP image needs to be loaded first (Step 1):
+Pipeline processing (5 transcript files) takes ~3-4 minutes. Backend healthcheck may fail during this time but recovers after pipeline completion.
 
 ```bash
-cd ~/Documents/GitHub/Graciela_Lab_Collab/prostate_cancer_R01_NLP_classifiers_Michael
-tar -cf /tmp/r01-nlp.tar -C r01-nlp-classifiers-docker-image .
-docker load -i /tmp/r01-nlp.tar
+docker logs prostatecancer-backend 2>&1 | grep "Pipeline Complete"
 ```
 
-### Port already in use
+### "No sentence available" in Doctor Demo
+
+Verify the pipeline processed files successfully:
 
 ```bash
-# Check what's using the port
+docker exec prostatecancer-postgres psql -U prostatecancer_user -d prostatecancer_db \
+  -c "SELECT file, speaker, COUNT(*) FROM doctor_sentence_view GROUP BY file, speaker;"
+```
+
+### Port conflict
+
+```bash
+lsof -i :3001   # nginx
 lsof -i :8000   # backend
-lsof -i :3000   # webapp/nginx
-
-# Stop conflicting process or change ports in docker-compose.yml
+lsof -i :5433   # postgres
 ```
 
-### Backend can't connect to NLP API
+### Webapp/Nginx not starting
 
-Verify from inside the backend container:
-```bash
-docker exec prostatecancer-backend curl -s http://nlp-classifiers:8000/ping
-# Should return: {"status":"online","time":"..."}
-```
-
-### Database connection issues
+If `docker compose up -d` only starts some services, explicitly start the missing ones:
 
 ```bash
-# Check postgres logs
-docker logs prostatecancer-postgres
-
-# Verify database is accessible from backend
-docker exec prostatecancer-backend python -c "from db import db_ready_ping; import asyncio; print(asyncio.run(db_ready_ping()))"
+docker compose up -d webapp nginx
 ```
 
-### Environment variable issues
-
-```bash
-# Verify .env is loaded correctly
-docker exec prostatecancer-backend env | grep -E "DATABASE_URL|API_KEY|AUTH_MODE|REDCAP"
-```
+Or use `run_all.sh` which handles startup ordering automatically.
