@@ -120,7 +120,7 @@ This document summarizes all CSV files used in the Doctor & Patient Interface sy
 | sentence_in_utterance| INT          | 발화 내 문장 인덱스 (i2)              |
 | speaker              | VARCHAR(100) | 화자                                  |
 | sentence_text        | TEXT         | 문장 내용                              |
-| pred_score           | FLOAT        | NLP 예측 점수 (0.0~1.0)              |
+| pred_score           | FLOAT        | NLP 예측 확률 (0.0~1.0)              |
 | context              | TEXT         | ±3 문장 컨텍스트                      |
 
 ### 7️⃣ `transcript_analysis_log.csv`

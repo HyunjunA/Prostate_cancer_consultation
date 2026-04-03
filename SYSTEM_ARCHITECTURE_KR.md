@@ -486,7 +486,7 @@ HTTP 커넥션 풀:
   │ speaker   │ VARCHAR    │ 화자 라벨                      │
   │ class_    │ VARCHAR    │ 도메인 (1~5, -1=해당없음)       │
   │ sentence  │ TEXT       │ 소문자 변환된 문장 텍스트        │
-  │ score     │ FLOAT      │ NLP 예측 점수 (0.0~1.0)        │
+  │ score     │ FLOAT      │ 상담 품질 점수 (0-5)             │
   │ context   │ TEXT       │ ±3 맥락 (<main>태그 포함)       │
   │ time      │ TIMESTAMP  │ 레코드 시간                    │
   └───────────┴────────────┴──────────────────────────────┘
