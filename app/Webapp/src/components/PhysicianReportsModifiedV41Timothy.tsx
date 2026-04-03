@@ -3393,6 +3393,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   // ═══════════════════════════════════════════════════════════
   const [selectedFile, setSelectedFile] = useState<string>("");
   const [selectedSpeaker, setSelectedSpeaker] = useState<string>("");
+  const [fileSpeakerMap, setFileSpeakerMap] = useState<Record<string, string>>({});
   const [patients, setPatients] = useState<PatientRow[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<PatientRow | null>(
     null,
@@ -3545,10 +3546,19 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   useEffect(() => {
     const init = async () => {
       const result = await fetchFiles();
-      // Set default speaker from first file's actual speaker (dynamic identification)
-      const useAutoDetect = !doctorId || doctorId === "auto";
-      if (result?.file_details?.length > 0 && useAutoDetect) {
-        const defaultSpeaker = result.file_details[0].speaker;
+      // Build file→speaker map from API response
+      if (result?.file_details?.length > 0) {
+        const map: Record<string, string> = {};
+        result.file_details.forEach((fd: { file: string; speaker: string }) => {
+          map[fd.file] = fd.speaker;
+        });
+        setFileSpeakerMap(map);
+
+        // Set default speaker from first file
+        const useAutoDetect = !doctorId || doctorId === "auto";
+        const defaultSpeaker = useAutoDetect
+          ? result.file_details[0].speaker
+          : doctorId;
         setSelectedSpeaker(defaultSpeaker);
         fetchTrajectory(defaultSpeaker);
       } else if (doctorId && doctorId !== "auto") {
@@ -3672,20 +3682,28 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   // Patient selection → load sentences + scoreSummary
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
-    if (selectedPatient && selectedSpeaker) {
+    if (selectedPatient) {
       console.log(`Loading data for: ${selectedPatient.fileName}`);
       setSelectedFile(selectedPatient.fileName);
 
-      fetchSentences(selectedPatient.fileName, selectedSpeaker);
-      fetchRewritesFiltered(selectedPatient.fileName, selectedSpeaker);
+      // Use file-specific speaker from fileSpeakerMap (dynamic identification)
+      const speaker = fileSpeakerMap[selectedPatient.fileName] || selectedSpeaker;
+      if (speaker && speaker !== selectedSpeaker) {
+        setSelectedSpeaker(speaker);
+      }
 
-      setScoreSummaryLoading(true);
-      fetchScoreSummary(selectedPatient.fileName, selectedSpeaker).finally(() =>
-        setScoreSummaryLoading(false),
-      );
+      if (speaker) {
+        fetchSentences(selectedPatient.fileName, speaker);
+        fetchRewritesFiltered(selectedPatient.fileName, speaker);
+
+        setScoreSummaryLoading(true);
+        fetchScoreSummary(selectedPatient.fileName, speaker).finally(() =>
+          setScoreSummaryLoading(false),
+        );
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPatient, selectedSpeaker]);
+  }, [selectedPatient, fileSpeakerMap]);
 
   // ═══════════════════════════════════════════════════════════
   // sentences → topics conversion + rewrites merge
