@@ -17,7 +17,7 @@ Step 2 — **Filter interviewer utterances**
 Step 3 — **Split into sentences**
     Tokenize each utterance into individual sentences using regex-based
     splitting (mirrors R ``tidytext::unnest_tokens('sentences')``).
-Step 4 — **NLP prediction** *(delegated to nlp_service.py)*
+Step 4 — **NLP prediction** *(delegated to nlp_classifier_client.py)*
     Send every sentence to the five NLP classification models hosted in
     Michael's ``r01-nlp-classifiers`` Docker container. Each model returns
     a probability score (``.pred_1``) indicating how relevant the sentence
@@ -41,7 +41,7 @@ Input / Output
 
 Dependencies
 ------------
-* ``nlp_service.predict_batch`` — batch HTTP calls to the NLP Docker service.
+* ``nlp_classifier_client.predict_batch`` — batch HTTP calls to the NLP Docker service.
 * ``pandas``, ``openpyxl`` — Excel I/O and data manipulation.
 """
 
@@ -54,7 +54,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
-from nlp_service import ALL_MODELS, predict_batch
+import nlp_classifier_client
 
 logger = logging.getLogger(__name__)
 
@@ -93,27 +93,51 @@ def _get_batch_size() -> int:
 # Step 1: Read transcript xlsx
 # ──────────────────────────────────────────────────────────────────────────────
 
-def read_transcript(file_bytes: bytes, filename: str) -> Tuple[pd.DataFrame, str]:
-    """Read an xlsx file and extract patient ID from filename.
+def _extract_patient_id(filename: str) -> str:
+    """Extract clean patient ID from filename.
 
-    Args:
-        file_bytes: Raw xlsx file content.
-        filename: Original filename (e.g. "processed_transcripts_sid-01.xlsx").
+    'Input_Keystrokes REC001 (SID 14).xlsx' → 'SID_14'
+    'Input_TurboScribe SID 33.csv'          → 'SID_33'
+    'processed_transcripts_sid-01.xlsx'      → 'SID_01'
+    """
+    stem = Path(filename).stem
+    sid_match = re.search(r"SID[\s_-]*(\d+)", stem, re.IGNORECASE)
+    if sid_match:
+        return f"SID_{sid_match.group(1)}"
+    return re.sub(r"^processed_transcripts_", "", stem)
+
+
+def read_transcript(file_bytes: bytes, filename: str) -> Tuple[pd.DataFrame, str]:
+    """Read an xlsx or csv transcript file and extract patient ID.
+
+    Tries xlsx first, falls back to csv. Validates required columns.
 
     Returns:
-        Tuple of (DataFrame with columns [speaker, text], patient_id string).
+        Tuple of (DataFrame with columns [index, speaker, text], patient_id string).
     """
-    df = pd.read_excel(BytesIO(file_bytes), engine="openpyxl")
+    df = None
+
+    # Try xlsx first
+    try:
+        df = pd.read_excel(BytesIO(file_bytes), engine="openpyxl")
+    except Exception:
+        pass
+
+    # Fallback to csv
+    if df is None:
+        try:
+            df = pd.read_csv(BytesIO(file_bytes))
+        except Exception as e:
+            raise ValueError(f"Cannot read {filename} as xlsx or csv: {e}")
 
     # Validate required columns
     required = {"speaker", "text"}
     if not required.issubset(df.columns):
         raise ValueError(
-            f"xlsx must have columns {required}, got {set(df.columns)}"
+            f"xlsx/csv must have columns {required}, got {set(df.columns)}"
         )
 
-    # Extract patient ID: "processed_transcripts_sid-01.xlsx" → "sid-01"
-    patient_id = re.sub(r"^processed_transcripts_", "", Path(filename).stem)
+    patient_id = _extract_patient_id(filename)
 
     # Add 1-based row index (matches R line 28: mutate(index = row_number()))
     df = df[["speaker", "text"]].copy()
@@ -235,7 +259,7 @@ def split_sentences(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Step 4: NLP prediction (uses existing nlp_service.py → Docker container)
+# Step 4: NLP prediction (uses existing nlp_classifier_client.py → Docker container)
 # ──────────────────────────────────────────────────────────────────────────────
 
 async def run_predictions(df: pd.DataFrame) -> pd.DataFrame:
@@ -250,7 +274,7 @@ async def run_predictions(df: pd.DataFrame) -> pd.DataFrame:
     total = len(texts)
 
     # Initialize prediction columns
-    all_preds: Dict[str, List[float]] = {model: [] for model in ALL_MODELS}
+    all_preds: Dict[str, List[float]] = {model: [] for model in nlp_classifier_client.ALL_MODELS}
 
     # Process in batches — within each batch, run 5 models concurrently
     batch_size = _get_batch_size()
@@ -259,11 +283,11 @@ async def run_predictions(df: pd.DataFrame) -> pd.DataFrame:
 
         # Fire all 5 models at the same time for this batch
         batch_results = await asyncio.gather(
-            *[predict_batch(chunk, model) for model in ALL_MODELS]
+            *[nlp_classifier_client.predict_batch(chunk, model) for model in nlp_classifier_client.ALL_MODELS]
         )
 
         # Collect results per model
-        for model, results in zip(ALL_MODELS, batch_results):
+        for model, results in zip(nlp_classifier_client.ALL_MODELS, batch_results):
             all_preds[model].extend(r["pred_1"] for r in results)
 
         logger.info(
@@ -272,7 +296,7 @@ async def run_predictions(df: pd.DataFrame) -> pd.DataFrame:
         )
 
     # Assign predictions to DataFrame
-    for model in ALL_MODELS:
+    for model in nlp_classifier_client.ALL_MODELS:
         outcome = MODEL_TO_OUTCOME[model]
         df[outcome] = all_preds[model]
 
@@ -356,6 +380,24 @@ def generate_context(
 
     logger.info("Step 6: Generated %d context strings", len(contexts))
     return contexts
+
+
+def generate_all_contexts(
+    top_by_model: Dict[str, pd.DataFrame],
+    full_df: pd.DataFrame,
+    window: int = 3,
+) -> Dict[str, pd.DataFrame]:
+    """Generate context for all domains at once (Step 6 — single call from main).
+
+    Returns dict of DataFrames with 'context' column added.
+    """
+    final_results: Dict[str, pd.DataFrame] = {}
+    for outcome, top_df in top_by_model.items():
+        contexts = generate_context(full_df, top_df, window=window)
+        result_df = top_df.copy()
+        result_df["context"] = contexts
+        final_results[outcome] = result_df
+    return final_results
 
 
 # ──────────────────────────────────────────────────────────────────────────────

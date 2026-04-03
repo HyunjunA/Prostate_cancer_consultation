@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from auth import get_current_user
 from auth.base import AuthUser
-from nlp_service import (
+from nlp_classifier_client import (
     ALL_MODELS,
     CLASS_TO_MODEL,
     MODEL_TO_CLASS,

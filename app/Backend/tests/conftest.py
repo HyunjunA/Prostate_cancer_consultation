@@ -82,11 +82,11 @@ async def client(db, monkeypatch):
 
     # Mock NLP health check to return healthy
     # Must patch BOTH the source module AND main's local reference
-    import nlp_service
+    import nlp_classifier_client
     import main as main_module
     async def _mock_nlp_health():
         return {"status": "healthy", "detail": "mocked"}
-    monkeypatch.setattr(nlp_service, "nlp_health_check", _mock_nlp_health)
+    monkeypatch.setattr(nlp_classifier_client, "nlp_health_check", _mock_nlp_health)
     monkeypatch.setattr(main_module, "nlp_health_check", _mock_nlp_health)
 
     transport = ASGITransport(app=app)

@@ -34,7 +34,11 @@ logger = logging.getLogger(__name__)
 async def process_single_file(
     filepath: str, Session, cfg: Dict[str, Any]
 ) -> Optional[Dict[str, Any]]:
-    """Process one transcript through Steps 1-10. Each Step = one call."""
+    """Process one transcript through Steps 1-10. Each Step = one call.
+
+    Ivan's Thin Main: no inline logic, no for-loops, no data processing.
+    Every step delegates to its responsible module.
+    """
     import transcript_service
     import scorer_service
     import rewriter_service
@@ -56,23 +60,12 @@ async def process_single_file(
     context_window = cfg["pipeline"]["context_window"]
     summary_top_k = cfg["scoring"]["summary_top_k"]
 
-    # ── Step 1: Read transcript ──────────────────────────────────────────
+    # ── Step 1: Read transcript (xlsx or csv, with patient_id extraction) ──
     try:
         df_raw, patient_id = transcript_service.read_transcript(file_bytes, filename)
-    except Exception:
-        import pandas as pd
-        from io import BytesIO
-        try:
-            df_raw = pd.read_csv(BytesIO(file_bytes))
-            if not {"speaker", "text"}.issubset(df_raw.columns):
-                logger.error("  Skipping %s — missing speaker/text columns", filename)
-                return None
-            patient_id = re.sub(r"^processed_transcripts_", "", Path(filename).stem)
-            df_raw = df_raw[["speaker", "text"]].copy()
-            df_raw.insert(0, "index", range(1, len(df_raw) + 1))
-        except Exception as e:
-            logger.error("  Skipping %s — cannot read: %s", filename, e)
-            return None
+    except Exception as e:
+        logger.error("  Skipping %s — cannot read: %s", filename, e)
+        return None
 
     # ── Step 2: Identify & filter doctor ─────────────────────────────────
     df_filtered = transcript_service.filter_interviewer(df_raw)
@@ -90,15 +83,10 @@ async def process_single_file(
     # ── Step 5: Select top-N per domain ──────────────────────────────────
     top_by_model = transcript_service.select_top_n(df_predicted, n=top_n)
 
-    # ── Step 6: Generate context ─────────────────────────────────────────
-    final_results = {}
-    for outcome, top_df in top_by_model.items():
-        contexts = transcript_service.generate_context(
-            df_sentences, top_df, window=context_window
-        )
-        top_df = top_df.copy()
-        top_df["context"] = contexts
-        final_results[outcome] = top_df
+    # ── Step 6: Generate context (single call, no for-loop in main) ──────
+    final_results = transcript_service.generate_all_contexts(
+        top_by_model, df_sentences, window=context_window
+    )
 
     # ── Step 7: Export xlsx ──────────────────────────────────────────────
     xlsx_bytes = transcript_service.export_to_xlsx(final_results, patient_id)
@@ -107,14 +95,14 @@ async def process_single_file(
     doctor_speaker = df_filtered["speaker"].iloc[0] if len(df_filtered) > 0 else "Unknown"
     patient_speaker = f"Patient_{Path(filename).stem}"
 
-    # ── Step 8: Score sentences (0-5) ────────────────────────────────────
-    scorer_keys, scores = await _run_scoring(
-        df_sentences, final_results, doctor_speaker, cfg
+    # ── Step 8: Score sentences (single call to scorer_service) ──────────
+    scorer_keys, scores = await scorer_service.run_scoring(
+        df_sentences, final_results, doctor_speaker, _DOMAIN_SHORT_MAP
     )
 
-    # ── Step 9: Rewrite patient summaries ────────────────────────────────
-    summaries_by_domain = await _run_rewriting(
-        final_results, summary_top_k, cfg
+    # ── Step 9: Rewrite patient summaries (single call to rewriter_service)
+    summaries_by_domain = await rewriter_service.run_rewriting(
+        final_results, summary_top_k, transcript_service.OUTCOME_TO_SHEET, _DOMAIN_SHORT_MAP
     )
 
     # ── Step 10: Save to DB ──────────────────────────────────────────────
@@ -145,7 +133,7 @@ async def process_single_file(
     return None
 
 
-# ── Step 8 helper ────────────────────────────────────────────────────────────
+# ── Domain mappings (used by persistence) ────────────────────────────────────
 
 _DOMAIN_SHORT_MAP = {
     "cancer_prognosis": "cp",
@@ -162,54 +150,6 @@ _DOMAIN_SLOT_MAP = {
     "irritative_urinary_symptoms_frequency_urgency_nocturnia": "4",
     "life_expectancy": "5",
 }
-
-
-async def _run_scoring(df_sentences, final_results, doctor_speaker, cfg):
-    """Step 8: Call consultation-scorer for quality scores (0-5)."""
-    import scorer_service
-
-    logger.info("  Step 8: Scoring sentences (0-5)...")
-    sentence_domain_map = {}
-    for outcome, top_df in final_results.items():
-        for _, row in top_df.iterrows():
-            key = (int(row["i"]), int(row["i2"]))
-            pred = float(row[".pred_1"])
-            if key not in sentence_domain_map or pred > sentence_domain_map[key][1]:
-                sentence_domain_map[key] = (outcome, pred)
-
-    scorer_input = []
-    scorer_keys = []
-    for (i, i2), (domain_full, _) in sentence_domain_map.items():
-        text_row = df_sentences[(df_sentences["i"] == i) & (df_sentences["i2"] == i2)]
-        if len(text_row) > 0:
-            text = text_row.iloc[0]["text"]
-            scorer_input.append({"text": text, "domain": _DOMAIN_SHORT_MAP.get(domain_full, "")})
-            scorer_keys.append((i, i2, domain_full, text, doctor_speaker))
-
-    scores = await scorer_service.score_batch(scorer_input)
-    logger.info("  Step 8: %d sentences scored", len(scores))
-    return scorer_keys, scores
-
-
-async def _run_rewriting(final_results, summary_top_k, cfg):
-    """Step 9: Call patient-summary-rewriter for domain summaries."""
-    import rewriter_service
-    from transcript_service import OUTCOME_TO_SHEET
-
-    logger.info("  Step 9: Generating patient summaries...")
-    domains_for_rewrite = []
-    for outcome in OUTCOME_TO_SHEET.keys():
-        if outcome in final_results:
-            top_sentences = final_results[outcome]["text"].head(summary_top_k).tolist()
-            if top_sentences:
-                domains_for_rewrite.append({
-                    "sentences": top_sentences,
-                    "domain": _DOMAIN_SHORT_MAP.get(outcome, ""),
-                })
-
-    summaries = await rewriter_service.rewrite_batch(domains_for_rewrite) if domains_for_rewrite else {}
-    logger.info("  Step 9: %d domain summaries generated", len(summaries))
-    return summaries
 
 
 def _save_output_files(cfg, filename, patient_id, xlsx_bytes):
