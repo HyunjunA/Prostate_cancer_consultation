@@ -49,6 +49,25 @@ services:
       timeout: 3s
       retries: 10
 
+  consultation-scorer:
+    build:
+      context: ../../../prostate_cancer_R01_Guille/consultation-scorer
+      dockerfile: Dockerfile
+    container_name: prostatecancer-scorer
+    networks: [prostatecancer-network]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/ping')\""]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
   nlp-classifiers:
     image: r01-nlp-classifiers:latest
     networks: [prostatecancer-network]
@@ -86,6 +105,7 @@ services:
       DATABASE_POOL_USE_LIFO: "true"
       REDIS_URL: redis://redis:6379/0
       NLP_API_URL: http://nlp-classifiers:8000
+      SCORER_API_URL: http://consultation-scorer:8001
       AUTH_MODE: ${AUTH_MODE:-api_key}
       CORS_ORIGINS: '["http://localhost:3000","http://localhost:3001","http://localhost"]'
     ports:
