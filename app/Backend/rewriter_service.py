@@ -41,6 +41,27 @@ async def rewrite_batch(domains: List[Dict]) -> Dict[str, str]:
         return {s["domain"]: s["summary"] for s in resp.json()["summaries"]}
 
 
+async def run_rewriting(final_results, summary_top_k, outcome_to_sheet, domain_short_map):
+    """Step 9 pipeline entry — build rewrite input from final_results, call rewrite_batch.
+
+    Returns dict mapping domain_short → summary text.
+    """
+    logger.info("  Step 9: Generating patient summaries...")
+    domains_for_rewrite = []
+    for outcome in outcome_to_sheet.keys():
+        if outcome in final_results:
+            top_sentences = final_results[outcome]["text"].head(summary_top_k).tolist()
+            if top_sentences:
+                domains_for_rewrite.append({
+                    "sentences": top_sentences,
+                    "domain": domain_short_map.get(outcome, ""),
+                })
+
+    summaries = await rewrite_batch(domains_for_rewrite) if domains_for_rewrite else {}
+    logger.info("  Step 9: %d domain summaries generated", len(summaries))
+    return summaries
+
+
 async def rewriter_health() -> bool:
     """Check if rewriter service is reachable."""
     try:

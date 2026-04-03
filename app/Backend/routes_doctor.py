@@ -18,7 +18,7 @@ from auth.access_control import check_patient_access
 from auth.base import AuthUser
 from db import get_db
 from models import DoctorSentenceView, DoctorRewriteLog, SentencePrediction, TranscriptAnalysisLog
-from nlp_service import predict_single, CLASS_TO_MODEL, NLPServiceError
+from nlp_classifier_client import predict_single, CLASS_TO_MODEL, NLPServiceError
 
 logger = logging.getLogger(__name__)
 

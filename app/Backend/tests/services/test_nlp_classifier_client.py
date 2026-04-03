@@ -1,9 +1,9 @@
-"""Unit tests for nlp_service.py — HTTP client to the NLP Docker container.
+"""Unit tests for nlp_classifier_client.py — HTTP client to the NLP Docker container.
 
 Mocking strategy:
   - ``respx`` intercepts all httpx calls (the NLP Docker service)
   - ``get_redis()`` is monkeypatched to None for most tests (caching disabled)
-  - ``nlp_service._client`` is reset before each test so respx can intercept
+  - ``nlp_classifier_client._client`` is reset before each test so respx can intercept
   - For cache tests, ``get_redis()`` returns a mock with async get/set
 
 Test classes:
@@ -25,8 +25,8 @@ import pytest
 import respx
 from httpx import Response
 
-import nlp_service
-from nlp_service import (
+import nlp_classifier_client
+from nlp_classifier_client import (
     NLPServiceError,
     predict_single,
     predict_batch,
@@ -44,12 +44,12 @@ NLP_BASE = "http://nlp-classifiers:8000"
 
 def _disable_cache(monkeypatch) -> None:
     """Patch get_redis to return None (no caching)."""
-    monkeypatch.setattr("nlp_service.get_redis", lambda: None)
+    monkeypatch.setattr("nlp_classifier_client.get_redis", lambda: None)
 
 
 def _reset_client() -> None:
     """Reset the module-level httpx client so respx can intercept."""
-    nlp_service._client = None
+    nlp_classifier_client._client = None
 
 
 class FakeRedis:
@@ -67,7 +67,7 @@ class FakeRedis:
 
 def _enable_cache(monkeypatch, fake_redis: FakeRedis) -> None:
     """Patch get_redis to return a FakeRedis instance."""
-    monkeypatch.setattr("nlp_service.get_redis", lambda: fake_redis)
+    monkeypatch.setattr("nlp_classifier_client.get_redis", lambda: fake_redis)
 
 
 # ── TestPredictSingle ────────────────────────────────────────────────────────
@@ -131,7 +131,7 @@ class TestPredictSingle:
             "pred_1": 0.99,
             "pred_0": 0.01,
         }
-        cache_key = nlp_service._text_cache_key("cp", "cached sentence")
+        cache_key = nlp_classifier_client._text_cache_key("cp", "cached sentence")
         fake_redis = FakeRedis({cache_key: json.dumps(cached_data)})
         _enable_cache(monkeypatch, fake_redis)
 
@@ -143,11 +143,11 @@ class TestPredictSingle:
         assert result["pred_0"] == 0.01
 
     @respx.mock
-    async def test_raises_nlp_service_error_after_retries(self, monkeypatch):
+    async def test_raises_nlp_classifier_client_error_after_retries(self, monkeypatch):
         """NLP returns 500 on every attempt → NLPServiceError after retries."""
         _disable_cache(monkeypatch)
         _reset_client()
-        monkeypatch.setattr("nlp_service.NLP_RETRIES", 2)
+        monkeypatch.setattr("nlp_classifier_client.NLP_RETRIES", 2)
 
         respx.post(f"{NLP_BASE}/predict/inc").mock(
             return_value=Response(500, text="Internal Server Error")
@@ -224,7 +224,7 @@ class TestPredictBatch:
             "pred_1": 0.88,
             "pred_0": 0.12,
         }
-        cache_key = nlp_service._text_cache_key("le", "already cached")
+        cache_key = nlp_classifier_client._text_cache_key("le", "already cached")
         fake_redis = FakeRedis({cache_key: json.dumps(cached_pred)})
         _enable_cache(monkeypatch, fake_redis)
 
@@ -249,7 +249,7 @@ class TestPredictBatch:
         _reset_client()
 
         cached_pred = {"text": "cached", "model": "ed", "pred_1": 0.77, "pred_0": 0.23}
-        cache_key = nlp_service._text_cache_key("ed", "cached")
+        cache_key = nlp_classifier_client._text_cache_key("ed", "cached")
         fake_redis = FakeRedis({cache_key: json.dumps(cached_pred)})
         _enable_cache(monkeypatch, fake_redis)
 
@@ -353,7 +353,7 @@ class TestPredictAllModels:
         """If one model errors, others still succeed. Error model has 'error' key."""
         _disable_cache(monkeypatch)
         _reset_client()
-        monkeypatch.setattr("nlp_service.NLP_RETRIES", 1)
+        monkeypatch.setattr("nlp_classifier_client.NLP_RETRIES", 1)
         monkeypatch.setattr(asyncio, "sleep", AsyncMock())
 
         for model in ALL_MODELS:
@@ -473,7 +473,7 @@ class TestCallNlpWithRetry:
     @respx.mock
     async def test_retries_on_failure_then_succeeds(self, monkeypatch):
         _reset_client()
-        monkeypatch.setattr("nlp_service.NLP_RETRIES", 3)
+        monkeypatch.setattr("nlp_classifier_client.NLP_RETRIES", 3)
         monkeypatch.setattr(asyncio, "sleep", AsyncMock())
 
         route = respx.post(f"{NLP_BASE}/predict/le")
@@ -489,9 +489,9 @@ class TestCallNlpWithRetry:
         assert route.call_count == 3
 
     @respx.mock
-    async def test_raises_nlp_service_error_after_max_retries(self, monkeypatch):
+    async def test_raises_nlp_classifier_client_error_after_max_retries(self, monkeypatch):
         _reset_client()
-        monkeypatch.setattr("nlp_service.NLP_RETRIES", 2)
+        monkeypatch.setattr("nlp_classifier_client.NLP_RETRIES", 2)
         monkeypatch.setattr(asyncio, "sleep", AsyncMock())
 
         respx.post(f"{NLP_BASE}/predict/ed").mock(
@@ -505,7 +505,7 @@ class TestCallNlpWithRetry:
     async def test_respects_retry_count_from_config(self, monkeypatch):
         """With NLP_RETRIES=1, should only attempt once before raising."""
         _reset_client()
-        monkeypatch.setattr("nlp_service.NLP_RETRIES", 1)
+        monkeypatch.setattr("nlp_classifier_client.NLP_RETRIES", 1)
         monkeypatch.setattr(asyncio, "sleep", AsyncMock())
 
         route = respx.post(f"{NLP_BASE}/predict/ius").mock(

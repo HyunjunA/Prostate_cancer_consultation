@@ -25,6 +25,8 @@ from models import (
     DoctorRewriteLog,
     PatientSummary,
     PatientSummaryDomain,
+    SentencePrediction,
+    TranscriptAnalysisLog,
 )
 
 logger = logging.getLogger(__name__)
@@ -371,54 +373,86 @@ async def get_patient_files(
 @router.get("/api/patient/sentences/{file}")
 async def get_patient_sentences_by_class(
     file: str,
-    top_n: int = Query(7, ge=1, le=50),
+    top_n: int = Query(10, ge=1, le=50),
+    summary_top_n: int = Query(3, ge=1, le=10),
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user)
 ):
-    """Get top-scoring sentences from doctor_sentence_view grouped by class.
+    """Get top sentences by NLP pred_score per domain, with quality scores.
 
-    Returns the highest-scoring sentences per class for the patient
+    Returns pred_score top-N sentences per domain for the patient
     "View relevant sentences from your visit" feature.
-    All speakers in the transcript are included (doctor, patient, etc.).
+    Sentences used in AI-GENERATED SUMMARY (top summary_top_n by pred_score)
+    are marked with is_in_summary=true.
     """
     await check_patient_access(file, user, db)
 
-    stmt = select(
-        DoctorSentenceView.class_,
-        DoctorSentenceView.sentence,
-        DoctorSentenceView.score,
-        DoctorSentenceView.speaker,
-        DoctorSentenceView.i,
-        DoctorSentenceView.i2,
+    # Find latest analysis for this file
+    analysis_stmt = select(TranscriptAnalysisLog.id).where(
+        TranscriptAnalysisLog.source_filename == file
+    ).order_by(TranscriptAnalysisLog.analyzed_at.desc()).limit(1)
+    analysis_id = (await db.execute(analysis_stmt)).scalar_one_or_none()
+
+    if not analysis_id:
+        return {"file": file, "top_n": top_n, "by_class": {}}
+
+    # Get all predictions for this analysis, ordered by pred_score DESC per model
+    ranked = select(
+        SentencePrediction.model,
+        SentencePrediction.sentence_text,
+        SentencePrediction.pred_score,
+        SentencePrediction.speaker,
+        SentencePrediction.utterance_index,
+        SentencePrediction.sentence_in_utterance,
+        func.row_number().over(
+            partition_by=SentencePrediction.model,
+            order_by=SentencePrediction.pred_score.desc()
+        ).label('rn')
     ).where(
-        DoctorSentenceView.file == file,
-        DoctorSentenceView.class_ != '-1',
-        DoctorSentenceView.score.isnot(None),
-    ).order_by(
-        DoctorSentenceView.class_,
-        DoctorSentenceView.score.desc(),
-    )
+        SentencePrediction.analysis_id == analysis_id,
+    ).subquery()
 
-    results = (await db.execute(stmt)).all()
+    top_stmt = select(
+        ranked.c.model,
+        ranked.c.sentence_text,
+        ranked.c.pred_score,
+        ranked.c.speaker,
+        ranked.c.utterance_index,
+        ranked.c.sentence_in_utterance,
+        ranked.c.rn,
+    ).where(ranked.c.rn <= top_n).order_by(ranked.c.model, ranked.c.rn)
 
-    # Group by class, keep top_n per class
+    results = (await db.execute(top_stmt)).all()
+
+    # Join with doctor_sentence_view for quality scores
     by_class: dict[str, list[dict]] = {}
     for r in results:
-        cls = r.class_
-        if cls not in by_class:
-            by_class[cls] = []
-        if len(by_class[cls]) < top_n:
-            by_class[cls].append({
-                "sentence": r.sentence,
-                "score": r.score,
-                "speaker": r.speaker,
-                "i": r.i,
-                "i2": r.i2,
-            })
+        # Look up quality score from doctor_sentence_view
+        score_stmt = select(DoctorSentenceView.score).where(
+            DoctorSentenceView.file == file,
+            DoctorSentenceView.i == r.utterance_index,
+            DoctorSentenceView.i2 == r.sentence_in_utterance,
+        )
+        quality_score = (await db.execute(score_stmt)).scalar_one_or_none()
+
+        model = r.model
+        if model not in by_class:
+            by_class[model] = []
+
+        by_class[model].append({
+            "sentence": r.sentence_text,
+            "pred_score": round(float(r.pred_score), 4),
+            "score": quality_score if quality_score is not None else None,
+            "speaker": r.speaker,
+            "i": r.utterance_index,
+            "i2": r.sentence_in_utterance,
+            "is_in_summary": r.rn <= summary_top_n,
+        })
 
     return {
         "file": file,
         "top_n": top_n,
+        "summary_top_n": summary_top_n,
         "by_class": by_class,
     }
 

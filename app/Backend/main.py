@@ -38,7 +38,7 @@ from routes_transcript import router as transcript_router
 from routes_tracking import router as tracking_router
 from auth.admin_routes import router as auth_router
 from redis_client import init_redis, close_redis, get_redis
-from nlp_service import close_http_client, nlp_health_check
+from nlp_classifier_client import close_http_client, nlp_health_check
 
 
 # ──────────────────────────────────────────────────────────────────────────────

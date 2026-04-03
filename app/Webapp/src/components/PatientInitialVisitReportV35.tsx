@@ -448,6 +448,12 @@ const CLASS_TO_TOPIC_MAP: Record<string, string> = {
   "4.0": "Urinary Incontinence",
   "5": "Irritative Urinary Symptoms",
   "5.0": "Irritative Urinary Symptoms",
+  // Short model keys (from sentence_prediction.model)
+  "cp": "Cancer Prognosis",
+  "le": "Life Expectancy",
+  "ed": "Erectile Dysfunction",
+  "inc": "Urinary Incontinence",
+  "ius": "Irritative Urinary Symptoms",
   // Full domain name keys (from pipeline)
   "cancer_prognosis": "Cancer Prognosis",
   "continence": "Urinary Incontinence",
@@ -951,35 +957,61 @@ const TopicCard: React.FC<TopicCardProps> = ({
                   Excerpts from your consultation
                 </h4>
                 {extractedSentences && extractedSentences.length > 0 ? (
-                  extractedSentences.map((sentence, idx) => (
+                  extractedSentences.map((item, idx) => (
                     <div
                       key={idx}
                       className={cx(
                         "p-4 rounded-xl border-l-4 transition-all duration-200",
-                        isDark
-                          ? "bg-slate-800/50 border-l-indigo-500 border-y border-r border-slate-700/50"
-                          : "bg-white border-l-indigo-500 border-y border-r border-gray-100 shadow-sm",
+                        item.is_in_summary
+                          ? isDark
+                            ? "bg-amber-900/20 border-l-amber-500 border-y border-r border-amber-700/30"
+                            : "bg-amber-50 border-l-amber-500 border-y border-r border-amber-200"
+                          : isDark
+                            ? "bg-slate-800/50 border-l-indigo-500 border-y border-r border-slate-700/50"
+                            : "bg-white border-l-indigo-500 border-y border-r border-gray-100 shadow-sm",
                       )}
                     >
                       <div className="flex items-start gap-3">
                         <div
                           className={cx(
                             "flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold",
-                            isDark
-                              ? "bg-indigo-500/20 text-indigo-300"
-                              : "bg-indigo-100 text-indigo-600",
+                            item.is_in_summary
+                              ? isDark
+                                ? "bg-amber-500/20 text-amber-300"
+                                : "bg-amber-100 text-amber-700"
+                              : isDark
+                                ? "bg-indigo-500/20 text-indigo-300"
+                                : "bg-indigo-100 text-indigo-600",
                           )}
                         >
                           {idx + 1}
                         </div>
-                        <p
-                          className={cx(
-                            "flex-1 text-sm leading-relaxed italic",
-                            isDark ? "text-slate-300" : "text-gray-600",
-                          )}
-                        >
-                          &ldquo;{sentence}&rdquo;
-                        </p>
+                        <div className="flex-1">
+                          <p
+                            className={cx(
+                              "text-sm leading-relaxed italic",
+                              isDark ? "text-slate-300" : "text-gray-600",
+                            )}
+                          >
+                            &ldquo;{item.sentence}&rdquo;
+                          </p>
+                          <div className="flex items-center gap-3 mt-2">
+                            {item.score !== null && (
+                              <span className={cx("text-xs font-medium px-2 py-0.5 rounded",
+                                isDark ? "bg-slate-700 text-slate-300" : "bg-gray-100 text-gray-600"
+                              )}>
+                                Score: {item.score}
+                              </span>
+                            )}
+                            {item.is_in_summary && (
+                              <span className={cx("text-xs font-medium px-2 py-0.5 rounded",
+                                isDark ? "bg-amber-500/20 text-amber-300" : "bg-amber-100 text-amber-700"
+                              )}>
+                                Used in Summary
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ))
@@ -1090,7 +1122,12 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
   const [summaryData, setSummaryData] = useState<SummaryDetailResponse | null>(
     null,
   );
-  const [evidenceSentences, setEvidenceSentences] = useState<Record<string, string[]>>({});
+  const [evidenceSentences, setEvidenceSentences] = useState<Record<string, Array<{
+    sentence: string;
+    pred_score: number;
+    score: number | null;
+    is_in_summary: boolean;
+  }>>>({});
   const [apiLoading, setApiLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
 
@@ -1144,15 +1181,21 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
           setApiError("Failed to load summary data");
         }
 
-        // Map evidence sentences by class → topic name
+        // Map evidence sentences by class → topic name (with pred_score, score, is_in_summary)
         if (sentencesResult?.by_class) {
-          const mapped: Record<string, string[]> = {};
+          const mapped: Record<string, Array<{sentence: string; pred_score: number; score: number | null; is_in_summary: boolean}>> = {};
           for (const [cls, sentences] of Object.entries(sentencesResult.by_class)) {
             const topicName = CLASS_TO_TOPIC_MAP[cls];
             if (topicName) {
-              mapped[topicName] = (sentences as any[]).map((s: any) => s.sentence);
+              mapped[topicName] = (sentences as any[]).map((s: any) => ({
+                sentence: s.sentence,
+                pred_score: s.pred_score,
+                score: s.score,
+                is_in_summary: s.is_in_summary || false,
+              }));
             }
           }
+          console.log("[evidenceSentences] Mapped:", mapped);
           setEvidenceSentences(mapped);
         }
       } catch (err) {
@@ -1170,7 +1213,7 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
   const consultationTopics = useMemo(() => {
     const topics: Record<
       string,
-      { aiSummary: string; extractedSentences: string[] }
+      { aiSummary: string; extractedSentences: Array<{sentence: string; pred_score: number; score: number | null; is_in_summary: boolean}> }
     > = {};
 
     if (summaryData?.summary?.classes) {
