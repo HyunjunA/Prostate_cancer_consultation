@@ -221,19 +221,26 @@ interface DetailViewProps {
 // Constants
 // ═══════════════════════════════════════════════════════════
 const CLASS_TO_TOPIC: Record<string, TopicName> = {
+  // Numeric keys (legacy)
   "1": "Cancer Prognosis",
   "2": "Life Expectancy",
   "3": "Erectile Dysfunction",
   "4": "Urinary Incontinence",
   "5": "Irritative Symptoms",
+  // Full domain name keys (from pipeline)
+  "cancer_prognosis": "Cancer Prognosis",
+  "life_expectancy": "Life Expectancy",
+  "erectile_dysfunction_potency": "Erectile Dysfunction",
+  "continence": "Urinary Incontinence",
+  "irritative_urinary_symptoms_frequency_urgency_nocturnia": "Irritative Symptoms",
 };
 
 const TOPIC_TO_CLASS: Record<TopicName, string> = {
-  "Cancer Prognosis": "1",
-  "Life Expectancy": "2",
-  "Erectile Dysfunction": "3",
-  "Urinary Incontinence": "4",
-  "Irritative Symptoms": "5",
+  "Cancer Prognosis": "cancer_prognosis",
+  "Life Expectancy": "life_expectancy",
+  "Erectile Dysfunction": "erectile_dysfunction_potency",
+  "Urinary Incontinence": "continence",
+  "Irritative Symptoms": "irritative_urinary_symptoms_frequency_urgency_nocturnia",
 };
 
 const ALL_TOPICS: TopicName[] = [
