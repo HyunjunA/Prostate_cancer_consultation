@@ -21,7 +21,7 @@ There are **12 tables** organized into 5 functional groups:
 | Group | Tables | Purpose |
 |-------|--------|---------|
 | Physician Interface | `doctor_sentence_view`, `doctor_rewrite_log` | NLP-scored sentences + rewrite practice history |
-| Patient Interface | `patient_summary`, `patient_summary_scoring`, `patient_responses` | AI summaries + patient feedback |
+| Patient Interface | `patient_summary`, `patient_summary_scoring`, `patient_responses`* | AI summaries + patient feedback (*`patient_responses` not used in active UI) |
 | Survey System | `survey_submission_log` | SDM, DCS, Risk Perception, Satisfaction surveys |
 | ML Pipeline Results | `transcript_analysis_log`, `sentence_prediction` | Raw NLP pipeline output storage |
 | Infrastructure | `user_interaction_log`, `auth_user`, `auth_api_key`, `patient_access` | Behavior tracking + access control |
@@ -50,7 +50,7 @@ There are **12 tables** organized into 5 functional groups:
 | 5 AI summary cards | `patient_summary` | Per-domain AI-generated summary text |
 | Evidence sentences below summary | `doctor_sentence_view` | Original sentences that the summary is based on |
 | Summary usefulness rating | `patient_summary_scoring` | Patient rates 1-5: "Was this information helpful?" |
-| Free-text feedback | `patient_responses` | Open-ended text response per domain |
+| ~~Free-text feedback~~ | `patient_responses` | **Not used in active UI.** Table/API exist but no active component calls them. Legacy only. |
 
 ### 📋 Patient Follow-up Visit (`?visit=followup`)
 
@@ -274,9 +274,11 @@ After reading each AI summary card, patients rate how helpful the information wa
 
 ## 5. `patient_responses` — Patient Free-Text Answers
 
+> **⚠️ NOT CURRENTLY USED IN ACTIVE UI.** The API endpoints (`GET/PUT /api/patient/responses`) and hook functions (`usePatientData.tsx`) exist, but no active frontend component (V33, V35, V31Re) calls them. Only legacy components (V2–V29, inactive) used this table. The pipeline creates empty rows (answer_1~5 = NULL) at startup, but no UI reads or writes to them. Infrastructure is ready for future use.
+
 ### Why this table exists
 
-On the Patient First Visit page, patients can optionally provide free-text answers to open-ended questions about each domain. This captures qualitative feedback that star ratings alone cannot convey.
+Originally designed for the Patient First Visit page where patients would provide free-text answers to open-ended questions about each domain. This would capture qualitative feedback that star ratings alone cannot convey.
 
 ### Column details
 
