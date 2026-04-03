@@ -71,7 +71,7 @@ erDiagram
 | `i2` | INT | PK3 | 발화 내 문장 인덱스 (1-based). 발화 5가 3개 문장으로 분리되면 `i2` = 1, 2, 3. |
 | `speaker` | VARCHAR(100) | | 트랜스크립트의 화자 라벨. 항상 의사 라벨 (예: `Interviewer:`). 콜론 포함 — 프론트엔드가 이 정확한 문자열로 쿼리. |
 | `sentence` | TEXT | | 실제 문장 텍스트 (파이프라인 분절 단계에서 소문자 변환됨). 의사가 대시보드에서 읽는 내용. |
-| `score` | FLOAT | | NLP 예측 점수 (0.0–1.0). 높을수록 해당 도메인에 더 관련됨. NLP 모델의 `.pred_1` 값. |
+| `score` | FLOAT | | 상담 품질 점수 (0–5). NLP 파이프라인의 채점 단계에서 부여. 높을수록 해당 도메인에 대한 커뮤니케이션 품질이 좋음. |
 | `class` | VARCHAR(100) | | 도메인 전체 이름: `cancer_prognosis`, `life_expectancy`, `erectile_dysfunction_potency`, `continence`, 또는 `irritative_urinary_symptoms`. 프론트엔드가 이 컬럼으로 문장을 그룹화. |
 | `time` | TIMESTAMP WITH TIME ZONE | | 레코드 생성 시각. 궤적(trajectory) 뷰에서 정렬에 사용. |
 
