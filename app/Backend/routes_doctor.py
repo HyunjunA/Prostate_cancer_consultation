@@ -37,7 +37,6 @@ class DoctorRewriteUpdateFull(BaseModel):
     revised_sentence: str
     score: Optional[float] = None
     class_: str
-    selected: bool
 
 
 @router.get("/sentences/{file}/{speaker}")
@@ -98,23 +97,20 @@ async def get_doctor_sentences(
 async def get_doctor_rewrites(
     file: Optional[str] = None,
     speaker: Optional[str] = None,
-    selected: Optional[bool] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user)
 ):
     """Get doctor rewrite history with optional filters"""
-    logger.debug("get_doctor_rewrites: file=%s, selected=%s, skip=%d, limit=%d", file, selected, skip, limit)
+    logger.debug("get_doctor_rewrites: file=%s, skip=%d, limit=%d", file, skip, limit)
 
     stmt = select(DoctorRewriteLog)
-    
+
     if file:
         stmt = stmt.where(DoctorRewriteLog.file == file)
     if speaker:
         stmt = stmt.where(DoctorRewriteLog.speaker == speaker)
-    if selected is not None:
-        stmt = stmt.where(DoctorRewriteLog.selected == selected)
     
     # Get total count
     count_stmt = select(func.count()).select_from(stmt.subquery())
@@ -138,8 +134,7 @@ async def get_doctor_rewrites(
                 "original_sentence": r.original_sentence,
                 "revised_sentence": r.revised_sentence,
                 "score": r.score,
-                "class": r.class_,
-                "selected": r.selected
+                "class": r.class_
             }
             for r in results
         ]
@@ -177,8 +172,7 @@ async def update_doctor_rewrite(
         original_sentence=update_data.original_sentence,
         revised_sentence=update_data.revised_sentence,
         score=update_data.score,
-        class_=update_data.class_,
-        selected=update_data.selected
+        class_=update_data.class_
     )
     
     db.add(new_record)
@@ -194,8 +188,7 @@ async def update_doctor_rewrite(
         "original_sentence": new_record.original_sentence,
         "revised_sentence": new_record.revised_sentence,
         "score": new_record.score,
-        "class": new_record.class_,
-        "selected": new_record.selected
+        "class": new_record.class_
     }
 
 @router.get("/rewrites/{file}/{i}/{i2}/history")
@@ -273,8 +266,7 @@ async def get_doctor_rewrite_history(
                 "time": r.time.isoformat() if r.time else None,
                 "revised_sentence": r.revised_sentence,
                 "score": r.score,
-                "class": r.class_,
-                "selected": r.selected
+                "class": r.class_
             }
             for idx, r in enumerate(results)
         ]
@@ -315,8 +307,7 @@ async def get_doctor_rewrite_by_key(
         "original_sentence": result.original_sentence,
         "revised_sentence": result.revised_sentence,
         "score": result.score,
-        "class": result.class_,
-        "selected": result.selected
+        "class": result.class_
     }
 
 @router.get("/rewrites/stats")

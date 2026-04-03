@@ -428,8 +428,8 @@ Retry backoff: 2^attempt seconds (1s → 2s)
   │ PK: file, i, i2, time  │        │ PK: id (SERIAL)             │
   │    original_sentence    │        │    analysis_id (FK)         │
   │    revised_sentence     │        │    patient_id, model        │
-  │    score                │        │    sentence_text            │
-  │    selected             │        │    pred_score, context      │
+  │    score, class         │        │    sentence_text            │
+  │                         │        │    pred_score, context      │
   └─────────────────────────┘        └─────────────────────────────┘
 
 

@@ -67,7 +67,6 @@ class TestDataFactory:
         revised_sentence: str = "Revised sentence.",
         score: float = 0.45,
         class_: str = "Cancer Prognosis",
-        selected: bool = False,
     ) -> DoctorRewriteLog:
         return DoctorRewriteLog(
             file=file,
@@ -78,7 +77,6 @@ class TestDataFactory:
             revised_sentence=revised_sentence,
             score=score,
             class_=class_,
-            selected=selected,
             time=datetime.now(timezone.utc),
         )
 

@@ -156,21 +156,6 @@ class TestGetDoctorRewrites:
         assert body["total"] == 1
         assert body["data"][0]["file"] == "a.xlsx"
 
-    async def test_filter_by_selected(self, client, db, api_headers):
-        db.add(TestDataFactory.doctor_sentence(file="sel.xlsx", i=1, i2=1))
-        db.add(TestDataFactory.doctor_sentence(file="sel.xlsx", i=2, i2=1))
-        await db.commit()
-
-        rw1 = TestDataFactory.doctor_rewrite(file="sel.xlsx", i=1, i2=1, selected=True)
-        rw2 = TestDataFactory.doctor_rewrite(file="sel.xlsx", i=2, i2=1, selected=False)
-        db.add_all([rw1, rw2])
-        await db.commit()
-
-        resp = await client.get("/api/doctor/rewrites?selected=true", headers=api_headers)
-        body = resp.json()
-        assert body["total"] == 1
-        assert body["data"][0]["selected"] is True
-
     async def test_response_shape(self, client, db, api_headers):
         db.add(TestDataFactory.doctor_sentence(file="rs.xlsx", i=1, i2=1))
         await db.commit()
@@ -185,7 +170,7 @@ class TestGetDoctorRewrites:
         assert "data" in body
         row = body["data"][0]
         for key in ("file", "i", "i2", "speaker", "time", "original_sentence",
-                     "revised_sentence", "score", "class", "selected"):
+                     "revised_sentence", "score", "class"):
             assert key in row, f"Missing key: {key}"
 
     async def test_requires_authentication(self, client):
@@ -212,7 +197,6 @@ class TestPutDoctorRewrites:
             "revised_sentence": "Revised text.",
             "score": 0.65,
             "class_": "Cancer Prognosis",
-            "selected": False,
         }
         resp = await client.put("/api/doctor/rewrites", json=payload, headers=api_headers)
         assert resp.status_code == 200
@@ -230,7 +214,6 @@ class TestPutDoctorRewrites:
             "original_sentence": "Original.",
             "revised_sentence": "Revised.",
             "class_": "Cancer Prognosis",
-            "selected": True,
         }
         resp = await client.put("/api/doctor/rewrites", json=payload, headers=api_headers)
         assert resp.status_code == 404
@@ -249,7 +232,6 @@ class TestPutDoctorRewrites:
             "original_sentence": "Original.",
             "revised_sentence": "Revised.",
             "class_": "Cancer Prognosis",
-            "selected": False,
         }
         resp = await client.put("/api/doctor/rewrites", json=payload, headers=api_headers)
         assert resp.status_code == 200
@@ -269,7 +251,6 @@ class TestPutDoctorRewrites:
             "original_sentence": "Original.",
             "revised_sentence": "Revised.",
             "class_": "Cancer Prognosis",
-            "selected": False,
             # score intentionally omitted
         }
         resp = await client.put("/api/doctor/rewrites", json=payload, headers=api_headers)
@@ -290,12 +271,11 @@ class TestPutDoctorRewrites:
             "revised_sentence": "Rev.",
             "score": 0.5,
             "class_": "Life Expectancy",
-            "selected": True,
         }
         resp = await client.put("/api/doctor/rewrites", json=payload, headers=api_headers)
         body = resp.json()
         for key in ("file", "i", "i2", "speaker", "time", "original_sentence",
-                     "revised_sentence", "score", "class", "selected"):
+                     "revised_sentence", "score", "class"):
             assert key in body, f"Missing key: {key}"
 
     async def test_requires_authentication(self, client):
@@ -308,7 +288,6 @@ class TestPutDoctorRewrites:
             "original_sentence": "Orig.",
             "revised_sentence": "Rev.",
             "class_": "CP",
-            "selected": False,
         }
         resp = await client.put("/api/doctor/rewrites", json=payload)
         assert resp.status_code == 403
@@ -390,7 +369,7 @@ class TestGetDoctorRewriteHistory:
         assert "total_revisions" in body
         assert "history" in body
         entry = body["history"][0]
-        for key in ("revision_number", "time", "revised_sentence", "score", "class", "selected"):
+        for key in ("revision_number", "time", "revised_sentence", "score", "class"):
             assert key in entry, f"Missing key in history entry: {key}"
 
     async def test_includes_original_score_from_sentence_view(self, client, db, api_headers):
@@ -468,7 +447,7 @@ class TestGetDoctorRewriteByKey:
         )
         body = resp.json()
         for key in ("file", "i", "i2", "speaker", "time", "original_sentence",
-                     "revised_sentence", "score", "class", "selected"):
+                     "revised_sentence", "score", "class"):
             assert key in body, f"Missing key: {key}"
 
     async def test_requires_authentication(self, client):

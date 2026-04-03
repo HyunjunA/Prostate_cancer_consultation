@@ -25,7 +25,6 @@ export interface DoctorRewriteData {
   revised_sentence: string;
   score: number;
   class_: string; // "1" | "2" | "3" | "4" | "5"
-  selected?: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -60,7 +59,6 @@ export interface DoctorRewriteItem {
   revised_sentence: string;
   score: number;
   class: string;
-  selected: boolean;
 }
 
 export interface DoctorRewritesResponse {
@@ -79,7 +77,6 @@ export interface RewriteHistoryItem {
   revised_sentence: string;
   score: number | null;
   class: string;
-  selected: boolean;
 }
 
 export interface RewriteHistoryResponse {
@@ -573,8 +570,7 @@ export const useDoctorData = () => {
     originalSentence: string,
     revisedSentence: string,
     score: number,
-    classNumber: string,
-    selected: boolean = true
+    classNumber: string
   ) => {
     const rewriteData: DoctorRewriteData = {
       file,
@@ -586,7 +582,6 @@ export const useDoctorData = () => {
       revised_sentence: revisedSentence,
       score,
       class_: classNumber,
-      selected,
     };
 
     return saveRewrite(rewriteData);
