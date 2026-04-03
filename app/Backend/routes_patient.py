@@ -63,7 +63,7 @@ async def get_patient_summaries(
 ):
     """Get patient summaries with optional filters"""
     print("=" * 80)
-    print("🔍 DEBUG [get_patient_summaries] - Input Parameters:")
+    print("[DEBUG] [get_patient_summaries] - Input Parameters:")
     print(f"   file: {file}")
     print(f"   speaker: {speaker}")
     print(f"   skip: {skip}, limit: {limit}")
@@ -119,7 +119,7 @@ async def get_patient_summary_detail(
     """Get detailed patient summary for specific file and speaker"""
     await check_patient_access(file, user, db)
     print("=" * 80)
-    print("🔍 DEBUG [get_patient_summary_detail] - Input Parameters:")
+    print("[DEBUG] [get_patient_summary_detail] - Input Parameters:")
     print(f"   file: {file}")
     print(f"   speaker: {speaker}")
 
@@ -161,7 +161,7 @@ async def get_patient_scoring(
 ):
     """Get patient scoring data"""
     print("=" * 80)
-    print("🔍 DEBUG [get_patient_scoring] - Input Parameters:")
+    print("[DEBUG] [get_patient_scoring] - Input Parameters:")
     print(f"   file: {file}")
     print(f"   speaker: {speaker}")
 
@@ -210,7 +210,7 @@ async def update_patient_scoring(
 ):
     """Update or create patient scoring for a single domain"""
     print("=" * 80)
-    print("🔍 DEBUG [update_patient_scoring] - Input Data:")
+    print("[DEBUG] [update_patient_scoring] - Input Data:")
     print(f"   file: {update_data.file}")
     print(f"   speaker: {update_data.speaker}")
     print(f"   domain: {update_data.domain}")
@@ -266,7 +266,7 @@ async def get_patient_responses(
 ):
     """Get patient question responses"""
     print("=" * 80)
-    print("🔍 DEBUG [get_patient_responses] - Input Parameters:")
+    print("[DEBUG] [get_patient_responses] - Input Parameters:")
     print(f"   file: {file}")
     print(f"   speaker: {speaker}")
 
@@ -312,7 +312,7 @@ async def update_patient_responses(
 ):
     """Update or create patient response for a single domain"""
     print("=" * 80)
-    print("🔍 DEBUG [update_patient_responses] - Input Data:")
+    print("[DEBUG] [update_patient_responses] - Input Data:")
     print(f"   file: {update_data.file}")
     print(f"   speaker: {update_data.speaker}")
     print(f"   domain: {update_data.domain}")
@@ -468,7 +468,7 @@ async def get_dashboard_stats(
 ):
     """Get overall dashboard statistics"""
     print("=" * 80)
-    print("🔍 DEBUG [get_dashboard_stats] - Querying statistics")
+    print("[DEBUG] [get_dashboard_stats] - Querying statistics")
 
     # Doctor stats
     print("   Querying doctor interface stats...")
@@ -547,13 +547,13 @@ async def import_to_redcap(
 ):
     """Import records to REDCap project"""
     print("=" * 80)
-    print("🔍 DEBUG [import_to_redcap] - Input Data:")
+    print("[DEBUG] [import_to_redcap] - Input Data:")
     print(f"   Number of records: {len(request_data.records)}")
     print(f"   overwrite: {request_data.overwrite}")
     print(f"   return_content: {request_data.return_content}")
 
     if not REDCAP_API_URL or not REDCAP_API_TOKEN:
-        print("   ❌ ERROR: REDCap API configuration missing")
+        print("   [ERROR]: REDCap API configuration missing")
         print("=" * 80)
         raise HTTPException(
             status_code=500,

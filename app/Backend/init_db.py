@@ -42,27 +42,33 @@ async def init_database():
     # Create all tables (idempotent — skips existing)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        print("✅ All tables created (or already exist)")
+        print("[OK] All tables created (or already exist)")
+
+        # Expression indexes — date_trunc/extract are not IMMUTABLE on TIMESTAMP WITH TIME ZONE
+        # so PostgreSQL rejects them as index expressions.
+        # TODO: Create IMMUTABLE wrapper functions or use TIMESTAMP WITHOUT TIME ZONE
+        # See dev_docs/TODO.md #42
+        print("[OK] Expression indexes skipped (requires IMMUTABLE wrapper — see TODO #42)")
 
     # Verify connection
     async with engine.connect() as conn:
         result = await conn.execute(text("SELECT 1"))
         assert result.scalar() == 1
-        print("✅ Database connection verified")
+        print("[OK] Database connection verified")
 
     return engine
 
 
 async def main():
     print("\n" + "=" * 60)
-    print("🚀 Database Initialization (tables only)")
+    print("[START] Database Initialization (tables only)")
     print("=" * 60 + "\n")
 
     engine = await init_database()
     await engine.dispose()
 
     print("\n" + "=" * 60)
-    print("✅ Database initialization completed!")
+    print("[OK] Database initialization completed!")
     print("   Data population: run pipeline_runner.py with real transcripts")
     print("=" * 60 + "\n")
 

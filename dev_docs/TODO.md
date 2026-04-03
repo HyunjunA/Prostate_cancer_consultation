@@ -105,11 +105,14 @@
 
 | # | Area | Item | Details |
 |---|------|------|---------|
-| 40 | Backend | Strengthen file upload validation | `.xlsx` extension check only -> add Content-Type + size limit |
-| 41 | ML Deployment | ONNX conversion (long-term) | R Docker 1.41GB -> Python ~200MB |
-| 42 | Webapp | Fix build warnings | surveysSecondVersion/index.tsx has 4 missing exports |
-| 43 | Webapp | Clean up .dockerignore duplicates | node_modules declared twice |
-| 44 | Webapp | Enable ESLint/TypeScript checks | Remove `ignoreBuildErrors: true` |
+| 40 | Backend DB | Add missing CHECK constraints (5 columns) | `sentence_prediction.model`, `doctor_sentence_view.score`, `sentence_prediction.pred_score`, `survey_submission_log.survey_type`, `user_interaction_log.role` — need to verify actual values in code first |
+| 41 | Backend DB | Remove 3 redundant indexes on `user_interaction_log` | `idx_uil_file` (covered by composite), `idx_uil_role` (low cardinality), `idx_uil_speaker` (rarely queried alone). Reduces INSERT overhead on highest-write table |
+| 42 | Backend DB | Create 2 expression indexes via init_db.py | `idx_uil_client_ts_hour` (date_trunc) and `idx_uil_client_ts_hour_of_day` (extract hour) — defined in database_schema.sql but not created because create_all() cannot generate expression indexes. Need raw SQL execution in init_db.py after create_all() |
+| 43 | Backend | Strengthen file upload validation | `.xlsx` extension check only -> add Content-Type + size limit |
+| 44 | ML Deployment | ONNX conversion (long-term) | R Docker 1.41GB -> Python ~200MB |
+| 45 | Webapp | Fix build warnings | surveysSecondVersion/index.tsx has 4 missing exports |
+| 46 | Webapp | Clean up .dockerignore duplicates | node_modules declared twice |
+| 47 | Webapp | Enable ESLint/TypeScript checks | Remove `ignoreBuildErrors: true` |
 
 ---
 
@@ -120,5 +123,5 @@
 | **CRITICAL** | 2 | NLP parallelization, Webapp Docker 80% size reduction |
 | **HIGH** | 22 | DB schema normalization, patient master table, View conversion, CHECK constraints, index cleanup, TurboScribe conversion, PHI encryption, package/legacy cleanup |
 | **MEDIUM** | 17 | REDCap retry, JWT, audit log, cache, timeout, Next.js upgrade |
-| **LOW** | 5 | File validation, ONNX, build warnings |
-| **Total** | **44** | |
+| **LOW** | 8 | CHECK constraints, index cleanup, expression indexes, file validation, ONNX, build warnings |
+| **Total** | **47** | |

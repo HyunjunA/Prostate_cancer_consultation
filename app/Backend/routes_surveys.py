@@ -311,10 +311,10 @@ async def import_to_redcap(submission: SurveySubmission, timestamp: str) -> dict
     print("-" * 70)
     
     if not REDCAP_ENABLED:
-        print("[ERROR] ❌ REDCap is not enabled (missing API URL or TOKEN)")
+        print("[ERROR] [ERROR] REDCap is not enabled (missing API URL or TOKEN)")
         return {"success": False, "error": "REDCap not configured", "record_id": None}
     
-    print("[CONFIG] ✅ REDCap is enabled")
+    print("[CONFIG] [OK] REDCap is enabled")
     
     record_id = submission.speaker
     survey_type = submission.survey_type
@@ -324,11 +324,11 @@ async def import_to_redcap(submission: SurveySubmission, timestamp: str) -> dict
     field_mapping = FRONTEND_TO_REDCAP_MAPPING.get(survey_type, {})
     
     if not field_mapping:
-        print(f"[ERROR] ❌ No field mapping found for survey_type: {survey_type}")
+        print(f"[ERROR] [ERROR] No field mapping found for survey_type: {survey_type}")
         print(f"[INFO] Available survey types: {list(FRONTEND_TO_REDCAP_MAPPING.keys())}")
         return {"success": False, "error": f"No mapping for {survey_type}", "record_id": record_id}
     
-    print(f"[STEP 1] ✅ Found mapping with {len(field_mapping)} fields")
+    print(f"[STEP 1] [OK] Found mapping with {len(field_mapping)} fields")
     print(f"[MAPPING] {field_mapping}")
     
     # Step 2: Convert frontend answers to REDCap fields
@@ -341,9 +341,9 @@ async def import_to_redcap(submission: SurveySubmission, timestamp: str) -> dict
         if redcap_field:
             transformed_value = transform_value(survey_type, frontend_key, value)
             redcap_fields[redcap_field] = transformed_value
-            print(f"[CONVERT] ✅ {frontend_key}: '{value}' → {redcap_field}: '{transformed_value}'")
+            print(f"[CONVERT] [OK] {frontend_key}: '{value}' → {redcap_field}: '{transformed_value}'")
         else:
-            print(f"[CONVERT] ⚠️  No mapping for field: '{frontend_key}' (value: '{value}') - SKIPPED")
+            print(f"[CONVERT] [WARN]  No mapping for field: '{frontend_key}' (value: '{value}') - SKIPPED")
     
     # ══════════════════════════════════════════════════════════════════════════
     # NEW: Step 2.5 - Add complete field for this survey type
@@ -351,15 +351,15 @@ async def import_to_redcap(submission: SurveySubmission, timestamp: str) -> dict
     complete_field = SURVEY_COMPLETE_FIELDS.get(survey_type)
     if complete_field:
         redcap_fields[complete_field] = "2"  # 2 = Complete (green checkmark)
-        print(f"[COMPLETE] ✅ Adding {complete_field} = '2' (Complete - Green)")
+        print(f"[COMPLETE] [OK] Adding {complete_field} = '2' (Complete - Green)")
     else:
-        print(f"[COMPLETE] ⚠️  No complete field mapping for survey_type: {survey_type}")
+        print(f"[COMPLETE] [WARN]  No complete field mapping for survey_type: {survey_type}")
     
     print("-" * 70)
     print(f"[STEP 2] Converted {len(redcap_fields)}/{len(submission.answers)} fields (+ complete field)")
     
     if not redcap_fields:
-        print("[ERROR] ❌ No valid fields to import after conversion")
+        print("[ERROR] [ERROR] No valid fields to import after conversion")
         return {"success": False, "error": "No valid fields to import", "record_id": record_id}
     
     print(f"\n[STEP 3] Final REDCap fields to import:")
@@ -370,7 +370,7 @@ async def import_to_redcap(submission: SurveySubmission, timestamp: str) -> dict
     print(f"\n[STEP 4] Creating REDCapImportData object...")
     try:
         import_data = REDCapImportData(**redcap_fields)
-        print(f"[STEP 4] ✅ REDCapImportData created successfully")
+        print(f"[STEP 4] [OK] REDCapImportData created successfully")
         print(f"[DATA] {import_data.model_dump(exclude_none=True)}")
         
         print(f"\n[STEP 5] Calling import_to_redcap_record(record_id='{record_id}', import_data=...)")
@@ -385,9 +385,9 @@ async def import_to_redcap(submission: SurveySubmission, timestamp: str) -> dict
         success = result.get("status") == "success"
         
         if success:
-            print(f"\n[FINAL] ✅ REDCap import SUCCESSFUL")
+            print(f"\n[FINAL] [OK] REDCap import SUCCESSFUL")
         else:
-            print(f"\n[FINAL] ❌ REDCap import FAILED")
+            print(f"\n[FINAL] [ERROR] REDCap import FAILED")
             print(f"[FINAL] Error: {result.get('error', 'Unknown error')}")
         
         print("=" * 70 + "\n")
@@ -400,7 +400,7 @@ async def import_to_redcap(submission: SurveySubmission, timestamp: str) -> dict
         }
         
     except Exception as e:
-        print(f"[ERROR] ❌ Exception occurred: {type(e).__name__}")
+        print(f"[ERROR] [ERROR] Exception occurred: {type(e).__name__}")
         print(f"[ERROR] Message: {str(e)}")
         print("=" * 70 + "\n")
         return {"success": False, "error": str(e), "record_id": record_id}
@@ -1243,7 +1243,7 @@ async def delete_redcap_record(record_id: str):
     print("\n" + "=" * 70)
     print(f"[API] DELETE /redcap/records/{record_id}")
     print("=" * 70)
-    print(f"[WARNING] ⚠️  This will permanently delete the record!")
+    print(f"[WARNING] [WARN]  This will permanently delete the record!")
     
     if not REDCAP_ENABLED:
         print("[ERROR] REDCap not configured")
@@ -1318,9 +1318,9 @@ async def delete_redcap_record(record_id: str):
             if verify_response.status_code == 200:
                 remaining = verify_response.json()
                 if not remaining:
-                    print(f"[SUCCESS] ✅ Record '{record_id}' successfully deleted")
+                    print(f"[SUCCESS] [OK] Record '{record_id}' successfully deleted")
                 else:
-                    print(f"[WARNING] ⚠️ Record may still exist")
+                    print(f"[WARNING] [WARN] Record may still exist")
             
             # Final summary
             print("\n" + "=" * 70)
@@ -1328,7 +1328,7 @@ async def delete_redcap_record(record_id: str):
             print("=" * 70)
             print(f"   Action: DELETE")
             print(f"   Record ID: {record_id}")
-            print(f"   Status: ✅ Deleted")
+            print(f"   Status: [OK] Deleted")
             print(f"   Records affected: {result}")
             print("=" * 70 + "\n")
             
@@ -1338,7 +1338,7 @@ async def delete_redcap_record(record_id: str):
                 "records_deleted": result
             }
         else:
-            print(f"[ERROR] ❌ Failed to delete record: {response.text}")
+            print(f"[ERROR] [ERROR] Failed to delete record: {response.text}")
             raise HTTPException(
                 status_code=response.status_code, 
                 detail=f"Failed to delete record: {response.text}"
@@ -1512,19 +1512,19 @@ async def import_to_redcap_record(
         
         if dcs_count > 0 and 'decisional_conflict_survey_complete' not in data_dict:
             redcap_record['decisional_conflict_survey_complete'] = '2'
-            print(f"[AUTO-COMPLETE] ✅ decisional_conflict_survey_complete = '2' (Green)")
+            print(f"[AUTO-COMPLETE] [OK] decisional_conflict_survey_complete = '2' (Green)")
         
         if sdm_count > 0 and 'shared_decision_making_sdm_complete' not in data_dict:
             redcap_record['shared_decision_making_sdm_complete'] = '2'
-            print(f"[AUTO-COMPLETE] ✅ shared_decision_making_sdm_complete = '2' (Green)")
+            print(f"[AUTO-COMPLETE] [OK] shared_decision_making_sdm_complete = '2' (Green)")
         
         if risk_count > 0 and 'risk_perception_complete' not in data_dict:
             redcap_record['risk_perception_complete'] = '2'
-            print(f"[AUTO-COMPLETE] ✅ risk_perception_complete = '2' (Green)")
+            print(f"[AUTO-COMPLETE] [OK] risk_perception_complete = '2' (Green)")
         
         if sat_count > 0 and 'patient_satisfaction_complete' not in data_dict:
             redcap_record['patient_satisfaction_complete'] = '2'
-            print(f"[AUTO-COMPLETE] ✅ patient_satisfaction_complete = '2' (Green)")
+            print(f"[AUTO-COMPLETE] [OK] patient_satisfaction_complete = '2' (Green)")
         
         print(f"\n[RECORD] Record ID: {record_id}")
         print(f"[RECORD] Total fields to import: {len(redcap_record) - 1}")  # -1 for record_id
@@ -1566,14 +1566,14 @@ async def import_to_redcap_record(
         print(f"[HTTP] Response: {response.text}")
         
         if response.status_code != 200:
-            print(f"[ERROR] ❌ Import failed: {response.text}")
+            print(f"[ERROR] [ERROR] Import failed: {response.text}")
             raise HTTPException(
                 status_code=response.status_code,
                 detail=f"REDCap import failed: {response.text}"
             )
         
         import_result = response.json()
-        print(f"[SUCCESS] ✅ Import successful!")
+        print(f"[SUCCESS] [OK] Import successful!")
         print(f"[RESULT] Imported record IDs: {import_result}")
         
         # ═══════════════════════════════════════════════════════════════════
@@ -1630,7 +1630,7 @@ async def import_to_redcap_record(
         print("=" * 70)
         print(f"   Action: IMPORT")
         print(f"   Record ID: {record_id}")
-        print(f"   Status: ✅ Success")
+        print(f"   Status: [OK] Success")
         print(f"   Fields imported: {len(redcap_record) - 1}")
         print(f"      • DCS: {dcs_count}/16")
         print(f"      • SDM: {sdm_count}/4")

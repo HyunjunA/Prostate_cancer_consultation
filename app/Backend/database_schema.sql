@@ -248,9 +248,9 @@ CREATE TABLE user_interaction_log (
 );
 
 CREATE INDEX idx_uil_session ON user_interaction_log(session_id);
-CREATE INDEX idx_uil_role ON user_interaction_log(role);
-CREATE INDEX idx_uil_file ON user_interaction_log(file);
-CREATE INDEX idx_uil_speaker ON user_interaction_log(speaker);
+-- idx_uil_role REMOVED: low cardinality (2-3 values), index ineffective
+-- idx_uil_file REMOVED: covered by composite idx_uil_file_event_type (first column)
+-- idx_uil_speaker REMOVED: rarely queried alone
 CREATE INDEX idx_uil_event_type ON user_interaction_log(event_type);
 CREATE INDEX idx_uil_client_timestamp ON user_interaction_log(client_timestamp);
 CREATE INDEX idx_uil_file_event_type ON user_interaction_log(file, event_type);

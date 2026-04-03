@@ -61,10 +61,11 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────────────
 # Configuration
 # ──────────────────────────────────────────────────────────────────────────────
-NLP_API_URL: str = os.getenv("NLP_API_URL", "http://nlp-classifiers:8000")
-NLP_TIMEOUT: int = int(os.getenv("NLP_TIMEOUT", "30"))
-NLP_RETRIES: int = int(os.getenv("NLP_RETRIES", "3"))
-CACHE_TTL: int = int(os.getenv("NLP_CACHE_TTL", "3600"))  # 1 hour
+import config as _cfg
+NLP_API_URL: str = _cfg.get("nlp.api_url", "http://nlp-classifiers:8000")
+NLP_TIMEOUT: int = int(_cfg.get("nlp.timeout", 30))
+NLP_RETRIES: int = int(_cfg.get("nlp.retries", 3))
+CACHE_TTL: int = int(_cfg.get("nlp.cache_ttl", 3600))  # 1 hour
 
 # Class number → model endpoint mapping
 CLASS_TO_MODEL: Dict[str, str] = {

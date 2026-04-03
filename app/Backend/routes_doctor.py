@@ -244,9 +244,9 @@ async def get_doctor_rewrite_history(
             original_score = sentence_result.score
             print(f"   Original score from doctor_sentence_view: {original_score}")
         else:
-            print(f"   ⚠️ No matching sentence found in doctor_sentence_view")
+            print(f"   [WARN] No matching sentence found in doctor_sentence_view")
     except Exception as e:
-        print(f"   ⚠️ Error fetching original score: {e}")
+        print(f"   [WARN] Error fetching original score: {e}")
     
     print(f"   Found {len(results)} revisions")
     print("=" * 80)
@@ -1243,7 +1243,7 @@ async def get_improvement_suggestions_by_class(
     - all_levels: All score level descriptions for reference
     """
     print("=" * 80)
-    print("📋 DEBUG [get_improvement_suggestions] - Input:")
+    print("[INFO] DEBUG [get_improvement_suggestions] - Input:")
     print(f"   class_: {class_}")
     print(f"   current_score: {current_score}")
     
@@ -1306,7 +1306,7 @@ async def get_improvement_suggestions(
     Returns same as GET version.
     """
     print("=" * 80)
-    print("📋 DEBUG [get_improvement_suggestions POST] - Input:")
+    print("[INFO] DEBUG [get_improvement_suggestions POST] - Input:")
     print(f"   class_: {request_data.class_}")
     print(f"   current_score: {request_data.current_score}")
     
@@ -1364,7 +1364,7 @@ async def get_all_improvement_suggestions(
     Returns a dictionary of all classes with their suggestions.
     """
     print("=" * 80)
-    print("📋 DEBUG [get_all_improvement_suggestions]")
+    print("[INFO] DEBUG [get_all_improvement_suggestions]")
     print("=" * 80)
     
     result = {}

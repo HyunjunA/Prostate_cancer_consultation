@@ -5,15 +5,15 @@ and receives patient-friendly summary text.
 """
 
 import logging
-import os
 from typing import Dict, List
 
 import httpx
+import config
 
 logger = logging.getLogger(__name__)
 
-REWRITER_API_URL = os.getenv("REWRITER_API_URL", "http://patient-summary-rewriter:8002")
-REWRITER_TIMEOUT = int(os.getenv("REWRITER_TIMEOUT", "30"))
+REWRITER_API_URL = config.get("scoring.rewriter_url", "http://patient-summary-rewriter:8002")
+REWRITER_TIMEOUT = int(config.get("scoring.rewriter_timeout", 30))
 
 
 async def rewrite_sentences(sentences: List[str], domain: str = "") -> str:
