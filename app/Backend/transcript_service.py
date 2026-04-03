@@ -67,6 +67,8 @@ PHYSICIAN_IDS = [
     "INTERVIEWER 1",
     "INTERVIEWER 2",
     "Interviewer",
+    "Interviewer:",
+    "Interviewer: ",
     "Q",
     "Q1",
     "Q2",
