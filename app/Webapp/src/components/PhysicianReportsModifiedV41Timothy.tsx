@@ -3546,11 +3546,13 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
     const init = async () => {
       const result = await fetchFiles();
       // Set default speaker from first file's actual speaker (dynamic identification)
-      if (result?.file_details?.length > 0 && !doctorId) {
+      const useAutoDetect = !doctorId || doctorId === "auto";
+      if (result?.file_details?.length > 0 && useAutoDetect) {
         const defaultSpeaker = result.file_details[0].speaker;
         setSelectedSpeaker(defaultSpeaker);
         fetchTrajectory(defaultSpeaker);
-      } else if (doctorId) {
+      } else if (doctorId && doctorId !== "auto") {
+        setSelectedSpeaker(doctorId);
         fetchTrajectory(doctorId);
       }
     };
