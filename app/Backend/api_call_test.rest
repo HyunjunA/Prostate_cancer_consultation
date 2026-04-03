@@ -33,9 +33,9 @@ X-API-Key: {{api_key}}
 
 
 ############################################################
-### 2) Doctor Interface - Get Files
-# list of file names in the doctor_sentence_view table
-# each file is the conversation transcript between a doctor and a patient.
+### 2) Doctor Interface - Get Files (Patient List)
+# Returns all patient files + file_details (speaker, sentence_count per file)
+# Used to build patient sidebar in Doctor Demo
 ############################################################
 GET {{base}}/api/doctor/files
 X-API-Key: {{api_key}}
@@ -46,7 +46,7 @@ X-API-Key: {{api_key}}
 # get all sentences for a given file and speaker (DoctorID or Interviewer) from the doctor_sentence_view table
 # For a given file, extract only the sentences whose class is between 1 and 5 and whose speaker column is 'Interviewer (doctor)'.
 ############################################################
-GET {{base}}/api/doctor/sentences/quality-coded-nlp-pilot-sid-1.xlsx/Interviewer:
+GET {{base}}/api/doctor/sentences/processed_transcripts_sid-01.xlsx/Interviewer
 X-API-Key: {{api_key}}
 
 
@@ -62,7 +62,7 @@ X-API-Key: {{api_key}}
 ### 5) Doctor Interface - Get Rewrites (Filtered)
 # get all rewrites for a given file and speaker from the doctor_rewrite_log table
 ############################################################
-GET {{base}}/api/doctor/rewrites?file=quality-coded-nlp-pilot-sid-1.xlsx&speaker=Interviewer:
+GET {{base}}/api/doctor/rewrites?file=processed_transcripts_sid-01.xlsx&speaker=Interviewer
 X-API-Key: {{api_key}}
 
 
@@ -76,7 +76,7 @@ X-API-Key: {{api_key}}
 ### 6-1) Doctor Interface - Get Rewrite History for Specific Sentence
 # View the revision history of a specific sentence (file, i, i2)
 ############################################################
-GET {{base}}/api/doctor/rewrites/quality-coded-nlp-pilot-sid-1.xlsx/29/3/history
+GET {{base}}/api/doctor/rewrites/processed_transcripts_sid-01.xlsx/5/3/history
 X-API-Key: {{api_key}}
 
 
@@ -398,10 +398,10 @@ Content-Type: {{json}}
 X-API-Key: {{api_key}}
 
 {
-  "file": "quality-coded-nlp-pilot-sid-1.xlsx",
-  "i": 1,
-  "i2": 1,
-  "speaker": "Interviewer:",
+  "file": "processed_transcripts_sid-01.xlsx",
+  "i": 5,
+  "i2": 3,
+  "speaker": "Interviewer",
   "time": "{{$timestamp}}",
   "original_sentence": "original_sentence_example",
   "revised_sentence": "revised_sentence_example",
@@ -411,7 +411,7 @@ X-API-Key: {{api_key}}
 }
 
 ############################################################
-GET {{base}}/api/doctor/rewrites/quality-coded-nlp-pilot-sid-1.xlsx/1/1/1
+GET {{base}}/api/doctor/rewrites/processed_transcripts_sid-01.xlsx/1/1/1
 X-API-Key: {{api_key}}
 
 
@@ -425,7 +425,8 @@ X-API-Key: {{api_key}}
 
 
 ############################################################
-### 1) Get All Score Averages (all file/speaker/class combinations)
+### 1) Get All Score Averages
+# For each file×domain: returns quality score of the sentence with highest pred_score
 ############################################################
 GET {{base}}/api/doctor/scores/average
 X-API-Key: {{api_key}}
@@ -434,21 +435,21 @@ X-API-Key: {{api_key}}
 ############################################################
 ### 2) Get Score Averages - Filter by File
 ############################################################
-GET {{base}}/api/doctor/scores/average?file=quality-coded-nlp-pilot-sid-1.xlsx
+GET {{base}}/api/doctor/scores/average?file=processed_transcripts_sid-01.xlsx
 X-API-Key: {{api_key}}
 
 
 ############################################################
 ### 3) Get Score Averages - Filter by File and Speaker
 ############################################################
-GET {{base}}/api/doctor/scores/average?file=quality-coded-nlp-pilot-sid-1.xlsx&speaker=Interviewer:
+GET {{base}}/api/doctor/scores/average?file=processed_transcripts_sid-01.xlsx&speaker=Interviewer:
 X-API-Key: {{api_key}}
 
 
 ############################################################
 ### 4) Get Score Averages - Filter by File, Speaker, and Class
 ############################################################
-GET {{base}}/api/doctor/scores/average?file=quality-coded-nlp-pilot-sid-5.xlsx&speaker=Interviewer:&class=5
+GET {{base}}/api/doctor/scores/average?file=Input_Keystrokes REC001 (SID 15).xlsx&speaker=Interviewer:&class=5
 X-API-Key: {{api_key}}
 
 
@@ -460,17 +461,24 @@ X-API-Key: {{api_key}}
 
 
 ############################################################
-### 6) Get Complete Score Summary for Specific File and Speaker
-# Returns: overall stats + breakdown by class
+### 6) Get Score Summary for Specific Patient
+# For each domain: returns quality score (0-5) of the sentence with highest NLP pred_score
+# Also returns the sentence text, pred_score, and position (i, i2)
+# Speaker is auto-detected if omitted
 ############################################################
-GET {{base}}/api/doctor/scores/summary/quality-coded-nlp-pilot-sid-1.xlsx/Interviewer:
+GET {{base}}/api/doctor/scores/summary/Input_Keystrokes REC 001 (SID 10).xlsx/Interviewer:
 X-API-Key: {{api_key}}
 
 
+###
+### 6-2) Score Summary without speaker (auto-detect)
+GET {{base}}/api/doctor/scores/summary/processed_transcripts_sid-01.xlsx
+X-API-Key: {{api_key}}
+
 ############################################################
-### 7) Get Score Summary - Different File
+### 7) Get Score Summary - Different File (SID-14)
 ############################################################
-GET {{base}}/api/doctor/scores/summary/quality-coded-nlp-pilot-sid-4.xlsx/Interviewer:
+GET {{base}}/api/doctor/scores/summary/Input_Keystrokes REC001 (SID 14).xlsx/Interviewer:
 X-API-Key: {{api_key}}
 
 
@@ -511,21 +519,21 @@ X-API-Key: {{api_key}}
 ############################################################
 ### 3) Get Class Distribution for Specific File (Query Param)
 ############################################################
-GET {{base}}/api/doctor/class-distribution?file=quality-coded-nlp-pilot-sid-1.xlsx
+GET {{base}}/api/doctor/class-distribution?file=processed_transcripts_sid-01.xlsx
 X-API-Key: {{api_key}}
 
 
 ############################################################
 ### 4) Get Detailed Class Distribution for Specific File (Path Param)
 ############################################################
-GET {{base}}/api/doctor/class-distribution/quality-coded-nlp-pilot-sid-1.xlsx
+GET {{base}}/api/doctor/class-distribution/processed_transcripts_sid-01.xlsx
 X-API-Key: {{api_key}}
 
 
 ############################################################
 ### 5) Get Detailed Class Distribution (Include Invalid)
 ############################################################
-GET {{base}}/api/doctor/class-distribution/quality-coded-nlp-pilot-sid-1.xlsx?include_invalid=true
+GET {{base}}/api/doctor/class-distribution/processed_transcripts_sid-01.xlsx?include_invalid=true
 X-API-Key: {{api_key}}
 
 ############################################################
@@ -540,7 +548,7 @@ X-API-Key: {{api_key}}
 ### 9) Patient Interface - Get Summaries (Filtered)
 # return summaries for a given file and speaker from the patient_summary table
 ############################################################
-GET {{base}}/api/patient/summaries?file=quality-coded-nlp-pilot-sid-1.xlsx&speaker=Patient_quality-coded-nlp-pilot-sid-1
+GET {{base}}/api/patient/summaries?file=processed_transcripts_sid-01.xlsx&speaker=Patient_processed_transcripts_sid-01
 X-API-Key: {{api_key}}
 
 
@@ -549,7 +557,7 @@ X-API-Key: {{api_key}}
 ### 10) Patient Interface - Get Summary Detail
 # return detailed summary for a given file and speaker from the patient_summary_scoring table
 ############################################################
-GET {{base}}/api/patient/summaries/quality-coded-nlp-pilot-sid-1.xlsx/Patient_quality-coded-nlp-pilot-sid-1
+GET {{base}}/api/patient/summaries/processed_transcripts_sid-01.xlsx/Patient_processed_transcripts_sid-01
 X-API-Key: {{api_key}}
 
 
@@ -948,9 +956,9 @@ GET {{base}}/api/surveys/submissions?survey_type=dcs&redcap_synced=false
 X-API-Key: {{api_key}}
 
 ############################################################
-### By Speaker - Patient_quality-coded-nlp-pilot-sid-1
+### By Speaker - Patient_processed_transcripts_sid-01
 ############################################################
-GET {{base}}/api/surveys/by-speaker/Patient_quality-coded-nlp-pilot-sid-1
+GET {{base}}/api/surveys/by-speaker/Patient_processed_transcripts_sid-01
 X-API-Key: {{api_key}}
 
 ############################################################
@@ -995,8 +1003,8 @@ Content-Type: application/json
 
 {
   "survey_type": "sdm",
-  "file": "test_consultation_001.txt",
-  "speaker": "TEST_PATIENT_100",
+  "file": "Input_Keystrokes REC001 (SID 14).xlsx",
+  "speaker": "Patient_Input_Keystrokes REC001 (SID 14)",
   "answers": {
     "q1": "1",
     "q2": "1",
@@ -1018,8 +1026,8 @@ Content-Type: application/json
 
 {
   "survey_type": "dcs",
-  "file": "test_consultation_001.txt",
-  "speaker": "TEST_PATIENT_100",
+  "file": "Input_Keystrokes REC001 (SID 14).xlsx",
+  "speaker": "Patient_Input_Keystrokes REC001 (SID 14)",
   "answers": {
     "q1": "1",
     "q2": "2",
@@ -1052,8 +1060,8 @@ Content-Type: application/json
 
 {
   "survey_type": "risk_perception",
-  "file": "test_consultation_001.txt",
-  "speaker": "TEST_PATIENT_100",
+  "file": "Input_Keystrokes REC001 (SID 14).xlsx",
+  "speaker": "Patient_Input_Keystrokes REC001 (SID 14)",
   "answers": {
     "q1": "3",
     "q2": "1",
@@ -1075,8 +1083,8 @@ Content-Type: application/json
 
 {
   "survey_type": "satisfaction",
-  "file": "test_consultation_001.txt",
-  "speaker": "TEST_PATIENT_100",
+  "file": "Input_Keystrokes REC001 (SID 14).xlsx",
+  "speaker": "Patient_Input_Keystrokes REC001 (SID 14)",
   "answers": {
     "feedbackText": "The NLP report was very helpful in understanding my treatment options. It clearly explained the risks and benefits of each approach."
   },
@@ -1185,11 +1193,11 @@ Content-Type: application/json
 ### ══════════════════════════════════════════════════════════════════════════════
 
 ### Filter by file AND speaker
-GET {{base}}/api/surveys/submissions?file=quality-coded-nlp-pilot-sid-1.xlsx&speaker=Patient_quality-coded-nlp-pilot-sid-1
+GET {{base}}/api/surveys/submissions?file=processed_transcripts_sid-01.xlsx&speaker=Patient_processed_transcripts_sid-01
 Content-Type: application/json
 
 ### Filter by speaker
-GET {{base}}/api/surveys/submissions?speaker=Patient_quality-coded-nlp-pilot-sid-1
+GET {{base}}/api/surveys/submissions?speaker=Patient_processed_transcripts_sid-01
 Content-Type: application/json
 
 ### Filter by survey type
@@ -1216,14 +1224,14 @@ Content-Type: application/json
 ### ══════════════════════════════════════════════════════════════════════════════
 ### 13. Get Submissions by Speaker
 ### ══════════════════════════════════════════════════════════════════════════════
-GET {{base}}/api/surveys/by-speaker/TEST_PATIENT_100
+GET {{base}}/api/surveys/by-speaker/Patient_Input_Keystrokes REC001 (SID 14)
 Content-Type: application/json
 
 
 ### ══════════════════════════════════════════════════════════════════════════════
 ### 14. Get Submissions by File
 ### ══════════════════════════════════════════════════════════════════════════════
-GET {{base}}/api/surveys/by-file/test_consultation_001.txt
+GET {{base}}/api/surveys/by-file/Input_Keystrokes REC001 (SID 14).xlsx
 Content-Type: application/json
 
 
@@ -1251,7 +1259,7 @@ Content-Type: application/json
 ### ══════════════════════════════════════════════════════════════════════════════
 ### 18. Delete Record from REDCap by using the Record ID, which is the same as the speaker, which is patient ID.
 ### ══════════════════════════════════════════════════════════════════════════════
-DELETE {{base}}/api/surveys/redcap/records/Patient_quality-coded-nlp-pilot-sid-1	
+DELETE {{base}}/api/surveys/redcap/records/Patient_processed_transcripts_sid-01	
 Content-Type: application/json
 
 
@@ -1421,7 +1429,7 @@ Content-Type: application/json
 ### ══════════════════════════════════════════════════════════════════════════════
 
 ### 30. Delete TEST_SAMPLE_001
-DELETE {{base}}/api/surveys/redcap/records/Patient_quality-coded-nlp-pilot-sid-1
+DELETE {{base}}/api/surveys/redcap/records/Patient_processed_transcripts_sid-01
 Content-Type: application/json
 
 ### 31. Delete TEST001
@@ -2185,8 +2193,8 @@ X-API-Key: {{api_key}}
 
 {
   "session_id": "session_1710850000000_abc123def456",
-  "file": "quality-coded-nlp-pilot-sid-1.xlsx",
-  "speaker": "Patient_quality-coded-nlp-pilot-sid-1",
+  "file": "processed_transcripts_sid-01.xlsx",
+  "speaker": "Patient_processed_transcripts_sid-01",
   "device_type": "desktop",
   "events": [
     {
@@ -2252,7 +2260,7 @@ X-API-Key: {{api_key}}
 
 ###
 ### 6b. GET — Query all events for a specific patient
-GET {{base}}/api/tracking/events?file=quality-coded-nlp-pilot-sid-1.xlsx&speaker=Patient_quality-coded-nlp-pilot-sid-1
+GET {{base}}/api/tracking/events?file=processed_transcripts_sid-01.xlsx&speaker=Patient_processed_transcripts_sid-01
 X-API-Key: {{api_key}}
 
 ###
@@ -2262,7 +2270,7 @@ X-API-Key: {{api_key}}
 
 ###
 ### 6d. GET — Query only rating_click events
-GET {{base}}/api/tracking/events?file=quality-coded-nlp-pilot-sid-1.xlsx&event_type=rating_click
+GET {{base}}/api/tracking/events?file=processed_transcripts_sid-01.xlsx&event_type=rating_click
 X-API-Key: {{api_key}}
 
 ###
@@ -2272,7 +2280,7 @@ X-API-Key: {{api_key}}
 
 ###
 ### 6f. GET — Query scroll_depth events for a specific patient
-GET {{base}}/api/tracking/events?file=quality-coded-nlp-pilot-sid-1.xlsx&event_type=scroll_depth&limit=50
+GET {{base}}/api/tracking/events?file=processed_transcripts_sid-01.xlsx&event_type=scroll_depth&limit=50
 X-API-Key: {{api_key}}
 
 ###
@@ -2283,8 +2291,8 @@ X-API-Key: {{api_key}}
 
 {
   "session_id": "session_1710860000000_xyz789abc012",
-  "file": "quality-coded-nlp-pilot-sid-1.xlsx",
-  "speaker": "Patient_quality-coded-nlp-pilot-sid-1",
+  "file": "processed_transcripts_sid-01.xlsx",
+  "speaker": "Patient_processed_transcripts_sid-01",
   "device_type": "mobile",
   "events": [
     {

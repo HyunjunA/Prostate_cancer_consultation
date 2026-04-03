@@ -259,15 +259,48 @@ export default function Home() {
   useTracking();
 
   // ═══════════════════════════════════════════════════════════
-  // Selection Screen (shown when no URL parameters)
+  // Selection Screen — Patient list + visit type buttons
   // ═══════════════════════════════════════════════════════════
+  const [patientList, setPatientList] = useState<any[]>([]);
+  const [loadingPatients, setLoadingPatients] = useState(false);
+
+  useEffect(() => {
+    if (currentView === "selection") {
+      setLoadingPatients(true);
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const apiKey = process.env.NEXT_PUBLIC_API_KEY || "";
+      fetch(`${apiUrl}/api/patient/files`, {
+        headers: apiKey ? { "X-API-Key": apiKey } : {},
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          console.log("[SelectionScreen] Patient files loaded:", data);
+          setPatientList(data.files || data.patients || []);
+        })
+        .catch((err) => console.error("[SelectionScreen] Failed to load patients:", err))
+        .finally(() => setLoadingPatients(false));
+    }
+  }, [currentView]);
+
+  const handlePatientSelect = (file: string, visit: "first" | "followup") => {
+    const stem = file.replace(/\.(xlsx|csv)$/i, "");
+    const speaker = `Patient_${stem}`;
+    // Navigate with URL parameters (same format as before)
+    const params = new URLSearchParams({
+      fileid: file,
+      patid: speaker,
+      visit: visit,
+    });
+    window.location.href = `/?${params.toString()}`;
+  };
+
   const SelectionScreen = () => (
     <div
       className={`min-h-screen flex items-center justify-center ${
         isDarkMode ? "bg-slate-900" : "bg-gray-50"
       }`}
     >
-      <div className="text-center max-w-3xl mx-auto p-8">
+      <div className="text-center max-w-4xl mx-auto p-8">
         <h1
           className={`text-3xl font-semibold mb-4 ${
             isDarkMode ? "text-slate-100" : "text-gray-900"
@@ -280,214 +313,89 @@ export default function Home() {
             isDarkMode ? "text-slate-400" : "text-gray-600"
           }`}
         >
-          Please access this page with the appropriate URL parameters.
+          Select a patient and visit type below.
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* Patient First Visit Card */}
-          <div
-            className={`p-5 rounded-lg border ${
-              isDarkMode
-                ? "bg-slate-800 border-slate-700"
-                : "bg-white border-gray-200"
-            }`}
-          >
-            <div
-              className={`text-lg font-medium mb-2 ${
-                isDarkMode ? "text-blue-400" : "text-blue-600"
-              }`}
-            >
-              👤 First Visit
-            </div>
-            <p
-              className={`text-sm mb-4 ${
-                isDarkMode ? "text-slate-400" : "text-gray-500"
-              }`}
-            >
-              View consultation summary.
-              <br />
-              No surveys required.
-            </p>
-            <code
-              className={`block text-xs p-2 rounded break-all ${
-                isDarkMode
-                  ? "bg-slate-900 text-slate-300"
-                  : "bg-gray-100 text-gray-700"
-              }`}
-            >
-              ?fileid=...&patid=...
-              <br />
-              <span className="text-blue-500 font-semibold">&visit=first</span>
-            </code>
+        {/* Patient List */}
+        {loadingPatients ? (
+          <p className={isDarkMode ? "text-slate-400" : "text-gray-500"}>Loading patients...</p>
+        ) : patientList.length === 0 ? (
+          <p className={isDarkMode ? "text-slate-400" : "text-gray-500"}>No patients found.</p>
+        ) : (
+          <div className="w-full">
+            <table className={`w-full border-collapse rounded-lg overflow-hidden ${
+              isDarkMode ? "bg-slate-800" : "bg-white"
+            }`}>
+              <thead>
+                <tr className={isDarkMode ? "bg-slate-700" : "bg-gray-100"}>
+                  <th className={`px-6 py-3 text-left text-sm font-semibold ${isDarkMode ? "text-slate-200" : "text-gray-700"}`}>
+                    Patient
+                  </th>
+                  <th className={`px-6 py-3 text-center text-sm font-semibold ${isDarkMode ? "text-slate-200" : "text-gray-700"}`}>
+                    First Visit
+                  </th>
+                  <th className={`px-6 py-3 text-center text-sm font-semibold ${isDarkMode ? "text-slate-200" : "text-gray-700"}`}>
+                    Follow-up
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {patientList.map((file, idx) => {
+                  const match = file.match(/sid[\s_-]*(\d+)/i);
+                  const label = match ? `SID-${match[1]}` : file;
+                  return (
+                    <tr
+                      key={file}
+                      className={`border-t ${
+                        isDarkMode
+                          ? "border-slate-700 hover:bg-slate-700/50"
+                          : "border-gray-100 hover:bg-gray-50"
+                      }`}
+                    >
+                      <td className={`px-6 py-4 ${isDarkMode ? "text-slate-200" : "text-gray-800"}`}>
+                        <div className="font-medium">{label}</div>
+                        <div className={`text-xs ${isDarkMode ? "text-slate-500" : "text-gray-400"}`}>
+                          {file}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <button
+                          onClick={() => handlePatientSelect(file, "first")}
+                          className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-500 transition-colors"
+                        >
+                          First Visit
+                        </button>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <button
+                          onClick={() => handlePatientSelect(file, "followup")}
+                          className="px-4 py-2 rounded-lg text-sm font-medium bg-cyan-600 text-white hover:bg-cyan-500 transition-colors"
+                        >
+                          Follow-up
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
+        )}
 
-          {/* Patient Follow-up Visit Card */}
-          <div
-            className={`p-5 rounded-lg border ${
-              isDarkMode
-                ? "bg-slate-800 border-slate-700"
-                : "bg-white border-gray-200"
-            }`}
+        {/* Quick Links */}
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
+          <a
+            href="/?doctorid=auto"
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-500 transition-colors"
           >
-            <div
-              className={`text-lg font-medium mb-2 ${
-                isDarkMode ? "text-cyan-400" : "text-cyan-600"
-              }`}
-            >
-              👤 Follow-up Visit
-            </div>
-            <p
-              className={`text-sm mb-4 ${
-                isDarkMode ? "text-slate-400" : "text-gray-500"
-              }`}
-            >
-              Complete surveys after
-              <br />
-              your follow-up visit.
-            </p>
-            <code
-              className={`block text-xs p-2 rounded break-all ${
-                isDarkMode
-                  ? "bg-slate-900 text-slate-300"
-                  : "bg-gray-100 text-gray-700"
-              }`}
-            >
-              ?fileid=...&patid=...
-              <br />
-              <span className="text-cyan-500 font-semibold">
-                &visit=followup
-              </span>
-            </code>
-          </div>
-
-          {/* Doctor Access Card */}
-          <div
-            className={`p-5 rounded-lg border ${
-              isDarkMode
-                ? "bg-slate-800 border-slate-700"
-                : "bg-white border-gray-200"
-            }`}
-          >
-            <div
-              className={`text-lg font-medium mb-2 ${
-                isDarkMode ? "text-green-400" : "text-green-600"
-              }`}
-            >
-              👨‍⚕️ Doctor Access
-            </div>
-            <p
-              className={`text-sm mb-4 ${
-                isDarkMode ? "text-slate-400" : "text-gray-500"
-              }`}
-            >
-              Review quality reports
-              <br />
-              and AI rewrites.
-            </p>
-            <code
-              className={`block text-xs p-2 rounded break-all ${
-                isDarkMode
-                  ? "bg-slate-900 text-slate-300"
-                  : "bg-gray-100 text-gray-700"
-              }`}
-            >
-              ?fileid=...
-              <br />
-              <span className="text-green-500 font-semibold">
-                &doctorid=...
-              </span>
-            </code>
-          </div>
-          {/* Admin Tracking Card */}
+            Doctor Demo
+          </a>
           <a
             href="/admin/tracking"
-            className={`p-5 rounded-lg border block text-left transition-colors ${
-              isDarkMode
-                ? "bg-slate-800 border-slate-700 hover:border-amber-500"
-                : "bg-white border-gray-200 hover:border-amber-400"
-            }`}
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-amber-600 text-white hover:bg-amber-500 transition-colors"
           >
-            <div
-              className={`text-lg font-medium mb-2 ${
-                isDarkMode ? "text-amber-400" : "text-amber-600"
-              }`}
-            >
-              Admin Tracking
-            </div>
-            <p
-              className={`text-sm mb-4 ${
-                isDarkMode ? "text-slate-400" : "text-gray-500"
-              }`}
-            >
-              View user interaction
-              <br />
-              tracking data.
-            </p>
-            <code
-              className={`block text-xs p-2 rounded break-all ${
-                isDarkMode
-                  ? "bg-slate-900 text-slate-300"
-                  : "bg-gray-100 text-gray-700"
-              }`}
-            >
-              <span className="text-amber-500 font-semibold">
-                /admin/tracking
-              </span>
-            </code>
+            Admin Tracking
           </a>
-        </div>
-
-        {/* Quick Test Links */}
-        <div className="mt-8">
-          <p
-            className={`text-sm mb-3 ${
-              isDarkMode ? "text-slate-500" : "text-gray-400"
-            }`}
-          >
-            Quick Test Links:
-          </p>
-          <div className="flex flex-wrap justify-center gap-3">
-            <a
-              href="/?fileid=Input_Keystrokes REC001 (SID 14).xlsx&patid=Patient_Input_Keystrokes REC001 (SID 14)&visit=first"
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                isDarkMode
-                  ? "bg-blue-600 text-white hover:bg-blue-500"
-                  : "bg-blue-600 text-white hover:bg-blue-700"
-              }`}
-            >
-              Patient First Visit
-            </a>
-            <a
-              href="/?fileid=Input_Keystrokes REC001 (SID 14).xlsx&patid=Patient_Input_Keystrokes REC001 (SID 14)&visit=followup"
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                isDarkMode
-                  ? "bg-cyan-600 text-white hover:bg-cyan-500"
-                  : "bg-cyan-600 text-white hover:bg-cyan-700"
-              }`}
-            >
-              Patient Follow-up
-            </a>
-            <a
-              href="/?doctorid=auto"
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                isDarkMode
-                  ? "bg-green-600 text-white hover:bg-green-500"
-                  : "bg-green-600 text-white hover:bg-green-700"
-              }`}
-            >
-              Doctor Demo
-            </a>
-            <a
-              href="/admin/tracking"
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                isDarkMode
-                  ? "bg-amber-600 text-white hover:bg-amber-500"
-                  : "bg-amber-600 text-white hover:bg-amber-700"
-              }`}
-            >
-              Admin Tracking
-            </a>
-          </div>
         </div>
       </div>
     </div>

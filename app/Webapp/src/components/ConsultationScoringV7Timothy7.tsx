@@ -138,8 +138,9 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
   // Original multi-sentence display code is commented out below for reference.
   const displaySentences = useMemo(() => {
     if (sentences && sentences.length > 0) {
-      // Show only the last sentence
-      const lastItem = sentences[sentences.length - 1];
+      // Use first sentence (parent passes sentences in API order, representative first)
+      const lastItem = sentences[selectedIdx] || sentences[0];
+      console.log(`[ConsultationScoring] displaySentence: score=${lastItem.score}, text="${lastItem.sentence?.slice(0, 50)}..."`);
       // Always show original sentence (rewrite is learning tool only, never replaces original)
       const displayText = lastItem.sentence;
       const needsTrunc = displayText.length > maxSentenceChars;
@@ -317,13 +318,13 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
                   <div className={`flex-shrink-0 pr-3 border-r flex flex-col items-center gap-1.5 ${isDarkMode ? "border-slate-600" : "border-gray-300"}`}>
                     <button
                       onClick={() => {
-                        const s = displaySentences[selectedIdx].score;
+                        const s = highlightPosition;
                         if (s != null && onScoreClick) onScoreClick(Math.round(s));
                       }}
-                      className={`inline-flex items-center justify-center w-8 h-8 rounded text-sm font-bold transition-transform ${onScoreClick ? "cursor-pointer hover:scale-110" : ""} ${getScoreBadgeColor(displaySentences[selectedIdx].score, isDarkMode)}`}
+                      className={`inline-flex items-center justify-center w-8 h-8 rounded text-sm font-bold transition-transform ${onScoreClick ? "cursor-pointer hover:scale-110" : ""} ${getScoreBadgeColor(highlightPosition, isDarkMode)}`}
                       title={onScoreClick ? "Click to view scoring rubric" : undefined}
                     >
-                      {displaySentences[selectedIdx].score ?? "N/A"}
+                      {highlightPosition ?? "N/A"}
                     </button>
                     {/* Commented out: Rewritten badge
                     {displaySentences[selectedIdx].hasRewrite && (
@@ -371,9 +372,6 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
               className="absolute flex flex-col items-center -translate-x-1/2"
               style={{ left: `${pct}%` }}
             >
-              <span className="text-sm font-bold px-2 py-0.5 rounded bg-blue-600 text-white">
-                {highlightPosition.toFixed(1)}
-              </span>
               <div className="w-0.5 h-3 bg-blue-600" />
               <div className="text-blue-600 text-lg leading-none">▼</div>
             </div>

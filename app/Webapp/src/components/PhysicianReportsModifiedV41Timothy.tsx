@@ -227,6 +227,12 @@ const CLASS_TO_TOPIC: Record<string, TopicName> = {
   "3": "Erectile Dysfunction",
   "4": "Urinary Incontinence",
   "5": "Irritative Symptoms",
+  // Short model keys (from sentence_prediction.model)
+  "cp": "Cancer Prognosis",
+  "le": "Life Expectancy",
+  "ed": "Erectile Dysfunction",
+  "inc": "Urinary Incontinence",
+  "ius": "Irritative Symptoms",
   // Full domain name keys (from pipeline)
   "cancer_prognosis": "Cancer Prognosis",
   "life_expectancy": "Life Expectancy",
@@ -241,6 +247,15 @@ const TOPIC_TO_CLASS: Record<TopicName, string> = {
   "Erectile Dysfunction": "erectile_dysfunction_potency",
   "Urinary Incontinence": "continence",
   "Irritative Symptoms": "irritative_urinary_symptoms_frequency_urgency_nocturnia",
+};
+
+// Short model keys for matching scoreAverage API responses
+const TOPIC_TO_MODEL: Record<TopicName, string> = {
+  "Cancer Prognosis": "cp",
+  "Life Expectancy": "le",
+  "Erectile Dysfunction": "ed",
+  "Urinary Incontinence": "inc",
+  "Irritative Symptoms": "ius",
 };
 
 const ALL_TOPICS: TopicName[] = [
@@ -395,14 +410,11 @@ const leftLabelByTopic = (topic: TopicName): string => {
   return labels[topic] || topic;
 };
 
-// ═══════════════════════════════════════════════════════════
-// Placeholder consultation score generator (TEMPORARY)
-// Will be replaced by Guillermo's AI scoring sub-pipeline (Step 8)
-// ═══════════════════════════════════════════════════════════
-const getPlaceholderScore = (fileName: string, topicName: string): number => {
-  // Deterministic pseudo-random: same inputs always produce same score
+// getPlaceholderScore REMOVED — all scores now come directly from API
+// Kept as dead code reference only
+const _getPlaceholderScore_REMOVED = (_fileName: string, _topicName: string): number => {
   let hash = 0;
-  const seed = `${fileName}::${topicName}`;
+  const seed = `${_fileName}::${_topicName}`;
   for (let i = 0; i < seed.length; i++) {
     hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
   }
@@ -2188,23 +2200,20 @@ const GridView: React.FC<GridViewProps> = ({
   const isLoadingSentences =
     apiLoading && (!sentences?.data || sentences.data.length === 0);
 
-  // ⚠️ WARNING — TEMPORARY SCORING APPROACH (NOT PRODUCTION-READY)
-  // getRepresentativeSentence and getLastSentenceScore use the last sentence as a
-  // simplified placeholder. For production, replace with a proper scoring algorithm
-  // that aggregates across all relevant sentences per domain.
+  // Representative sentence: directly from scores/summary API (pred_score highest sentence)
   const getRepresentativeSentence = (data: TopicData): string => {
-    if (data.sentenceDetails.length === 0) return "No sentence available";
-    // Return the last sentence as representative
-    return data.sentenceDetails[data.sentenceDetails.length - 1]?.sentence || "No sentence available";
+    if ((data as any).representativeSentence) {
+      console.log(`[getRepresentativeSentence] Using API sentence: "${((data as any).representativeSentence || "").slice(0, 50)}..."`);
+      return (data as any).representativeSentence;
+    }
+    console.log("[getRepresentativeSentence] No API sentence, falling back to first sentenceDetail");
+    return data.sentenceDetails[0]?.sentence || "No sentence available";
   };
 
-  // Helper: get consultation score for grid display
-  // TEMPORARY: Uses placeholder random scores (1-5) until Guillermo's AI scoring (Step 8) is implemented
-  // The .pred_1 values from NLP models are sentence relevance probabilities (0.0-1.0),
-  // NOT consultation quality scores, so they must NOT be used here.
-  const getLastSentenceScore = (_data: TopicData, topicName?: TopicName): number | null => {
-    if (!selectedPatient) return null;
-    return getPlaceholderScore(selectedPatient.fileName, topicName || "default");
+  // Score for grid display: directly from scores/summary API
+  const getLastSentenceScore = (data: TopicData, _topicName?: TopicName): number | null => {
+    console.log(`[getLastSentenceScore] data.score=${data.score}`);
+    return data.score ?? null;
   };
 
   // Helper function to get first improvement suggestion
@@ -2520,7 +2529,7 @@ const GridView: React.FC<GridViewProps> = ({
                           )}
                           title="Click to view scoring rubric"
                         >
-                          {getLastSentenceScore(data, topicName) !== null ? Math.round(getLastSentenceScore(data, topicName)!) : "—"}
+                          {getLastSentenceScore(data, topicName) !== null ? getLastSentenceScore(data, topicName)!.toFixed(1) : "—"}
                         </button>
                       )}
                     </td>
@@ -2640,10 +2649,20 @@ const DetailView: React.FC<DetailViewProps> = ({
 }) => {
   const { name: topicName, patient } = selectedTopic;
   const data = topicsData[topicName];
-  // Always use last sentence (consistent with ConsultationScoring display)
-  const currentSentence = data.sentenceDetails.length > 0
-    ? data.sentenceDetails[data.sentenceDetails.length - 1]
-    : undefined;
+  // Use the representative sentence from scores/summary API (pred_score highest)
+  const repI = (data as any).representativeI;
+  const repI2 = (data as any).representativeI2;
+  const currentSentence = (() => {
+    if (repI !== null && repI2 !== null) {
+      const match = data.sentenceDetails.find((d) => d.i === repI && d.i2 === repI2);
+      if (match) {
+        console.log(`[currentSentence] Using API representative: i=${repI}, i2=${repI2}, score=${match.score}`);
+        return match;
+      }
+    }
+    console.log("[currentSentence] No API match, using first sentenceDetail");
+    return data.sentenceDetails.length > 0 ? data.sentenceDetails[0] : undefined;
+  })();
 
   // History modal state
   const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -2838,9 +2857,10 @@ const DetailView: React.FC<DetailViewProps> = ({
 
         {/* Topic Trajectory: all patients' scores for this topic */}
         {scoreAverageData && scoreAverageData.length > 0 && (() => {
-          const classNumber = TOPIC_TO_CLASS[topicName];
+          const classFullName = TOPIC_TO_CLASS[topicName];
+          const classShortName = TOPIC_TO_MODEL[topicName];
           const topicScores = scoreAverageData
-            .filter((item) => item.class === classNumber && item.avg_score !== null)
+            .filter((item) => (item.class === classFullName || item.class === classShortName) && item.avg_score !== null)
             .map((item, idx) => {
               const isCurrentPatient = item.file === patient.fileName;
               const patientInfo = allPatients?.find((p) => p.fileName === item.file);
@@ -2848,8 +2868,7 @@ const DetailView: React.FC<DetailViewProps> = ({
                 index: idx + 1,
                 file: item.file,
                 label: patientInfo?.name || `Patient ${idx + 1}`,
-                // TEMPORARY: placeholder score instead of .pred_1 avg
-                score: getPlaceholderScore(item.file, topicName),
+                score: item.avg_score ?? 0,
                 isCurrentPatient,
               };
             })
@@ -3018,9 +3037,7 @@ const DetailView: React.FC<DetailViewProps> = ({
         <div data-tour="detail-consultation-scoring" className="mb-6">
           <ConsultationScoring
             isDarkMode={isDarkMode}
-            title={titleByScore(
-              getPlaceholderScore(patient.fileName, topicName)
-            )}
+            title={titleByScore(data.score)}
             subtitle="Quality of Risk Communication"
             sentences={data.sentenceDetails.map((detail) => ({
               sentence: detail.sentence,
@@ -3029,14 +3046,12 @@ const DetailView: React.FC<DetailViewProps> = ({
               score: detail.score,
               revisedScore: detail.revisedScore,
             }))}
-            highlightPosition={
-              getPlaceholderScore(patient.fileName, topicName)
-            }
+            highlightPosition={data.score}
             leftLabel={leftLabelByTopic(topicName)}
             selectedIdx={selectedSentenceIdx}
             onSentenceClick={(idx) => setSelectedSentenceIdx(idx)}
             suggestions={getImprovementSuggestions(topicName,
-              getPlaceholderScore(patient.fileName, topicName)
+              data.score ?? 0
             )}
             allRubricLevels={getImprovementSuggestions(topicName, 0)}
             onSuggestionClick={(suggestion) => {
@@ -3580,7 +3595,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       files &&
       files.length > 0
     ) {
-      fetchScoreAverage(undefined, selectedSpeaker, undefined);
+      fetchScoreAverage(undefined, undefined, undefined);
       fetchRewriteStats(selectedSpeaker);
     }
   }, [currentView, selectedSpeaker]);
@@ -3620,10 +3635,8 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       setLoading(false);
       console.log("Patients created from files (sorted):", patientList);
 
-      // Fetch scores for all files
-      if (selectedSpeaker) {
-        fetchScoreAverage(undefined, selectedSpeaker, undefined);
-      }
+      // Fetch scores for all patients (no speaker filter — speakers vary per file)
+      fetchScoreAverage(undefined, undefined, undefined);
     }
   }, [files, selectedSpeaker]);
 
@@ -3655,15 +3668,19 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       if (prev.length === 0) return prev;
 
       const updatedPatients = prev.map((patient) => {
-        // Average of placeholder scores across all 5 topics
-        const topicScores = ALL_TOPICS.map((topic) =>
-          getPlaceholderScore(patient.fileName, topic)
-        );
-        const avgScore = topicScores.reduce((a, b) => a + b, 0) / topicScores.length;
-        return {
-          ...patient,
-          overallScore: Math.round(avgScore * 10) / 10,
-        };
+        // Use scores directly from scoreAverage API (no frontend averaging)
+        if (scoreAverage?.data) {
+          const patientScores = scoreAverage.data
+            .filter((d) => d.file === patient.fileName && d.avg_score !== null)
+            .map((d) => d.avg_score as number);
+          if (patientScores.length > 0) {
+            const avg = patientScores.reduce((a, b) => a + b, 0) / patientScores.length;
+            console.log(`[patientOverallScore] ${patient.fileName}: scores=${JSON.stringify(patientScores)}, avg=${avg}`);
+            return { ...patient, overallScore: avg };
+          }
+        }
+        console.log(`[patientOverallScore] ${patient.fileName}: no scores, defaulting to 0`);
+        return { ...patient, overallScore: 0 };
       });
 
       // Only update if scores actually changed
@@ -3758,30 +3775,51 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
     });
 
     if (scoreSummary?.by_class) {
-      scoreSummary.by_class.forEach((item) => {
+      scoreSummary.by_class.forEach((item: any) => {
         const topicName = CLASS_TO_TOPIC[item.class];
         if (topicName && result[topicName]) {
-          result[topicName].score = item.avg_score;
+          result[topicName].score = item.score ?? item.avg_score ?? null;
+          // Store representative sentence info from API (no frontend processing needed)
+          result[topicName].representativeSentence = item.sentence ?? null;
+          result[topicName].representativeI = item.i ?? null;
+          result[topicName].representativeI2 = item.i2 ?? null;
+          result[topicName].predScore = item.pred_score ?? null;
+          console.log(`[topicsData] ${topicName}: score=${result[topicName].score}, pred=${item.pred_score}, sentence="${(item.sentence || "").slice(0, 50)}..."`);
         }
       });
     }
 
-    console.log("topicsData recalculated:", result);
+    console.log("[topicsData] Final:", result);
     return result;
   }, [sentences, rewritesFiltered, scoreSummary]);
+
+  // Sync selectedSentenceIdx to API representative sentence when topic changes
+  useEffect(() => {
+    if (!selectedTopic?.name) return;
+    const data = topicsData[selectedTopic.name];
+    if (!data) return;
+    const repI = (data as any).representativeI;
+    const repI2 = (data as any).representativeI2;
+    if (repI !== null && repI !== undefined && repI2 !== null && repI2 !== undefined) {
+      const idx = data.sentenceDetails.findIndex((d) => d.i === repI && d.i2 === repI2);
+      if (idx >= 0) {
+        console.log(`[selectedSentenceIdx] Setting to representative: idx=${idx}, i=${repI}, i2=${repI2}`);
+        setSelectedSentenceIdx(idx);
+        return;
+      }
+    }
+    setSelectedSentenceIdx(0);
+  }, [selectedTopic, topicsData]);
 
   // ═══════════════════════════════════════════════════════════
   // Overall score calculation
   // ═══════════════════════════════════════════════════════════
-  // TEMPORARY: Use average of placeholder random scores (1-5) instead of .pred_1 average
-  // Will be replaced by Guillermo's AI scoring sub-pipeline (Step 8)
+  // Overall score — directly from scores/summary API (no frontend calculation)
   const overallScore = useMemo(() => {
-    if (!selectedPatient) return null;
-    const topicScores = ALL_TOPICS.map((topic) =>
-      getPlaceholderScore(selectedPatient.fileName, topic)
-    );
-    return Math.round((topicScores.reduce((a, b) => a + b, 0) / topicScores.length) * 10) / 10;
-  }, [selectedPatient]);
+    const apiScore = scoreSummary?.overall?.score ?? null;
+    console.log(`[overallScore] From API: ${apiScore}`);
+    return apiScore;
+  }, [scoreSummary]);
 
   // ═══════════════════════════════════════════════════════════
   // Filtered Patients

@@ -633,15 +633,16 @@ export const useDoctorData = () => {
   // 9) Get Score Summary by File & Speaker
   // GET /api/doctor/scores/summary/{file}/{speaker}
   // ═══════════════════════════════════════════════════════════
-  const fetchScoreSummary = async (file: string, speaker: string) => {
+  const fetchScoreSummary = async (file: string, speaker?: string) => {
     try {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(
-        `${BASE_URL}/api/doctor/scores/summary/${encodeURIComponent(
-          file
-        )}/${encodeURIComponent(speaker)}`,
+      const url = speaker
+        ? `${BASE_URL}/api/doctor/scores/summary/${encodeURIComponent(file)}/${encodeURIComponent(speaker)}`
+        : `${BASE_URL}/api/doctor/scores/summary/${encodeURIComponent(file)}`;
+
+      const response = await fetch(url,
         {
           method: "GET",
           headers: getHeaders(),
