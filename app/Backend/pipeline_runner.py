@@ -152,7 +152,7 @@ async def process_single_file(filepath: str, Session) -> Optional[Dict[str, Any]
         if len(text_row) > 0:
             text = text_row.iloc[0]["text"]
             scorer_input.append({"text": text, "domain": domain_short.get(domain_full, "")})
-            scorer_keys.append((i, i2, domain_full, text, text_row.iloc[0].get("speaker", "")))
+            scorer_keys.append((i, i2, domain_full, text, "Interviewer:"))
 
     scores_0_5 = await score_batch(scorer_input)
     logger.info("  Step 8: %d sentences scored", len(scores_0_5))
@@ -179,9 +179,8 @@ async def process_single_file(filepath: str, Session) -> Optional[Dict[str, Any]
 
     # Determine file identifier and speaker
     file_id = filename
-    # Find the speaker label from the filtered data
-    speakers = df_filtered["speaker"].unique().tolist()
-    doctor_speaker = speakers[0] if speakers else "Interviewer"
+    # Normalize speaker to "Interviewer:" for consistency across all files
+    doctor_speaker = "Interviewer:"
     patient_speaker = f"Patient_{Path(filename).stem}"
 
     from datetime import datetime, timezone
@@ -213,7 +212,7 @@ async def process_single_file(filepath: str, Session) -> Optional[Dict[str, Any]
                         sentence_index=int(row["index"]),
                         utterance_index=int(row["i"]),
                         sentence_in_utterance=int(row["i2"]),
-                        speaker=row.get("speaker", doctor_speaker),
+                        speaker=doctor_speaker,
                         sentence_text=row["text"],
                         pred_score=float(row[".pred_1"]),
                         context=row.get("context"),
