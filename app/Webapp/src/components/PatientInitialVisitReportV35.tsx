@@ -437,6 +437,7 @@ const cx = (...classes: (string | false | null | undefined)[]) =>
   classes.filter(Boolean).join(" ");
 
 const CLASS_TO_TOPIC_MAP: Record<string, string> = {
+  // Numeric keys (legacy)
   "1": "Cancer Prognosis",
   "1.0": "Cancer Prognosis",
   "2": "Life Expectancy",
@@ -447,6 +448,12 @@ const CLASS_TO_TOPIC_MAP: Record<string, string> = {
   "4.0": "Urinary Incontinence",
   "5": "Irritative Urinary Symptoms",
   "5.0": "Irritative Urinary Symptoms",
+  // Full domain name keys (from pipeline)
+  "cancer_prognosis": "Cancer Prognosis",
+  "continence": "Urinary Incontinence",
+  "erectile_dysfunction_potency": "Erectile Dysfunction",
+  "irritative_urinary_symptoms_frequency_urgency_nocturnia": "Irritative Urinary Symptoms",
+  "life_expectancy": "Life Expectancy",
 };
 
 const TOPIC_TO_CLASS_NUMBER: Record<string, 1 | 2 | 3 | 4 | 5> = {
