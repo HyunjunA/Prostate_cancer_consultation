@@ -62,19 +62,6 @@ logger = logging.getLogger(__name__)
 # Constants
 # ──────────────────────────────────────────────────────────────────────────────
 
-PHYSICIAN_IDS = [
-    "INTERVIEWER",
-    "INTERVIEWER 1",
-    "INTERVIEWER 2",
-    "Interviewer",
-    "Interviewer:",
-    "Interviewer: ",
-    "Q",
-    "Q1",
-    "Q2",
-    "Q:",
-]
-
 # R script outcome names → sheet abbreviations
 # (matches process-data-guille.R lines 151-169)
 OUTCOME_TO_SHEET = {
@@ -134,16 +121,59 @@ def read_transcript(file_bytes: bytes, filename: str) -> Tuple[pd.DataFrame, str
 # Step 2: Filter interviewer utterances
 # ──────────────────────────────────────────────────────────────────────────────
 
-def filter_interviewer(df: pd.DataFrame) -> pd.DataFrame:
-    """Keep only interviewer/physician rows and re-index.
+def identify_doctor_speaker(df: pd.DataFrame) -> str:
+    """Identify the doctor by total text length — the speaker who talks the most.
 
-    Matches process-data-guille.R lines 32-47.
+    Ivan's rule: "group by speaker, sum the text length, the bigger is the doctor."
+    No hardcoded speaker IDs. Reuses logic from AI_physician_patient_communication
+    Pipeline's preprocessing.identify_doctor_speaker().
     """
-    filtered = df[df["speaker"].isin(PHYSICIAN_IDS)].copy()
+    work = df[["speaker", "text"]].copy()
+
+    # Drop rows with missing/empty speaker
+    work["speaker"] = work["speaker"].astype(str).str.strip()
+    work = work[~work["speaker"].isin(["", "nan", "None", "NaN", "[END FILE]"])]
+    work = work.reset_index(drop=True)
+
+    if work.empty:
+        logger.warning("Step 2: No valid speakers found")
+        return ""
+
+    # Sum total text length per speaker
+    text_lengths = (
+        work
+        .groupby("speaker")["text"]
+        .apply(lambda x: x.astype(str).str.strip().str.len().sum())
+    )
+
+    doctor = text_lengths.idxmax()
+    doctor_len = int(text_lengths.max())
+
+    logger.info(
+        "Step 2: Doctor identified as '%s' (%d chars) out of %d speakers",
+        doctor, doctor_len, len(text_lengths),
+    )
+    for spk in text_lengths.sort_values(ascending=False).index:
+        logger.info("  Speaker '%s': %d chars", spk, int(text_lengths[spk]))
+
+    return doctor
+
+
+def filter_interviewer(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep only doctor rows (identified by longest total text) and re-index.
+
+    Uses Ivan's dynamic identification: speaker with most text = doctor.
+    """
+    doctor_speaker = identify_doctor_speaker(df)
+    if not doctor_speaker:
+        return pd.DataFrame(columns=df.columns)
+
+    mask = df["speaker"].astype(str).str.strip() == doctor_speaker
+    filtered = df.loc[mask].copy()
     filtered["index"] = range(1, len(filtered) + 1)
     filtered = filtered.reset_index(drop=True)
 
-    logger.info("Step 2: Filtered to %d interviewer rows", len(filtered))
+    logger.info("Step 2: Filtered to %d doctor rows (speaker='%s')", len(filtered), doctor_speaker)
     return filtered
 
 
