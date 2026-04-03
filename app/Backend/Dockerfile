@@ -45,22 +45,27 @@ RUN mkdir -p /app/logs /app/uploads /app/data /app/static \
 USER appuser
 EXPOSE ${PORT}
 
-# prestart hook (DB wait / seed / migrate)
+# prestart hook (DB init → Alembic → pipeline)
 ENV PRE_START_PATH=/app/prestart.sh
 RUN printf '%s\n' \
   '#!/usr/bin/env bash' \
   'set -e' \
   '' \
-  '# Wait for database if script exists' \
+  '# Wait for database' \
   '[ -f /app/wait_for_db.py ] && python /app/wait_for_db.py || true' \
   '' \
-  '# Initialize database if script exists' \
+  '# Create tables (idempotent)' \
   '[ -f /app/init_db.py ] && python /app/init_db.py || true' \
   '' \
-  '# Run Alembic migrations (stamp baseline if first run, then upgrade)' \
+  '# Run Alembic migrations' \
   'if [ -f /app/alembic.ini ]; then' \
   '  alembic stamp head 2>/dev/null || true' \
   '  alembic upgrade head || true' \
+  'fi' \
+  '' \
+  '# Run full pipeline on real transcripts (skip if no transcript dir or DB already has data)' \
+  'if [ -d /app/data/transcripts ] && [ "$(ls /app/data/transcripts/*.xlsx 2>/dev/null | head -1)" ]; then' \
+  '  python /app/pipeline_runner.py --dir /app/data/transcripts || true' \
   'fi' \
   > /app/prestart.sh \
  && chmod +x /app/prestart.sh
