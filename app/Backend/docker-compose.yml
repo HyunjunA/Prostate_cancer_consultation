@@ -152,8 +152,8 @@ services:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
       interval: 15s
       timeout: 5s
-      retries: 10
-      start_period: 30s
+      retries: 20
+      start_period: 180s
     ulimits:
       nofile:
         soft: 1048576
