@@ -25,9 +25,9 @@
               │                                    │
               ▼                                    ▼
 ┌─────────────────────────────┐      ┌──────────────────────────────────────────────────────────┐
-│    ⚠️ Stage 1 → 2          │      │              ✅ Stage 2 → 3 Analysis (Implemented)       │
+│     Stage 1 → 2          │      │               Stage 2 → 3 Analysis (Implemented)       │
 │    Conversion               │      │                                                          │
-│  (Not Yet Implemented       │      │  [R Path — Legacy]           [Backend Path — New ✅]     │
+│  (Not Yet Implemented       │      │  [R Path — Legacy]           [Backend Path — New ]     │
 │   — Top Priority)           │      │  process-data-guille.R       POST /api/transcript/analyze │
 │                             │      │                          POST /api/transcript/analyze-batch│
 │  • Speaker 1 → Interviewer  │      │                                                          │
@@ -220,8 +220,8 @@ Graciela_Lab_Collab/
 
 | Stage | Status | Description |
 |-------|--------|-------------|
-| **Stage 1 → 2 Conversion** | ⚠️ Not Yet Implemented | Automated conversion of TurboScribe CSV → NLP input xlsx |
-| **Stage 2 → 3 Analysis** | ✅ Implemented | `transcript_service.py` + `routes_transcript.py` (replaces R script) |
+| **Stage 1 → 2 Conversion** |  Not Yet Implemented | Automated conversion of TurboScribe CSV → NLP input xlsx |
+| **Stage 2 → 3 Analysis** |  Implemented | `transcript_service.py` + `routes_transcript.py` (replaces R script) |
 
 ### Remaining Work: Stage 1 → 2 Preprocessing Automation
 

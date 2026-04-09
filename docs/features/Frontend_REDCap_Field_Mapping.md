@@ -805,7 +805,7 @@ GET http://localhost:8000/api/surveys/redcap/records/TEST_PATIENT_001
 [DB] Saved with ID: 123
 [REDCAP] Converted 4 fields for sdm
 [REDCAP] Fields: {'sdmp_options': '1', 'sdm_ptos': '1', 'sdm_cons': '2', 'sdm_pref': '1'}
-[SUCCESS] ✅ REDCap import successful!
+[SUCCESS]  REDCap import successful!
 ```
 
 ---

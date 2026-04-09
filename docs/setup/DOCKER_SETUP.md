@@ -82,8 +82,8 @@ This uses both `docker-compose.yml` and `docker-compose.override.yml`.
 
 ## NLP Classifiers Image
 
-`nlp-classifiers` 서비스는 `r01-nlp-classifiers:latest` 로컬 Docker 이미지를 사용한다.  
-이 이미지는 Docker Hub에 없으며, 아래 경로의 OCI 이미지 디렉토리에서 로드해야 한다:
+The `nlp-classifiers` service uses the `r01-nlp-classifiers:latest` local Docker image.  
+This image is not available on Docker Hub and must be loaded from the OCI image directory at the following path:
 
 ```bash
 cd prostate_cancer_R01_NLP_classifiers_Michael/r01-nlp-classifiers-docker-image
@@ -92,7 +92,7 @@ docker load -i /tmp/r01-nlp-classifiers.tar
 # → Loaded image: r01-nlp-classifiers:latest
 ```
 
-원본 R 코드/모델은 별도 폴더에 위치:
+The original R code/models are located in a separate folder:
 ```
 prostate_cancer_project/prostate_cancer_R01_NLP_classifiers_Michael/
 ```
@@ -222,14 +222,14 @@ docker compose build webapp && docker compose up -d webapp
 **First-time startup output:**
 
 ```
-🚀 Starting Prostate Cancer Dashboard Dashboard Backend...
-🔄 Running prestart tasks...
-⏳ Waiting for database...
-🗄️  Initializing database and loading CSV...
-✅ Found 216 records in CSV
-✅ Migration completed! Created: 216, Updated: 0, Errors: 0
-✅ Prestart tasks completed successfully!
-🔧 Starting in DEVELOPMENT mode...
+ Starting Prostate Cancer Dashboard Dashboard Backend...
+ Running prestart tasks...
+ Waiting for database...
+  Initializing database and loading CSV...
+ Found 216 records in CSV
+ Migration completed! Created: 216, Updated: 0, Errors: 0
+ Prestart tasks completed successfully!
+ Starting in DEVELOPMENT mode...
 INFO: Uvicorn running on http://0.0.0.0:8000
 ```
 

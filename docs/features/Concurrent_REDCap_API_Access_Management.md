@@ -10,7 +10,7 @@ Multiple users and systems can simultaneously connect to the same REDCap instanc
 
 ---
 
-## ✅ 1. Is Concurrent Access Possible?
+##  1. Is Concurrent Access Possible?
 Yes.  
 REDCap supports **multi-user concurrent API connections**. Each request is handled independently using RESTful HTTP sessions.
 
@@ -21,7 +21,7 @@ REDCap supports **multi-user concurrent API connections**. Each request is handl
 
 ---
 
-## ⚠️ 2. Primary Risk: Concurrent Write Conflicts
+##  2. Primary Risk: Concurrent Write Conflicts
 REDCap’s API is **not transactional**, meaning it does not fully support **ACID-level concurrency control**.
 
 ### 🔸 Example Scenario
@@ -33,7 +33,7 @@ Because REDCap processes each request independently, **last-write-wins** behavio
 
 ---
 
-## ⚙️ 3. Recommended Concurrency Management Strategies
+##  3. Recommended Concurrency Management Strategies
 
 | Strategy | Description | Benefit |
 |-----------|--------------|----------|
@@ -70,10 +70,10 @@ Therefore, **data consistency must be enforced externally**, at the client level
 
 | Operation Type | Safe for Concurrency? | Notes |
 |----------------|------------------------|--------|
-| **Read (GET)** | ✅ Yes | Minimal risk; read-only. |
-| **Write (POST/PUT)** | ⚠️ Yes, but manage concurrency | Risk of overwriting data; use locks or timestamps. |
-| **Delete (DELETE)** | ⚠️ Caution | Should be serialized; no undo. |
-| **Token Reuse** | ⚠️ Not Recommended | Use unique tokens per user. |
+| **Read (GET)** |  Yes | Minimal risk; read-only. |
+| **Write (POST/PUT)** |  Yes, but manage concurrency | Risk of overwriting data; use locks or timestamps. |
+| **Delete (DELETE)** |  Caution | Should be serialized; no undo. |
+| **Token Reuse** |  Not Recommended | Use unique tokens per user. |
 
 ---
 

@@ -34,10 +34,10 @@ app/Backend/uploads/
 app/Backend/data/
 Processed_Data_DB.csv
 
-# Archive (large, contains node_modules copies)
+# Archive (all archive folders excluded from git)
 archive/
-!docs/archive/
-!dev_docs/archive/
 
 # Korean-only document versions (local only, not pushed)
 *_KR.md
+*_kr.txt
+*_kr_summary.txt

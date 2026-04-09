@@ -4,7 +4,7 @@ This guide provides step-by-step instructions for running the application direct
 
 ---
 
-## 📋 Table of Contents
+##  Table of Contents
 
 1. [Required Software Installation](#1-required-software-installation)
 2. [Database Setup](#2-database-setup)
@@ -510,7 +510,7 @@ python init_db.py
 
 ---
 
-## 📝 Additional Tips
+##  Additional Tips
 
 ### Auto-reload During Development
 

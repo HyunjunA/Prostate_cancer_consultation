@@ -2,32 +2,50 @@
 
 > Consolidated list of outstanding items, organized by priority.  
 > Target: **Production level**  
-> Sources: BACKEND_IMPROVEMENTS_TODO_KR, DB_ISSUES_ANALYSIS, ML_MODEL_DEPLOYMENT_OPTIMIZATION, WEBAPP_OPTIMIZATION_ANALYSIS, DB schema analysis (2026-04-03)  
-> Last consolidated: 2026-04-03
+> Last updated: 2026-04-03
+
+---
+
+## Recently Completed
+
+| Item | Date | Commit |
+|------|------|--------|
+| patient_summary normalization (3 tables -> 2) | 2026-04-03 | b0f4fd4 |
+| Remove AI_physician/db/ duplicate module | 2026-04-03 | 1e5d363 |
+| Thin Main (Ivan Standard #1) — move inline logic to service modules | 2026-04-03 | 527ffdd |
+| Readable Imports (Ivan Standard #4) — import module, not functions | 2026-04-03 | 527ffdd |
+| Rename nlp_service -> nlp_classifier_client | 2026-04-03 | 527ffdd |
+| Config-Driven (Ivan Standard #8) — services read from config.yaml | 2026-04-03 | 99e1321 |
+| Remove 3 redundant indexes on user_interaction_log | 2026-04-03 | 99e1321 |
+| Remove emojis from all Python code | 2026-04-03 | 99e1321 |
+| NLP model predictions parallelized (asyncio.gather) | 2026-04-02 | e1fbe2e |
+| Doctor Demo scoring — use API data directly, remove placeholder | 2026-04-03 | 4bca61e |
+| Patient First Visit — pred_score top-10 sentences with is_in_summary | 2026-04-03 | 4bca61e |
+| Patient selection screen (no URL params needed) | 2026-04-03 | 4bca61e |
 
 ---
 
 ## CRITICAL
 
-| # | Area | Item | Details | Expected Impact |
-|---|------|------|---------|-----------------|
-| 1 | ML Deployment | **Parallelize NLP model predictions** | 5 models called sequentially -> concurrent calls via `asyncio.gather()` | ~5x pipeline speed improvement |
-| 2 | Webapp Docker | **Use standalone output** | Configured in `next.config.js` but ignored by Dockerfile. Copy standalone output instead of reinstalling node_modules | Image size 1.25GB -> ~250MB (80% reduction) |
+| # | Area | Item | Details |
+|---|------|------|---------|
+| 1 | **Backend** | **Organize Backend folder structure** | 21 .py files in root — need clear separation: `services/` (transcript, scorer, rewriter, nlp_classifier_client), `routes/` (doctor, patient, surveys, tracking, transcript, nlp), `db/` (models, persistence, db, init_db), `core/` (config, redis_client, main). Remove stale files (csv_db_preprocessor.py, test_data_proc_vis_v5.py, wait_for_db.py if unused) |
+| 2 | Webapp Docker | **Use standalone output** | Configured in `next.config.js` but ignored by Dockerfile. Copy standalone output instead of reinstalling node_modules. Image size 1.25GB -> ~250MB (80% reduction) |
 
 ---
 
 ## HIGH
 
-### Backend -- Features
+### Backend — Features
 
 | # | Item | Details |
 |---|------|---------|
 | 3 | **TurboScribe CSV -> xlsx auto-conversion** | No automation code to convert Ella's TurboScribe CSV into NLP input format (only major gap) |
-| 4 | Analysis result deletion API | `DELETE /api/transcript/analysis/{id}` -- transcript_analysis_log + sentence_prediction CASCADE |
-| 5 | All patients list API | `GET /api/transcript/patients` -- full list of analyzed patients + analysis count |
+| 4 | Analysis result deletion API | `DELETE /api/transcript/analysis/{id}` — transcript_analysis_log + sentence_prediction CASCADE |
+| 5 | All patients list API | `GET /api/transcript/patients` — full list of analyzed patients + analysis count |
 | 6 | `/history` score summary | Include per-model average/max scores in history response |
 
-### Backend -- Security
+### Backend — Security
 
 | # | Item | Details |
 |---|------|---------|
@@ -43,25 +61,35 @@
 | 11 | Connection pool optimization | httpx max=20->30, keepalive=10->20 | +15-20% throughput |
 | 12 | Retry logic improvement | Add jitter + classify 4xx/5xx errors (permanent/transient) | Prevent thundering herd |
 
-### DB Schema — Production Readiness (verified 2026-04-03, all confirmed in code)
+### DB Schema
 
-| # | Item | Details | Evidence |
-|---|------|---------|----------|
-| 13 | **Normalize `patient_summary` (3 tables → 2)** | `patient_summary`, `patient_summary_scoring`, `patient_responses` all use hardcoded class_1~class_5 columns. Adding a 6th domain requires ALTER TABLE on 3 tables + code changes in 7 places. Normalize to `patient_summary` + `patient_summary_domain` (1 row per domain). Also removes unused `patient_responses` table. | `database_schema.sql:47-93`, `persistence.py:100-103`, `pipeline_runner.py:158-164` |
-| 14 | **Introduce `patient` master table** | No patient master table exists. `doctor_sentence_view` uses `file` (full filename) as patient identifier, while `sentence_prediction` uses `patient_id` (clean ID). Two identity systems coexist. Need unified patient table with clean ID, all tables reference it. | `database_schema.sql:21` (PK is file), `sentence_prediction` has separate `patient_id`, frontend uses `fileid` URL param |
-| 15 | **Convert `doctor_sentence_view` to View** | Same NLP data stored in both `sentence_prediction` (50 rows/patient) and `doctor_sentence_view` (45 rows/patient). `persistence.py` INSERTs into both. Convert `doctor_sentence_view` to a Materialized View over `sentence_prediction` to eliminate duplication and inconsistency risk. Requires changing `doctor_rewrite_log` FK. | `persistence.py:69-96` (dual INSERT) |
-| 16 | **Add missing CHECK constraints (5 columns)** | `sentence_prediction.model` (no check, should be cp/inc/ed/ius/le), `doctor_sentence_view.score` (no check, should be 0-5), `sentence_prediction.pred_score` (no check, should be 0.0-1.0), `survey_submission_log.survey_type` (no check), `user_interaction_log.role` (no check). Pattern exists in `auth_user.role` and `patient_summary_scoring` but not applied consistently. | `database_schema.sql:197,18,203,118,264` |
-| 17 | **Remove redundant indexes on `user_interaction_log`** | 9 indexes on the highest-INSERT table. `idx_uil_file` redundant with composite `idx_uil_file_event_type`, `idx_uil_role` low-cardinality (2 values), `idx_uil_speaker` rarely queried alone. Remove 3, keep 6. | `database_schema.sql:275-288` |
-| 18 | **Fix `doctor_rewrite_log.score` hardcoded to 5** | `/score-sentence` endpoint always returns 5 ("placeholder until scoring pipeline implemented"). Rewrite feedback has no real value. Call consultation-scorer for actual score. | `routes_doctor.py:796-801` |
+| # | Item | Details |
+|---|------|---------|
+| 13 | **Convert `doctor_sentence_view` to Materialized View** | Same data in `sentence_prediction` and `doctor_sentence_view`. Convert to View to eliminate duplication. Blocked by: class abbreviation mapping (cp vs cancer_prognosis) |
+| 14 | **Introduce `patient` master table** | Unify patient identity — `file` (full filename) vs `patient_id` (clean ID). Blocked by: large migration scope across all tables + frontend |
+| 15 | **Fix `doctor_rewrite_log.score` hardcoded to 5** | `/score-sentence` always returns 5. Call consultation-scorer for actual score |
 
-### Webapp
+### Webapp — Code & Bundle
 
 | # | Item | Details | Expected Impact |
 |---|------|---------|-----------------|
-| 19 | Remove unused packages | plotly(112MB), maplibre(41MB), mapbox(31MB), timelinejs(26MB), etc. | ~210MB saved in node_modules |
-| 20 | Clean up legacy components | 76 files, 64,112 lines -- only 10 of 160 components are active | Reduced build time + image size |
-| 21 | Dynamic imports | Static imports in page.tsx -> `next/dynamic` lazy loading | First Load JS 272KB -> ~150KB |
-| 22 | Consolidate chart libraries | Remove plotly + chart.js (keep d3 + recharts only) | ~120MB saved |
+| 16 | Remove unused packages | plotly(112MB), maplibre(41MB), mapbox(31MB), timelinejs(26MB), etc. | ~210MB saved in node_modules |
+| 17 | **Clean up legacy components (60+ files)** | 85 .tsx files total, only ~10 active. Versioned files: PhysicianReports V3-V41 (23), PatientReport V2-V31 (17), ConsultationScoring V3-V8 (8), PatientFollowUp V31-V37 (6), PatientInitialVisit V29-V35 (4). Keep only V41Timothy, V35, V31Re, V7Timothy7, FilterSidebarV3, HistoryModalV3 | ~100K lines removed, 6.9MB freed |
+| 18 | Dynamic imports | Static imports in page.tsx -> `next/dynamic` lazy loading | First Load JS 272KB -> ~150KB |
+| 19 | Consolidate chart libraries | Remove plotly + chart.js (keep d3 + recharts only) | ~120MB saved |
+| 20 | **Delete `dist/` folders inside `src/` (8 locations)** | `src/components/dist/`, `src/components/dist/dist/` (nested!), `src/components/charts/plotly/dist/`, `src/tracking/*/dist/` (4), `src/app/providers/dist/`. Build artifacts in source tree | 595KB freed, prevent accidental import |
+| 21 | **Delete `notused/` folders (4 locations)** | Root `Webapp/notused/` (5.3MB), `src/components/notused/` (19 files), `src/components/charts/d3js/notused/`, `src/hooks/notused/`. Dead code should be in git history, not working tree | 5.5MB+ freed |
+| 22 | **Merge duplicate survey components** | `src/components/surveys/` and `src/components/surveysSecondVersion/` have 6 identical components (BaselineQuestions, DCS, Satisfaction, RiskPerception, SDM). Minimal differences → merge into single directory with props-based switching | ~300KB duplication removed |
+| 23 | **Clean page.tsx commented imports** | 15 commented-out import lines (V33, V35, V37, V39, etc.). Git history preserves all versions | Code clarity |
+
+### Webapp — Config & Security
+
+| # | Item | Details | Expected Impact |
+|---|------|---------|-----------------|
+| 24 | **Remove `ignoreBuildErrors: true`** | `next.config.js` — TypeScript errors silenced during build. Type safety completely disabled for production | Runtime errors caught at build time |
+| 25 | **Remove `ignoreDuringBuilds: true`** | `next.config.js` — ESLint disabled during build. Code quality/security issues not caught | Build-time lint enforcement |
+| 26 | **Fix Next.js version mismatch** | `next: 13.5.6` but `eslint-config-next: 15.0.3` — 2 major versions apart. Lint rules may not match runtime behavior | Consistent tooling |
+| 27 | **Fix `.dockerignore` completeness** | Missing: `src/__tests__/`, `src/__mocks__/`, `*.md`, `notused/`, `dist/` inside src, `.git/`. Currently bloating Docker image | Image ~1.25GB → ~250MB (with standalone) |
 
 ---
 
@@ -71,33 +99,38 @@
 
 | # | Item | Details |
 |---|------|---------|
-| 23 | **REDCap sync retry mechanism** | Currently fire-and-forget (1 attempt, no retry). Need: auto-retry worker for `redcap_synced=FALSE` records, exponential backoff, resync API endpoint, admin failure alerts |
-| 24 | JWT authentication | Single API key -> per-user JWT + expiration |
-| 25 | Audit log | Table to record who accessed which data |
-| 26 | batch_id tracking | Add column for querying batch analysis groups |
-| 27 | Aggregate statistics API | Analysis count, per-model stats, patient count, etc. for dashboard use |
-| 28 | Ground truth DB integration | nlp-pilot-manual-scores(cp).csv -> DB table + prediction vs. manual comparison API |
-| 29 | DB SSL enforcement | Add `?sslmode=require` |
-| 30 | Log PII masking | Prevent plaintext logging of patient_id, etc. |
-| 31 | File versioning on patient_id re-analysis | Silent overwrite -> warning or version management |
-| 32 | Upload directory size management | Implement old file cleanup policy or monitoring |
+| 28 | **REDCap sync retry mechanism** | Currently fire-and-forget (1 attempt, no retry). Need: auto-retry worker, exponential backoff, resync API endpoint |
+| 29 | JWT authentication | Single API key -> per-user JWT + expiration |
+| 30 | Audit log | Table to record who accessed which data |
+| 31 | batch_id tracking | Add column for querying batch analysis groups |
+| 32 | Aggregate statistics API | Analysis count, per-model stats, patient count for dashboard |
+| 33 | Ground truth DB integration | nlp-pilot-manual-scores(cp).csv -> DB table + comparison API |
+| 34 | DB SSL enforcement | Add `?sslmode=require` |
+| 35 | Log PII masking | Prevent plaintext logging of patient_id |
+| 36 | File versioning on re-analysis | Silent overwrite -> warning or version management |
+| 37 | Upload directory size management | Old file cleanup policy or monitoring |
+| 38 | Docker healthcheck timeout | Backend `start_period: 30s` -> `300s` (pipeline takes 3-4 min) |
 
 ### ML Deployment
 
 | # | Item | Details | Expected Impact |
 |---|------|---------|-----------------|
-| 33 | Adaptive timeout | Fixed 30s -> payload-size-based 5/10/15s | Eliminate unnecessary waiting |
-| 34 | Cache strategy improvement | TTL 1h->30m, text normalization, hit/miss statistics | +25-40% hit rate |
-| 35 | Enhanced error classification | Single NLPServiceError -> split into Transient/Permanent | Eliminate unnecessary retries |
+| 39 | Adaptive timeout | Fixed 30s -> payload-size-based 5/10/15s | Eliminate unnecessary waiting |
+| 40 | Cache strategy improvement | TTL 1h->30m, text normalization, hit/miss statistics | +25-40% hit rate |
+| 41 | Enhanced error classification | Single NLPServiceError -> split into Transient/Permanent | Eliminate unnecessary retries |
 
-### Webapp
+### Webapp — Dependencies & Modernization
 
-| # | Item | Details |
-|---|------|---------|
-| 36 | Move @types to devDependencies | d3, papaparse, plotly.js types are in production deps |
-| 37 | Remove posthog-js, openai | Both are commented out (~32MB) |
-| 38 | Upgrade Next.js 13 -> 14+ | App Router stabilization, Turbopack, etc. (breaking change risk) |
-| 39 | API key layer exposure in build | NEXT_PUBLIC_API_KEY persists in Docker image layers |
+| # | Item | Details | Expected Impact |
+|---|------|---------|-----------------|
+| 42 | Move @types to devDependencies | d3, papaparse, plotly.js types are in production deps | Cleaner dependency tree |
+| 43 | Remove posthog-js, openai | Both are commented out (~32MB) | 32MB saved |
+| 44 | **Upgrade Next.js 13.5.6 → 15.x** | App Router stabilization, Turbopack, performance improvements (breaking change risk) | Better performance, security patches |
+| 45 | API key layer exposure in build | NEXT_PUBLIC_API_KEY persists in Docker image layers | Security improvement |
+| 46 | **Remove unused d3-dsv dependency** | Only imported in `src/hooks/notused/useSARSCOVData.tsx` (dead code) | Bundle size reduction |
+| 47 | **Expand Tailwind design system** | Only 4 custom colors defined, no spacing/typography tokens. Inline classes scattered across 85 components | Visual consistency |
+| 48 | **Fix Zustand store hydration** | Stores use localStorage without SSR hydration safety. No `useEffect` guard for client-only reads | Prevent SSR/hydration mismatch |
+| 49 | **Enable/remove PostHog** | `PostHogProvider.tsx` exists but PostHog initialization is commented out. Dead dependency | Clean up or activate analytics |
 
 ---
 
@@ -105,14 +138,15 @@
 
 | # | Area | Item | Details |
 |---|------|------|---------|
-| 40 | Backend DB | Add missing CHECK constraints (5 columns) | `sentence_prediction.model`, `doctor_sentence_view.score`, `sentence_prediction.pred_score`, `survey_submission_log.survey_type`, `user_interaction_log.role` — need to verify actual values in code first |
-| 41 | Backend DB | Remove 3 redundant indexes on `user_interaction_log` | `idx_uil_file` (covered by composite), `idx_uil_role` (low cardinality), `idx_uil_speaker` (rarely queried alone). Reduces INSERT overhead on highest-write table |
-| 42 | Backend DB | Create 2 expression indexes via init_db.py | `idx_uil_client_ts_hour` (date_trunc) and `idx_uil_client_ts_hour_of_day` (extract hour) — defined in database_schema.sql but not created because create_all() cannot generate expression indexes. Need raw SQL execution in init_db.py after create_all() |
-| 43 | Backend | Strengthen file upload validation | `.xlsx` extension check only -> add Content-Type + size limit |
-| 44 | ML Deployment | ONNX conversion (long-term) | R Docker 1.41GB -> Python ~200MB |
-| 45 | Webapp | Fix build warnings | surveysSecondVersion/index.tsx has 4 missing exports |
-| 46 | Webapp | Clean up .dockerignore duplicates | node_modules declared twice |
-| 47 | Webapp | Enable ESLint/TypeScript checks | Remove `ignoreBuildErrors: true` |
+| 50 | Backend DB | Add CHECK constraints (5 columns) | model, score, pred_score, survey_type, role — verify actual values first |
+| 51 | Backend DB | Create expression indexes | date_trunc + extract hour — requires IMMUTABLE wrapper for TIMESTAMP WITH TIME ZONE |
+| 52 | Backend | Strengthen file upload validation | `.xlsx` extension only -> add Content-Type + size limit |
+| 53 | ML Deployment | ONNX conversion (long-term) | R Docker 1.41GB -> Python ~200MB |
+| 54 | Webapp | **Fix build warnings** | surveysSecondVersion/index.tsx has 4 missing exports |
+| 55 | Webapp | **Clean up .dockerignore** | node_modules declared twice, missing exclusions |
+| 56 | Webapp | **Remove duplicate postcss.config** | Both `postcss.config.js` and `postcss.config.mjs` exist — only .js is loaded |
+| 57 | Webapp | **Clean commented code in components** | ConsultationScoringV7Timothy7.tsx has 73 lines commented out (~10.8% of file) |
+| 58 | Webapp | **Remove unused test mocks** | jest.config mocks plotly.js-dist, react-plotly.js, posthog-js — none are actually used |
 
 ---
 
@@ -120,8 +154,8 @@
 
 | Priority | Count | Key Focus |
 |----------|-------|-----------|
-| **CRITICAL** | 2 | NLP parallelization, Webapp Docker 80% size reduction |
-| **HIGH** | 22 | DB schema normalization, patient master table, View conversion, CHECK constraints, index cleanup, TurboScribe conversion, PHI encryption, package/legacy cleanup |
-| **MEDIUM** | 17 | REDCap retry, JWT, audit log, cache, timeout, Next.js upgrade |
-| **LOW** | 8 | CHECK constraints, index cleanup, expression indexes, file validation, ONNX, build warnings |
-| **Total** | **47** | |
+| **CRITICAL** | 2 | Backend folder structure, Webapp Docker standalone |
+| **HIGH** | 19 | TurboScribe conversion, PHI encryption, Materialized View, patient master table, **legacy 60+ component cleanup, dist/ removal, survey duplication, TS/ESLint enforcement** |
+| **MEDIUM** | 22 | REDCap retry, JWT, cache, **Next.js upgrade, design system, Zustand hydration, PostHog cleanup** |
+| **LOW** | 9 | CHECK constraints, expression indexes, ONNX, **build warnings, postcss duplicate, dead test mocks** |
+| **Total** | **58** | |

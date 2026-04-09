@@ -7,10 +7,10 @@
 > **Scope:** AI_physician_patient_communication + Dashboard Backend + Dashboard Webapp
 > **Audience:** Developers, researchers, reviewers
 >
-> **⚠️ Key Change (2026-03-27)**: All dashboard data now comes exclusively from the `AI_physician_patient_communication` pipeline output.
+> ** Key Change (2026-03-27)**: All dashboard data now comes exclusively from the `AI_physician_patient_communication` pipeline output.
 > Legacy fake CSV data is no longer used. Conversion script: `convert_output_to_csv.py` generates 6 CSV files from pipeline output.
 >
-> **⚠️ AI-Generated Summary (Temporary)**: The patient-facing AI summaries (`patient_summary.summary_class_1~5`) are currently
+> ** AI-Generated Summary (Temporary)**: The patient-facing AI summaries (`patient_summary.summary_class_1~5`) are currently
 > a simple concatenation of the top-3 NLP-scored sentences per domain. This is a **temporary implementation** that will be
 > replaced by **Guillermo's AI sub-pipeline (Step 9: AI reformat)**, which will generate patient-friendly reformulated summaries.
 
@@ -865,9 +865,9 @@ Patient ratings on the dashboard are **separate** from NLP scores:
   └──────────────────────────────────────────────────────────────────┘
 
   Security Status (as of 2026-02-20):
-    ✅ 6 fixes applied (timing attack, default key, port exposure,
+     6 fixes applied (timing attack, default key, port exposure,
        localhost binding, path traversal, .gitignore)
-    ⚠️  14 active vulnerabilities (see SECURITY_AUDIT_REPORT.md)
+      14 active vulnerabilities (see SECURITY_AUDIT_REPORT.md)
 ```
 
 ---

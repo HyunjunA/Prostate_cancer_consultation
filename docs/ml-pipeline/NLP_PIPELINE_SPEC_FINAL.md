@@ -1,32 +1,32 @@
-# NLP Sentence Classification Pipeline — Final Consolidated Specification
+# NLP Sentence Classification Pipeline -- Final Consolidated Specification
 
 > **Sources:** Meeting Transcript Spec (v2.1) + Jun's Implementation Spec (v1)
 > **Author:** Jun (implementation), Ivan/Gideon (requirements)
-> **Purpose:** Michael의 R(+HTML 주석) 기반 NLP 파이프라인을 **Python으로 동일 재현**하여
-> 샘플 input → 중간 산출물 → 최종 output이 **정확히 일치**(또는 합의된 변경만 반영)하도록 구현/검증한다.
+> **Purpose:** Replicate Michael's R (+HTML comments)-based NLP pipeline **identically in Python**
+> so that sample input -> intermediate outputs -> final output **match exactly** (or reflect only agreed-upon changes).
 
 ---
 
-## 0. 핵심 요구사항 요약 (대화에서 반복된 5가지)
+## 0. Summary of Core Requirements (5 Points Repeated in Discussion)
 
-1. **전처리/후처리 정의 바로잡기**
-   - 전처리: 문장 분절/필터링/정리
-   - 후처리: Top-N 선별 + 컨텍스트 확장 + 인덱스 부여 + 출력 포맷팅
+1. **Correct the definitions of pre-processing and post-processing**
+   - Pre-processing: sentence segmentation / filtering / cleanup
+   - Post-processing: Top-N selection + context expansion + index assignment + output formatting
 
-2. **동일성(Exact Match) 최우선**
-   - "다운스트림 분류기가 학습한 문장 구조가 조금만 달라도 파이프라인 전체가 무효가 될 수 있다."
+2. **Exact Match is the top priority**
+   - "Even a minor change to the sentence structure that the downstream classifier was trained on can invalidate the entire pipeline."
 
-3. **인덱스(index, i, i2) 유지 필요**
-   - 처음엔 "index만 있어도 된다"는 의견이 있었으나, 최종적으로 3종 인덱스를 유지한다.
-   - 이유: 개발 당시와 동일하게 유지해 surprises 방지 + 디버깅 가능
+3. **Maintain indices (index, i, i2)**
+   - Initially there was an opinion that "index alone would suffice," but ultimately all three indices are retained.
+   - Reason: keep them identical to the original development to prevent surprises + enable debugging
 
-4. **Top-10(도메인별) 규칙으로 확정**
-   - 코드에는 `prob > 0.7`(과거 실험 기준)이 있었지만, 최종 합의는 "각 도메인별 pred1 확률 상위 10문장"이다.
+4. **Finalized as Top-10 (per domain) rule**
+   - The code contained `prob > 0.7` (from past experiments), but the final agreement is "top 10 sentences by pred1 probability per domain."
 
-5. **새 입력 포맷(TurboScribe) 대응**
-   - Keystroke(구 포맷): interviewer/patient처럼 명확한 라벨
-   - TurboScribe(신 포맷): speaker1/speaker2 등으로 바뀜
-   - 따라서 doctor 판단은 "이름이 아니라 발화량(총 텍스트 길이)"로 한다.
+5. **Support for new input format (TurboScribe)**
+   - Keystroke (old format): clear labels like interviewer/patient
+   - TurboScribe (new format): uses speaker1/speaker2, etc.
+   - Therefore, doctor identification uses "total text length" rather than relying on the name.
 
 ---
 
@@ -39,7 +39,7 @@ This pipeline must:
 3. Generate indices (`i`, `i2`, `index`) identical in structure to the R implementation.
 4. Classify each sentence using the trained model (5 domains via Docker API).
 5. Select Top 10 sentences per outcome (replacing >0.70 threshold logic).
-6. Extract ±3 sentence contextual windows using `index`.
+6. Extract +/-3 sentence contextual windows using `index`.
 7. Export intermediate and final outputs for validation.
 
 ---
@@ -48,86 +48,86 @@ This pipeline must:
 
 ### 2.1 Exact Match
 
-- 결과가 "비슷"하면 안 된다. **샘플과 비교했을 때** 다음이 동일해야 한다:
-  - (1) 문장 분절 결과: 문장 개수/경계/텍스트(공백 포함)
-  - (2) 인덱스: index/i/i2 값 및 기준(0/1-base 포함)
-  - (3) 분류 결과 포맷: domain별 pred0/pred1 컬럼 구조
-  - (4) Top-10 선택 결과
-  - (5) ±3 컨텍스트 확장 결과
-  - (6) 최종 CSV: row 수/정렬/컬럼 순서/값
+- Results must not be "similar." When compared against samples, the following must be identical:
+  - (1) Sentence segmentation results: sentence count / boundaries / text (including whitespace)
+  - (2) Indices: index/i/i2 values and basis (including 0/1-based)
+  - (3) Classification result format: pred0/pred1 column structure per domain
+  - (4) Top-10 selection results
+  - (5) +/-3 context expansion results
+  - (6) Final CSV: row count / sort order / column order / values
 
-> **대화 근거:** "minimum change can… downstream classifier가 학습한 구조가 달라지면 invalid"
-> "비교해서 outputs are exactly the same"
+> **Discussion reference:** "minimum change can... downstream classifier's trained structure changes and becomes invalid"
+> "compare and outputs are exactly the same"
 
 ### 2.2 Architecture Separation
 
-- DB/GUI/REDCap/기타 시스템과 **결합하지 않는다.** 파이프라인은 **독립 유닛**이다.
-- 스파게티 코드 금지. 모듈화 + 유지보수 가능 구조.
+- **Do not couple** with DB / GUI / REDCap / other systems. The pipeline is an **independent unit**.
+- No spaghetti code. Modular + maintainable structure.
 
-> **대화 근거:** "This pipeline has nothing to do with the database… GUIs, Redcaps… this is a unit."
-> "super clean… not messy code… maintainable… comment it."
+> **Discussion reference:** "This pipeline has nothing to do with the database... GUIs, Redcaps... this is a unit."
+> "super clean... not messy code... maintainable... comment it."
 
 ### 2.3 Code Quality
 
-- "일단 돌아가게만" 금지. 처음부터 파이프라인 형태로 clean하게 구축.
-- 최소한의 주석이라도 핵심 단계별로 반드시 포함.
+- No "just make it work" approach. Build it cleanly as a pipeline from the start.
+- At minimum, include comments for each key step.
 
-> **대화 근거:** "Don't do it like try it and see if it works… build it pipeline way from beginning"
+> **Discussion reference:** "Don't do it like try it and see if it works... build it pipeline way from beginning"
 
-### 2.4 R Logic — No Guessing
+### 2.4 R Logic -- No Guessing
 
-- R 코드에서 `group_by`, `mutate`, `ungroup` 등 의미가 애매하면 **즉시 질문**한다.
+- If the meaning of R code constructs like `group_by`, `mutate`, `ungroup` is ambiguous, **ask immediately**.
 
-> **대화 근거:** "If you have a doubt… ask us. We have limited time."
-> "Don't go by 'I think…' ask us."
+> **Discussion reference:** "If you have a doubt... ask us. We have limited time."
+> "Don't go by 'I think...' ask us."
 
 ### 2.5 Sample-Based Development
 
-- 구현은 "추정 기반 개발"이 아니라, **샘플 입출력 비교 기반**으로 한다.
+- Implementation is based on **sample input/output comparison**, not "assumption-based development."
 
-> **대화 근거:** "from the first file… to segmented file… to final output… compare exactly same"
-
----
-
-## 3. Required Resources (4종 세트)
-
-1. **Keystroke 입력 CSV** (예: `Rec_001_SIT_14...`)
-   - row 단위는 문장이 아니라 "turn/segment"
-
-2. **Michael HTML 파일**
-   - R 코드 + 주석 + 알고리즘 설명 포함
-
-3. **Michael 최종 output CSV**
-   - 예: `NLP ... process results`
-
-4. **TurboScribe 입력 CSV 샘플**
-   - speaker1/speaker2 등으로 표현되는 신 포맷
-
-> **대화 근거:** "I can send you three things… input, html, output"
+> **Discussion reference:** "from the first file... to segmented file... to final output... compare exactly same"
 
 ---
 
-## 4. Configuration Specification (하드코딩 금지)
+## 3. Required Resources (4 Items)
+
+1. **Keystroke input CSV** (e.g., `Rec_001_SIT_14...`)
+   - Each row represents a "turn/segment," not a sentence
+
+2. **Michael's HTML file**
+   - Contains R code + comments + algorithm explanation
+
+3. **Michael's final output CSV**
+   - e.g., `NLP ... process results`
+
+4. **TurboScribe input CSV sample**
+   - New format with speaker1/speaker2, etc.
+
+> **Discussion reference:** "I can send you three things... input, html, output"
+
+---
+
+## 4. Configuration Specification (No Hardcoding)
 
 Required configuration keys:
 
 | Key | Description | Default |
 |-----|-------------|---------|
-| `input_path` | 입력 폴더 경로 | — |
-| `output_path` | 출력 폴더 경로 | — |
-| `archive_path` | 처리 완료 파일 이동 경로 | — |
-| `error_path` | 실패 파일 이동 경로 | — |
-| `text_column_name` | 텍스트 컬럼명 | `text` |
-| `speaker_column_name` | 스피커 컬럼명 | `speaker` |
-| `file_pattern` | 입력 파일 패턴 | `*.xlsx` |
-| `poll_interval_sec` | 파일 감시 주기 | `5` |
-| `sid_column_name` | SID 컬럼명 (있는 경우) | — |
+| `input_path` | Input folder path | -- |
+| `output_path` | Output folder path | -- |
+| `archive_path` | Path for processed files | -- |
+| `error_path` | Path for failed files | -- |
+| `text_column_name` | Text column name | `text` |
+| `speaker_column_name` | Speaker column name | `speaker` |
+| `file_pattern` | Input file pattern | `*.xlsx` |
+| `poll_interval_sec` | File watch interval | `5` |
+| `sid_column_name` | SID column name (if present) | -- |
 | `model_path_or_uri` | NLP Docker API URL | `http://nlp-classifiers:8000` |
-| `outcomes` | 분류 도메인 목록 | `[cp, le, ed, inc, ius]` |
-| `top_k` | 도메인별 선택 문장 수 | `10` |
-| `context_window` | 컨텍스트 확장 범위 | `3` |
+| `outcomes` | Classification domain list | `[cp, le, ed, inc, ius]` |
+| `top_k` | Sentences selected per domain | `10` |
+| `context_window` | Context expansion range | `3` |
 
-> **대화 근거:** "put it in a config file… don't hard-code it… columns might change"
+> **Discussion reference:** "put it in a config file... don't hard-code it... columns might change"
 > "you only care about speaker column and text column"
 
 ---
@@ -138,7 +138,7 @@ Required configuration keys:
 
 - Load configuration
 - Start FileManager
-- On file detection → call SentenceClassificationModule
+- On file detection -> call SentenceClassificationModule
 - Handle success/failure and archive accordingly
 
 ### 5.2 FileManager
@@ -151,7 +151,7 @@ Responsibilities:
 - Move processed files to `archive_path`
 - Move failed files to `error_path`
 
-> **대화 근거:** "you have a worker… looking for a file… grabs the file… preprocess… call Docker… stitch output"
+> **Discussion reference:** "you have a worker... looking for a file... grabs the file... preprocess... call Docker... stitch output"
 
 ### 5.3 SentenceClassificationModule
 
@@ -186,48 +186,48 @@ app/Pipeline/
 └── tests/
 ```
 
-> **대화 근거:** "create a module… sentence classification… main pipeline… worker… configurable"
+> **Discussion reference:** "create a module... sentence classification... main pipeline... worker... configurable"
 
 ---
 
 ## 6. Algorithm Specification
 
-### Step 1: Doctor Identification (이름 기반 금지)
+### Step 1: Doctor Identification (Name-Based Identification Prohibited)
 
 - Group by speaker
 - Concatenate all text per speaker
 - Compute total text length
 - Longest aggregated text = doctor
-- Aggregation used ONLY for identification (원본 row 구조는 유지)
-- Doctor speaker만 남기고 나머지 제거
+- Aggregation used ONLY for identification (original row structure is preserved)
+- Keep only doctor speaker rows and remove the rest
 
-> **대화 근거:** "Don't go by doctor. Go by frequency…"
-> 이어서 정정: "not frequency of rows… compare amount of text… biggest is doctor"
-> NOTE: 대화에서 'frequency(행 수)' 언급이 있었으나, 곧바로 "행 수가 아니라 텍스트 총량이 더 정확"으로 합의가 정리됨.
+> **Discussion reference:** "Don't go by doctor. Go by frequency..."
+> Followed by correction: "not frequency of rows... compare amount of text... biggest is doctor"
+> NOTE: "Frequency (row count)" was mentioned in the discussion, but was immediately clarified to "total text length is more accurate."
 
-**Doctor 텍스트 구성:**
-- doctor turn들을 합치고(필요 시 newline 유지) 문장 분절로 넘긴다.
-- 이 결합 방식도 샘플과 일치해야 한다(공백/줄바꿈 차이 방지).
+**Doctor text composition:**
+- Combine doctor turns (preserving newlines if needed) and pass to sentence segmentation.
+- This combination method must also match the sample (to prevent whitespace/newline differences).
 
-> **대화 근거:** "He's putting it together… all sentences together… then segmentation"
+> **Discussion reference:** "He's putting it together... all sentences together... then segmentation"
 > "Be super careful in the comparison"
 
 ---
 
-### Step 2: Sentence Segmentation and Indexing ("동일성" 최우선)
+### Step 2: Sentence Segmentation and Indexing ("Exact Match" Top Priority)
 
-**핵심 요구사항:**
-- Michael은 R에서 `tidytext` + `unnest_tokens`로 문장 분절을 한다.
-- Python에서도 결과가 **샘플과 완전히 동일**해야 한다.
+**Core requirement:**
+- Michael uses `tidytext` + `unnest_tokens` in R for sentence segmentation.
+- The Python implementation must produce results **completely identical to the sample**.
 
-> **대화 근거:** "critical part is unnest_tokens… do the same thing"
-> "minimum change can… not valid anymore… must be exactly same as samples"
+> **Discussion reference:** "critical part is unnest_tokens... do the same thing"
+> "minimum change can... not valid anymore... must be exactly same as samples"
 
-**구현 전략:**
-- Jun은 "R의 tidytext unnest_tokens와 동일한 라이브러리가 Python에도 있다"고 언급
-- 가능하면 해당 방식으로 재현하되, 무엇보다 **샘플 결과와의 비교**로 확정한다.
+**Implementation strategy:**
+- Jun mentioned "there is a Python library equivalent to R's tidytext unnest_tokens"
+- Use that approach if possible, but ultimately **confirm by comparison with sample results**.
 
-**인덱스 생성:**
+**Index generation:**
 
 For each original row (doctor rows only):
 
@@ -239,30 +239,30 @@ For each original row (doctor rows only):
 
 Output columns: `index`, `i`, `i2`, `speaker`, `text`
 
-**State 유지 (인덱스/후처리를 위해 필수):**
-- 모델은 문장 단위로 보내지만, 인덱스/컨텍스트는 "전체 노트의 문장 순서/문맥"을 요구한다.
-- 따라서 분절 이후에도 "문장 순서/위치"를 잃지 않도록 상태를 유지해야 한다.
+**State maintenance (required for indices/post-processing):**
+- The model receives individual sentences, but indices/context require "sentence order/position within the entire note."
+- Therefore, "sentence order/position" must be maintained even after segmentation.
 
-> **대화 근거:** "indexes rely on context of whole note… need keep state"
+> **Discussion reference:** "indexes rely on context of whole note... need keep state"
 > "as long as they are in order, we can do post-processing"
 
 ---
 
-### Step 3: Classification (Docker API 호출)
+### Step 3: Classification (Docker API Calls)
 
 For each sentence:
 
 - Run model inference via Docker API (`/predict/{model}`)
 - 5 outcomes: cp, le, ed, inc, ius
 - Store probability score per outcome (`.pred_1`, `.pred_0`)
-- 순서 유지 필수
+- Order must be preserved
 
-> **대화 근거:** "Given a sentence, getting the probabilities… integrate with what you have"
-> "pred1 gives probability… we select top sentences with highest pred1"
+> **Discussion reference:** "Given a sentence, getting the probabilities... integrate with what you have"
+> "pred1 gives probability... we select top sentences with highest pred1"
 
 ---
 
-### Step 4: Top-10 Selection (최신 합의)
+### Step 4: Top-10 Selection (Latest Agreement)
 
 For each outcome:
 
@@ -273,39 +273,39 @@ For each outcome:
   3. `i` ASC
   4. `i2` ASC
 - Select `top_k` sentences (default 10)
-- 도메인 5개면 총 50문장 유지
+- With 5 domains, maintain a total of 50 sentences
 
-> **대화 근거:** "selection criteria was prob > 0.7… has changed this week… finally agreed top 10"
-> "top 10 sentences for each domain… in the end keep 50 sentences"
+> **Discussion reference:** "selection criteria was prob > 0.7... has changed this week... finally agreed top 10"
+> "top 10 sentences for each domain... in the end keep 50 sentences"
 
 ---
 
-### Step 5: Context Extraction (±3 문장)
+### Step 5: Context Extraction (+/-3 Sentences)
 
 For each Top sentence:
 
 - Retrieve sentences in range: `index - context_window` through `index + context_window`
-- If boundary exceeded, include available only (에러 없이 truncate)
+- If boundary exceeded, include available only (truncate without errors)
 - Wrap target sentence with `<main>` tags:
   ```
   left context sentences.<main>Target sentence</main>.right context sentences
   ```
 - Join all context sentences into single string (dot `.` separated)
 
-> **대화 근거:** "extend them at the context level… three before and three after"
-> "he explains how he adds context… algorithm is there"
-> `<main>` 태그로 메인 문장을 표시. 왼쪽은 좌측 컨텍스트, 오른쪽은 우측 컨텍스트.
+> **Discussion reference:** "extend them at the context level... three before and three after"
+> "he explains how he adds context... algorithm is there"
+> The main sentence is marked with `<main>` tags. Left side is left context, right side is right context.
 
 ---
 
-### Step 6: Output Export (포맷 일치)
+### Step 6: Output Export (Format Must Match)
 
-**Intermediate Outputs (검증용):**
+**Intermediate Outputs (for validation):**
 
-- `segmented_sentences.csv` — 분절 결과
-- `predictions_long.csv` — 전체 예측 결과
-- `top10_by_outcome/*.csv` — 도메인별 Top-10
-- `top10_with_context/*.csv` — 컨텍스트 포함 Top-10
+- `segmented_sentences.csv` -- segmentation results
+- `predictions_long.csv` -- full prediction results
+- `top10_by_outcome/*.csv` -- Top-10 per domain
+- `top10_with_context/*.csv` -- Top-10 with context
 
 **Final Output:**
 
@@ -314,51 +314,51 @@ Excel file including:
 - metadata sheet
 - segmented sheet
 - predictions sheet
-- outcome-specific sheets (도메인별)
+- outcome-specific sheets (per domain)
 
-**최종 output 컬럼 (최소 포함 대상):**
+**Final output columns (minimum required):**
 
 - `index`, `i`, `i2`
 - `speaker`
 - `text`
-- `.pred_1` (domain별)
-- `context` (태그 포함)
+- `.pred_1` (per domain)
+- `context` (including tags)
 
-> **대화 근거:** "export… the CSV file with the three indexes"
-> "final output looks like… compare our outputs exactly the same"
-
----
-
-## 7. TurboScribe Input Support (운영 포맷 전환)
-
-### 7.1 포맷 차이
-
-- Keystroke: interviewer/patient처럼 역할이 명시된 경우가 많음. turn이 큼.
-- TurboScribe: speaker1/speaker2 형태로 단순. turn이 더 잘게 쪼개질 수 있음.
-
-### 7.2 대응 규칙
-
-- 역할 이름을 신뢰하지 않고 **총 텍스트 길이로 doctor 판별**하면 포맷에 무관하게 동작한다.
-- 컬럼명 차이는 config로 흡수한다.
-
-> **대화 근거:** "new system is TurboScribe… speaker one/speaker two"
-> "whatever speaker has highest… doctor for sure… compare amount of text"
+> **Discussion reference:** "export... the CSV file with the three indexes"
+> "final output looks like... compare our outputs exactly the same"
 
 ---
 
-## 8. Validation (구현만큼 중요)
+## 7. TurboScribe Input Support (Operational Format Transition)
 
-### 8.1 단계별 검증 체크포인트 (필수)
+### 7.1 Format Differences
 
-1. Keystroke input → doctor 필터 결과 확인 (합리성 + 샘플 비교)
-2. 문장 분절 결과 비교 (**최우선** — 문장 수/경계/텍스트)
-3. index/i/i2 구조 및 값 비교
-4. 모델 호출 결과 포맷 (컬럼 구조) 비교
-5. 도메인별 Top-10 선택 결과 비교 (index 값 일치)
-6. ±3 컨텍스트 확장 결과 비교
-7. 최종 CSV/Excel 전체 비교 (정렬/행/컬럼/값)
+- Keystroke: Roles are often explicitly labeled (e.g., interviewer/patient). Turns are large.
+- TurboScribe: Simple format with speaker1/speaker2. Turns may be split more finely.
 
-> **대화 근거:** "input → segmented → final output… compare exactly same"
+### 7.2 Handling Rules
+
+- Do not rely on role names; **identify the doctor by total text length** so it works regardless of format.
+- Column name differences are absorbed by the config.
+
+> **Discussion reference:** "new system is TurboScribe... speaker one/speaker two"
+> "whatever speaker has highest... doctor for sure... compare amount of text"
+
+---
+
+## 8. Validation (As Important as Implementation)
+
+### 8.1 Step-by-Step Validation Checkpoints (Required)
+
+1. Keystroke input -> verify doctor filter results (reasonableness + sample comparison)
+2. Compare sentence segmentation results (**top priority** -- sentence count / boundaries / text)
+3. Compare index/i/i2 structure and values
+4. Compare model call result format (column structure)
+5. Compare Top-10 selection results per domain (index values must match)
+6. Compare +/-3 context expansion results
+7. Full comparison of final CSV/Excel (sort order / rows / columns / values)
+
+> **Discussion reference:** "input -> segmented -> final output... compare exactly same"
 > "be super careful in the comparison"
 
 ### 8.2 Validation Checklist
@@ -374,64 +374,64 @@ Excel file including:
 
 ## 9. Edge Case Handling
 
-- Missing speaker → `"Unknown"`
-- Empty text → skip with log
-- Tie scores → deterministic ordering (score DESC → index ASC → i ASC → i2 ASC)
-- Context boundary clipping (시작/끝에 가까우면 존재하는 범위 내에서만 확장)
+- Missing speaker -> `"Unknown"`
+- Empty text -> skip with log
+- Tie scores -> deterministic ordering (score DESC -> index ASC -> i ASC -> i2 ASC)
+- Context boundary clipping (when near the start/end, expand only within the available range)
 - Duplicate file prevention
 
 ---
 
 ## 10. Completion Criteria (Acceptance Criteria)
 
-Jun의 작업이 "완료"로 인정되려면:
+For Jun's work to be considered "complete":
 
-1. **Keystroke 샘플** 입력에 대해:
-   - 최종 output CSV가 Michael output과 **동일** (row/정렬/컬럼/값)
-2. **TurboScribe 샘플** 입력에 대해:
-   - doctor 판별이 "총 텍스트 길이 기준"으로 안정적으로 동작
-   - 동일 파이프라인으로 end-to-end 실행 가능
-3. `top_k=10` 규칙이 적용되며 config로 조절 가능
-4. `index`/`i`/`i2`가 생성되고 유지되며 샘플과 일치
-5. 컨텍스트 확장(±3)이 샘플 로직과 동일 (태그 포함), boundary에서 에러 없이 동작
-6. 모듈 구조가 독립 유닛으로 유지되고, 핵심 단계 주석이 존재
-7. SID test file이 expected Top-10 selections를 재현
-8. 모든 intermediate artifacts가 생성됨
+1. **Keystroke sample** input:
+   - Final output CSV is **identical** to Michael's output (rows / sort order / columns / values)
+2. **TurboScribe sample** input:
+   - Doctor identification works reliably based on "total text length"
+   - End-to-end execution is possible using the same pipeline
+3. `top_k=10` rule is applied and adjustable via config
+4. `index`/`i`/`i2` are generated and maintained, matching the sample
+5. Context expansion (+/-3) is identical to the sample logic (including tags), and works without errors at boundaries
+6. Module structure is maintained as an independent unit, and key step comments exist
+7. SID test file reproduces the expected Top-10 selections
+8. All intermediate artifacts are generated
 9. Outputs are reproducible and deterministic
 
 ---
 
-## 11. Risk Points (대화에서 경고된 위험 지점)
+## 11. Risk Points (Warnings Raised During Discussion)
 
-- 문장 분절이 샘플과 조금이라도 다름 → downstream invalid 가능
-- 인덱스 생성 로직이 다름 → 디버깅 불가 + surprises 발생
-- top-10/정렬 기준이 다름 → 선택 문장 달라짐
-- 컨텍스트 확장 로직이 다름 → 최종 output 구조 불일치
-- config 없이 하드코딩 → TurboScribe 전환 시 깨짐
-- DB/GUI 코드와 결합 → 유지보수/인수인계 실패 (스파게티)
+- Sentence segmentation differs even slightly from the sample -> downstream may become invalid
+- Index generation logic differs -> debugging becomes impossible + surprises occur
+- Top-10 / sorting criteria differ -> selected sentences change
+- Context expansion logic differs -> final output structure mismatch
+- Hardcoding without config -> breaks during TurboScribe transition
+- Coupling with DB/GUI code -> maintenance/handover failure (spaghetti)
 
 ---
 
 ## 12. Collaboration (OneDrive)
 
-- Gideon이 OneDrive에 폴더 생성
-- 샘플 파일과 Jun 코드/결과물을 동일 폴더 구조로 유지
-- Jun은 코드 + 비교 결과(일치/불일치 요약)를 공유 가능해야 함
+- Gideon creates a folder on OneDrive
+- Sample files and Jun's code/results are maintained in the same folder structure
+- Jun must be able to share code + comparison results (match/mismatch summary)
 
-> **대화 근거:** "On OneDrive… create folder… we all working there"
+> **Discussion reference:** "On OneDrive... create folder... we all working there"
 
 ---
 
 ## 13. Timeline
 
-- 목표: 3월까지 파이프라인 완성
-- 1차 목표: 샘플 비교 결과를 보여주고, 구현 정합성 확정 후, 다음 단계로 이동
+- Goal: complete pipeline by March
+- First goal: show sample comparison results, confirm implementation correctness, then move to next phase
 
-> **대화 근거:** "has to be complete by March… start to close things"
+> **Discussion reference:** "has to be complete by March... start to close things"
 
 ---
 
-# Appendix: Meeting Transcript (원본 대화 스크립트)
+# Appendix: Meeting Transcript (Original Discussion Script)
 
 Yeah, it's like a little bit of the post-processing because when you get the sentences and the probabilities, he needs to extend them at the context level, putting three sentences before and three sentences after. So that's exactly true.
 

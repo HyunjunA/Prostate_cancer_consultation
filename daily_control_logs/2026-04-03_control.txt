@@ -1,0 +1,164 @@
+Prostate Cancer Consultation Dashboard - Work Log
+=======================================================
+
+April 3, 2026 (Thursday)
+
+Context: DB normalization, Doctor Demo scoring fix, Ivan code review standards,
+config-driven services, documentation restructuring.
+6 commits pushed to origin/main.
+
+---
+
+## Part 1: Documentation Restructuring (Commits 9ffa60d, 0a85e97)
+
+- Merged duplicate EN/KR documentation files into organized structure
+  - docs/ reorganized: archive/, architecture/, features/, ml-pipeline/, security/, setup/
+  - INDEX.md: new master documentation index (English)
+- TODO.md translated to English, consolidated from multiple files
+- DATABASE_SCHEMA.md: added app screen guide (which dashboard page uses which table)
+- EN/KR files split into separate documents where both versions needed
+
+---
+
+## Part 2: Patient Summary Table Normalization (Commit c1ae718)
+
+- patient_summary: removed fixed class_1~5 / summary_class_1~5 columns
+  - Kept: file, speaker, entire_summary only
+- patient_summary_domain: new table — one row per patient per domain
+  - Columns: domain, display_order, summary_text, patient_scoring, patient_response
+  - Composite PK: (file, speaker, domain)
+- patient_summary_scoring: removed (merged into patient_summary_domain.patient_scoring)
+- patient_responses: removed (merged into patient_summary_domain.patient_response)
+- Result: 3 tables → 2 tables, adding new NLP domains no longer requires DDL changes
+
+### Files Modified
+- Backend/database_schema.sql: DDL rewritten
+- Backend/models.py: PatientSummaryDomain model added, PatientSummaryScoring + PatientResponses removed
+- Backend/persistence.py: slot-based INSERT → domain row INSERT
+- Backend/routes_patient.py: all 7 patient endpoints rewritten for normalized schema
+- Webapp/src/hooks/usePatientData.tsx: interfaces + methods updated (slot numbers → domain names)
+- Backend/api_call_test.rest: patient tests updated + transcript/tracking tests added
+- dev_docs/TODO.md: added DB optimization items (#13-18)
+- Verified: Docker full rebuild + pipeline 6 files processed + 30 domain rows + all APIs tested
+
+---
+
+## Part 3: Doctor Demo Scoring — API Data Direct (Commit 59f3f2c)
+
+### Backend
+- scores/summary: returns highest pred_score sentence's quality score per domain (not average)
+- scores/average: same approach per file×domain (top-1 pred_score sentence)
+- scores/trajectory: fixed class keys ("1"-"5" → full domain names)
+- sentences & scores/summary: speaker now optional (auto-detect from DB)
+
+### Frontend (PhysicianReportsModifiedV41Timothy)
+- Removed getPlaceholderScore — all scores sourced from API directly
+- topicsData.score from scores/summary API (not frontend calculation)
+- overallScore from API overall.score (not frontend averaging)
+- Representative sentence selected by API (i, i2), not last/sorted
+- Added TOPIC_TO_MODEL mapping for short keys (cp, ed, inc, ius, le)
+- All Patients Score Overview: filter matches both full and short class keys
+- Patient list overallScore from scoreAverage API
+- fetchScoreAverage: removed speaker filter (all patients included)
+
+### Frontend (ConsultationScoringV7Timothy7)
+- Score badge shows highlightPosition (API score), not per-sentence score
+- Display sentence synced to representative sentence from API
+
+### Frontend (page.tsx)
+- Selection screen: patient list table with First Visit / Follow-up buttons
+- Navigates with proper URL parameters (?fileid=...&patid=...&visit=...)
+
+### Frontend (useDoctorData)
+- fetchScoreSummary: speaker parameter now optional
+
+---
+
+## Part 4: Ivan Code Review Standards (Commit 527ffdd)
+
+### Pipeline Runner (Thin Main — Standard #1)
+- Step 1: CSV fallback logic moved into transcript_service.read_transcript()
+- Step 6: for-loop removed, replaced with transcript_service.generate_all_contexts()
+- Step 8: _run_scoring() moved to scorer_service.run_scoring()
+- Step 9: _run_rewriting() moved to rewriter_service.run_rewriting()
+- Every step is now a single function call with no inline logic
+
+### Readable Imports (Standard #4)
+- transcript_service.py: from nlp_service import X → import nlp_classifier_client
+- All references use nlp_classifier_client.function() style
+
+### Rename nlp_service → nlp_classifier_client
+- Reflects actual role: HTTP client for NLP classifier Docker containers
+- Updated in: main.py, routes_nlp.py, routes_doctor.py, transcript_service.py, tests
+
+### Patient First Visit (View relevant sentences)
+- API returns pred_score top-10 sentences per domain (was: quality score top-7)
+- Each sentence includes pred_score, quality score, and is_in_summary flag
+- Frontend highlights summary sentences with amber badge + "Used in Summary" label
+- CLASS_TO_TOPIC_MAP: added short model keys (cp, le, ed, inc, ius)
+
+---
+
+## Part 5: Config-Driven Services + Cleanup (Commit 99e1321)
+
+### Config-Driven (Ivan Standard #8)
+- scorer_service, rewriter_service, nlp_classifier_client: os.getenv() → config.get()
+- All service URLs/timeouts now read from config.yaml with env var override
+
+### DB Index Optimization
+- Removed 3 redundant indexes on user_interaction_log (role, file, speaker)
+- Expression indexes (date_trunc, extract) skipped — requires IMMUTABLE wrapper (TODO #42)
+
+### Code Cleanup
+- Removed all emojis from Python print/log statements → plain text [OK], [DEBUG], etc.
+- Fixed duplicate prefixes ([DEBUG] DEBUG → [DEBUG])
+
+### Frontend Fix
+- ConsultationScoring: highlightPosition default 3 → null (score=0 was treated as falsy)
+- Score badge: displaySentences[selectedIdx] → displaySentences[0] (always visible)
+- Arrow indicator hidden when score is null (loading state)
+
+### TODO
+- Added #40 CHECK constraints, #41 index cleanup, #42 expression indexes
+
+---
+
+## Summary Statistics
+
+| Metric | Before (Apr 2 end) | After (Apr 3 end) | Change |
+|--------|--------------------|--------------------|--------|
+| Total commits | 33 | 39 | +6 |
+| patient_summary tables | 3 (summary + scoring + responses) | 2 (summary + domain) | normalized |
+| Doctor Demo scores | placeholder + frontend calc | API direct | real data |
+| Pipeline inline logic | Steps 1,6,8,9 had inline code | all steps = 1 function call | thin main |
+| nlp_service.py | generic name | nlp_classifier_client.py | role-based naming |
+| Service config | os.getenv() hardcoded | config.yaml driven | Ivan standard |
+| Redundant DB indexes | 3 remaining | 0 | removed |
+| Python emojis in logs | present | removed | clean output |
+
+## Files Created
+- daily_control_logs/2026-04-03_control.txt
+
+## Files Modified (key changes)
+- Backend/database_schema.sql (normalization)
+- Backend/models.py (PatientSummaryDomain, removed 2 models)
+- Backend/persistence.py (domain row INSERT)
+- Backend/routes_patient.py (7 endpoints rewritten)
+- Backend/routes_doctor.py (scores/summary, scores/average, scores/trajectory, sentences)
+- Backend/pipeline_runner.py (thin main — all steps single function)
+- Backend/nlp_service.py → Backend/nlp_classifier_client.py (renamed)
+- Backend/scorer_service.py (config-driven)
+- Backend/rewriter_service.py (config-driven)
+- Backend/config.yaml (scoring section added)
+- Webapp/src/hooks/usePatientData.tsx (normalized schema)
+- Webapp/src/hooks/useDoctorData.tsx (optional speaker)
+- Webapp/src/components/PhysicianReportsModifiedV41Timothy.tsx (API direct scoring)
+- Webapp/src/components/ConsultationScoringV7Timothy7.tsx (score badge fix)
+- Webapp/src/components/page.tsx (patient selection screen)
+- docs/ restructured (archive, architecture, features, ml-pipeline, security, setup)
+
+## Remaining Work
+- TODO #40: CHECK constraints on scoring columns
+- TODO #41: Index cleanup audit
+- TODO #42: Expression indexes (IMMUTABLE wrapper needed)
+- Steps 8-9: Replace placeholder services with real AI scoring (Guillermo)

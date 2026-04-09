@@ -331,7 +331,7 @@ vars <- c(
 )
 
 # ╔══════════════════════════════════════════════════════════════════════╗
-# ║  ★★★ CRITICAL: Sentence selection (lines 99-112) ★★★               ║
+# ║   CRITICAL: Sentence selection (lines 99-112)                ║
 # ╚══════════════════════════════════════════════════════════════════════╝
 datas$top <- map(datas$physician_data_preds, \(x) {
   x |>
@@ -462,7 +462,7 @@ params <- map(preds, \(x) bind_cols(data, x)) |>
 # → params: 5 rows (one per model), each data = tibble [424 x 6]
 
 # ╔══════════════════════════════════════════════════════════════════════╗
-# ║  ★★★ CRITICAL: Sentence selection (HTML lines 2748-2753) ★★★       ║
+# ║   CRITICAL: Sentence selection (HTML lines 2748-2753)        ║
 # ╚══════════════════════════════════════════════════════════════════════╝
 params$top_sentences <- pmap(params, \(name, data) {
   data |>
@@ -745,7 +745,7 @@ The following items were identified during analysis and require Michael's clarif
 - Is this because all future transcripts will use the `Interviewer:` format (TurboScribe standardized)?
 - Or should the Backend maintain backwards compatibility with the 8-ID list for older transcripts?
 
-**⚠ Data Processing Caution:**
+** Data Processing Caution:**
 - In `REC001 (SID 14).xlsx`, 6 rows have `Interviewer: ` (with trailing space) that would be missed by exact match `== 'Interviewer:'`.
 - When processing transcripts in the Backend, **always strip/trim whitespace** from the speaker column before matching.
 - Consider using prefix matching (`str.startswith()`) or case-insensitive matching rather than exact equality to prevent silent data loss.
@@ -906,6 +906,6 @@ OUTCOME_TO_SHEET = {
 - [ML_PIPELINE_OVERVIEW_KR.md](./ML_PIPELINE_OVERVIEW_KR.md) / [EN](./ML_PIPELINE_OVERVIEW_EN.md) — Pipeline stages overview
 - [ML_PIPELINE_DEVELOPMENT_STATUS_KR.md](./ML_PIPELINE_DEVELOPMENT_STATUS_KR.md) / [EN](./ML_PIPELINE_DEVELOPMENT_STATUS_EN.md) — Implementation status
 - [COMPARISON_AND_PLAN_process-data-guille_vs_r01-nlp-classifiers-docker_KR.md](./COMPARISON_AND_PLAN_process-data-guille_vs_r01-nlp-classifiers-docker_KR.md) / [EN](./COMPARISON_AND_PLAN_process-data-guille_vs_r01-nlp-classifiers-docker_EN.md) — R script vs Docker comparison
-- [한국어 버전](#한국어) — below
+- [Korean version](#korean) — below
 
 ---

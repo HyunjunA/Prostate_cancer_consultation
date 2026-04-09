@@ -131,7 +131,7 @@ flowchart TD
         S9["Step 9: Rewrite Summary<br/>patient-summary-rewriter"]
     end
 
-    subgraph DB["🗄️ PostgreSQL"]
+    subgraph DB[" PostgreSQL"]
         DSV["doctor_sentence_view<br/>sentence + score(0-5) + class"]
         SP["sentence_prediction<br/>pred_score(0-1) × 5 domains"]
         TAL["transcript_analysis_log<br/>run metadata + xlsx binary"]
@@ -587,8 +587,8 @@ flowchart TD
 graph TD
     subgraph Domains["5 Clinical Domains"]
         CP["🔬 Cancer Prognosis<br/>cp — class 1"]
-        LE["⏳ Life Expectancy<br/>le — class 2"]
-        ED["🩺 Erectile Dysfunction<br/>ed — class 3"]
+        LE[" Life Expectancy<br/>le — class 2"]
+        ED[" Erectile Dysfunction<br/>ed — class 3"]
         INC["💧 Urinary Incontinence<br/>inc — class 4"]
         IUS["⚡ Irritative Urinary Symptoms<br/>ius — class 5"]
     end
