@@ -2,7 +2,7 @@
 
 @base = http://localhost:8000
 @json = application/json
-@api_key = REDACTED_API_KEY
+@api_key = <YOUR_API_KEY>
 
 # NLP Classifier API (r01-nlp Docker container)
 # Run: docker run -d --name r01-nlp -p 8001:8000 r01-nlp-classifiers:latest
@@ -84,14 +84,14 @@ X-API-Key: {{api_key}}
 ### 6-2) Doctor Interface - AI Rewrite Suggestion
 ###
 
-@apiKey = REDACTED_API_KEY
+@apiKey = <YOUR_API_KEY>
 
 ### ═══════════════════════════════════════════════════════════
 ### AI Rewrite API Tests
 ### ═══════════════════════════════════════════════════════════
 
 @baseUrl = http://localhost:8000
-@apiKey = REDACTED_API_KEY
+@apiKey = <YOUR_API_KEY>
 
 ### ───────────────────────────────────────────────────────────
 ### 1. Basic Request

@@ -15,7 +15,7 @@ import httpx
 # Constants
 # ---------------------------------------------------------------------------
 BASE_URL = "http://localhost:8000"
-API_KEY = "REDACTED_API_KEY"
+API_KEY = "<YOUR_API_KEY>"
 AUTH_HEADERS = {"X-API-Key": API_KEY}
 
 
