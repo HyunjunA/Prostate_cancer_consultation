@@ -2,7 +2,7 @@
 
 > Consolidated list of outstanding items, organized by priority.  
 > Target: **Production level**  
-> Last updated: 2026-04-03
+> Last updated: 2026-04-09
 
 ---
 
@@ -10,6 +10,14 @@
 
 | Item | Date | Commit |
 |------|------|--------|
+| Webapp Docker standalone output (861MB → 154MB, 82% reduction) | 2026-04-09 | cfd2095 |
+| Improve Webapp .dockerignore (add __tests__, __mocks__, dist/, notused/, .git/) | 2026-04-09 | e92df9b |
+| Delete 8 dist/ folders inside Webapp src/ (595KB build artifacts) | 2026-04-09 | b96e44b |
+| Delete notused/ folders (4 locations, 5.5MB dead code) | 2026-04-09 | b96e44b |
+| Redesign Selection Screen + Admin Tracking Dashboard (production UI) | 2026-04-09 | b96e44b |
+| Add ERD v3 EN/KR with detailed table descriptions + API mapping | 2026-04-09 | 4e7cd31 |
+| Remove hardcoded API key from all source files + git history rewrite | 2026-04-09 | b980f63 |
+| API key rotation (old key revoked, new key deployed) | 2026-04-09 | 31af834 |
 | patient_summary normalization (3 tables -> 2) | 2026-04-03 | b0f4fd4 |
 | Remove AI_physician/db/ duplicate module | 2026-04-03 | 1e5d363 |
 | Thin Main (Ivan Standard #1) — move inline logic to service modules | 2026-04-03 | 527ffdd |
@@ -30,7 +38,6 @@
 | # | Area | Item | Details |
 |---|------|------|---------|
 | 1 | **Backend** | **Organize Backend folder structure** | 21 .py files in root — need clear separation: `services/` (transcript, scorer, rewriter, nlp_classifier_client), `routes/` (doctor, patient, surveys, tracking, transcript, nlp), `db/` (models, persistence, db, init_db), `core/` (config, redis_client, main). Remove stale files (csv_db_preprocessor.py, test_data_proc_vis_v5.py, wait_for_db.py if unused) |
-| 2 | Webapp Docker | **Use standalone output** | Configured in `next.config.js` but ignored by Dockerfile. Copy standalone output instead of reinstalling node_modules. Image size 1.25GB -> ~250MB (80% reduction) |
 
 ---
 
@@ -77,8 +84,8 @@
 | 17 | **Clean up legacy components (60+ files)** | 85 .tsx files total, only ~10 active. Versioned files: PhysicianReports V3-V41 (23), PatientReport V2-V31 (17), ConsultationScoring V3-V8 (8), PatientFollowUp V31-V37 (6), PatientInitialVisit V29-V35 (4). Keep only V41Timothy, V35, V31Re, V7Timothy7, FilterSidebarV3, HistoryModalV3 | ~100K lines removed, 6.9MB freed |
 | 18 | Dynamic imports | Static imports in page.tsx -> `next/dynamic` lazy loading | First Load JS 272KB -> ~150KB |
 | 19 | Consolidate chart libraries | Remove plotly + chart.js (keep d3 + recharts only) | ~120MB saved |
-| 20 | **Delete `dist/` folders inside `src/` (8 locations)** | `src/components/dist/`, `src/components/dist/dist/` (nested!), `src/components/charts/plotly/dist/`, `src/tracking/*/dist/` (4), `src/app/providers/dist/`. Build artifacts in source tree | 595KB freed, prevent accidental import |
-| 21 | **Delete `notused/` folders (4 locations)** | Root `Webapp/notused/` (5.3MB), `src/components/notused/` (19 files), `src/components/charts/d3js/notused/`, `src/hooks/notused/`. Dead code should be in git history, not working tree | 5.5MB+ freed |
+| ~~20~~ | ~~Delete `dist/` folders inside `src/`~~ | ~~Completed 2026-04-09 (b96e44b)~~ | ✅ |
+| ~~21~~ | ~~Delete `notused/` folders~~ | ~~Completed 2026-04-09 (b96e44b)~~ | ✅ |
 | 22 | **Merge duplicate survey components** | `src/components/surveys/` and `src/components/surveysSecondVersion/` have 6 identical components (BaselineQuestions, DCS, Satisfaction, RiskPerception, SDM). Minimal differences → merge into single directory with props-based switching | ~300KB duplication removed |
 | 23 | **Clean page.tsx commented imports** | 15 commented-out import lines (V33, V35, V37, V39, etc.). Git history preserves all versions | Code clarity |
 
@@ -89,7 +96,7 @@
 | 24 | **Remove `ignoreBuildErrors: true`** | `next.config.js` — TypeScript errors silenced during build. Type safety completely disabled for production | Runtime errors caught at build time |
 | 25 | **Remove `ignoreDuringBuilds: true`** | `next.config.js` — ESLint disabled during build. Code quality/security issues not caught | Build-time lint enforcement |
 | 26 | **Fix Next.js version mismatch** | `next: 13.5.6` but `eslint-config-next: 15.0.3` — 2 major versions apart. Lint rules may not match runtime behavior | Consistent tooling |
-| 27 | **Fix `.dockerignore` completeness** | Missing: `src/__tests__/`, `src/__mocks__/`, `*.md`, `notused/`, `dist/` inside src, `.git/`. Currently bloating Docker image | Image ~1.25GB → ~250MB (with standalone) |
+| ~~27~~ | ~~Fix `.dockerignore` completeness~~ | ~~Completed 2026-04-09 (e92df9b)~~ | ✅ |
 
 ---
 
@@ -143,7 +150,7 @@
 | 52 | Backend | Strengthen file upload validation | `.xlsx` extension only -> add Content-Type + size limit |
 | 53 | ML Deployment | ONNX conversion (long-term) | R Docker 1.41GB -> Python ~200MB |
 | 54 | Webapp | **Fix build warnings** | surveysSecondVersion/index.tsx has 4 missing exports |
-| 55 | Webapp | **Clean up .dockerignore** | node_modules declared twice, missing exclusions |
+| ~~55~~ | ~~Webapp~~ | ~~Clean up .dockerignore~~ | ~~Completed 2026-04-09 (e92df9b) — merged into #27~~ |
 | 56 | Webapp | **Remove duplicate postcss.config** | Both `postcss.config.js` and `postcss.config.mjs` exist — only .js is loaded |
 | 57 | Webapp | **Clean commented code in components** | ConsultationScoringV7Timothy7.tsx has 73 lines commented out (~10.8% of file) |
 | 58 | Webapp | **Remove unused test mocks** | jest.config mocks plotly.js-dist, react-plotly.js, posthog-js — none are actually used |
@@ -154,8 +161,9 @@
 
 | Priority | Count | Key Focus |
 |----------|-------|-----------|
-| **CRITICAL** | 2 | Backend folder structure, Webapp Docker standalone |
-| **HIGH** | 19 | TurboScribe conversion, PHI encryption, Materialized View, patient master table, **legacy 60+ component cleanup, dist/ removal, survey duplication, TS/ESLint enforcement** |
+| **CRITICAL** | 1 | Backend folder structure |
+| **HIGH** | 15 | TurboScribe conversion, PHI encryption, Materialized View, patient master table, **legacy 60+ component cleanup, survey duplication, TS/ESLint enforcement** |
 | **MEDIUM** | 22 | REDCap retry, JWT, cache, **Next.js upgrade, design system, Zustand hydration, PostHog cleanup** |
-| **LOW** | 9 | CHECK constraints, expression indexes, ONNX, **build warnings, postcss duplicate, dead test mocks** |
-| **Total** | **58** | |
+| **LOW** | 7 | CHECK constraints, expression indexes, ONNX, **postcss duplicate, dead test mocks** |
+| **Completed** | **13** | Standalone Docker, dist/ cleanup, notused/ cleanup, .dockerignore, UI redesign, ERD v3, API key rotation, + 6 prior items |
+| **Total remaining** | **45** | |
