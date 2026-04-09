@@ -344,31 +344,15 @@ export default function AdminTrackingDashboard() {
   }
 
   // ────────────────────────────────────────────────────────────────────────────
-  // Styles
+  // Shared styles
   // ────────────────────────────────────────────────────────────────────────────
 
-  const bg = isDarkMode ? "bg-gray-900 text-gray-100" : "bg-gray-50 text-gray-900";
-  const cardBg = isDarkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200";
-  const tableBg = isDarkMode ? "bg-gray-800" : "bg-white";
-  const tableHeaderBg = isDarkMode ? "bg-gray-700 text-gray-200" : "bg-gray-100 text-gray-700";
-  const tableRowHover = isDarkMode ? "hover:bg-gray-700" : "hover:bg-gray-50";
-  const inputBg = isDarkMode
-    ? "bg-gray-700 border-gray-600 text-gray-100 placeholder-gray-400"
-    : "bg-white border-gray-300 text-gray-900 placeholder-gray-500";
-  const badgeBg = isDarkMode ? "bg-gray-600 text-gray-200" : "bg-gray-200 text-gray-700";
-  const chartTextColor = isDarkMode ? "#9ca3af" : "#6b7280";
-  const chartGridColor = isDarkMode ? "#374151" : "#e5e7eb";
+  const cardCls = isDarkMode
+    ? "bg-slate-900/50 border-slate-800 rounded-xl border"
+    : "bg-white border-slate-200 rounded-xl border shadow-sm";
 
-  const tabClass = (tab: TabId) =>
-    `px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium rounded-t-lg transition-colors ${
-      activeTab === tab
-        ? isDarkMode
-          ? "bg-gray-800 text-white border-b-2 border-blue-500"
-          : "bg-white text-gray-900 border-b-2 border-blue-600"
-        : isDarkMode
-          ? "text-gray-400 hover:text-gray-200"
-          : "text-gray-500 hover:text-gray-700"
-    }`;
+  const chartTextColor = isDarkMode ? "#94a3b8" : "#64748b";
+  const chartGridColor = isDarkMode ? "#1e293b" : "#f1f5f9";
 
   // ────────────────────────────────────────────────────────────────────────────
   // Custom tooltip
@@ -379,110 +363,145 @@ export default function AdminTrackingDashboard() {
     return (
       <div
         className={`rounded-lg shadow-lg p-3 text-xs border ${
-          isDarkMode ? "bg-gray-800 border-gray-600 text-gray-200" : "bg-white border-gray-200 text-gray-800"
+          isDarkMode ? "bg-slate-800 border-slate-700 text-slate-200" : "bg-white border-slate-200 text-slate-800"
         }`}
       >
         <div className="font-medium mb-1">{label}</div>
         {payload.map((entry: any, i: number) => (
           <div key={i} className="flex items-center gap-2">
             <div
-              className="w-2.5 h-2.5 rounded-full"
+              className="w-2 h-2 rounded-full flex-shrink-0"
               style={{ backgroundColor: entry.color }}
             />
-            <span className="opacity-70">{entry.name || entry.dataKey}:</span>
-            <span className="font-medium">{entry.value}</span>
+            <span className="opacity-60">{entry.name || entry.dataKey}:</span>
+            <span className="font-semibold">{entry.value}</span>
           </div>
         ))}
       </div>
     );
   };
 
+  // Chart empty state
+  const ChartEmpty = ({ text = "No data" }: { text?: string }) => (
+    <div className={`h-full flex items-center justify-center text-xs ${
+      isDarkMode ? "text-slate-600" : "text-slate-300"
+    }`}>
+      {text}
+    </div>
+  );
+
   // ────────────────────────────────────────────────────────────────────────────
   // Render
   // ────────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className={`min-h-screen p-3 sm:p-4 lg:p-6 ${bg}`}>
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-3">
-          <div>
-            <h1 className="text-lg sm:text-xl lg:text-2xl font-bold">User Interaction Tracking Dashboard</h1>
-            <p className="text-sm opacity-50 mt-1">
-              Real-time analytics from user_interaction_log
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <a
-              href="/"
-              className={`px-3 py-2 rounded-md text-sm transition-colors ${
-                isDarkMode ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-200 hover:bg-gray-300"
-              }`}
-            >
-              Back to Home
-            </a>
+    <div className={`min-h-screen flex flex-col ${
+      isDarkMode
+        ? "bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100"
+        : "bg-gradient-to-br from-slate-50 via-white to-blue-50 text-slate-900"
+    }`}>
+      {/* ── Header ─────────────────────────────────────────────────────── */}
+      <header className={`sticky top-0 z-30 border-b backdrop-blur-sm ${
+        isDarkMode ? "border-slate-800/60 bg-slate-900/80" : "border-slate-200/60 bg-white/80"
+      }`}>
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+          <h1 className={`text-lg font-semibold tracking-tight ${
+            isDarkMode ? "text-slate-100" : "text-slate-900"
+          }`}>
+            User Interaction Tracking
+          </h1>
+          <div className="flex items-center gap-2">
             <button
               onClick={refreshAll}
-              className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
-            >
-              Refresh All
-            </button>
-          </div>
-        </div>
-
-        {/* ── Role Filter ───────────────────────────────────────────────── */}
-        <div className={`flex items-center gap-2 mb-4 p-2 rounded-lg border ${cardBg}`}>
-          <span className="text-xs font-medium opacity-60 mr-1">Source:</span>
-          {([
-            { value: "" as const, label: "All", icon: "🔍" },
-            { value: "patient" as const, label: "Patient", icon: "🩺" },
-            { value: "physician" as const, label: "Physician", icon: "👨‍⚕️" },
-          ]).map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => setFilterRole(opt.value)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                filterRole === opt.value
-                  ? opt.value === "patient"
-                    ? "bg-blue-600 text-white"
-                    : opt.value === "physician"
-                      ? "bg-emerald-600 text-white"
-                      : isDarkMode
-                        ? "bg-gray-600 text-white"
-                        : "bg-gray-800 text-white"
-                  : isDarkMode
-                    ? "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                isDarkMode
+                  ? "bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-500/20"
+                  : "bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-100"
               }`}
             >
-              {opt.label}
+              Refresh
             </button>
-          ))}
+            <a
+              href="/"
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                isDarkMode
+                  ? "bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700"
+                  : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200 shadow-sm"
+              }`}
+            >
+              Back
+            </a>
+          </div>
+        </div>
+      </header>
+
+      {/* ── Main ───────────────────────────────────────────────────────── */}
+      <main className="flex-1 w-full max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
+
+        {/* ── Role Filter + Stats ─────────────────────────────────────── */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-6">
+          {/* Role pills */}
+          <div className="flex items-center gap-1.5">
+            <span className={`text-xs font-medium mr-1 ${
+              isDarkMode ? "text-slate-500" : "text-slate-400"
+            }`}>Source:</span>
+            {([
+              { value: "" as const, label: "All" },
+              { value: "patient" as const, label: "Patient" },
+              { value: "physician" as const, label: "Physician" },
+            ]).map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setFilterRole(opt.value)}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                  filterRole === opt.value
+                    ? isDarkMode
+                      ? "bg-blue-600 text-white"
+                      : "bg-slate-900 text-white"
+                    : isDarkMode
+                      ? "bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700"
+                      : "bg-white text-slate-500 hover:text-slate-700 border border-slate-200"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Role counts */}
           {stats?.role_counts && (
-            <div className="ml-auto flex gap-3 text-xs opacity-60">
-              <span>Patient: <strong>{stats.role_counts.patient ?? 0}</strong></span>
-              <span>Physician: <strong>{stats.role_counts.physician ?? 0}</strong></span>
+            <div className={`flex gap-4 text-xs ${
+              isDarkMode ? "text-slate-500" : "text-slate-400"
+            }`}>
+              <span>Patient: <strong className={isDarkMode ? "text-slate-300" : "text-slate-600"}>{stats.role_counts.patient ?? 0}</strong></span>
+              <span>Physician: <strong className={isDarkMode ? "text-slate-300" : "text-slate-600"}>{stats.role_counts.physician ?? 0}</strong></span>
             </div>
           )}
         </div>
 
-        {/* ── Stats Cards ────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 lg:gap-4 mb-4 sm:mb-6">
+        {/* ── Stats Cards ─────────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
           {[
-            { label: "Total Events", value: stats?.total_events ?? "—", color: "text-blue-500" },
-            { label: "Sessions", value: stats?.total_sessions ?? "—", color: "text-green-500" },
-            { label: "Patients", value: stats?.total_patients ?? "—", color: "text-purple-500" },
-            { label: "Event Types", value: stats?.total_event_types ?? "—", color: "text-amber-500" },
+            { label: "Total Events", value: stats?.total_events ?? "—", color: isDarkMode ? "text-blue-400" : "text-blue-600" },
+            { label: "Sessions", value: stats?.total_sessions ?? "—", color: isDarkMode ? "text-emerald-400" : "text-emerald-600" },
+            { label: "Patients", value: stats?.total_patients ?? "—", color: isDarkMode ? "text-violet-400" : "text-violet-600" },
+            { label: "Event Types", value: stats?.total_event_types ?? "—", color: isDarkMode ? "text-amber-400" : "text-amber-600" },
           ].map((card) => (
-            <div key={card.label} className={`rounded-lg border p-3 sm:p-4 ${cardBg}`}>
-              <div className={`text-xl sm:text-2xl lg:text-3xl font-bold ${card.color}`}>{card.value}</div>
-              <div className="text-sm opacity-60 mt-1">{card.label}</div>
+            <div key={card.label} className={`p-4 ${cardCls}`}>
+              <div className={`text-2xl lg:text-3xl font-bold tabular-nums ${card.color}`}>
+                {typeof card.value === "number" ? card.value.toLocaleString() : card.value}
+              </div>
+              <div className={`text-xs mt-1 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
+                {card.label}
+              </div>
             </div>
           ))}
         </div>
 
-        {/* ── Tabs ────────────────────────────────────────────────────────── */}
-        <div className="flex gap-1 mb-0 overflow-x-auto">
+        {/* ── Tabs ────────────────────────────────────────────────────── */}
+        <div className={`flex gap-0.5 mb-0 border-b ${
+          isDarkMode ? "border-slate-800" : "border-slate-200"
+        }`}>
           {(
             [
               { id: "overview", label: "Overview" },
@@ -493,10 +512,23 @@ export default function AdminTrackingDashboard() {
           ).map((tab) => (
             <button
               key={tab.id}
-              className={tabClass(tab.id)}
+              className={`px-4 py-2.5 text-xs font-medium transition-all relative ${
+                activeTab === tab.id
+                  ? isDarkMode
+                    ? "text-blue-400"
+                    : "text-blue-600"
+                  : isDarkMode
+                    ? "text-slate-500 hover:text-slate-300"
+                    : "text-slate-400 hover:text-slate-600"
+              }`}
               onClick={() => setActiveTab(tab.id)}
             >
               {tab.label}
+              {activeTab === tab.id && (
+                <span className={`absolute bottom-0 left-0 right-0 h-0.5 ${
+                  isDarkMode ? "bg-blue-400" : "bg-blue-600"
+                }`} />
+              )}
             </button>
           ))}
         </div>
@@ -505,183 +537,127 @@ export default function AdminTrackingDashboard() {
         {/* TAB: Overview                                                  */}
         {/* ════════════════════════════════════════════════════════════════ */}
         {activeTab === "overview" && (
-          <div className="space-y-6 mt-0">
+          <div className="space-y-4 pt-4">
             {/* Row 1: Timeline + Event Type Pie */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               {/* Activity Timeline */}
-              <div className={`lg:col-span-2 rounded-lg border p-3 sm:p-4 lg:p-5 ${cardBg}`}>
-                <h2 className="text-xs sm:text-sm font-semibold mb-3 sm:mb-4 opacity-80">
-                  Activity Timeline (events/hour)
+              <div className={`lg:col-span-2 p-4 ${cardCls}`}>
+                <h2 className={`text-xs font-semibold uppercase tracking-wider mb-4 ${
+                  isDarkMode ? "text-slate-500" : "text-slate-400"
+                }`}>
+                  Activity Timeline
                 </h2>
-                <div className="h-48 sm:h-56 lg:h-64">
+                <div className="w-full h-56 lg:h-64 min-w-0">
                   {timelineData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={timelineData}>
+                      <AreaChart data={timelineData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                         <defs>
                           <linearGradient id="colorEvents" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2} />
                             <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke={chartGridColor} />
-                        <XAxis
-                          dataKey="label"
-                          tick={{ fontSize: 11, fill: chartTextColor }}
-                          axisLine={{ stroke: chartGridColor }}
-                        />
-                        <YAxis
-                          tick={{ fontSize: 11, fill: chartTextColor }}
-                          axisLine={{ stroke: chartGridColor }}
-                          allowDecimals={false}
-                        />
+                        <XAxis dataKey="label" tick={{ fontSize: 10, fill: chartTextColor }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fontSize: 10, fill: chartTextColor }} axisLine={false} tickLine={false} allowDecimals={false} />
                         <Tooltip content={<ChartTooltip />} />
-                        <Area
-                          type="monotone"
-                          dataKey="count"
-                          stroke="#3b82f6"
-                          strokeWidth={2}
-                          fill="url(#colorEvents)"
-                          name="Events"
-                        />
+                        <Area type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2} fill="url(#colorEvents)" name="Events" />
                       </AreaChart>
                     </ResponsiveContainer>
                   ) : (
-                    <div className="h-full flex items-center justify-center opacity-40">
-                      No timeline data
-                    </div>
+                    <ChartEmpty />
                   )}
                 </div>
               </div>
 
               {/* Event Type Distribution */}
-              <div className={`rounded-lg border p-3 sm:p-4 lg:p-5 ${cardBg}`}>
-                <h2 className="text-xs sm:text-sm font-semibold mb-3 sm:mb-4 opacity-80">
-                  Event Type Distribution
+              <div className={`p-4 ${cardCls}`}>
+                <h2 className={`text-xs font-semibold uppercase tracking-wider mb-4 ${
+                  isDarkMode ? "text-slate-500" : "text-slate-400"
+                }`}>
+                  Event Types
                 </h2>
-                <div className="h-48 sm:h-56 lg:h-64">
+                <div className="w-full h-56 lg:h-64 min-w-0">
                   {eventTypePieData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
                           data={eventTypePieData}
                           cx="50%"
-                          cy="50%"
-                          innerRadius={45}
-                          outerRadius={80}
+                          cy="45%"
+                          innerRadius={40}
+                          outerRadius={70}
                           dataKey="value"
                           nameKey="name"
                           stroke="none"
                         >
                           {eventTypePieData.map((entry, idx) => (
-                            <Cell
-                              key={idx}
-                              fill={entry.color || CHART_COLORS[idx % CHART_COLORS.length]}
-                            />
+                            <Cell key={idx} fill={entry.color || CHART_COLORS[idx % CHART_COLORS.length]} />
                           ))}
                         </Pie>
                         <Tooltip content={<ChartTooltip />} />
-                        <Legend
-                          wrapperStyle={{ fontSize: 11, color: chartTextColor }}
-                          iconSize={8}
-                        />
+                        <Legend wrapperStyle={{ fontSize: 10, color: chartTextColor }} iconSize={6} />
                       </PieChart>
                     </ResponsiveContainer>
                   ) : (
-                    <div className="h-full flex items-center justify-center opacity-40">
-                      No data
-                    </div>
+                    <ChartEmpty />
                   )}
                 </div>
               </div>
             </div>
 
             {/* Row 2: Patient Breakdown + Hourly Activity */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Events by Patient (Stacked Bar) */}
-              <div className={`rounded-lg border p-3 sm:p-4 lg:p-5 ${cardBg}`}>
-                <h2 className="text-xs sm:text-sm font-semibold mb-3 sm:mb-4 opacity-80">
-                  Events by Patient (by type)
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Events by Patient */}
+              <div className={`p-4 ${cardCls}`}>
+                <h2 className={`text-xs font-semibold uppercase tracking-wider mb-4 ${
+                  isDarkMode ? "text-slate-500" : "text-slate-400"
+                }`}>
+                  Events by Patient
                 </h2>
-                <div className="h-48 sm:h-56 lg:h-64">
+                <div className="w-full min-w-0" style={{ height: Math.max(200, patientBarData.length * 36 + 40) }}>
                   {patientBarData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={patientBarData} layout="vertical">
-                        <CartesianGrid
-                          strokeDasharray="3 3"
-                          stroke={chartGridColor}
-                          horizontal={false}
-                        />
-                        <XAxis
-                          type="number"
-                          tick={{ fontSize: 11, fill: chartTextColor }}
-                          axisLine={{ stroke: chartGridColor }}
-                          allowDecimals={false}
-                        />
-                        <YAxis
-                          type="category"
-                          dataKey="name"
-                          tick={{ fontSize: 11, fill: chartTextColor }}
-                          width={80}
-                          axisLine={{ stroke: chartGridColor }}
-                        />
+                      <BarChart data={patientBarData} layout="vertical" margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chartGridColor} horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 10, fill: chartTextColor }} axisLine={false} tickLine={false} allowDecimals={false} />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: chartTextColor }} width={100} axisLine={false} tickLine={false} />
                         <Tooltip content={<ChartTooltip />} />
-                        <Legend
-                          wrapperStyle={{ fontSize: 11, color: chartTextColor }}
-                          iconSize={8}
-                        />
+                        <Legend wrapperStyle={{ fontSize: 10, color: chartTextColor }} iconSize={6} />
                         {patientBarKeys.map((key, idx) => (
-                          <Bar
-                            key={key}
-                            dataKey={key}
-                            stackId="a"
-                            fill={
-                              EVENT_TYPE_COLORS[key] ||
-                              CHART_COLORS[idx % CHART_COLORS.length]
-                            }
-                          />
+                          <Bar key={key} dataKey={key} stackId="a" fill={EVENT_TYPE_COLORS[key] || CHART_COLORS[idx % CHART_COLORS.length]} />
                         ))}
                       </BarChart>
                     </ResponsiveContainer>
                   ) : (
-                    <div className="h-full flex items-center justify-center opacity-40">
-                      No data
-                    </div>
+                    <ChartEmpty />
                   )}
                 </div>
               </div>
 
-              {/* Hourly Activity Heatmap */}
-              <div className={`rounded-lg border p-3 sm:p-4 lg:p-5 ${cardBg}`}>
-                <h2 className="text-xs sm:text-sm font-semibold mb-3 sm:mb-4 opacity-80">
-                  Activity by Hour of Day
+              {/* Hourly Activity */}
+              <div className={`p-4 ${cardCls}`}>
+                <h2 className={`text-xs font-semibold uppercase tracking-wider mb-4 ${
+                  isDarkMode ? "text-slate-500" : "text-slate-400"
+                }`}>
+                  Activity by Hour
                 </h2>
-                <div className="h-48 sm:h-56 lg:h-64">
+                <div className="w-full h-56 lg:h-64 min-w-0">
                   {hourlyData.some((h) => h.count > 0) ? (
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={hourlyData}>
+                      <BarChart data={hourlyData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke={chartGridColor} />
-                        <XAxis
-                          dataKey="hour"
-                          tick={{ fontSize: 10, fill: chartTextColor }}
-                          axisLine={{ stroke: chartGridColor }}
-                          interval={1}
-                        />
-                        <YAxis
-                          tick={{ fontSize: 11, fill: chartTextColor }}
-                          axisLine={{ stroke: chartGridColor }}
-                          allowDecimals={false}
-                        />
+                        <XAxis dataKey="hour" tick={{ fontSize: 9, fill: chartTextColor }} axisLine={false} tickLine={false} interval={2} />
+                        <YAxis tick={{ fontSize: 10, fill: chartTextColor }} axisLine={false} tickLine={false} allowDecimals={false} />
                         <Tooltip content={<ChartTooltip />} />
-                        <Bar dataKey="count" name="Events" radius={[3, 3, 0, 0]}>
+                        <Bar dataKey="count" name="Events" radius={[2, 2, 0, 0]}>
                           {hourlyData.map((entry, idx) => (
                             <Cell
                               key={idx}
                               fill={
                                 entry.count > 0
-                                  ? `rgba(59, 130, 246, ${Math.min(0.3 + (entry.count / Math.max(...hourlyData.map((h) => h.count))) * 0.7, 1)})`
-                                  : isDarkMode
-                                    ? "#374151"
-                                    : "#e5e7eb"
+                                  ? `rgba(59, 130, 246, ${Math.min(0.3 + (entry.count / Math.max(...hourlyData.map((h) => h.count), 1)) * 0.7, 1)})`
+                                  : isDarkMode ? "#1e293b" : "#f1f5f9"
                               }
                             />
                           ))}
@@ -689,21 +665,22 @@ export default function AdminTrackingDashboard() {
                       </BarChart>
                     </ResponsiveContainer>
                   ) : (
-                    <div className="h-full flex items-center justify-center opacity-40">
-                      No data
-                    </div>
+                    <ChartEmpty />
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Row 3: Device Breakdown */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className={`rounded-lg border p-3 sm:p-4 lg:p-5 ${cardBg}`}>
-                <h2 className="text-xs sm:text-sm font-semibold mb-3 sm:mb-4 opacity-80">
-                  Device Breakdown
+            {/* Row 3: Device + Event Type Breakdown */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Device Breakdown */}
+              <div className={`p-4 ${cardCls}`}>
+                <h2 className={`text-xs font-semibold uppercase tracking-wider mb-4 ${
+                  isDarkMode ? "text-slate-500" : "text-slate-400"
+                }`}>
+                  Devices
                 </h2>
-                <div className="h-48">
+                <div className="w-full h-48 min-w-0">
                   {analytics?.device_breakdown && analytics.device_breakdown.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
@@ -711,64 +688,63 @@ export default function AdminTrackingDashboard() {
                           data={analytics.device_breakdown}
                           cx="50%"
                           cy="50%"
-                          outerRadius={65}
+                          outerRadius={60}
                           dataKey="count"
                           nameKey="device"
-                          label={({ device, percent }) =>
-                            `${device} ${(percent * 100).toFixed(0)}%`
-                          }
+                          label={({ device, percent }) => `${device} ${(percent * 100).toFixed(0)}%`}
                           labelLine={false}
                           stroke="none"
                         >
                           {analytics.device_breakdown.map((_, idx) => (
-                            <Cell
-                              key={idx}
-                              fill={CHART_COLORS[idx % CHART_COLORS.length]}
-                            />
+                            <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
                           ))}
                         </Pie>
                         <Tooltip content={<ChartTooltip />} />
                       </PieChart>
                     </ResponsiveContainer>
                   ) : (
-                    <div className="h-full flex items-center justify-center opacity-40">
-                      No data
-                    </div>
+                    <ChartEmpty />
                   )}
                 </div>
               </div>
 
-              {/* Event type counts list */}
-              <div className={`lg:col-span-2 rounded-lg border p-3 sm:p-4 lg:p-5 ${cardBg}`}>
-                <h2 className="text-xs sm:text-sm font-semibold mb-3 sm:mb-4 opacity-80">
+              {/* Event type breakdown bars */}
+              <div className={`lg:col-span-2 p-4 ${cardCls}`}>
+                <h2 className={`text-xs font-semibold uppercase tracking-wider mb-4 ${
+                  isDarkMode ? "text-slate-500" : "text-slate-400"
+                }`}>
                   Event Type Breakdown
                 </h2>
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-64 overflow-y-auto">
                   {stats &&
-                    Object.entries(stats.event_type_counts).map(([type, count]) => {
-                      const pct = stats.total_events
-                        ? (count / stats.total_events) * 100
-                        : 0;
-                      return (
-                        <div key={type} className="flex items-center gap-3">
-                          <div className="w-28 text-xs font-medium truncate">{type}</div>
-                          <div className="flex-1 h-5 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700">
-                            <div
-                              className="h-full rounded-full transition-all"
-                              style={{
-                                width: `${pct}%`,
-                                backgroundColor:
-                                  EVENT_TYPE_COLORS[type] || CHART_COLORS[0],
-                              }}
-                            />
+                    Object.entries(stats.event_type_counts)
+                      .sort(([, a], [, b]) => b - a)
+                      .map(([type, count]) => {
+                        const pct = stats.total_events ? (count / stats.total_events) * 100 : 0;
+                        return (
+                          <div key={type} className="flex items-center gap-3">
+                            <div className={`w-28 text-xs font-medium truncate ${
+                              isDarkMode ? "text-slate-400" : "text-slate-600"
+                            }`}>{type}</div>
+                            <div className={`flex-1 h-4 rounded-full overflow-hidden ${
+                              isDarkMode ? "bg-slate-800" : "bg-slate-100"
+                            }`}>
+                              <div
+                                className="h-full rounded-full transition-all"
+                                style={{
+                                  width: `${pct}%`,
+                                  backgroundColor: EVENT_TYPE_COLORS[type] || CHART_COLORS[0],
+                                }}
+                              />
+                            </div>
+                            <div className={`w-20 text-xs text-right font-mono tabular-nums ${
+                              isDarkMode ? "text-slate-400" : "text-slate-500"
+                            }`}>
+                              {count.toLocaleString()} <span className="opacity-50">({pct.toFixed(0)}%)</span>
+                            </div>
                           </div>
-                          <div className="w-16 text-xs text-right font-mono">
-                            {count}{" "}
-                            <span className="opacity-50">({pct.toFixed(0)}%)</span>
-                          </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
                 </div>
               </div>
             </div>
@@ -779,59 +755,53 @@ export default function AdminTrackingDashboard() {
         {/* TAB: Sessions                                                  */}
         {/* ════════════════════════════════════════════════════════════════ */}
         {activeTab === "sessions" && (
-          <div className={`rounded-lg border overflow-hidden mt-0 ${cardBg}`}>
+          <div className={`mt-4 overflow-hidden ${cardCls}`}>
             <div className="overflow-x-auto">
-              <table className={`w-full text-sm ${tableBg}`}>
+              <table className="w-full text-sm">
                 <thead>
-                  <tr className={tableHeaderBg}>
-                    <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Session ID</th>
-                    <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Patient</th>
-                    <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Device</th>
-                    <th className="px-2 py-2 sm:px-4 sm:py-3 text-right font-medium">Events</th>
-                    <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Start</th>
-                    <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">End</th>
-                    <th className="px-2 py-2 sm:px-4 sm:py-3 text-right font-medium">Duration</th>
+                  <tr className={isDarkMode ? "bg-slate-800/50" : "bg-slate-50"}>
+                    {["Session ID", "Patient", "Device", "Events", "Start", "End", "Duration"].map((h, i) => (
+                      <th key={h} className={`px-4 py-3 text-xs font-semibold uppercase tracking-wider ${
+                        i === 3 || i === 6 ? "text-right" : "text-left"
+                      } ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                        {h}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody className={`divide-y ${isDarkMode ? "divide-slate-800" : "divide-slate-100"}`}>
                   {analytics?.sessions && analytics.sessions.length > 0 ? (
                     analytics.sessions.map((s) => (
                       <tr
                         key={s.session_id}
-                        className={`${tableRowHover} cursor-pointer transition-colors`}
+                        className={`cursor-pointer transition-colors ${
+                          isDarkMode ? "hover:bg-slate-800/50" : "hover:bg-slate-50"
+                        }`}
                         onClick={() => {
                           setFilterSession(s.session_id);
                           setActiveTab("events");
                         }}
                       >
-                        <td className="px-4 py-2 font-mono text-xs">
-                          {truncate(s.session_id, 20)}
-                        </td>
-                        <td className="px-4 py-2" title={s.file}>
-                          {truncate(s.file, 30)}
-                        </td>
-                        <td className="px-4 py-2">
-                          <span className={`inline-block px-2 py-0.5 rounded text-xs ${badgeBg}`}>
+                        <td className="px-4 py-3 font-mono text-xs">{truncate(s.session_id, 20)}</td>
+                        <td className="px-4 py-3 text-xs" title={s.file}>{truncate(s.file, 30)}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-block px-2 py-0.5 rounded text-xs ${
+                            isDarkMode ? "bg-slate-700 text-slate-300" : "bg-slate-100 text-slate-600"
+                          }`}>
                             {s.device_type || "—"}
                           </span>
                         </td>
-                        <td className="px-4 py-2 text-right font-medium">
-                          {s.event_count}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-xs">
-                          {formatTimestamp(s.first_event)}
-                        </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-xs">
-                          {formatTimestamp(s.last_event)}
-                        </td>
-                        <td className="px-4 py-2 text-right font-mono text-xs">
-                          {formatDuration(s.duration_sec)}
-                        </td>
+                        <td className="px-4 py-3 text-right font-semibold text-xs">{s.event_count}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-xs">{formatTimestamp(s.first_event)}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-xs">{formatTimestamp(s.last_event)}</td>
+                        <td className="px-4 py-3 text-right font-mono text-xs">{formatDuration(s.duration_sec)}</td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center opacity-50">
+                      <td colSpan={7} className={`px-4 py-12 text-center text-xs ${
+                        isDarkMode ? "text-slate-600" : "text-slate-300"
+                      }`}>
                         No sessions found
                       </td>
                     </tr>
@@ -846,94 +816,78 @@ export default function AdminTrackingDashboard() {
         {/* TAB: Elements                                                  */}
         {/* ════════════════════════════════════════════════════════════════ */}
         {activeTab === "elements" && (
-          <div className="space-y-6 mt-0">
+          <div className="space-y-4 pt-4">
             {/* Top Elements Bar Chart */}
-            <div className={`rounded-lg border p-3 sm:p-4 lg:p-5 ${cardBg}`}>
-              <h2 className="text-xs sm:text-sm font-semibold mb-3 sm:mb-4 opacity-80">
-                Most Interacted Elements (Top 20)
+            <div className={`p-4 ${cardCls}`}>
+              <h2 className={`text-xs font-semibold uppercase tracking-wider mb-4 ${
+                isDarkMode ? "text-slate-500" : "text-slate-400"
+              }`}>
+                Most Interacted Elements
               </h2>
-              <div className="h-80">
+              <div className="w-full min-w-0" style={{ height: Math.max(200, (analytics?.top_elements?.length ?? 0) * 28 + 40) }}>
                 {analytics?.top_elements && analytics.top_elements.length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                       data={analytics.top_elements.map((el) => ({
-                        name: el.element_id.length > 25
-                          ? el.element_id.slice(0, 25) + "…"
-                          : el.element_id,
+                        name: el.element_id.length > 30 ? el.element_id.slice(0, 30) + "…" : el.element_id,
                         fullName: el.element_id,
                         count: el.count,
                         event_type: el.event_type,
                       }))}
                       layout="vertical"
-                      margin={{ left: 20 }}
+                      margin={{ top: 5, right: 10, left: 10, bottom: 0 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke={chartGridColor} horizontal={false} />
-                      <XAxis
-                        type="number"
-                        tick={{ fontSize: 11, fill: chartTextColor }}
-                        axisLine={{ stroke: chartGridColor }}
-                        allowDecimals={false}
-                      />
-                      <YAxis
-                        type="category"
-                        dataKey="name"
-                        tick={{ fontSize: 10, fill: chartTextColor }}
-                        width={180}
-                        axisLine={{ stroke: chartGridColor }}
-                      />
+                      <XAxis type="number" tick={{ fontSize: 10, fill: chartTextColor }} axisLine={false} tickLine={false} allowDecimals={false} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 9, fill: chartTextColor }} width={200} axisLine={false} tickLine={false} />
                       <Tooltip content={<ChartTooltip />} />
-                      <Bar dataKey="count" name="Interactions" radius={[0, 4, 4, 0]}>
+                      <Bar dataKey="count" name="Interactions" radius={[0, 3, 3, 0]}>
                         {analytics.top_elements.map((el, idx) => (
-                          <Cell
-                            key={idx}
-                            fill={
-                              EVENT_TYPE_COLORS[el.event_type] ||
-                              CHART_COLORS[idx % CHART_COLORS.length]
-                            }
-                          />
+                          <Cell key={idx} fill={EVENT_TYPE_COLORS[el.event_type] || CHART_COLORS[idx % CHART_COLORS.length]} />
                         ))}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-full flex items-center justify-center opacity-40">
-                    No element data
-                  </div>
+                  <ChartEmpty text="No element data" />
                 )}
               </div>
             </div>
 
             {/* Elements Table */}
-            <div className={`rounded-lg border overflow-hidden ${cardBg}`}>
+            <div className={`overflow-hidden ${cardCls}`}>
               <div className="overflow-x-auto">
-                <table className={`w-full text-sm ${tableBg}`}>
+                <table className="w-full text-sm">
                   <thead>
-                    <tr className={tableHeaderBg}>
-                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">#</th>
-                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Element ID</th>
-                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Event Type</th>
-                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-right font-medium">Count</th>
+                    <tr className={isDarkMode ? "bg-slate-800/50" : "bg-slate-50"}>
+                      {["#", "Element ID", "Event Type", "Count"].map((h, i) => (
+                        <th key={h} className={`px-4 py-3 text-xs font-semibold uppercase tracking-wider ${
+                          i === 3 ? "text-right" : "text-left"
+                        } ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                          {h}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  <tbody className={`divide-y ${isDarkMode ? "divide-slate-800" : "divide-slate-100"}`}>
                     {analytics?.top_elements?.map((el, idx) => (
-                      <tr key={`${el.element_id}-${el.event_type}`} className={tableRowHover}>
-                        <td className="px-4 py-2 font-mono text-xs opacity-50">{idx + 1}</td>
-                        <td className="px-4 py-2 font-mono text-xs">{el.element_id}</td>
-                        <td className="px-4 py-2">
+                      <tr key={`${el.element_id}-${el.event_type}`} className={`transition-colors ${
+                        isDarkMode ? "hover:bg-slate-800/50" : "hover:bg-slate-50"
+                      }`}>
+                        <td className={`px-4 py-2.5 font-mono text-xs ${isDarkMode ? "text-slate-600" : "text-slate-300"}`}>{idx + 1}</td>
+                        <td className="px-4 py-2.5 font-mono text-xs">{el.element_id}</td>
+                        <td className="px-4 py-2.5">
                           <span
                             className="inline-block px-2 py-0.5 rounded text-xs font-medium"
                             style={{
-                              backgroundColor: EVENT_TYPE_COLORS[el.event_type]
-                                ? `${EVENT_TYPE_COLORS[el.event_type]}20`
-                                : undefined,
+                              backgroundColor: EVENT_TYPE_COLORS[el.event_type] ? `${EVENT_TYPE_COLORS[el.event_type]}15` : undefined,
                               color: EVENT_TYPE_COLORS[el.event_type] || undefined,
                             }}
                           >
                             {el.event_type}
                           </span>
                         </td>
-                        <td className="px-4 py-2 text-right font-bold">{el.count}</td>
+                        <td className="px-4 py-2.5 text-right font-semibold tabular-nums">{el.count}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -947,49 +901,58 @@ export default function AdminTrackingDashboard() {
         {/* TAB: Event Log                                                 */}
         {/* ════════════════════════════════════════════════════════════════ */}
         {activeTab === "events" && (
-          <div className="space-y-0 mt-0">
+          <div className="pt-4 space-y-0">
             {/* Filters */}
-            <div className={`rounded-t-lg border border-b-0 p-4 ${cardBg}`}>
-              <div className="flex flex-wrap gap-3 sm:gap-4 items-end">
-                <div className="flex flex-col w-full sm:w-auto">
-                  <label className="text-xs font-medium mb-1 opacity-70">Patient</label>
+            <div className={`p-4 rounded-t-xl border border-b-0 ${
+              isDarkMode ? "bg-slate-900/50 border-slate-800" : "bg-white border-slate-200"
+            }`}>
+              <div className="flex flex-wrap gap-3 items-end">
+                <div className="flex flex-col min-w-0">
+                  <label className={`text-xs font-medium mb-1 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>Patient</label>
                   <select
                     value={filterFile}
                     onChange={(e) => setFilterFile(e.target.value)}
-                    className={`rounded-md border px-3 py-2 text-sm w-full sm:w-auto ${inputBg}`}
+                    className={`rounded-md border px-3 py-1.5 text-xs ${
+                      isDarkMode
+                        ? "bg-slate-800 border-slate-700 text-slate-200"
+                        : "bg-white border-slate-200 text-slate-700"
+                    }`}
                   >
                     <option value="">All patients</option>
                     {patients.map((p) => (
-                      <option key={p.file} value={p.file}>
-                        {p.file} ({p.event_count})
-                      </option>
+                      <option key={p.file} value={p.file}>{p.file} ({p.event_count})</option>
                     ))}
                   </select>
                 </div>
-                <div className="flex flex-col w-full sm:w-auto">
-                  <label className="text-xs font-medium mb-1 opacity-70">Event Type</label>
+                <div className="flex flex-col min-w-0">
+                  <label className={`text-xs font-medium mb-1 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>Event Type</label>
                   <select
                     value={filterEventType}
                     onChange={(e) => setFilterEventType(e.target.value)}
-                    className={`rounded-md border px-3 py-2 text-sm w-full sm:w-auto ${inputBg}`}
+                    className={`rounded-md border px-3 py-1.5 text-xs ${
+                      isDarkMode
+                        ? "bg-slate-800 border-slate-700 text-slate-200"
+                        : "bg-white border-slate-200 text-slate-700"
+                    }`}
                   >
                     <option value="">All types</option>
-                    {stats &&
-                      Object.entries(stats.event_type_counts).map(([type, count]) => (
-                        <option key={type} value={type}>
-                          {type} ({count})
-                        </option>
-                      ))}
+                    {stats && Object.entries(stats.event_type_counts).map(([type, count]) => (
+                      <option key={type} value={type}>{type} ({count})</option>
+                    ))}
                   </select>
                 </div>
-                <div className="flex flex-col w-full sm:w-auto">
-                  <label className="text-xs font-medium mb-1 opacity-70">Session ID</label>
+                <div className="flex flex-col min-w-0">
+                  <label className={`text-xs font-medium mb-1 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>Session ID</label>
                   <input
                     type="text"
                     value={filterSession}
                     onChange={(e) => setFilterSession(e.target.value)}
                     placeholder="Filter by session…"
-                    className={`rounded-md border px-3 py-2 text-sm w-full sm:w-52 ${inputBg}`}
+                    className={`rounded-md border px-3 py-1.5 text-xs w-44 ${
+                      isDarkMode
+                        ? "bg-slate-800 border-slate-700 text-slate-200 placeholder-slate-600"
+                        : "bg-white border-slate-200 text-slate-700 placeholder-slate-300"
+                    }`}
                   />
                 </div>
                 {(filterFile || filterEventType || filterSession || filterRole) && (
@@ -1000,149 +963,124 @@ export default function AdminTrackingDashboard() {
                       setFilterEventType("");
                       setFilterSession("");
                     }}
-                    className={`px-3 py-2 rounded-md text-sm transition-colors ${
-                      isDarkMode ? "bg-gray-700 hover:bg-gray-600" : "bg-gray-200 hover:bg-gray-300"
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                      isDarkMode
+                        ? "bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700"
+                        : "bg-slate-100 text-slate-500 hover:text-slate-700"
                     }`}
                   >
-                    Clear Filters
+                    Clear
                   </button>
                 )}
               </div>
             </div>
 
             {/* Table */}
-            <div className={`rounded-b-lg border overflow-hidden ${cardBg}`}>
+            <div className={`overflow-hidden rounded-b-xl border ${
+              isDarkMode ? "border-slate-800" : "border-slate-200"
+            }`}>
               <div className="overflow-x-auto">
-                <table className={`w-full text-sm ${tableBg}`}>
+                <table className="w-full text-sm">
                   <thead>
-                    <tr className={tableHeaderBg}>
-                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">#</th>
-                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Time</th>
-                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Role</th>
-                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Patient</th>
-                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Session</th>
-                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Event Type</th>
-                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Element</th>
-                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium">Device</th>
-                      <th className="px-2 py-2 sm:px-4 sm:py-3 text-left font-medium"></th>
+                    <tr className={isDarkMode ? "bg-slate-800/50" : "bg-slate-50"}>
+                      {["#", "Time", "Role", "Patient", "Session", "Event", "Element", "Device", ""].map((h, i) => (
+                        <th key={i} className={`px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider ${
+                          isDarkMode ? "text-slate-400" : "text-slate-500"
+                        }`}>
+                          {h}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  <tbody className={`divide-y ${isDarkMode ? "divide-slate-800" : "divide-slate-100"}`}>
                     {loading ? (
                       <tr>
-                        <td colSpan={9} className="px-4 py-8 text-center opacity-50">
-                          Loading…
+                        <td colSpan={9} className="px-4 py-12 text-center">
+                          <div className={`flex items-center justify-center gap-2 text-xs ${
+                            isDarkMode ? "text-slate-500" : "text-slate-400"
+                          }`}>
+                            <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                            Loading events...
+                          </div>
                         </td>
                       </tr>
                     ) : events.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="px-4 py-8 text-center opacity-50">
+                        <td colSpan={9} className={`px-4 py-12 text-center text-xs ${
+                          isDarkMode ? "text-slate-600" : "text-slate-300"
+                        }`}>
                           No events found
                         </td>
                       </tr>
                     ) : (
                       events.map((ev, idx) => (
-                        <>
-                          <tr
-                            key={ev.id}
-                            className={`${tableRowHover} cursor-pointer transition-colors`}
-                            onClick={() =>
-                              setExpandedRow(expandedRow === ev.id ? null : ev.id)
-                            }
-                          >
-                            <td className="px-4 py-2 font-mono text-xs opacity-50">
-                              {page * PAGE_SIZE + idx + 1}
-                            </td>
-                            <td className="px-4 py-2 whitespace-nowrap">
-                              {formatTimestamp(ev.client_timestamp)}
-                            </td>
-                            <td className="px-4 py-2">
-                              <span
-                                className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
-                                  ev.role === "physician"
-                                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400"
-                                    : "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400"
-                                }`}
-                              >
-                                {ev.role || "patient"}
-                              </span>
-                            </td>
-                            <td className="px-4 py-2" title={ev.file}>
-                              {truncate(ev.file, 25)}
-                            </td>
-                            <td
-                              className="px-4 py-2 font-mono text-xs"
-                              title={ev.session_id}
+                        <tr key={ev.id} className="group">
+                          <td colSpan={9} className="p-0">
+                            <div
+                              className={`flex items-center px-3 py-2.5 cursor-pointer transition-colors ${
+                                isDarkMode ? "hover:bg-slate-800/50" : "hover:bg-slate-50"
+                              }`}
+                              onClick={() => setExpandedRow(expandedRow === ev.id ? null : ev.id)}
                             >
-                              {truncate(ev.session_id, 12)}
-                            </td>
-                            <td className="px-4 py-2">
-                              <span
-                                className="inline-block px-2 py-0.5 rounded text-xs font-medium"
-                                style={{
-                                  backgroundColor: EVENT_TYPE_COLORS[ev.event_type]
-                                    ? `${EVENT_TYPE_COLORS[ev.event_type]}20`
-                                    : undefined,
-                                  color: EVENT_TYPE_COLORS[ev.event_type] || undefined,
-                                }}
-                              >
-                                {ev.event_type}
-                              </span>
-                            </td>
-                            <td className="px-4 py-2" title={ev.element_id ?? ""}>
-                              {truncate(ev.element_id, 25)}
-                            </td>
-                            <td className="px-4 py-2 text-xs">
-                              {ev.device_type ?? "—"}
-                            </td>
-                            <td className="px-4 py-2 text-xs opacity-50">
-                              {expandedRow === ev.id ? "▲" : "▼"}
-                            </td>
-                          </tr>
-                          {expandedRow === ev.id && (
-                            <tr key={`${ev.id}-detail`}>
-                              <td colSpan={9} className="px-2 py-2 sm:px-4 sm:py-3">
-                                <div
-                                  className={`rounded p-3 text-xs font-mono overflow-x-auto ${
-                                    isDarkMode ? "bg-gray-900" : "bg-gray-100"
-                                  }`}
+                              <div className={`w-10 font-mono text-xs ${isDarkMode ? "text-slate-600" : "text-slate-300"}`}>
+                                {page * PAGE_SIZE + idx + 1}
+                              </div>
+                              <div className="w-36 text-xs whitespace-nowrap">{formatTimestamp(ev.client_timestamp)}</div>
+                              <div className="w-20">
+                                <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-medium ${
+                                  ev.role === "physician"
+                                    ? isDarkMode ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-50 text-emerald-700"
+                                    : isDarkMode ? "bg-blue-500/10 text-blue-400" : "bg-blue-50 text-blue-700"
+                                }`}>
+                                  {ev.role || "patient"}
+                                </span>
+                              </div>
+                              <div className="flex-1 min-w-0 text-xs truncate" title={ev.file}>{truncate(ev.file, 25)}</div>
+                              <div className="w-28 font-mono text-xs truncate" title={ev.session_id}>{truncate(ev.session_id, 12)}</div>
+                              <div className="w-28">
+                                <span
+                                  className="inline-block px-1.5 py-0.5 rounded text-xs font-medium"
+                                  style={{
+                                    backgroundColor: EVENT_TYPE_COLORS[ev.event_type] ? `${EVENT_TYPE_COLORS[ev.event_type]}15` : undefined,
+                                    color: EVENT_TYPE_COLORS[ev.event_type] || undefined,
+                                  }}
                                 >
-                                  <div className="grid grid-cols-2 gap-2 mb-2">
-                                    <div>
-                                      <strong>Full File:</strong> {ev.file}
-                                    </div>
-                                    <div>
-                                      <strong>Speaker:</strong> {ev.speaker}
-                                    </div>
-                                    <div>
-                                      <strong>Element ID:</strong>{" "}
-                                      {ev.element_id ?? "—"}
-                                    </div>
-                                    <div>
-                                      <strong>Session:</strong> {ev.session_id}
-                                    </div>
-                                    <div>
-                                      <strong>Client Time:</strong>{" "}
-                                      {formatTimestamp(ev.client_timestamp)}
-                                    </div>
-                                    <div>
-                                      <strong>Server Time:</strong>{" "}
-                                      {formatTimestamp(ev.created_at)}
-                                    </div>
-                                  </div>
-                                  {ev.event_data && (
-                                    <div>
-                                      <strong>Metadata:</strong>
-                                      <pre className="mt-1 whitespace-pre-wrap break-all">
-                                        {JSON.stringify(ev.event_data, null, 2)}
-                                      </pre>
-                                    </div>
-                                  )}
+                                  {ev.event_type}
+                                </span>
+                              </div>
+                              <div className="w-32 text-xs truncate" title={ev.element_id ?? ""}>{truncate(ev.element_id, 20)}</div>
+                              <div className="w-16 text-xs">{ev.device_type ?? "—"}</div>
+                              <div className={`w-6 text-xs text-center ${isDarkMode ? "text-slate-600" : "text-slate-300"}`}>
+                                {expandedRow === ev.id ? "▲" : "▼"}
+                              </div>
+                            </div>
+                            {expandedRow === ev.id && (
+                              <div className={`mx-3 mb-3 rounded-lg p-3 text-xs font-mono ${
+                                isDarkMode ? "bg-slate-950 border border-slate-800" : "bg-slate-50 border border-slate-100"
+                              }`}>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+                                  <div><strong className="opacity-50">File:</strong> {ev.file}</div>
+                                  <div><strong className="opacity-50">Speaker:</strong> {ev.speaker}</div>
+                                  <div><strong className="opacity-50">Element:</strong> {ev.element_id ?? "—"}</div>
+                                  <div><strong className="opacity-50">Session:</strong> {ev.session_id}</div>
+                                  <div><strong className="opacity-50">Client:</strong> {formatTimestamp(ev.client_timestamp)}</div>
+                                  <div><strong className="opacity-50">Server:</strong> {formatTimestamp(ev.created_at)}</div>
                                 </div>
-                              </td>
-                            </tr>
-                          )}
-                        </>
+                                {ev.event_data && (
+                                  <div>
+                                    <strong className="opacity-50">Metadata:</strong>
+                                    <pre className="mt-1 whitespace-pre-wrap break-all overflow-x-auto">
+                                      {JSON.stringify(ev.event_data, null, 2)}
+                                    </pre>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
                       ))
                     )}
                   </tbody>
@@ -1150,34 +1088,37 @@ export default function AdminTrackingDashboard() {
               </div>
 
               {/* Pagination */}
-              <div
-                className={`flex items-center justify-between px-2 py-2 sm:px-4 sm:py-3 border-t ${
-                  isDarkMode ? "border-gray-700" : "border-gray-200"
-                }`}
-              >
-                <div className="text-sm opacity-60">
+              <div className={`flex items-center justify-between px-4 py-3 border-t ${
+                isDarkMode ? "border-slate-800" : "border-slate-100"
+              }`}>
+                <span className={`text-xs ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
                   {totalEvents > 0
-                    ? `Showing ${page * PAGE_SIZE + 1}–${Math.min(
-                        (page + 1) * PAGE_SIZE,
-                        totalEvents,
-                      )} of ${totalEvents}`
+                    ? `${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, totalEvents)} of ${totalEvents.toLocaleString()}`
                     : "No events"}
-                </div>
-                <div className="flex gap-2">
+                </span>
+                <div className="flex items-center gap-1">
                   <button
                     disabled={page === 0}
                     onClick={() => setPage((p) => Math.max(0, p - 1))}
-                    className="px-2 py-1 sm:px-3 rounded border text-xs sm:text-sm disabled:opacity-30 hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors"
+                    className={`px-2.5 py-1 rounded text-xs font-medium disabled:opacity-20 transition-all ${
+                      isDarkMode
+                        ? "bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700"
+                        : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200"
+                    }`}
                   >
                     Prev
                   </button>
-                  <span className="px-2 py-1 sm:px-3 text-xs sm:text-sm">
+                  <span className={`px-2 text-xs tabular-nums ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
                     {totalPages > 0 ? `${page + 1} / ${totalPages}` : "—"}
                   </span>
                   <button
                     disabled={page >= totalPages - 1}
                     onClick={() => setPage((p) => p + 1)}
-                    className="px-2 py-1 sm:px-3 rounded border text-xs sm:text-sm disabled:opacity-30 hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors"
+                    className={`px-2.5 py-1 rounded text-xs font-medium disabled:opacity-20 transition-all ${
+                      isDarkMode
+                        ? "bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700"
+                        : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200"
+                    }`}
                   >
                     Next
                   </button>
@@ -1186,7 +1127,7 @@ export default function AdminTrackingDashboard() {
             </div>
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }

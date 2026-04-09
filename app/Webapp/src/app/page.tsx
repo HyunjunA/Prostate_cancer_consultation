@@ -296,108 +296,194 @@ export default function Home() {
 
   const SelectionScreen = () => (
     <div
-      className={`min-h-screen flex items-center justify-center ${
-        isDarkMode ? "bg-slate-900" : "bg-gray-50"
+      className={`min-h-screen flex flex-col ${
+        isDarkMode
+          ? "bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950"
+          : "bg-gradient-to-br from-slate-50 via-white to-blue-50"
       }`}
     >
-      <div className="text-center max-w-4xl mx-auto p-8">
-        <h1
-          className={`text-3xl font-semibold mb-4 ${
-            isDarkMode ? "text-slate-100" : "text-gray-900"
-          }`}
-        >
-          Patient Consultation System
-        </h1>
-        <p
-          className={`text-lg mb-8 ${
-            isDarkMode ? "text-slate-400" : "text-gray-600"
-          }`}
-        >
-          Select a patient and visit type below.
-        </p>
-
-        {/* Patient List */}
-        {loadingPatients ? (
-          <p className={isDarkMode ? "text-slate-400" : "text-gray-500"}>Loading patients...</p>
-        ) : patientList.length === 0 ? (
-          <p className={isDarkMode ? "text-slate-400" : "text-gray-500"}>No patients found.</p>
-        ) : (
-          <div className="w-full">
-            <table className={`w-full border-collapse rounded-lg overflow-hidden ${
-              isDarkMode ? "bg-slate-800" : "bg-white"
-            }`}>
-              <thead>
-                <tr className={isDarkMode ? "bg-slate-700" : "bg-gray-100"}>
-                  <th className={`px-6 py-3 text-left text-sm font-semibold ${isDarkMode ? "text-slate-200" : "text-gray-700"}`}>
-                    Patient
-                  </th>
-                  <th className={`px-6 py-3 text-center text-sm font-semibold ${isDarkMode ? "text-slate-200" : "text-gray-700"}`}>
-                    First Visit
-                  </th>
-                  <th className={`px-6 py-3 text-center text-sm font-semibold ${isDarkMode ? "text-slate-200" : "text-gray-700"}`}>
-                    Follow-up
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {patientList.map((file, idx) => {
-                  const match = file.match(/sid[\s_-]*(\d+)/i);
-                  const label = match ? `SID-${match[1]}` : file;
-                  return (
-                    <tr
-                      key={file}
-                      className={`border-t ${
-                        isDarkMode
-                          ? "border-slate-700 hover:bg-slate-700/50"
-                          : "border-gray-100 hover:bg-gray-50"
-                      }`}
-                    >
-                      <td className={`px-6 py-4 ${isDarkMode ? "text-slate-200" : "text-gray-800"}`}>
-                        <div className="font-medium">{label}</div>
-                        <div className={`text-xs ${isDarkMode ? "text-slate-500" : "text-gray-400"}`}>
-                          {file}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <button
-                          onClick={() => handlePatientSelect(file, "first")}
-                          className="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-500 transition-colors"
-                        >
-                          First Visit
-                        </button>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <button
-                          onClick={() => handlePatientSelect(file, "followup")}
-                          className="px-4 py-2 rounded-lg text-sm font-medium bg-cyan-600 text-white hover:bg-cyan-500 transition-colors"
-                        >
-                          Follow-up
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      {/* Header */}
+      <header className={`border-b backdrop-blur-sm ${
+        isDarkMode ? "border-slate-800/60 bg-slate-900/70" : "border-slate-200/60 bg-white/70"
+      }`}>
+        <div className="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">
+          <h1 className={`text-lg font-semibold tracking-tight ${
+            isDarkMode ? "text-slate-100" : "text-slate-900"
+          }`}>
+            Patient Consultation System
+          </h1>
+          <div className="flex items-center gap-2">
+            <a
+              href="/?doctorid=auto"
+              className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition-all ${
+                isDarkMode
+                  ? "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700"
+                  : "bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-slate-200 shadow-sm"
+              }`}
+            >
+              Physician View
+            </a>
+            <a
+              href="/admin/tracking"
+              className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition-all ${
+                isDarkMode
+                  ? "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700"
+                  : "bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-slate-200 shadow-sm"
+              }`}
+            >
+              Admin
+            </a>
           </div>
-        )}
-
-        {/* Quick Links */}
-        <div className="mt-8 flex flex-wrap justify-center gap-3">
-          <a
-            href="/?doctorid=auto"
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-500 transition-colors"
-          >
-            Doctor Demo
-          </a>
-          <a
-            href="/admin/tracking"
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-amber-600 text-white hover:bg-amber-500 transition-colors"
-          >
-            Admin Tracking
-          </a>
         </div>
-      </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="flex-1 flex items-start justify-center py-12 px-6">
+        <div className="w-full max-w-3xl">
+          {/* Section Header */}
+          <div className="mb-6">
+            <h2 className={`text-sm font-semibold uppercase tracking-wider ${
+              isDarkMode ? "text-slate-500" : "text-slate-400"
+            }`}>
+              Patient Records
+            </h2>
+            <p className={`mt-1 text-sm ${
+              isDarkMode ? "text-slate-400" : "text-slate-500"
+            }`}>
+              Select a patient to view their consultation report.
+            </p>
+          </div>
+
+          {/* Patient List */}
+          {loadingPatients ? (
+            <div className="flex items-center justify-center py-20">
+              <div className={`flex items-center gap-3 ${
+                isDarkMode ? "text-slate-400" : "text-slate-500"
+              }`}>
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                <span className="text-sm">Loading patients...</span>
+              </div>
+            </div>
+          ) : patientList.length === 0 ? (
+            <div className={`text-center py-20 rounded-xl border-2 border-dashed ${
+              isDarkMode ? "border-slate-800 text-slate-500" : "border-slate-200 text-slate-400"
+            }`}>
+              <p className="text-sm">No patients found.</p>
+            </div>
+          ) : (
+            <div className={`rounded-xl overflow-hidden border ${
+              isDarkMode ? "border-slate-800 bg-slate-900/50" : "border-slate-200 bg-white shadow-sm"
+            }`}>
+              <table className="w-full">
+                <thead>
+                  <tr className={isDarkMode ? "bg-slate-800/50" : "bg-slate-50"}>
+                    <th className={`px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider ${
+                      isDarkMode ? "text-slate-400" : "text-slate-500"
+                    }`}>
+                      Patient ID
+                    </th>
+                    <th className={`px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider hidden sm:table-cell ${
+                      isDarkMode ? "text-slate-400" : "text-slate-500"
+                    }`}>
+                      Source File
+                    </th>
+                    <th className={`px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider ${
+                      isDarkMode ? "text-slate-400" : "text-slate-500"
+                    }`}>
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className={`divide-y ${
+                  isDarkMode ? "divide-slate-800" : "divide-slate-100"
+                }`}>
+                  {patientList.map((file, idx) => {
+                    const match = file.match(/sid[\s_-]*(\d+)/i);
+                    const label = match ? `SID-${match[1]}` : file;
+                    return (
+                      <tr
+                        key={file}
+                        className={`group transition-colors ${
+                          isDarkMode
+                            ? "hover:bg-slate-800/50"
+                            : "hover:bg-slate-50/80"
+                        }`}
+                      >
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
+                              isDarkMode
+                                ? "bg-blue-500/10 text-blue-400"
+                                : "bg-blue-50 text-blue-600"
+                            }`}>
+                              {match ? match[1] : (idx + 1)}
+                            </div>
+                            <span className={`font-medium text-sm ${
+                              isDarkMode ? "text-slate-200" : "text-slate-800"
+                            }`}>
+                              {label}
+                            </span>
+                          </div>
+                        </td>
+                        <td className={`px-5 py-4 hidden sm:table-cell`}>
+                          <span className={`text-xs font-mono ${
+                            isDarkMode ? "text-slate-500" : "text-slate-400"
+                          }`}>
+                            {file}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => handlePatientSelect(file, "first")}
+                              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                                isDarkMode
+                                  ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 hover:text-blue-300 border border-blue-500/20"
+                                  : "bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 border border-blue-100"
+                              }`}
+                            >
+                              First Visit
+                            </button>
+                            <button
+                              onClick={() => handlePatientSelect(file, "followup")}
+                              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                                isDarkMode
+                                  ? "bg-teal-500/10 text-teal-400 hover:bg-teal-500/20 hover:text-teal-300 border border-teal-500/20"
+                                  : "bg-teal-50 text-teal-700 hover:bg-teal-100 hover:text-teal-800 border border-teal-100"
+                              }`}
+                            >
+                              Follow-up
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {/* Table Footer */}
+              <div className={`px-5 py-3 flex items-center justify-between border-t ${
+                isDarkMode ? "border-slate-800 bg-slate-800/30" : "border-slate-100 bg-slate-50/50"
+              }`}>
+                <span className={`text-xs ${
+                  isDarkMode ? "text-slate-500" : "text-slate-400"
+                }`}>
+                  {patientList.length} patient{patientList.length !== 1 ? "s" : ""}
+                </span>
+                <span className={`text-xs ${
+                  isDarkMode ? "text-slate-600" : "text-slate-300"
+                }`}>
+                  &nbsp;
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      </main>
     </div>
   );
 
