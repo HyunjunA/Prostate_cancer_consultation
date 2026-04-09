@@ -1,7 +1,5 @@
 # Dependencies
 node_modules
-npm-debug.log
-yarn-error.log
 
 # Build output
 .next
@@ -13,23 +11,49 @@ dist
 .env.local
 .env.*.local
 
+# Git
+.git
+.gitignore
+
 # Logs
 logs
 *.log
 *.out
 *.err
+npm-debug.log
+yarn-error.log
 
 # IDE
 .vscode
 .idea
 *.swp
 .DS_Store
+Thumbs.db
 
 # Tests (not needed in production)
-e2e/
+src/__tests__/
 src/__mocks__/
+e2e/
 jest.config.*
 playwright.config.*
+coverage/
 
-# Documentation
+# Documentation (not needed in container)
 *.md
+LICENSE
+
+# Dead code / legacy
+notused/
+src/**/notused/
+src/**/dist/
+
+# Config duplicates
+postcss.config.mjs
+
+# Docker (prevent recursive copy)
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# OS artifacts
+*.DS_Store
