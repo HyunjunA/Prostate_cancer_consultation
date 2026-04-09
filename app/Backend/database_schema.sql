@@ -255,10 +255,4 @@ CREATE INDEX idx_uil_event_type ON user_interaction_log(event_type);
 CREATE INDEX idx_uil_client_timestamp ON user_interaction_log(client_timestamp);
 CREATE INDEX idx_uil_file_event_type ON user_interaction_log(file, event_type);
 
--- #4: Expression index for analytics timeline (GROUP BY date_trunc)
-CREATE INDEX idx_uil_client_ts_hour ON user_interaction_log (date_trunc('hour', client_timestamp))
-    WHERE client_timestamp IS NOT NULL;
-
--- #5: Expression index for hourly heatmap (GROUP BY extract hour)
-CREATE INDEX idx_uil_client_ts_hour_of_day ON user_interaction_log (extract(hour FROM client_timestamp))
-    WHERE client_timestamp IS NOT NULL;
+-- #4, #5: Expression indexes (date_trunc, extract) removed — require IMMUTABLE wrapper (TODO #42)
