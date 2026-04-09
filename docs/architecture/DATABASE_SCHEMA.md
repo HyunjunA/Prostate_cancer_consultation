@@ -32,7 +32,7 @@ There are **12 tables** organized into 5 functional groups:
 
 > Which tables provide data for each screen the user sees.
 
-### 🩺 Doctor Dashboard (`?doctorid=auto`)
+###  Doctor Dashboard (`?doctorid=auto`)
 
 | Screen Element | Data Source | Description |
 |---------------|-----------|-------------|
@@ -43,7 +43,7 @@ There are **12 tables** organized into 5 functional groups:
 | Sentence rewrite tool | `doctor_rewrite_log` | Doctor rewrites a sentence → stored here. Original score unchanged |
 | Rewrite history | `doctor_rewrite_log` | Previous rewrite attempts for same sentence |
 
-### 👤 Patient First Visit (`?visit=first`)
+###  Patient First Visit (`?visit=first`)
 
 | Screen Element | Data Source | Description |
 |---------------|-----------|-------------|
@@ -52,7 +52,7 @@ There are **12 tables** organized into 5 functional groups:
 | Summary usefulness rating | `patient_summary_scoring` | Patient rates 1-5: "Was this information helpful?" |
 | ~~Free-text feedback~~ | `patient_responses` | **Not used in active UI.** Table/API exist but no active component calls them. Legacy only. |
 
-### 📋 Patient Follow-up Visit (`?visit=followup`)
+###  Patient Follow-up Visit (`?visit=followup`)
 
 | Screen Element | Data Source | Description |
 |---------------|-----------|-------------|
@@ -61,7 +61,7 @@ There are **12 tables** organized into 5 functional groups:
 | Risk Perception survey | `survey_submission_log` | Per-domain risk understanding assessment |
 | Patient Satisfaction survey | `survey_submission_log` | Overall consultation satisfaction |
 
-### 📊 Admin Tracking Dashboard (`/admin/tracking`)
+###  Admin Tracking Dashboard (`/admin/tracking`)
 
 | Screen Element | Data Source | Description |
 |---------------|-----------|-------------|
@@ -70,7 +70,7 @@ There are **12 tables** organized into 5 functional groups:
 | Device distribution | `user_interaction_log` | desktop/tablet/mobile ratio |
 | Hourly heatmap | `user_interaction_log` | Peak usage hours |
 
-### ⚙️ Background (not visible to users)
+###  Background (not visible to users)
 
 | Role | Table | Description |
 |------|-------|-------------|
@@ -274,7 +274,7 @@ After reading each AI summary card, patients rate how helpful the information wa
 
 ## 5. `patient_responses` — Patient Free-Text Answers
 
-> **⚠️ NOT CURRENTLY USED IN ACTIVE UI.** The API endpoints (`GET/PUT /api/patient/responses`) and hook functions (`usePatientData.tsx`) exist, but no active frontend component (V33, V35, V31Re) calls them. Only legacy components (V2–V29, inactive) used this table. The pipeline creates empty rows (answer_1~5 = NULL) at startup, but no UI reads or writes to them. Infrastructure is ready for future use.
+> ** NOT CURRENTLY USED IN ACTIVE UI.** The API endpoints (`GET/PUT /api/patient/responses`) and hook functions (`usePatientData.tsx`) exist, but no active frontend component (V33, V35, V31Re) calls them. Only legacy components (V2–V29, inactive) used this table. The pipeline creates empty rows (answer_1~5 = NULL) at startup, but no UI reads or writes to them. Infrastructure is ready for future use.
 
 ### Why this table exists
 

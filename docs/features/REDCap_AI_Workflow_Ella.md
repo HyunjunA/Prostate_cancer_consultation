@@ -15,7 +15,7 @@ raw transcripts ──▶ Data Processing Server ──▶ Processed Data
 
 ---
 
-## ⚙️ 1. Data Generation and Transcription
+##  1. Data Generation and Transcription
 ### Source: Consultation Recordings
 - Each consultation between physician and patient is **audio-recorded** (e.g., `.wav`, `.mp3`).
 - These recordings contain **PHI (Protected Health Information)** and are stored securely.
@@ -79,7 +79,7 @@ Future plan: automate upload via **REDCap API** instead of manual file upload.
 
 ---
 
-## 🔄 5. Combined Data Flow Summary
+##  5. Combined Data Flow Summary
 ```text
 (1) Physician–Patient Consultation → Audio Recording
         ↓
@@ -104,11 +104,11 @@ Future plan: automate upload via **REDCap API** instead of manual file upload.
 ## 🧩 PHI Classification
 | Stage | Contains PHI? | Notes |
 |--------|----------------|-------|
-| Audio recordings | ✅ Yes | Voice, names, clinical context |
-| Transcripts (TurboScribe) | ✅ Yes | Patient/physician statements |
-| Processed data (AI summaries) | ✅ Yes (indirect PHI) | Derived from identifiable dialogue |
-| Dashboard display | ✅ Yes | Personalized patient data |
-| REDCap stored files | ✅ Yes | Reports, demographics, surveys |
+| Audio recordings |  Yes | Voice, names, clinical context |
+| Transcripts (TurboScribe) |  Yes | Patient/physician statements |
+| Processed data (AI summaries) |  Yes (indirect PHI) | Derived from identifiable dialogue |
+| Dashboard display |  Yes | Personalized patient data |
+| REDCap stored files |  Yes | Reports, demographics, surveys |
 
 ---
 
