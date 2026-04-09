@@ -572,7 +572,7 @@ Output: {patient_id}_predictions.xlsx
 
 ```bash
 curl -s -X POST "http://localhost:8000/api/transcript/analyze" \
-  -H "X-API-Key: REDACTED_API_KEY" \
+  -H "X-API-Key: <YOUR_API_KEY>" \
   -F "file=@/path/to/processed_transcripts_sid-01.xlsx" \
   -F "top_n=5" \
   -F "context_window=3" | python3 -m json.tool
@@ -582,7 +582,7 @@ curl -s -X POST "http://localhost:8000/api/transcript/analyze" \
 
 ```bash
 curl -s -X GET "http://localhost:8000/api/transcript/download/sid-01" \
-  -H "X-API-Key: REDACTED_API_KEY" \
+  -H "X-API-Key: <YOUR_API_KEY>" \
   -o sid-01_predictions.xlsx
 ```
 
@@ -592,7 +592,7 @@ curl -s -X GET "http://localhost:8000/api/transcript/download/sid-01" \
 
 ```bash
 curl -X POST http://localhost:8000/api/transcript/analyze-batch \
-  -H "X-API-Key: REDACTED_API_KEY" \
+  -H "X-API-Key: <YOUR_API_KEY>" \
   -F "files=@processed_transcripts_sid-01.xlsx" \
   -F "files=@processed_transcripts_sid-02.xlsx" \
   -F "files=@processed_transcripts_sid-03.xlsx" \
@@ -635,7 +635,7 @@ curl -X POST http://localhost:8000/api/transcript/analyze-batch \
 
 ```bash
 curl -X GET "http://localhost:8000/api/transcript/download-batch?patient_ids=sid-01,sid-02" \
-  -H "X-API-Key: REDACTED_API_KEY" \
+  -H "X-API-Key: <YOUR_API_KEY>" \
   --output batch_results.zip
 ```
 
