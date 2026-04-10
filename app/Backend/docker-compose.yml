@@ -134,7 +134,12 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./uploads:/app/uploads
+      # Transcript input files from the NLP pipeline data folder
       - ../../../AI_physician_patient_communication/data/input:/app/data/transcripts:ro
+      # Guille's AI pipeline — LLM-powered scoring (0-5 clinical relevance)
+      # and rewriting/reformatting system that generates patient-facing
+      # risk summaries using Azure OpenAI GPT-4o
+      - ../../../AI_physician_patient_communication/ai_pipeline:/app/ai_pipeline:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -152,8 +157,10 @@ services:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
       interval: 15s
       timeout: 5s
-      retries: 20
-      start_period: 180s
+      retries: 40
+      # Extended start_period: pipeline_runner Steps 1-10 (~3min) + Step 11 AI pipeline
+      # GPT-4o scoring for 6 patients × 5 domains ≈ 15-20min on first startup
+      start_period: 600s
     ulimits:
       nofile:
         soft: 1048576

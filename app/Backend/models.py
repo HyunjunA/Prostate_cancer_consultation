@@ -152,6 +152,7 @@ class TranscriptAnalysisLog(Base):
     xlsx_data = Column(LargeBinary)         # binary xlsx for DB-backed download
     source_filename = Column(String(500))
     analyzed_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), index=True)
+    ai_overall_score = Column(Float)  # GPT-4o average score across all domains (0-5)
 
     predictions = relationship("SentencePrediction", back_populates="analysis", cascade="all, delete-orphan")
 
@@ -214,3 +215,59 @@ class UserInteractionLog(Base):
 
     def __repr__(self):
         return f"<UserInteractionLog(id={self.id}, session_id={self.session_id}, event_type={self.event_type})>"
+
+
+# =====================================================
+# 7. Session Recording (rrweb)
+# =====================================================
+
+class SessionRecording(Base):
+    """Stores rrweb session recording chunks for replay."""
+    __tablename__ = 'session_recording'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(100), nullable=False, index=True)
+    chunk_index = Column(Integer, nullable=False, default=0)
+    file = Column(String(255))
+    visit_type = Column(String(20))
+    recording_data = Column(LargeBinary)  # gzipped rrweb events JSON
+    event_count = Column(Integer, nullable=False, default=0)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f"<SessionRecording(id={self.id}, session_id={self.session_id}, chunk={self.chunk_index})>"
+
+
+# =====================================================
+# 8. LLM Domain Scoring & Summary (GPT-4o AI Pipeline)
+# =====================================================
+
+class LLMDomainScoringAndSummary(Base):
+    """Stores GPT-4o AI pipeline results per domain per analysis run.
+
+    Each row = one domain's final result from the AI pipeline:
+    - ai_score (0-5): how specifically the doctor communicated risk for this domain
+    - extracted_estimate: the actual risk number extracted (e.g., "24-25%", "13 years")
+    - reformat_sentence: patient-facing plain-language summary
+    - treatment: which treatment the estimate refers to (side-effect domains only)
+    """
+    __tablename__ = 'llm_domain_scoring_and_summary'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    analysis_id = Column(Integer, ForeignKey('transcript_analysis_log.id', ondelete='CASCADE'), nullable=False)
+    patient_id = Column(String(255), nullable=False)
+    domain = Column(String(10), nullable=False)              # cp, le, ed, inc, ius
+    ai_score = Column(Integer)                               # 0-5 GPT-4o relevance score
+    score_explanation = Column(Text)                         # chain-of-thought reasoning
+    extracted_estimate = Column(Text)                        # "24-25%", "13 years", "<missing>"
+    treatment = Column(String(50))                           # "surgery", "radiation", NULL
+    source_sentence = Column(Text)                           # original single sentence (input to reformat)
+    source_context = Column(Text)                            # surrounding context sentences
+    reformat_sentence = Column(Text)                         # patient-facing summary sentence
+    source_filename = Column(String(500))
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    analysis = relationship("TranscriptAnalysisLog")
+
+    def __repr__(self):
+        return f"<LLMDomainScoringAndSummary(id={self.id}, domain={self.domain}, ai_score={self.ai_score})>"

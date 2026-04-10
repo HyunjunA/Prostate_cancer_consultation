@@ -81,6 +81,47 @@ X-API-Key: {{api_key}}
 
 
 ############################################################
+### 6-1b) AI Summary — GPT-4o LLM Scoring + Patient Summary
+###
+### Guille's ai_pipeline integration:
+###   - GPT-4o scores each sentence's clinical relevance (0-5)
+###   - Extracts actual risk numbers (e.g., "24-25%", "13 years")
+###   - Reformats into patient-facing plain language
+###   - Runs as Step 11 in pipeline_runner.py (after Step 10 DB save)
+###   - Results stored in llm_domain_scoring_and_summary table
+###
+### Response fields:
+###   domain          - cp/le/ed/inc/ius
+###   ai_score        - 0-5 (0=not mentioned, 5=patient-specific with timeline)
+###   extracted_estimate - the actual risk number (e.g., "24-25%")
+###   treatment       - "surgery"/"radiation"/null (side-effect domains only)
+###   source_sentence - original doctor's sentence used to generate summary
+###   source_context  - surrounding context sentences
+###   reformat_sentence - patient-facing AI summary
+###
+### Usage in app:
+###   Patient First Visit / Follow-up → "AI-Generated Summary" section
+###   "View relevant sentences" → shows source_sentence
+############################################################
+
+### List all patients with AI-generated summaries
+GET {{base}}/api/patient/ai-summary
+X-API-Key: {{api_key}}
+
+###
+### Get AI summary for specific patient (SID-10)
+### Returns per-domain: ai_score, extracted_estimate, source_sentence, reformat_sentence
+GET {{base}}/api/patient/ai-summary/Input_Keystrokes REC 001 (SID 10).xlsx
+X-API-Key: {{api_key}}
+
+###
+### Get AI summary for specific patient (SID-14)
+### If AI summary not available, returns source="fallback_rewriter" with empty domains
+GET {{base}}/api/patient/ai-summary/Input_Keystrokes REC001 (SID 14).xlsx
+X-API-Key: {{api_key}}
+
+
+############################################################
 ### 6-2) Doctor Interface - AI Rewrite Suggestion
 ###
 
@@ -484,16 +525,57 @@ X-API-Key: {{api_key}}
 
 
 ############################################################
-### 8) Doctor Interface - Score Sentence
-# Submit a score for a specific sentence
+### 8) Doctor Interface - Score Sentence (GPT-4o)
+###
+### Uses Guille's ai_pipeline scoring via Azure OpenAI GPT-4o.
+### Doctor writes a rewritten sentence in Re-write Practice,
+### clicks "Try & Score" → this endpoint returns 0-5 score.
+###
+### Score rubric:
+###   0 = No mention of domain topic
+###   1 = Mention but no risk description
+###   2 = Qualitative only ("the risk is low")
+###   3 = Numeric estimate without timeline ("12 percent")
+###   4 = Numeric estimate with timeline ("12% at 15 years")
+###   5 = Patient-specific with timeline
+###
+### class_ values: 1=cp, 2=inc, 3=ed, 4=ius, 5=le
+###   (or short names: cp, le, ed, inc, ius)
+###
+### Response includes chain-of-thought explanation from GPT-4o.
+### Falls back to score=5 if Azure OpenAI unavailable.
 ############################################################
+
+### Example: Cancer Prognosis (score should be 3-4, has numbers but partial)
+POST {{base}}/api/doctor/score-sentence
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "sentence": "your risk of dying from prostate cancer without treatment is about 12 percent at 15 years",
+  "class_": "cp"
+}
+
+###
+### Example: Erectile Dysfunction (score should be 4, has numbers + timeline)
 POST {{base}}/api/doctor/score-sentence
 Content-Type: {{json}}
 X-API-Key: {{api_key}}
 
 {
   "sentence": "Based on your age and health, you have a 15% chance of experiencing erectile dysfunction within 2 years after surgery.",
-  "class_": "3"
+  "class_": "ed"
+}
+
+###
+### Example: Vague statement (score should be 1-2, no numbers)
+POST {{base}}/api/doctor/score-sentence
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "sentence": "there is some risk of incontinence after the procedure",
+  "class_": "inc"
 }
 
 

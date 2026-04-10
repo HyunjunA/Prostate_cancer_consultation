@@ -27,6 +27,7 @@ from models import (
     PatientSummaryDomain,
     SentencePrediction,
     TranscriptAnalysisLog,
+    LLMDomainScoringAndSummary,
 )
 
 logger = logging.getLogger(__name__)
@@ -523,6 +524,120 @@ async def get_dashboard_stats(
             "unique_files": patient_files_count,
             "average_scores": average_scores
         }
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# AI Summary — GPT-4o generated patient-facing risk summaries
+# (from Guille's ai_pipeline: LLM scoring + rewriting system)
+# ──────────────────────────────────────────────────────────────────────────────
+
+@router.get("/api/patient/ai-summary/{file}")
+async def get_ai_summary(
+    file: str,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Get AI-generated patient-facing risk summaries per domain.
+
+    Returns GPT-4o scored and reformatted sentences for each domain.
+    Falls back to existing patient_summary_domain if AI results not available.
+    """
+    await check_patient_access(file, user, db)
+
+    # Find latest analysis for this file
+    analysis_stmt = select(TranscriptAnalysisLog.id).where(
+        TranscriptAnalysisLog.source_filename == file
+    ).order_by(TranscriptAnalysisLog.analyzed_at.desc()).limit(1)
+    analysis_id = (await db.execute(analysis_stmt)).scalar_one_or_none()
+
+    if not analysis_id:
+        raise HTTPException(status_code=404, detail="No analysis found for this file.")
+
+    # Get AI pipeline results
+    stmt = select(LLMDomainScoringAndSummary).where(
+        LLMDomainScoringAndSummary.analysis_id == analysis_id
+    ).order_by(LLMDomainScoringAndSummary.domain)
+
+    results = (await db.execute(stmt)).scalars().all()
+
+    if not results:
+        # Fallback: return existing patient_summary_domain data
+        return {
+            "file": file,
+            "analysis_id": analysis_id,
+            "source": "fallback_rewriter",
+            "domains": [],
+            "message": "AI summaries not available. Use /api/patient/summaries for existing summaries.",
+        }
+
+    # Domain display name mapping
+    domain_names = {
+        "cp": "Cancer Prognosis",
+        "le": "Life Expectancy",
+        "ed": "Erectile Dysfunction",
+        "inc": "Urinary Incontinence",
+        "ius": "Irritative Urinary Symptoms",
+    }
+
+    domains = []
+    for r in results:
+        domains.append({
+            "domain": r.domain,
+            "domain_name": domain_names.get(r.domain, r.domain),
+            "ai_score": r.ai_score,
+            "score_explanation": r.score_explanation,
+            "extracted_estimate": r.extracted_estimate,
+            "treatment": r.treatment,
+            "source_sentence": r.source_sentence,
+            "source_context": getattr(r, "source_context", None),
+            "reformat_sentence": r.reformat_sentence,
+        })
+
+    return {
+        "file": file,
+        "analysis_id": analysis_id,
+        "source": "ai_pipeline_gpt4o",
+        "total_domains": len(domains),
+        "domains": domains,
+    }
+
+
+@router.get("/api/patient/ai-summary")
+async def list_ai_summaries(
+    limit: int = Query(default=50, ge=1, le=500),
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """List all patients that have AI-generated summaries."""
+    stmt = (
+        select(
+            LLMDomainScoringAndSummary.source_filename,
+            LLMDomainScoringAndSummary.patient_id,
+            func.count(LLMDomainScoringAndSummary.id).label("domain_count"),
+            func.max(LLMDomainScoringAndSummary.created_at).label("created_at"),
+        )
+        .group_by(
+            LLMDomainScoringAndSummary.source_filename,
+            LLMDomainScoringAndSummary.patient_id,
+        )
+        .order_by(func.max(LLMDomainScoringAndSummary.created_at).desc())
+        .limit(limit)
+    )
+
+    results = (await db.execute(stmt)).all()
+
+    return {
+        "total": len(results),
+        "patients": [
+            {
+                "file": r.source_filename,
+                "patient_id": r.patient_id,
+                "domain_count": r.domain_count,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in results
+        ],
     }
 
 

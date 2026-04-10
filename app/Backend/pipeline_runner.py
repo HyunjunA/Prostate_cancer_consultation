@@ -43,6 +43,7 @@ async def process_single_file(
     import scorer_service
     import rewriter_service
     import persistence
+    import ai_pipeline_service
 
     filename = os.path.basename(filepath)
 
@@ -127,6 +128,30 @@ async def process_single_file(
 
     # ── Save output files (traceability) ─────────────────────────────────
     _save_output_files(cfg, filename, patient_id, xlsx_bytes)
+
+    # ── Step 11: AI pipeline — GPT-4o scoring + patient summary rewriting ─
+    #    Uses Guille's ai_pipeline module (volume-mounted from
+    #    AI_physician_patient_communication/ai_pipeline/).
+    #    Non-blocking: if Azure OpenAI is unavailable, pipeline still completes.
+    if success:
+        try:
+            # Get analysis_id from the DB record just saved
+            analysis_id = await persistence.get_latest_analysis_id(Session, patient_id)
+            if analysis_id:
+                ai_ok = await ai_pipeline_service.run_ai_scoring_and_summary(
+                    Session,
+                    analysis_id=analysis_id,
+                    patient_id=patient_id,
+                    source_filename=filename,
+                    final_results=final_results,
+                    outcome_to_sheet=transcript_service.OUTCOME_TO_SHEET,
+                )
+                if ai_ok:
+                    logger.info("  [OK] AI pipeline: scoring + patient summary saved")
+                else:
+                    logger.info("  [SKIP] AI pipeline: not available or failed (non-blocking)")
+        except Exception as e:
+            logger.warning("  [SKIP] AI pipeline error (non-blocking): %s", e)
 
     if success:
         return {"file": filename, "patient_id": patient_id, "doctor_sentences": len(scorer_keys)}

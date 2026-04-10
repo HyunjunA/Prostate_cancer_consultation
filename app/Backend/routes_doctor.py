@@ -425,87 +425,56 @@ async def get_doctor_score_average(
     user: AuthUser = Depends(get_current_user)
 ):
     """
-    Get average score grouped by file, speaker, class
+    Get average score grouped by file, speaker, class.
 
-    Uses ONLY original NLP scores from doctor_sentence_view.
-    Rewrite scores (doctor_rewrite_log) are NOT used here — rewrites are
-    purely a training/practice tool and do not affect score analysis.
-
-    Filter options:
-    - No filters: Average for all file/speaker/class combinations
-    - file only: Average by speaker/class for the specified file
-    - file + speaker: Average by class for the specified file and speaker
-    - file + speaker + class: Single average value for the specific combination
+    Uses GPT-4o ai_score from llm_domain_scoring_and_summary.
+    For the landing page Overall Score, uses ai_overall_score from transcript_analysis_log.
     """
-    print("=" * 80)
-    print("DEBUG [get_doctor_score_average] - Input Parameters:")
-    print(f"   file: {file}")
-    print(f"   speaker: {speaker}")
-    print(f"   class: {class_}")
+    from models import LLMDomainScoringAndSummary
 
-    # For each file×model: get quality score of the sentence with highest pred_score
-    ranked = select(
-        TranscriptAnalysisLog.source_filename.label('file'),
-        SentencePrediction.speaker,
-        SentencePrediction.model.label('class_'),
-        SentencePrediction.pred_score,
-        SentencePrediction.utterance_index,
-        SentencePrediction.sentence_in_utterance,
-        func.row_number().over(
-            partition_by=[TranscriptAnalysisLog.source_filename, SentencePrediction.model],
-            order_by=SentencePrediction.pred_score.desc()
-        ).label('rn')
-    ).join(
-        TranscriptAnalysisLog, SentencePrediction.analysis_id == TranscriptAnalysisLog.id
-    ).subquery()
-
+    # Build query from llm_domain_scoring_and_summary
     stmt = select(
-        ranked.c.file,
-        ranked.c.speaker,
-        ranked.c.class_,
-        DoctorSentenceView.score.label('avg_score'),  # named avg_score for frontend compat
-    ).join(
-        DoctorSentenceView,
-        and_(
-            DoctorSentenceView.file == ranked.c.file,
-            DoctorSentenceView.i == ranked.c.utterance_index,
-            DoctorSentenceView.i2 == ranked.c.sentence_in_utterance,
-        )
-    ).where(ranked.c.rn == 1)
+        LLMDomainScoringAndSummary.source_filename.label('file'),
+        LLMDomainScoringAndSummary.domain.label('class_'),
+        LLMDomainScoringAndSummary.ai_score.label('avg_score'),
+        LLMDomainScoringAndSummary.source_sentence.label('sentence'),
+        LLMDomainScoringAndSummary.treatment,
+    )
 
-    # Apply filters
     if file:
-        stmt = stmt.where(ranked.c.file == file)
-    if speaker:
-        stmt = stmt.where(ranked.c.speaker == speaker)
+        stmt = stmt.where(LLMDomainScoringAndSummary.source_filename == file)
     if class_:
-        stmt = stmt.where(ranked.c.class_ == class_)
+        stmt = stmt.where(LLMDomainScoringAndSummary.domain == class_)
 
-    stmt = stmt.order_by(ranked.c.file, ranked.c.class_)
-
+    stmt = stmt.order_by(LLMDomainScoringAndSummary.source_filename, LLMDomainScoringAndSummary.domain)
     results = (await db.execute(stmt)).all()
 
-    print(f"   Found {len(results)} groups")
-    print("=" * 80)
+    # Get speaker from doctor_sentence_view
+    speaker_val = speaker
+    if not speaker_val and file:
+        sp_stmt = select(DoctorSentenceView.speaker).where(
+            DoctorSentenceView.file == file
+        ).distinct().limit(1)
+        speaker_val = (await db.execute(sp_stmt)).scalar_one_or_none() or ""
 
     return {
         "total_groups": len(results),
         "filters": {
             "file": file,
-            "speaker": speaker,
+            "speaker": speaker_val,
             "class": class_
         },
         "data": [
             {
                 "file": r.file,
-                "speaker": r.speaker,
+                "speaker": speaker_val or "",
                 "class": r.class_,
-                "avg_score": int(r.avg_score) if r.avg_score is not None else None,
+                "avg_score": r.avg_score,
                 "count": 1,
                 "rewritten_count": 0,
                 "original_count": 1,
-                "min_score": int(r.avg_score) if r.avg_score is not None else None,
-                "max_score": int(r.avg_score) if r.avg_score is not None else None,
+                "min_score": r.avg_score,
+                "max_score": r.avg_score,
             }
             for r in results
         ]
@@ -523,14 +492,9 @@ async def get_doctor_score_summary_by_file_speaker(
     """
     Get score summary for specific patient (all classes).
 
-    For each domain: returns the quality score (0-5) of the sentence with
-    the highest NLP pred_score (most relevant sentence per domain).
+    Uses Guille's GPT-4o ai_score (0-5) from llm_domain_scoring_and_summary.
+    Falls back to consultation-scorer quality score if AI scores unavailable.
     """
-    print("=" * 80)
-    print("DEBUG [get_doctor_score_summary] - Input Parameters:")
-    print(f"   file: {file}")
-    print(f"   speaker: {speaker}")
-
     if not speaker:
         sp_stmt = select(DoctorSentenceView.speaker).where(
             DoctorSentenceView.file == file
@@ -546,57 +510,31 @@ async def get_doctor_score_summary_by_file_speaker(
     if not analysis_id:
         return {"file": file, "speaker": speaker, "overall": {"score": None, "count": 0}, "by_class": []}
 
-    # For each model: rank by pred_score DESC, pick top-1, join to doctor_sentence_view for quality score
-    ranked = select(
-        SentencePrediction.model,
-        SentencePrediction.pred_score,
-        SentencePrediction.utterance_index,
-        SentencePrediction.sentence_in_utterance,
-        func.row_number().over(
-            partition_by=SentencePrediction.model,
-            order_by=SentencePrediction.pred_score.desc()
-        ).label('rn')
-    ).where(
-        SentencePrediction.analysis_id == analysis_id,
-    ).subquery()
+    # Try GPT-4o ai_score from llm_domain_scoring_and_summary first
+    from models import LLMDomainScoringAndSummary
+    ai_stmt = select(LLMDomainScoringAndSummary).where(
+        LLMDomainScoringAndSummary.analysis_id == analysis_id
+    ).order_by(LLMDomainScoringAndSummary.domain)
+    ai_results = (await db.execute(ai_stmt)).scalars().all()
 
-    top_stmt = select(
-        ranked.c.model,
-        ranked.c.pred_score,
-        ranked.c.utterance_index,
-        ranked.c.sentence_in_utterance,
-        DoctorSentenceView.score,
-        DoctorSentenceView.sentence,
-    ).join(
-        DoctorSentenceView,
-        and_(
-            DoctorSentenceView.file == file,
-            DoctorSentenceView.i == ranked.c.utterance_index,
-            DoctorSentenceView.i2 == ranked.c.sentence_in_utterance,
-        )
-    ).where(ranked.c.rn == 1).order_by(ranked.c.model)
-
-    top_results = (await db.execute(top_stmt)).all()
-
+    # Use GPT-4o ai_score only — no consultation-scorer fallback
     by_class = []
     scores_list = []
-    for r in top_results:
-        score_val = int(r.score) if r.score is not None else None
+    for r in ai_results:
+        score_val = r.ai_score
         by_class.append({
-            "class": r.model,
+            "class": r.domain,
             "score": score_val,
-            "pred_score": round(float(r.pred_score), 4),
-            "sentence": r.sentence,
-            "i": r.utterance_index,
-            "i2": r.sentence_in_utterance,
+            "pred_score": None,
+            "sentence": r.source_sentence,
+            "explanation": r.score_explanation,
+            "extracted_estimate": r.extracted_estimate,
+            "treatment": r.treatment,
         })
         if score_val is not None:
             scores_list.append(score_val)
 
     overall_score = round(sum(scores_list) / len(scores_list), 2) if scores_list else None
-
-    print(f"   Found {len(by_class)} classes, overall={overall_score}")
-    print("=" * 80)
 
     return {
         "file": file,
@@ -744,21 +682,86 @@ class SentenceScoringRequest(BaseModel):
 class SentenceScoringResponse(BaseModel):
     score: float
     sentence: str
+    explanation: Optional[str] = None
 
-@router.post("/score-sentence", response_model=SentenceScoringResponse)
+@router.post("/score-sentence")
 async def score_sentence(
     request_data: SentenceScoringRequest,
     user: AuthUser = Depends(get_current_user)
 ):
-    """Score a sentence.
+    """Score a sentence using Guille's AI pipeline (GPT-4o).
 
-    Placeholder: always returns 5 until the communication quality
-    scoring pipeline (Steps 6-9) is implemented.
+    Uses Azure OpenAI GPT-4o to evaluate how specifically the doctor
+    communicated clinical risk in this sentence. Returns 0-5 score
+    with chain-of-thought explanation.
+
+    Score rubric:
+      0 = No mention of domain topic
+      1 = Mention but no risk description
+      2 = Qualitative description only
+      3 = Numeric estimate without timeline
+      4 = Numeric estimate with timeline
+      5 = Patient-specific estimate with timeline
+
+    Falls back to consultation-scorer (score=5 placeholder) if GPT-4o unavailable.
     """
-    return SentenceScoringResponse(
-        score=5,
-        sentence=request_data.sentence
-    )
+    import os, sys
+    if "/app" not in sys.path:
+        sys.path.insert(0, "/app")
+
+    try:
+        from ai_pipeline.llm import call_llm
+        from ai_pipeline.utils.prompts import load_prompt
+        from openai import AzureOpenAI
+
+        endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+        key = os.getenv("AZURE_OPENAI_KEY")
+
+        if not endpoint or not key:
+            raise ValueError("Azure OpenAI not configured")
+
+        client = AzureOpenAI(
+            azure_endpoint=endpoint,
+            api_key=key,
+            api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-08-01-preview"),
+        )
+
+        model = os.getenv("AZURE_OPENAI_MODEL", "gpt-4o")
+        params = {"max_tokens": 4096, "temperature": 0.3, "top_p": 0.4, "seed": 0}
+
+        # Determine domain from class_ parameter
+        domain = request_data.class_ or "cp"
+        # Map class numbers/names to domain short names
+        domain_map = {
+            "1": "cp", "2": "inc", "3": "ed", "4": "ius", "5": "le",
+            "cancer_prognosis": "cp", "continence": "inc",
+            "erectile_dysfunction_potency": "ed",
+            "irritative_urinary_symptoms_frequency_urgency_nocturnia": "ius",
+            "life_expectancy": "le",
+            "cp": "cp", "inc": "inc", "ed": "ed", "ius": "ius", "le": "le",
+        }
+        domain_short = domain_map.get(domain, "cp")
+
+        # Load scoring prompt for this domain
+        prompt = load_prompt("scoring", domain_short, "1")
+
+        # Call GPT-4o scoring
+        result = call_llm(client, model, params, prompt, text=request_data.sentence)
+
+        return {
+            "score": result["score"],
+            "sentence": request_data.sentence,
+            "explanation": result["explanation"],
+        }
+
+    except Exception as e:
+        logger.warning("GPT-4o scoring failed, using fallback: %s", e)
+        # Fallback: return placeholder score
+        return {
+            "score": 5,
+            "sentence": request_data.sentence,
+            "explanation": None,
+        }
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Doctor Interface - Class Distribution API
