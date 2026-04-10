@@ -255,8 +255,13 @@ export default function Home() {
     };
   }, [setWindowSize]);
 
-  // User behavior Tracking hook
-  useTracking();
+  // User behavior Tracking hook — pass context for backend bridge
+  useTracking({
+    role: currentView === "doctor" ? "physician" : "patient",
+    file: fileId || "",
+    speaker: currentView === "doctor" ? (doctorId || "") : (patientId || ""),
+    visitType: currentView === "patient" ? visitType : "",
+  });
 
   // ═══════════════════════════════════════════════════════════
   // Selection Screen — Patient list + visit type buttons

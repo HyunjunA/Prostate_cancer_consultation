@@ -237,6 +237,7 @@ CREATE TABLE user_interaction_log (
     id SERIAL PRIMARY KEY,
     session_id VARCHAR(100) NOT NULL,
     role VARCHAR(20) NOT NULL DEFAULT 'patient',
+    visit_type VARCHAR(20),                        -- 'first' | 'followup' | NULL (physician/legacy)
     file VARCHAR(255) NOT NULL,
     speaker VARCHAR(100) NOT NULL,
     event_type VARCHAR(50) NOT NULL,

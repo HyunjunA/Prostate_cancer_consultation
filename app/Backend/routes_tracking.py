@@ -55,6 +55,7 @@ class TrackingEventBatch(BaseModel):
     """Batch of events to store."""
     session_id: str
     role: str = "patient"                      # "patient" | "physician"
+    visit_type: Optional[str] = None           # "first" | "followup" | null
     file: str
     speaker: str
     device_type: Optional[str] = "desktop"
@@ -73,6 +74,7 @@ class TrackingEventDetail(BaseModel):
     id: int
     session_id: str
     role: str
+    visit_type: Optional[str] = None
     file: str
     speaker: str
     event_type: str
@@ -111,6 +113,7 @@ async def store_tracking_events(
             row = UserInteractionLog(
                 session_id=batch.session_id,
                 role=batch.role,
+                visit_type=batch.visit_type,
                 file=batch.file,
                 speaker=batch.speaker,
                 event_type=event.event_type,
@@ -148,6 +151,7 @@ async def store_tracking_events(
 @router.get("/events")
 async def get_tracking_events(
     role: Optional[str] = Query(None, description="Filter by role (patient/physician)"),
+    visit_type: Optional[str] = Query(None, description="Filter by visit type (first/followup)"),
     file: Optional[str] = Query(None, description="Filter by patient file"),
     speaker: Optional[str] = Query(None, description="Filter by speaker"),
     session_id: Optional[str] = Query(None, description="Filter by session"),
@@ -163,6 +167,8 @@ async def get_tracking_events(
     conditions = []
     if role:
         conditions.append(UserInteractionLog.role == role)
+    if visit_type:
+        conditions.append(UserInteractionLog.visit_type == visit_type)
     if file:
         conditions.append(UserInteractionLog.file == file)
     if speaker:
@@ -194,11 +200,12 @@ async def get_tracking_events(
             "id": row.id,
             "session_id": row.session_id,
             "role": getattr(row, 'role', 'patient'),
+            "visit_type": getattr(row, 'visit_type', None),
             "file": row.file,
             "speaker": row.speaker,
             "event_type": row.event_type,
             "element_id": row.element_id,
-            "event_data": row.event_data,  # JSONB column — already a dict
+            "event_data": row.event_data,
             "device_type": row.device_type,
             "client_timestamp": row.client_timestamp.isoformat() if row.client_timestamp else None,
             "created_at": row.created_at.isoformat() if row.created_at else None,
@@ -219,52 +226,44 @@ async def get_tracking_events(
 @router.get("/stats")
 async def get_tracking_stats(
     role: Optional[str] = Query(None, description="Filter by role (patient/physician)"),
+    visit_type: Optional[str] = Query(None, description="Filter by visit type (first/followup)"),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Return summary statistics: total events, unique sessions, unique patients,
-    and event counts by type. Optionally filtered by role.
+    and event counts by type. Optionally filtered by role and visit_type.
     """
-    base_condition = UserInteractionLog.role == role if role else None
+    conditions = []
+    if role:
+        conditions.append(UserInteractionLog.role == role)
+    if visit_type:
+        conditions.append(UserInteractionLog.visit_type == visit_type)
 
-    total_stmt = select(func.count(UserInteractionLog.id))
-    if base_condition is not None:
-        total_stmt = total_stmt.where(base_condition)
-    total_result = await db.execute(total_stmt)
-    total_events = total_result.scalar() or 0
+    def _apply(stmt):
+        for c in conditions:
+            stmt = stmt.where(c)
+        return stmt
 
-    session_stmt = select(func.count(distinct(UserInteractionLog.session_id)))
-    if base_condition is not None:
-        session_stmt = session_stmt.where(base_condition)
-    session_result = await db.execute(session_stmt)
-    total_sessions = session_result.scalar() or 0
+    total_events = (await db.execute(_apply(select(func.count(UserInteractionLog.id))))).scalar() or 0
+    total_sessions = (await db.execute(_apply(select(func.count(distinct(UserInteractionLog.session_id)))))).scalar() or 0
+    total_patients = (await db.execute(_apply(select(func.count(distinct(UserInteractionLog.file)))))).scalar() or 0
 
-    patient_stmt = select(func.count(distinct(UserInteractionLog.file)))
-    if base_condition is not None:
-        patient_stmt = patient_stmt.where(base_condition)
-    patient_result = await db.execute(patient_stmt)
-    total_patients = patient_result.scalar() or 0
-
-    type_stmt = (
-        select(
-            UserInteractionLog.event_type,
-            func.count(UserInteractionLog.id).label("count"),
-        )
-        .group_by(UserInteractionLog.event_type)
-        .order_by(desc("count"))
+    type_stmt = _apply(
+        select(UserInteractionLog.event_type, func.count(UserInteractionLog.id).label("count"))
+        .group_by(UserInteractionLog.event_type).order_by(desc("count"))
     )
-    if base_condition is not None:
-        type_stmt = type_stmt.where(base_condition)
-    type_result = await db.execute(type_stmt)
-    event_type_counts = {row.event_type: row.count for row in type_result.all()}
+    event_type_counts = {row.event_type: row.count for row in (await db.execute(type_stmt)).all()}
 
-    # Role breakdown (always returned)
-    role_stmt = select(
-        UserInteractionLog.role,
-        func.count(UserInteractionLog.id).label("count"),
-    ).group_by(UserInteractionLog.role)
-    role_result = await db.execute(role_stmt)
-    role_counts = {(row.role or "patient"): row.count for row in role_result.all()}
+    # Role breakdown
+    role_stmt = select(UserInteractionLog.role, func.count(UserInteractionLog.id).label("count")).group_by(UserInteractionLog.role)
+    role_counts = {(row.role or "patient"): row.count for row in (await db.execute(role_stmt)).all()}
+
+    # Visit type breakdown
+    vt_stmt = select(UserInteractionLog.visit_type, func.count(UserInteractionLog.id).label("count")).group_by(UserInteractionLog.visit_type)
+    vt_counts = {}
+    for row in (await db.execute(vt_stmt)).all():
+        key = row.visit_type or "unknown"
+        vt_counts[key] = row.count
 
     return {
         "total_events": total_events,
@@ -273,6 +272,7 @@ async def get_tracking_stats(
         "total_event_types": len(event_type_counts),
         "event_type_counts": event_type_counts,
         "role_counts": role_counts,
+        "visit_type_counts": vt_counts,
     }
 
 
@@ -283,6 +283,7 @@ async def get_tracking_stats(
 @router.get("/patients")
 async def get_tracked_patients(
     role: Optional[str] = Query(None, description="Filter by role (patient/physician)"),
+    visit_type: Optional[str] = Query(None, description="Filter by visit type (first/followup)"),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -294,6 +295,8 @@ async def get_tracked_patients(
     )
     if role:
         stmt = stmt.where(UserInteractionLog.role == role)
+    if visit_type:
+        stmt = stmt.where(UserInteractionLog.visit_type == visit_type)
     result = await db.execute(
         stmt.group_by(UserInteractionLog.file).order_by(UserInteractionLog.file)
     )
@@ -312,6 +315,7 @@ async def get_tracked_patients(
 @router.get("/analytics")
 async def get_tracking_analytics(
     role: Optional[str] = Query(None, description="Filter by role (patient/physician)"),
+    visit_type: Optional[str] = Query(None, description="Filter by visit type (first/followup)"),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -324,7 +328,12 @@ async def get_tracking_analytics(
     - hourly_heatmap: activity by hour of day
     """
 
-    role_condition = UserInteractionLog.role == role if role else None
+    # Build filter conditions
+    _conditions = []
+    if role:
+        _conditions.append(UserInteractionLog.role == role)
+    if visit_type:
+        _conditions.append(UserInteractionLog.visit_type == visit_type)
 
     # ── Helper: run a query in an independent session ────────────────────────
     async def _run(stmt):
@@ -332,7 +341,9 @@ async def get_tracking_analytics(
             return (await s.execute(stmt)).all()
 
     def _apply_role(stmt):
-        return stmt.where(role_condition) if role_condition is not None else stmt
+        for c in _conditions:
+            stmt = stmt.where(c)
+        return stmt
 
     # ── Build all 6 statements (no await yet) ────────────────────────────────
     timeline_stmt = _apply_role(
