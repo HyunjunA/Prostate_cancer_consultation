@@ -7,26 +7,26 @@
 ```mermaid
 erDiagram
     doctor_sentence_view {
-        VARCHAR file PK "consultation transcript filename"
-        INT i PK "utterance sequence number"
-        INT i2 PK "sentence position within utterance"
-        VARCHAR speaker "speaker label"
-        TEXT sentence "sentence text"
-        FLOAT score "consultation quality score 0-5"
-        VARCHAR class "NLP domain cp/inc/ed/ius/le or -1"
-        TIMESTAMPTZ time "data load timestamp"
+        VARCHAR file PK "e.g. Input_Keystrokes REC 001 (SID 10).xlsx"
+        INT i PK "e.g. 67 (utterance sequence number)"
+        INT i2 PK "e.g. 3 (sentence position in utterance)"
+        VARCHAR speaker "e.g. Interviewer:"
+        TEXT sentence "e.g. so i'm going to take that 12 percent and..."
+        FLOAT score "e.g. 2 (quality score 0-5)"
+        VARCHAR class "e.g. cancer_prognosis"
+        TIMESTAMPTZ time "e.g. 2026-04-10T15:33:32Z"
     }
 
     doctor_rewrite_log {
-        VARCHAR file PK,FK "FK - doctor_sentence_view"
-        INT i PK,FK "FK - doctor_sentence_view"
-        INT i2 PK,FK "FK - doctor_sentence_view"
-        TIMESTAMPTZ time PK "rewrite timestamp"
-        VARCHAR speaker "doctor who performed rewrite"
-        TEXT original_sentence "original sentence"
-        TEXT revised_sentence "AI-improved sentence"
-        FLOAT score "post-rewrite quality score"
-        VARCHAR class "NLP domain"
+        VARCHAR file PK,FK "e.g. Input_Keystrokes REC 001 (SID 10).xlsx"
+        INT i PK,FK "e.g. 67"
+        INT i2 PK,FK "e.g. 2"
+        TIMESTAMPTZ time PK "e.g. 2026-04-09T14:30:00Z"
+        VARCHAR speaker "e.g. Interviewer:"
+        TEXT original_sentence "e.g. so if your cancer—if you're an older man..."
+        TEXT revised_sentence "e.g. Your cancer is being well-controlled..."
+        FLOAT score "e.g. 4 (improved quality score)"
+        VARCHAR class "e.g. cancer_prognosis"
     }
 
     doctor_sentence_view ||--o{ doctor_rewrite_log : "per-sentence AI rewrite history"
@@ -37,130 +37,147 @@ erDiagram
 ```mermaid
 erDiagram
     patient_summary {
-        VARCHAR file PK "consultation transcript filename"
-        VARCHAR speaker PK "patient speaker label"
-        TEXT entire_summary "full AI summary"
+        VARCHAR file PK "e.g. Input_Keystrokes REC 001 (SID 10).xlsx"
+        VARCHAR speaker PK "e.g. Patient_Input_Keystrokes REC 001 (SID 10)"
+        TEXT entire_summary "e.g. (AI-generated full visit summary)"
     }
 
     patient_summary_domain {
-        VARCHAR file PK,FK "FK - patient_summary"
-        VARCHAR speaker PK,FK "FK - patient_summary"
-        VARCHAR domain PK "NLP domain name (5 domains)"
-        INT display_order "UI display order"
-        TEXT summary_text "per-domain AI summary"
-        INT patient_scoring "patient usefulness rating 0-10"
-        TEXT patient_response "patient free-text feedback"
+        VARCHAR file PK,FK "e.g. Input_Keystrokes REC 001 (SID 10).xlsx"
+        VARCHAR speaker PK,FK "e.g. Patient_...SID 10"
+        VARCHAR domain PK "e.g. cancer_prognosis"
+        INT display_order "1=cp 2=inc 3=ed 4=ius 5=le (UI order)"
+        TEXT summary_text "e.g. so i'm going to take that 12 percent..."
+        INT patient_scoring "e.g. 8 (0-10, NULL until rated, UPDATE not INSERT)"
+        TEXT patient_response "e.g. Very helpful (NULL until entered, UPDATE not INSERT)"
     }
 
     survey_submission_log {
-        SERIAL id PK "auto-increment PK"
-        VARCHAR file FK "patient file identifier"
-        VARCHAR speaker FK "patient speaker label"
-        VARCHAR survey_type "dcs/sdm/risk_perception/satisfaction"
-        JSONB answers "question-answer map"
-        JSONB extra_data "metadata"
-        TIMESTAMPTZ submitted_at "submission timestamp"
-        BOOLEAN redcap_synced "REDCap sync status"
-        VARCHAR redcap_record_id "REDCap record ID"
-        TEXT redcap_error "sync error message"
+        SERIAL id PK "auto-increment"
+        VARCHAR file FK "e.g. Input_Keystrokes REC001 (SID 14).xlsx"
+        VARCHAR speaker FK "e.g. Patient_...SID 14"
+        VARCHAR survey_type "e.g. dcs"
+        JSONB answers "e.g. {q1: 2, q2: 3, ..., q16: 4}"
+        JSONB extra_data "e.g. {browser: Chrome, session: abc}"
+        TIMESTAMPTZ submitted_at "e.g. 2026-04-10T16:05:30Z"
+        BOOLEAN redcap_synced "e.g. true"
+        VARCHAR redcap_record_id "e.g. REC-2026-0014"
+        TEXT redcap_error "e.g. NULL (or error message)"
     }
 
     patient_summary ||--o{ patient_summary_domain : "per-domain summary + patient feedback"
     patient_summary ||--o{ survey_submission_log : "patient survey responses + REDCap sync"
 ```
 
+> **Why `survey_submission_log` uses INSERT (not UPDATE):** The same patient can submit the same survey type at different timepoints (e.g., DCS before and after treatment). Each submission is a distinct measurement — the second does not replace the first. This also allows per-row REDCap sync tracking (`redcap_synced` per submission).
+>
+> **Why `patient_summary_domain.patient_scoring` uses UPDATE (not INSERT):** This is a "current rating" — only the latest value matters. No need to preserve rating history.
+
 ### C. ML Pipeline (Transcript Analysis)
 
 ```mermaid
 erDiagram
     transcript_analysis_log {
-        SERIAL id PK "auto-increment PK"
-        VARCHAR patient_id "patient identifier"
-        INT total_sentences "total sentence count"
-        INT top_n "top sentences per model"
-        INT context_window "context surrounding sentences"
-        JSONB model_results "DEPRECATED"
-        BYTEA xlsx_data "result xlsx binary"
-        VARCHAR source_filename "original filename"
-        TIMESTAMPTZ analyzed_at "analysis timestamp"
+        SERIAL id PK "auto-increment"
+        VARCHAR patient_id "e.g. SID_10"
+        INT total_sentences "e.g. 428"
+        INT top_n "e.g. 10"
+        INT context_window "e.g. 3"
+        JSONB model_results "DEPRECATED (NULL for new rows)"
+        BYTEA xlsx_data "e.g. (binary, 87KB xlsx file)"
+        VARCHAR source_filename "e.g. Input_Keystrokes REC 001 (SID 10).xlsx"
+        TIMESTAMPTZ analyzed_at "e.g. 2026-04-10T15:33:32Z"
     }
 
     sentence_prediction {
-        SERIAL id PK "auto-increment PK"
-        INT analysis_id FK "FK - transcript_analysis_log"
-        VARCHAR patient_id "patient identifier"
-        VARCHAR model "NLP model cp/inc/ed/ius/le"
-        INT sentence_index "global sentence number"
-        INT utterance_index "utterance number = doctor_sentence_view.i"
-        INT sentence_in_utterance "position in utterance = doctor_sentence_view.i2"
-        VARCHAR speaker "speaker label"
-        TEXT sentence_text "sentence text"
-        FLOAT pred_score "NLP prediction probability 0.0-1.0"
-        TEXT context "surrounding sentence context"
+        SERIAL id PK "auto-increment"
+        INT analysis_id FK "e.g. 1 (FK to transcript_analysis_log)"
+        VARCHAR patient_id "e.g. SID_10"
+        VARCHAR model "e.g. cp (cancer_prognosis)"
+        INT sentence_index "e.g. 167 (global sequence)"
+        INT utterance_index "e.g. 67 (= doctor_sentence_view.i)"
+        INT sentence_in_utterance "e.g. 3 (= doctor_sentence_view.i2)"
+        VARCHAR speaker "e.g. Interviewer:"
+        TEXT sentence_text "e.g. so i'm going to take that 12 percent..."
+        FLOAT pred_score "e.g. 0.951 (probability, NOT quality score)"
+        TEXT context "e.g. ...previous sentence. <main>target</main> next..."
     }
 
     transcript_analysis_log ||--o{ sentence_prediction : "per-sentence NLP predictions"
 ```
+
+> **Why `transcript_analysis_log.id`:** The same patient (e.g., SID_10) can be analyzed multiple times — with different `top_n`/`context_window` parameters, or after transcript updates. `patient_id` alone cannot distinguish these runs. The `id` is also the FK target for `sentence_prediction.analysis_id`.
+>
+> **Why `sentence_prediction.id`:** The natural key `(analysis_id, model, sentence_index)` is unique, but a single 4-byte integer PK is more efficient for JOINs and indexing than a 3-column composite key (~14 bytes). With 2,140+ rows per patient, this difference compounds.
 
 ### D. Authentication & Access Control
 
 ```mermaid
 erDiagram
     auth_user {
-        SERIAL id PK "auto-increment PK"
-        VARCHAR username "login username"
-        VARCHAR email "email UNIQUE"
-        VARCHAR password_hash "bcrypt hash"
-        VARCHAR role "admin/user/readonly"
-        BOOLEAN is_superuser "bypass all access checks"
-        BOOLEAN is_active "soft-delete flag"
-        VARCHAR auth_provider "local/google/oauth2"
-        TIMESTAMPTZ created_at "account creation"
-        TIMESTAMPTZ updated_at "last update"
+        SERIAL id PK "auto-increment"
+        VARCHAR username "e.g. dr_timothy"
+        VARCHAR email "e.g. timothy@cedars-sinai.edu"
+        VARCHAR password_hash "e.g. $2b$12$LJ3... (bcrypt)"
+        VARCHAR role "e.g. admin"
+        BOOLEAN is_superuser "e.g. false"
+        BOOLEAN is_active "e.g. true"
+        VARCHAR auth_provider "e.g. local"
+        TIMESTAMPTZ created_at "e.g. 2026-04-01T10:00:00Z"
+        TIMESTAMPTZ updated_at "e.g. 2026-04-09T14:30:00Z"
     }
 
     auth_api_key {
-        SERIAL id PK "auto-increment PK"
-        INT user_id FK "FK - auth_user"
-        VARCHAR key_hash "API key SHA-256 hash"
-        VARCHAR label "key alias"
-        BOOLEAN is_active "key enabled flag"
-        TIMESTAMPTZ created_at "issued at"
-        TIMESTAMPTZ expires_at "expiration date"
-        TIMESTAMPTZ last_used_at "last authenticated request"
+        SERIAL id PK "auto-increment"
+        INT user_id FK "e.g. 1 (FK to auth_user)"
+        VARCHAR key_hash "e.g. a1b2c3... (SHA-256 of API key)"
+        VARCHAR label "e.g. dev-laptop"
+        BOOLEAN is_active "e.g. true"
+        TIMESTAMPTZ created_at "e.g. 2026-04-01T10:00:00Z"
+        TIMESTAMPTZ expires_at "e.g. 2026-07-01T00:00:00Z"
+        TIMESTAMPTZ last_used_at "e.g. 2026-04-10T08:30:00Z"
     }
 
     patient_access {
-        SERIAL id PK "auto-increment PK"
-        INT user_id FK "FK - auth_user"
-        VARCHAR patient_id "patient file identifier"
-        VARCHAR access_type "read/write/admin"
-        TIMESTAMPTZ granted_at "access granted at"
-        INT granted_by "FK - auth_user (grantor)"
+        SERIAL id PK "auto-increment"
+        INT user_id FK "e.g. 1 (FK to auth_user)"
+        VARCHAR patient_id "e.g. SID_10"
+        VARCHAR access_type "e.g. write"
+        TIMESTAMPTZ granted_at "e.g. 2026-04-01T10:00:00Z"
+        INT granted_by "e.g. 1 (admin user who granted)"
     }
 
     auth_user ||--o{ auth_api_key : "user API keys"
     auth_user ||--o{ patient_access : "patient access permissions"
 ```
 
+> **Why `auth_user.id`:** FK target for both `auth_api_key.user_id` and `patient_access.user_id`. One user can have multiple API keys and access to multiple patients.
+>
+> **Why `auth_api_key.id`:** One user can have multiple keys (e.g., `dev-laptop`, `CI-server`). `(user_id, key_hash)` could be a natural PK but SERIAL is simpler for revocation by ID.
+>
+> **Why `patient_access.id`:** One user can access multiple patients. Also has a UNIQUE constraint on `(user_id, patient_id)` to prevent duplicate grants.
+
 ### E. User Interaction Tracking
 
 ```mermaid
 erDiagram
     user_interaction_log {
-        SERIAL id PK "auto-increment PK"
-        VARCHAR session_id "browser session UUID"
-        VARCHAR role "patient/physician"
-        VARCHAR file "patient file being viewed"
-        VARCHAR speaker "speaker being viewed"
-        VARCHAR event_type "click/scroll/tab_switch etc"
-        VARCHAR element_id "interacted UI element ID"
-        JSONB event_data "event payload"
-        VARCHAR device_type "desktop/mobile/tablet"
+        SERIAL id PK "auto-increment"
+        VARCHAR session_id "e.g. session_1775777136737_xs8ob"
+        VARCHAR role "e.g. patient"
+        VARCHAR visit_type "e.g. first (or followup, NULL for physician)"
+        VARCHAR file "e.g. Input_Keystrokes REC 001 (SID 10).xlsx"
+        VARCHAR speaker "e.g. Patient_...SID 10"
+        VARCHAR event_type "e.g. button_click"
+        VARCHAR element_id "e.g. #topic-cancer-prognosis"
+        JSONB event_data "e.g. {elementType: button, clickSequence: 1}"
+        VARCHAR device_type "e.g. desktop"
         TIMESTAMPTZ client_timestamp "browser event time"
         TIMESTAMPTZ created_at "server receipt time"
     }
 ```
+
+> **Why `user_interaction_log.id`:** Hundreds of events per session (clicks, scrolls, page views). No natural unique key exists — the same user can click the same button at different times. SERIAL id uniquely identifies each event row.
 
 ---
 
@@ -181,6 +198,13 @@ Displays per-sentence consultation quality scores in the Doctor Dashboard. Docto
 **React app screens:**
 - Doctor Dashboard > Patient file selector > Sentence list (color-coded by score)
 - Score Band Chart (per-domain quality score visualization)
+
+**Example data:**
+| file | i | i2 | speaker | sentence | score | class |
+|---|---|---|---|---|---|---|
+| `Input_Keystrokes REC 001 (SID 10).xlsx` | 67 | 3 | `Interviewer:` | so i'm going to take that 12 percent and cut it in half again, so six... | 2 | cancer_prognosis |
+| `Input_Keystrokes REC 001 (SID 10).xlsx` | 67 | 2 | `Interviewer:` | so if your cancer—if you're an older man and your cancer is being cont... | 1 | cancer_prognosis |
+| `Input_Keystrokes REC001 (SID 14).xlsx` | 52 | 1 | `Interviewer:` | the nerves that supply the erectile function of the penis go right... | 3 | erectile_dysfunction_potency |
 
 **API endpoints:**
 | Endpoint | Purpose |
@@ -203,6 +227,11 @@ React Doctor UI "Rewrite" button click → `PUT /api/doctor/rewrites` → INSERT
 **Important:**
 Rewrite scores are NOT used in analysis — this is purely a practice/learning tool for physicians. Score average calculations use only the original `doctor_sentence_view.score`.
 
+**Example data:**
+| file | i | i2 | time | speaker | original_sentence | revised_sentence | score | class |
+|---|---|---|---|---|---|---|---|---|
+| `Input_Keystrokes REC 001 (SID 10).xlsx` | 67 | 2 | 2026-04-09 14:30:00 | `Interviewer:` | so if your cancer—if you're an older man... | Your cancer is being well-controlled, and as an older patient... | 4 | cancer_prognosis |
+
 **API endpoints:**
 | Endpoint | Purpose |
 |---|---|
@@ -224,6 +253,12 @@ Patients access the Patient Follow-up app after their visit and view an AI-gener
 
 **React app screen:** Patient Dashboard > "View Consultation Summary"
 
+**Example data:**
+| file | speaker | entire_summary |
+|---|---|---|
+| `Input_Keystrokes REC 001 (SID 10).xlsx` | `Patient_Input_Keystrokes REC 001 (SID 10)` | (AI-generated full visit summary text) |
+| `Input_Keystrokes REC001 (SID 14).xlsx` | `Patient_Input_Keystrokes REC001 (SID 14)` | (AI-generated full visit summary text) |
+
 **API endpoints:**
 | Endpoint | Purpose |
 |---|---|
@@ -244,9 +279,29 @@ In the Patient Follow-up app, patients:
 
 `patient_scoring` and `patient_response` start as NULL → UPDATE when patient inputs in app.
 
+**`display_order` — UI rendering order:**
+Controls the order in which domains appear in the Patient app. Set by `pipeline_runner.py`'s `_DOMAIN_SLOT_MAP`:
+
+| display_order | domain | Shown as |
+|:---:|---|---|
+| 1 | `cancer_prognosis` | First |
+| 2 | `continence` | Second |
+| 3 | `erectile_dysfunction_potency` | Third |
+| 4 | `irritative_urinary_symptoms_...` | Fourth |
+| 5 | `life_expectancy` | Fifth |
+
+This allows the PI to define a clinically appropriate order independent of alphabetical sorting. The frontend queries with `ORDER BY display_order`.
+
 **Design change history:**
 Old: Fixed `class_1~5` columns in `patient_summary` + separate scoring/responses tables
 Current: Normalized to 1 row per domain → flexible for N domains
+
+**Example data:**
+| file | speaker | domain | display_order | summary_text | patient_scoring | patient_response |
+|---|---|---|---|---|---|---|
+| `...REC 001 (SID 10).xlsx` | `Patient_...SID 10` | `cancer_prognosis` | 1 | so i'm going to take that 12 percent and cut it in half again... | NULL | NULL |
+| `...REC 001 (SID 10).xlsx` | `Patient_...SID 10` | `continence` | 2 | when it does come out, everybody has urinary incontinence, s... | NULL | NULL |
+| `...REC 001 (SID 10).xlsx` | `Patient_...SID 10` | `erectile_dysfunction_potency` | 3 | so even if we save the nerves, initially everyone is losing... | 8 | "Very helpful, I didn't know this" |
 
 **API endpoints:**
 | Endpoint | Purpose |
@@ -287,6 +342,13 @@ When a patient completes a survey in the Follow-up app and clicks "Submit", the 
 - Researchers can query survey data directly from DB without REDCap access
 - Sync status tracking: `redcap_synced=false` rows = need re-sync
 
+**Example data:**
+| id | file | speaker | survey_type | answers | redcap_synced | redcap_record_id |
+|---|---|---|---|---|---|---|
+| 1 | `...REC001 (SID 14).xlsx` | `Patient_...SID 14` | `dcs` | `{"q1": 2, "q2": 3, "q3": 1, ..., "q16": 4}` | true | `REC-2026-0014` |
+| 2 | `...REC001 (SID 14).xlsx` | `Patient_...SID 14` | `sdm` | `{"q1": "yes", "q2": "a_lot", "q3": "some", "q4": "yes"}` | true | `REC-2026-0014` |
+| 3 | `...REC001 (SID 14).xlsx` | `Patient_...SID 14` | `risk_perception` | `{"cancerRiskUntreated": 45, "cancerRiskTreated": "10", ...}` | false | NULL |
+
 **API endpoints:**
 | Endpoint | Purpose |
 |---|---|
@@ -307,8 +369,29 @@ Stores results when external users (researchers, R scripts) upload consultation 
 - **Analysis history:** Preserves multiple analysis runs per patient (parameters, timestamps, source filenames)
 - **Batch download:** `DISTINCT ON` query for multi-patient zip download retrieves latest results only
 
+**Why SERIAL id is needed (not just patient_id):**
+The same patient can be analyzed multiple times with different parameters or after transcript updates:
+
+| id | patient_id | top_n | context_window | analyzed_at | purpose |
+|---|---|---|---|---|---|
+| 1 | `SID_10` | 10 | 3 | 2026-04-10 15:33 | initial analysis |
+| 2 | `SID_10` | 5 | 5 | 2026-04-11 09:00 | re-analysis with different params |
+| 3 | `SID_10` | 10 | 3 | 2026-04-12 14:20 | re-analysis after transcript update |
+
+`patient_id` alone cannot distinguish these 3 runs. The `id` enables:
+- `sentence_prediction.analysis_id = 2` → query predictions for a specific run only
+- `GET /api/transcript/history/SID_10` → list all 3 analysis runs
+- `ORDER BY id DESC LIMIT 1` → get the latest run for download
+
 **model_results column status:**
 DEPRECATED — Previously stored all model results as JSON. Now normalized to `sentence_prediction` table. Column retained for legacy data compatibility; new rows set to NULL.
+
+**Example data (actual DB values):**
+
+| id | patient_id | total_sentences | top_n | context_window | source_filename | analyzed_at | xlsx_data |
+|---|---|---|---|---|---|---|---|
+| 1 | `SID_10` | 428 | 10 | 3 | `Input_Keystrokes REC 001 (SID 10).xlsx` | 2026-04-10 15:33:32 | (binary, 87KB) |
+| 2 | `SID_14` | 423 | 10 | 3 | `Input_Keystrokes REC001 (SID 14).xlsx` | 2026-04-10 15:34:06 | (binary, 92KB) |
 
 **API endpoints:**
 | Endpoint | Purpose |
@@ -326,7 +409,27 @@ DEPRECATED — Previously stored all model results as JSON. Now normalized to `s
 **Role in the app:**
 Normalized storage of NLP prediction probabilities per sentence per model. Used in **both** Doctor app and Patient app as a core data source.
 
+**Why SERIAL id instead of composite PK (analysis_id + model + sentence_index):**
+The combination `(analysis_id, model, sentence_index)` is effectively unique, but a single integer PK is more efficient:
+- JOINs compare 1 integer (4 bytes) instead of 2 integers + 1 string (~14 bytes)
+- Foreign key references are simpler: `WHERE id = 1` vs `WHERE analysis_id = 1 AND model = 'cp' AND sentence_index = 167`
+- With 2,140 rows per patient × many patients, index size difference compounds
+
+**How data is stored — 1 sentence × 5 models = 5 rows:**
+Each sentence from the transcript is scored by all 5 NLP models independently. For a single sentence, 5 rows are created — one per model — each with its own `pred_score` (probability that the sentence belongs to that domain):
+
+| row | model | sentence_text | pred_score | meaning |
+|---|---|---|---|---|
+| 1 | `cp` | "so i'm going to take that 12 percent and cut it in half" | **0.951** | 95.1% likely about Cancer Prognosis |
+| 2 | `inc` | (same sentence) | 0.123 | 12.3% likely about Incontinence |
+| 3 | `ed` | (same sentence) | 0.045 | 4.5% likely about Erectile Dysfunction |
+| 4 | `ius` | (same sentence) | 0.067 | 6.7% likely about Irritative Urinary Symptoms |
+| 5 | `le` | (same sentence) | 0.312 | 31.2% likely about Life Expectancy |
+
+For a transcript with 428 sentences: 428 × 5 models = **2,140 rows** per analysis run.
+
 **5 NLP models (Random Forest classifiers):**
+
 | model | Domain |
 |---|---|
 | `cp` | Cancer Prognosis |
@@ -346,8 +449,20 @@ Range 0.0-1.0. Higher = more relevant to that domain. Quality score (0-5) is in 
 - `sentence_prediction.sentence_in_utterance` = `doctor_sentence_view.i2`
 - `transcript_analysis_log.source_filename` = `doctor_sentence_view.file`
 
-**Relationship with `transcript_analysis_log.model_results` (JSON):**
-Previously stored as JSON → no SQL filtering possible. Now normalized to per-row → enables model, min_score, top_n queries. Legacy data auto-migrated via `_backfill_predictions()`.
+**Relationship with `transcript_analysis_log`:**
+`transcript_analysis_log` is the **parent** (1 row per analysis run). `sentence_prediction` is the **child** (thousands of rows per run). Linked by `analysis_id` FK. If the parent is deleted, all child rows are CASCADE deleted.
+
+Previously all predictions were stored as JSON in `transcript_analysis_log.model_results` → no SQL filtering possible. Now normalized to per-row → enables queries like `WHERE model = 'cp' AND pred_score > 0.8`.
+
+**Example data (actual DB values):**
+
+| id | analysis_id | patient_id | model | sentence_index | utterance_index | sentence_in_utterance | speaker | sentence_text | pred_score |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 1 | `SID_10` | `cp` | 167 | 67 | 3 | `Interviewer:` | so i'm going to take that 12 percent and cut it in... | 0.951 |
+| 2 | 1 | `SID_10` | `cp` | 166 | 67 | 2 | `Interviewer:` | so if your cancer—if you're an older man and your... | 0.9425 |
+| 3 | 1 | `SID_10` | `ed` | 115 | 52 | 2 | `Interviewer:` | the nerves that supply the erectile function of... | 0.887 |
+
+> Note: `pred_score` 0.951 means 95.1% probability the sentence is about cancer prognosis — this is NOT a quality score.
 
 **API endpoints:**
 | Endpoint | Purpose |
@@ -506,12 +621,21 @@ Records all UI interactions (clicks, scrolls, tab switches, page views, time spe
 - A/B testing: Engagement comparison across UI variants
 - Device analysis: Mobile vs desktop usage patterns
 
+**Example data:**
+| id | session_id | role | visit_type | file | speaker | event_type | element_id | event_data | device_type | client_timestamp |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | `session_1775777136737_xs8ob` | patient | first | `...REC 001 (SID 10).xlsx` | `Patient_...SID 10` | `page_view` | `/` | `{"pageUrl": "/"}` | desktop | 2026-04-10 15:26:00 |
+| 2 | `session_1775777136737_xs8ob` | patient | first | `...REC 001 (SID 10).xlsx` | `Patient_...SID 10` | `scroll_depth` | `/` | `{"scrollDepth": 50, "maxScrollDepth": 50}` | desktop | 2026-04-10 15:26:12 |
+| 3 | `session_1775777136737_xs8ob` | patient | first | `...REC 001 (SID 10).xlsx` | `Patient_...SID 10` | `button_click` | `#topic-cancer-prognosis` | `{"elementType": "button", "clickSequence": 1}` | desktop | 2026-04-10 15:26:18 |
+| 4 | `session_1775777200001_ab3cd` | patient | followup | `...REC001 (SID 14).xlsx` | `Patient_...SID 14` | `dwell_time` | `EvidenceToggle_Continence` | `{"duration": 12500, "page": "followup_visit"}` | desktop | 2026-04-10 16:05:30 |
+| 5 | `session_1775777300002_ef4gh` | physician | NULL | `...REC 001 (SID 10).xlsx` | `Interviewer:` | `topic_expand` | `ScoreBand_cp` | `{"domain": "cancer_prognosis"}` | desktop | 2026-04-10 17:00:45 |
+
 **API endpoints:**
 | Endpoint | Purpose |
 |---|---|
 | `POST /api/tracking/events` | Batch INSERT (max 500 events/request, rate limited) |
-| `GET /api/tracking/events` | Filter by role, file, speaker, session_id, event_type |
-| `GET /api/tracking/stats` | Total events, sessions, patients, event type counts |
+| `GET /api/tracking/events` | Filter by role, visit_type, file, speaker, session_id, event_type |
+| `GET /api/tracking/stats` | Total events, sessions, patients, event type counts, visit_type_counts |
 | `GET /api/tracking/patients` | Patient files with event counts |
 | `GET /api/tracking/analytics` | 6 parallel queries (timeline, by_patient, sessions, device_breakdown, top_elements, hourly_heatmap) |
 
