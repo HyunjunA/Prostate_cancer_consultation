@@ -28,6 +28,7 @@ interface TrackingEvent {
 interface TrackingEventBatch {
   session_id: string;
   role: string;
+  visit_type?: string;
   file: string;
   speaker: string;
   device_type: string;
@@ -81,12 +82,14 @@ export async function sendTrackingEvents(
   deviceType: string,
   events: TrackingEvent[],
   useKeepalive: boolean = false,
+  visitType: string = "",
 ): Promise<boolean> {
   if (!events || events.length === 0) return true;
 
   const batch: TrackingEventBatch = {
     session_id: sessionId,
     role,
+    ...(visitType && { visit_type: visitType }),
     file,
     speaker,
     device_type: deviceType,

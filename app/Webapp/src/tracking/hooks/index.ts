@@ -3,7 +3,7 @@ import { useClickPath } from "./useClickPath";
 import { useScrollDepth } from "./useScrollDepth";
 import { useNavigationTracking } from "./useNavigationTracking";
 import { useGlobalCursorProximity } from "./useGlobalCursorProximity"; // 🆕 추가
-import { initializePostHog, captureEvent } from "../lib/posthog";
+import { initializePostHog, captureEvent, setTrackingContext } from "../lib/posthog";
 import { getOrCreateSession, endSession } from "../utils/session.utils";
 import { getTrackingConfig } from "../config/tracking.config";
 
@@ -35,15 +35,21 @@ import { getTrackingConfig } from "../config/tracking.config";
  */
 
 interface UseTrackingOptions {
-  /**
-   * 커서 근접도 추적 설정
-   */
+  /** User role: "patient" | "physician" */
+  role?: string;
+  /** Patient file identifier */
+  file?: string;
+  /** Speaker/user identifier */
+  speaker?: string;
+  /** Visit type: "first" | "followup" */
+  visitType?: string;
+  /** 커서 근접도 추적 설정 */
   cursorProximity?: {
-    enabled?: boolean; // 활성화 여부 (기본: true)
-    autoTrackInteractive?: boolean; // 버튼/링크 자동 추적 (기본: false)
-    selector?: string; // 커스텀 selector (기본: '[data-track-proximity]')
-    throttleMs?: number; // 이벤트 전송 간격 (기본: 500)
-    maxTrackingDistance?: number; // 최대 추적 거리 (기본: 400)
+    enabled?: boolean;
+    autoTrackInteractive?: boolean;
+    selector?: string;
+    throttleMs?: number;
+    maxTrackingDistance?: number;
   };
 }
 
@@ -53,7 +59,17 @@ export const useTracking = (options?: UseTrackingOptions) => {
   const scrollDepth = useScrollDepth();
   const navigation = useNavigationTracking();
 
-  // 🆕 전역 커서 근접도 추적
+  // Set tracking context for the backend bridge (posthog.ts)
+  useEffect(() => {
+    setTrackingContext({
+      role: options?.role || "patient",
+      file: options?.file || "",
+      speaker: options?.speaker || "",
+      visitType: options?.visitType || "",
+    });
+  }, [options?.role, options?.file, options?.speaker, options?.visitType]);
+
+  // 전역 커서 근접도 추적
   const cursorProximityConfig = {
     enabled: options?.cursorProximity?.enabled !== false, // 기본값: true
     autoTrackInteractive:

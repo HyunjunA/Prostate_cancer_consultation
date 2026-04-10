@@ -43,6 +43,7 @@ interface TrackingStats {
   total_event_types: number;
   event_type_counts: Record<string, number>;
   role_counts?: Record<string, number>;
+  visit_type_counts?: Record<string, number>;
 }
 
 interface PatientOption {
@@ -131,6 +132,7 @@ export default function AdminTrackingDashboard() {
 
   // Filter state
   const [filterRole, setFilterRole] = useState<"" | "patient" | "physician">("");
+  const [filterVisitType, setFilterVisitType] = useState<"" | "first" | "followup">("");
   const [filterFile, setFilterFile] = useState("");
   const [filterEventType, setFilterEventType] = useState("");
   const [filterSession, setFilterSession] = useState("");
@@ -147,11 +149,17 @@ export default function AdminTrackingDashboard() {
   // Fetch helpers
   // ────────────────────────────────────────────────────────────────────────────
 
+  // Helper to build common query params
+  const buildParams = useCallback(() => {
+    const params = new URLSearchParams();
+    if (filterRole) params.set("role", filterRole);
+    if (filterVisitType) params.set("visit_type", filterVisitType);
+    return params;
+  }, [filterRole, filterVisitType]);
+
   const fetchStats = useCallback(async () => {
     try {
-      const params = new URLSearchParams();
-      if (filterRole) params.set("role", filterRole);
-      const qs = params.toString();
+      const qs = buildParams().toString();
       const res = await fetch(`${API_BASE_URL}/api/tracking/stats${qs ? `?${qs}` : ""}`, {
         headers: getHeaders(),
       });
@@ -159,13 +167,11 @@ export default function AdminTrackingDashboard() {
     } catch (e) {
       console.error("[Admin] Failed to fetch stats:", e);
     }
-  }, [filterRole]);
+  }, [buildParams]);
 
   const fetchPatients = useCallback(async () => {
     try {
-      const params = new URLSearchParams();
-      if (filterRole) params.set("role", filterRole);
-      const qs = params.toString();
+      const qs = buildParams().toString();
       const res = await fetch(`${API_BASE_URL}/api/tracking/patients${qs ? `?${qs}` : ""}`, {
         headers: getHeaders(),
       });
@@ -176,13 +182,11 @@ export default function AdminTrackingDashboard() {
     } catch (e) {
       console.error("[Admin] Failed to fetch patients:", e);
     }
-  }, [filterRole]);
+  }, [buildParams]);
 
   const fetchAnalytics = useCallback(async () => {
     try {
-      const params = new URLSearchParams();
-      if (filterRole) params.set("role", filterRole);
-      const qs = params.toString();
+      const qs = buildParams().toString();
       const res = await fetch(`${API_BASE_URL}/api/tracking/analytics${qs ? `?${qs}` : ""}`, {
         headers: getHeaders(),
       });
@@ -190,13 +194,12 @@ export default function AdminTrackingDashboard() {
     } catch (e) {
       console.error("[Admin] Failed to fetch analytics:", e);
     }
-  }, [filterRole]);
+  }, [buildParams]);
 
   const fetchEvents = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (filterRole) params.set("role", filterRole);
+      const params = buildParams();
       if (filterFile) params.set("file", filterFile);
       if (filterEventType) params.set("event_type", filterEventType);
       if (filterSession) params.set("session_id", filterSession);
@@ -217,7 +220,7 @@ export default function AdminTrackingDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [filterRole, filterFile, filterEventType, filterSession, page]);
+  }, [buildParams, filterFile, filterEventType, filterSession, page]);
 
   // ────────────────────────────────────────────────────────────────────────────
   // Effects
@@ -235,7 +238,7 @@ export default function AdminTrackingDashboard() {
 
   useEffect(() => {
     setPage(0);
-  }, [filterRole, filterFile, filterEventType, filterSession]);
+  }, [filterRole, filterVisitType, filterFile, filterEventType, filterSession]);
 
   // ────────────────────────────────────────────────────────────────────────────
   // Derived data for charts
@@ -468,15 +471,51 @@ export default function AdminTrackingDashboard() {
             ))}
           </div>
 
-          {/* Role counts */}
-          {stats?.role_counts && (
-            <div className={`flex gap-4 text-xs ${
+          {/* Visit type pills */}
+          <div className="flex items-center gap-1.5">
+            <span className={`text-xs font-medium mr-1 ${
               isDarkMode ? "text-slate-500" : "text-slate-400"
-            }`}>
-              <span>Patient: <strong className={isDarkMode ? "text-slate-300" : "text-slate-600"}>{stats.role_counts.patient ?? 0}</strong></span>
-              <span>Physician: <strong className={isDarkMode ? "text-slate-300" : "text-slate-600"}>{stats.role_counts.physician ?? 0}</strong></span>
-            </div>
-          )}
+            }`}>Visit:</span>
+            {([
+              { value: "" as const, label: "All" },
+              { value: "first" as const, label: "First" },
+              { value: "followup" as const, label: "Follow-up" },
+            ]).map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setFilterVisitType(opt.value)}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                  filterVisitType === opt.value
+                    ? isDarkMode
+                      ? "bg-teal-600 text-white"
+                      : "bg-teal-700 text-white"
+                    : isDarkMode
+                      ? "bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700"
+                      : "bg-white text-slate-500 hover:text-slate-700 border border-slate-200"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Counts */}
+          <div className={`flex gap-4 text-xs ${
+            isDarkMode ? "text-slate-500" : "text-slate-400"
+          }`}>
+            {stats?.role_counts && (
+              <>
+                <span>Patient: <strong className={isDarkMode ? "text-slate-300" : "text-slate-600"}>{stats.role_counts.patient ?? 0}</strong></span>
+                <span>Physician: <strong className={isDarkMode ? "text-slate-300" : "text-slate-600"}>{stats.role_counts.physician ?? 0}</strong></span>
+              </>
+            )}
+            {stats?.visit_type_counts && (
+              <>
+                <span>First: <strong className={isDarkMode ? "text-slate-300" : "text-slate-600"}>{stats.visit_type_counts.first ?? 0}</strong></span>
+                <span>Follow-up: <strong className={isDarkMode ? "text-slate-300" : "text-slate-600"}>{stats.visit_type_counts.followup ?? 0}</strong></span>
+              </>
+            )}
+          </div>
         </div>
 
         {/* ── Stats Cards ─────────────────────────────────────────────── */}
@@ -955,10 +994,11 @@ export default function AdminTrackingDashboard() {
                     }`}
                   />
                 </div>
-                {(filterFile || filterEventType || filterSession || filterRole) && (
+                {(filterFile || filterEventType || filterSession || filterRole || filterVisitType) && (
                   <button
                     onClick={() => {
                       setFilterRole("");
+                      setFilterVisitType("");
                       setFilterFile("");
                       setFilterEventType("");
                       setFilterSession("");
