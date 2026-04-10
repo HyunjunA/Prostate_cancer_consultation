@@ -35,6 +35,10 @@ python-jose[cryptography]==3.5.0
 # ── HTTP Client (NLP service calls) ──────────────────────────────────────────
 httpx==0.28.1
 
+# ── Azure OpenAI (Guille's AI pipeline — LLM scoring + patient summary rewriting)
+openai>=1.0.0
+tqdm>=4.0.0
+
 # ── Compression ──────────────────────────────────────────────────────────────
 brotli-asgi==1.6.0
 

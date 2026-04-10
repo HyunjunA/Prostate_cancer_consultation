@@ -127,7 +127,8 @@ CREATE TABLE transcript_analysis_log (
     model_results JSONB,                   -- per-model NLP scores (validated JSON)
     xlsx_data BYTEA,                       -- binary xlsx file for DB-backed download
     source_filename VARCHAR(500),
-    analyzed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    analyzed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    ai_overall_score FLOAT                  -- GPT-4o average score across all domains (0-5)
 );
 
 -- Note: idx_transcript_log_patient_id removed — redundant with composite (patient_id, analyzed_at DESC)
@@ -257,3 +258,32 @@ CREATE INDEX idx_uil_client_timestamp ON user_interaction_log(client_timestamp);
 CREATE INDEX idx_uil_file_event_type ON user_interaction_log(file, event_type);
 
 -- #4, #5: Expression indexes (date_trunc, extract) removed — require IMMUTABLE wrapper (TODO #42)
+
+
+-- =====================================================
+-- 8. LLM Domain Scoring & Summary (GPT-4o AI Pipeline)
+-- =====================================================
+-- Stores the output of the AI pipeline (Steps 11-14):
+--   - GPT-4o scores each sentence's clinical specificity (0-5)
+--   - Extracts actual risk numbers ("24-25%", "13 years")
+--   - Reformats into patient-facing plain language
+--   - For side-effect domains (ed, inc, ius): one row per treatment
+--
+CREATE TABLE llm_domain_scoring_and_summary (
+    id SERIAL PRIMARY KEY,
+    analysis_id INT NOT NULL REFERENCES transcript_analysis_log(id) ON DELETE CASCADE,
+    patient_id VARCHAR(255) NOT NULL,
+    domain VARCHAR(10) NOT NULL,                -- cp, le, ed, inc, ius
+    ai_score INT,                               -- 0-5 GPT-4o relevance score
+    score_explanation TEXT,                      -- chain-of-thought reasoning
+    extracted_estimate TEXT,                     -- e.g., "24-25%", "13 years", "<missing>"
+    treatment VARCHAR(50),                      -- e.g., "surgery", "radiation", NULL (regular domains)
+    source_sentence TEXT,                        -- original single sentence (input to reformat)
+    source_context TEXT,                         -- surrounding context sentences
+    reformat_sentence TEXT,                      -- patient-facing summary sentence
+    source_filename VARCHAR(500),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_llm_dss_analysis ON llm_domain_scoring_and_summary(analysis_id);
+CREATE INDEX idx_llm_dss_patient_domain ON llm_domain_scoring_and_summary(patient_id, domain);

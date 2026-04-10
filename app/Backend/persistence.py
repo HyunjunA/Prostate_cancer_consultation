@@ -135,3 +135,16 @@ async def file_already_processed(Session: async_sessionmaker, filename: str) -> 
             .where(models.DoctorSentenceView.file == filename)
         )).scalar()
         return count is not None and count > 0
+
+
+async def get_latest_analysis_id(Session, patient_id: str) -> int | None:
+    """Get the most recent transcript_analysis_log.id for a patient."""
+    from sqlalchemy import select
+    async with Session() as session:
+        result = await session.execute(
+            select(models.TranscriptAnalysisLog.id)
+            .where(models.TranscriptAnalysisLog.patient_id == patient_id)
+            .order_by(models.TranscriptAnalysisLog.analyzed_at.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
