@@ -1,0 +1,125 @@
+Prostate Cancer Consultation Dashboard - Work Log
+=======================================================
+
+April 9-10, 2026 (Wednesday-Thursday)
+
+Context: Frontend redesign, Docker optimization, security cleanup,
+Guille's AI pipeline full integration, tracking system improvements,
+ERD v3 documentation.
+16 commits pushed to origin/main.
+
+---
+
+## Part 1: Frontend Redesign (Commit b96e44b) — Apr 9
+
+- Redesigned Selection Screen and Tracking Dashboard UI
+- Removed dist/ directory from src (build artifacts should not be in source)
+
+---
+
+## Part 2: Documentation — ERD v3 (Commits 4e7cd31, 2ded982) — Apr 9
+
+- Added ERD v3 (EN/KR) with detailed table descriptions and API mapping
+  - Covers all 11 tables with field-level explanations
+  - Maps each table to API endpoints and React screens
+- Updated TODO with 14 new Webapp items
+- Cleaned stale/outdated files
+
+---
+
+## Part 3: Security Fixes (Commits b980f63, 31af834) — Apr 9
+
+- Removed hardcoded API key from source files (GitHub secret scanning alert)
+- Removed leaked API key from remaining docs and control logs
+- All secrets now read from .env only
+
+---
+
+## Part 4: Docker Optimization (Commits cfd2095, e92df9b) — Apr 9
+
+- Switched Webapp Docker to standalone output: 861MB → 154MB image size (82% reduction)
+- Improved Webapp .dockerignore completeness to exclude unnecessary files from build context
+
+---
+
+## Part 5: Guille's AI Pipeline — Backend Integration (Commits 44b8235, 48f8c17) — Apr 10
+
+- Created ai_pipeline_service.py: wraps Guille's AI pipeline for Backend use
+  - Creates Azure OpenAI client from env vars
+  - Calls run_ai_pipeline() with domain DataFrames
+  - Saves results to llm_domain_scoring_and_summary table
+  - Calculates ai_overall_score (average of all domain scores)
+- Added Step 11 to pipeline_runner.py (non-blocking, try/except)
+- Added LLMDomainScoringAndSummary model to models.py
+- Added ai_overall_score column to TranscriptAnalysisLog
+- Docker volume mount for ai_pipeline module in docker-compose.yml
+- Extended healthcheck start_period from 180s to 600s
+- Connected global tracking hooks (posthog.ts) to Backend API
+- Added visit_type support to tracking context
+
+---
+
+## Part 6: Patient Pages — Guille's AI Summaries (Commit a8e0ce1) — Apr 10
+
+- Patient First Visit: displays AI-generated reformat_sentence per domain
+- Patient Follow-up: same AI summary integration
+- "View relevant sentences from your visit" shows source_context (broader conversation)
+- Added GET /api/patient/ai-summary/{file} and GET /api/patient/ai-summary endpoints
+- AI Summary replaces existing rewriter summary when available
+
+---
+
+## Part 7: Physician Dashboard — Guille's AI Scoring (Commit 8b67c32) — Apr 10
+
+- Replaced consultation-scorer with Guille's AI ai_score (0-5) across all scoring APIs
+  - scores/average: queries llm_domain_scoring_and_summary only
+  - scores/summary: queries ai_score, no consultation-scorer fallback
+  - score-sentence: uses Guille's call_llm() + load_prompt()
+- Patients without AI scores hidden from dashboard list
+- Overall Score column colors matched to summary box colors (emerald/yellow/red)
+
+---
+
+## Part 8: Tracking System Improvements (Commit 749362e) — Apr 10
+
+- Added visit_type (first/followup) to all tracking events
+- Created patient-behavior API: per-patient, per-domain behavior aggregation
+- Added session recording endpoints (POST/GET /api/tracking/recordings) for rrweb
+- Fixed keepalive bug: false for periodic flush, true for unload only
+- Fixed survey event duplication (unified to survey_answer)
+- Fixed domain name mismatch (Continence vs Urinary Incontinence)
+
+---
+
+## Part 9: ERD v3 Updates (Commits 5401079, bfc06ef, 3324be2) — Apr 10
+
+- Enhanced ERD v3 with real DB examples and field-level explanations
+- Added llm_domain_scoring_and_summary section (C-2) to ERD
+- Added code review plan and updated TODO
+- Updated ERD v3 and database_schema.sql to match actual implementation:
+  - Added missing ai_overall_score column to transcript_analysis_log
+  - Added missing session_recording table DDL
+  - Expanded API endpoint lists (Doctor 5→12, Survey 4→11, Tracking +4)
+  - Replaced "GPT-4o" references with "Guille's AI" throughout
+
+---
+
+Commits (Apr 9):
+  b96e44b feat: redesign Selection Screen + Tracking Dashboard, remove dist/ from src
+  4e7cd31 docs: add ERD v3 (EN/KR) with detailed table descriptions and API mapping
+  2ded982 chore: update TODO with 14 new webapp items, clean stale files
+  b980f63 fix: remove hardcoded API key from source files (secret scanning alert)
+  31af834 fix: remove leaked API key from remaining docs and control logs
+  cfd2095 perf: switch Webapp Docker to standalone output (861MB → 154MB)
+  e92df9b chore: improve Webapp .dockerignore completeness
+  b0d1652 docs: update TODO with completed items from 2026-04-09 session
+
+Commits (Apr 10):
+  48f8c17 feat: connect global tracking hooks to Backend API + add visit_type support
+  5401079 docs: enhance ERD v3 with real DB examples, field-level explanations, and PDF
+  44b8235 feat: integrate Guille's AI pipeline (scoring + patient summary) into Backend
+  a8e0ce1 feat: display Guille's AI summaries on patient First Visit and Follow-up pages
+  8b67c32 feat: Physician Dashboard uses Guille's AI ai_score, hides unscored patients
+  749362e feat: tracking improvements — patient behavior, session recording, survey fixes
+  bfc06ef docs: add llm_domain_scoring_and_summary to ERD v3, code review plan, update TODO
+  3324be2 docs: update ERD v3 and schema to match actual implementation
