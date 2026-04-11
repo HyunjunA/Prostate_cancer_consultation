@@ -115,8 +115,8 @@ services:
       timeout: 5s
       retries: 40
       # Extended start_period: pipeline_runner Steps 1-10 (~3min) + Step 11 AI pipeline
-      # GPT-4o scoring for 6 patients × 5 domains ≈ 15-20min on first startup
-      start_period: 600s
+      # AI pipeline processes all patients on first startup (5 domains × ~3min each)
+      start_period: 1200s
     ulimits:
       nofile:
         soft: 1048576
