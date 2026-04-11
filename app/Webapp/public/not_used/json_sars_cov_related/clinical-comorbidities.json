@@ -1,0 +1,14 @@
+{
+  "Clinical-Comorbidities": [
+    {
+      "category": "No",
+      "count": 133,
+      "percentage": 61.6
+    },
+    {
+      "category": "Yes",
+      "count": 83,
+      "percentage": 38.4
+    }
+  ]
+}

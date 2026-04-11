@@ -1,0 +1,14 @@
+{
+  "Demographics-Age": [
+    {
+      "category": "Yes",
+      "count": 201,
+      "percentage": 93.1
+    },
+    {
+      "category": "No",
+      "count": 15,
+      "percentage": 6.9
+    }
+  ]
+}

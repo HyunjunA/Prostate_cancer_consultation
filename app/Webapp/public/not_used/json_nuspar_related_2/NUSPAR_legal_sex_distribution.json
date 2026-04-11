@@ -1,0 +1,50 @@
+{
+    "ALL": [
+        {
+            "category": "Female",
+            "count": 93,
+            "percentage": 52.0
+        },
+        {
+            "category": "Male",
+            "count": 86,
+            "percentage": 48.0
+        }
+    ],
+    "CEDARS": [
+        {
+            "category": "Male",
+            "count": 38,
+            "percentage": 52.8
+        },
+        {
+            "category": "Female",
+            "count": 34,
+            "percentage": 47.2
+        }
+    ],
+    "ST": [
+        {
+            "category": "Male",
+            "count": 12,
+            "percentage": 54.5
+        },
+        {
+            "category": "Female",
+            "count": 10,
+            "percentage": 45.5
+        }
+    ],
+    "OR": [
+        {
+            "category": "Female",
+            "count": 49,
+            "percentage": 57.6
+        },
+        {
+            "category": "Male",
+            "count": 36,
+            "percentage": 42.4
+        }
+    ]
+}

@@ -1,0 +1,1212 @@
+{
+  "states": {
+    "CA": [
+      {
+        "week_start": "2024-09-29",
+        "week_ending": "2024-10-05",
+        "week": 40,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 0.674062
+      },
+      {
+        "week_start": "2024-10-06",
+        "week_ending": "2024-10-12",
+        "week": 41,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 0.671276
+      },
+      {
+        "week_start": "2024-10-13",
+        "week_ending": "2024-10-19",
+        "week": 42,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 0.725614
+      },
+      {
+        "week_start": "2024-10-20",
+        "week_ending": "2024-10-26",
+        "week": 43,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 0.96557
+      },
+      {
+        "week_start": "2024-10-27",
+        "week_ending": "2024-11-02",
+        "week": 44,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 1.21979
+      },
+      {
+        "week_start": "2024-11-03",
+        "week_ending": "2024-11-09",
+        "week": 45,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 1.52769
+      },
+      {
+        "week_start": "2024-11-10",
+        "week_ending": "2024-11-16",
+        "week": 46,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 2.11081
+      },
+      {
+        "week_start": "2024-11-17",
+        "week_ending": "2024-11-23",
+        "week": 47,
+        "Negative_count": 0,
+        "Positive_count": 2,
+        "percent_positive_twitter_x": 100.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 2.83392
+      },
+      {
+        "week_start": "2024-11-24",
+        "week_ending": "2024-11-30",
+        "week": 48,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 3.94822
+      },
+      {
+        "week_start": "2024-12-01",
+        "week_ending": "2024-12-07",
+        "week": 49,
+        "Negative_count": 10,
+        "Positive_count": 11,
+        "percent_positive_twitter_x": 52.4,
+        "year": 2024.0,
+        "percent_positive_cdc": 5.18611
+      },
+      {
+        "week_start": "2024-12-08",
+        "week_ending": "2024-12-14",
+        "week": 50,
+        "Negative_count": 29,
+        "Positive_count": 81,
+        "percent_positive_twitter_x": 73.6,
+        "year": 2024.0,
+        "percent_positive_cdc": 8.59349
+      },
+      {
+        "week_start": "2024-12-15",
+        "week_ending": "2024-12-21",
+        "week": 51,
+        "Negative_count": 57,
+        "Positive_count": 73,
+        "percent_positive_twitter_x": 56.2,
+        "year": 2024.0,
+        "percent_positive_cdc": 14.1792
+      },
+      {
+        "week_start": "2024-12-22",
+        "week_ending": "2024-12-28",
+        "week": 52,
+        "Negative_count": 62,
+        "Positive_count": 133,
+        "percent_positive_twitter_x": 68.2,
+        "year": 2024.0,
+        "percent_positive_cdc": 18.2751
+      },
+      {
+        "week_start": "2024-12-29",
+        "week_ending": "2025-01-04",
+        "week": 1,
+        "Negative_count": 99,
+        "Positive_count": 141,
+        "percent_positive_twitter_x": 58.8,
+        "year": 2025.0,
+        "percent_positive_cdc": 18.2181
+      },
+      {
+        "week_start": "2025-01-05",
+        "week_ending": "2025-01-11",
+        "week": 2,
+        "Negative_count": 72,
+        "Positive_count": 104,
+        "percent_positive_twitter_x": 59.1,
+        "year": 2025.0,
+        "percent_positive_cdc": 18.3976
+      },
+      {
+        "week_start": "2025-01-12",
+        "week_ending": "2025-01-18",
+        "week": 3,
+        "Negative_count": 36,
+        "Positive_count": 57,
+        "percent_positive_twitter_x": 61.3,
+        "year": 2025.0,
+        "percent_positive_cdc": 23.8246
+      },
+      {
+        "week_start": "2025-01-19",
+        "week_ending": "2025-01-25",
+        "week": 4,
+        "Negative_count": 43,
+        "Positive_count": 112,
+        "percent_positive_twitter_x": 72.3,
+        "year": 2025.0,
+        "percent_positive_cdc": 28.7678
+      },
+      {
+        "week_start": "2025-01-26",
+        "week_ending": "2025-02-01",
+        "week": 5,
+        "Negative_count": 58,
+        "Positive_count": 173,
+        "percent_positive_twitter_x": 74.9,
+        "year": 2025.0,
+        "percent_positive_cdc": 31.6705
+      },
+      {
+        "week_start": "2025-02-02",
+        "week_ending": "2025-02-08",
+        "week": 6,
+        "Negative_count": 0,
+        "Positive_count": 1,
+        "percent_positive_twitter_x": 100.0,
+        "year": 2025.0,
+        "percent_positive_cdc": 31.4102
+      },
+      {
+        "week_start": "2025-02-09",
+        "week_ending": "2025-02-15",
+        "week": 7,
+        "Negative_count": 105,
+        "Positive_count": 169,
+        "percent_positive_twitter_x": 61.7,
+        "year": 2025.0,
+        "percent_positive_cdc": 27.8423
+      },
+      {
+        "week_start": "2025-02-16",
+        "week_ending": "2025-02-22",
+        "week": 8,
+        "Negative_count": 83,
+        "Positive_count": 153,
+        "percent_positive_twitter_x": 64.8,
+        "year": 2025.0,
+        "percent_positive_cdc": 23.3264
+      },
+      {
+        "week_start": "2025-02-23",
+        "week_ending": "2025-03-01",
+        "week": 9,
+        "Negative_count": 51,
+        "Positive_count": 79,
+        "percent_positive_twitter_x": 60.8,
+        "year": 2025.0,
+        "percent_positive_cdc": 19.453
+      },
+      {
+        "week_start": "2025-03-02",
+        "week_ending": "2025-03-08",
+        "week": 10,
+        "Negative_count": 43,
+        "Positive_count": 64,
+        "percent_positive_twitter_x": 59.8,
+        "year": 2025.0,
+        "percent_positive_cdc": 15.8463
+      },
+      {
+        "week_start": "2025-03-09",
+        "week_ending": "2025-03-15",
+        "week": 11,
+        "Negative_count": 33,
+        "Positive_count": 46,
+        "percent_positive_twitter_x": 58.2,
+        "year": 2025.0,
+        "percent_positive_cdc": 13.1258
+      },
+      {
+        "week_start": "2025-03-16",
+        "week_ending": "2025-03-22",
+        "week": 12,
+        "Negative_count": 19,
+        "Positive_count": 40,
+        "percent_positive_twitter_x": 67.8,
+        "year": 2025.0,
+        "percent_positive_cdc": 10.7069
+      },
+      {
+        "week_start": "2025-03-23",
+        "week_ending": "2025-03-29",
+        "week": 13,
+        "Negative_count": 19,
+        "Positive_count": 23,
+        "percent_positive_twitter_x": 54.8,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-03-30",
+        "week_ending": "2025-04-05",
+        "week": 14,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-04-06",
+        "week_ending": "2025-04-12",
+        "week": 15,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-04-13",
+        "week_ending": "2025-04-19",
+        "week": 16,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-04-20",
+        "week_ending": "2025-04-26",
+        "week": 17,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      }
+    ],
+    "AZ": [
+      {
+        "week_start": "2024-09-29",
+        "week_ending": "2024-10-05",
+        "week": 40,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 0.674062
+      },
+      {
+        "week_start": "2024-10-06",
+        "week_ending": "2024-10-12",
+        "week": 41,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 0.671276
+      },
+      {
+        "week_start": "2024-10-13",
+        "week_ending": "2024-10-19",
+        "week": 42,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 0.725614
+      },
+      {
+        "week_start": "2024-10-20",
+        "week_ending": "2024-10-26",
+        "week": 43,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 0.96557
+      },
+      {
+        "week_start": "2024-10-27",
+        "week_ending": "2024-11-02",
+        "week": 44,
+        "Negative_count": 5,
+        "Positive_count": 3,
+        "percent_positive_twitter_x": 37.5,
+        "year": 2024.0,
+        "percent_positive_cdc": 1.21979
+      },
+      {
+        "week_start": "2024-11-03",
+        "week_ending": "2024-11-09",
+        "week": 45,
+        "Negative_count": 64,
+        "Positive_count": 39,
+        "percent_positive_twitter_x": 37.9,
+        "year": 2024.0,
+        "percent_positive_cdc": 1.52769
+      },
+      {
+        "week_start": "2024-11-10",
+        "week_ending": "2024-11-16",
+        "week": 46,
+        "Negative_count": 52,
+        "Positive_count": 61,
+        "percent_positive_twitter_x": 54.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 2.11081
+      },
+      {
+        "week_start": "2024-11-17",
+        "week_ending": "2024-11-23",
+        "week": 47,
+        "Negative_count": 142,
+        "Positive_count": 286,
+        "percent_positive_twitter_x": 66.8,
+        "year": 2024.0,
+        "percent_positive_cdc": 2.83392
+      },
+      {
+        "week_start": "2024-11-24",
+        "week_ending": "2024-11-30",
+        "week": 48,
+        "Negative_count": 55,
+        "Positive_count": 55,
+        "percent_positive_twitter_x": 50.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 3.94822
+      },
+      {
+        "week_start": "2024-12-01",
+        "week_ending": "2024-12-07",
+        "week": 49,
+        "Negative_count": 54,
+        "Positive_count": 49,
+        "percent_positive_twitter_x": 47.6,
+        "year": 2024.0,
+        "percent_positive_cdc": 5.18611
+      },
+      {
+        "week_start": "2024-12-08",
+        "week_ending": "2024-12-14",
+        "week": 50,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 8.59349
+      },
+      {
+        "week_start": "2024-12-15",
+        "week_ending": "2024-12-21",
+        "week": 51,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 14.1792
+      },
+      {
+        "week_start": "2024-12-22",
+        "week_ending": "2024-12-28",
+        "week": 52,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 18.2751
+      },
+      {
+        "week_start": "2024-12-29",
+        "week_ending": "2025-01-04",
+        "week": 1,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2025.0,
+        "percent_positive_cdc": 18.2181
+      },
+      {
+        "week_start": "2025-01-05",
+        "week_ending": "2025-01-11",
+        "week": 2,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2025.0,
+        "percent_positive_cdc": 18.3932
+      },
+      {
+        "week_start": "2025-01-12",
+        "week_ending": "2025-01-18",
+        "week": 3,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2025.0,
+        "percent_positive_cdc": 23.855
+      },
+      {
+        "week_start": "2025-01-19",
+        "week_ending": "2025-01-25",
+        "week": 4,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2025.0,
+        "percent_positive_cdc": 28.5333
+      },
+      {
+        "week_start": "2025-01-26",
+        "week_ending": "2025-02-01",
+        "week": 5,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2025.0,
+        "percent_positive_cdc": 31.4284
+      },
+      {
+        "week_start": "2025-02-02",
+        "week_ending": "2025-02-08",
+        "week": 6,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2025.0,
+        "percent_positive_cdc": 31.3893
+      },
+      {
+        "week_start": "2025-02-09",
+        "week_ending": "2025-02-15",
+        "week": 7,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2025.0,
+        "percent_positive_cdc": 26.8508
+      },
+      {
+        "week_start": "2025-02-16",
+        "week_ending": "2025-02-22",
+        "week": 8,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-02-23",
+        "week_ending": "2025-03-01",
+        "week": 9,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-03-02",
+        "week_ending": "2025-03-08",
+        "week": 10,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-03-09",
+        "week_ending": "2025-03-15",
+        "week": 11,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-03-16",
+        "week_ending": "2025-03-22",
+        "week": 12,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-03-23",
+        "week_ending": "2025-03-29",
+        "week": 13,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-03-30",
+        "week_ending": "2025-04-05",
+        "week": 14,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-04-06",
+        "week_ending": "2025-04-12",
+        "week": 15,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-04-13",
+        "week_ending": "2025-04-19",
+        "week": 16,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-04-20",
+        "week_ending": "2025-04-26",
+        "week": 17,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      }
+    ],
+    "AR": [
+      {
+        "week_start": "2024-09-29",
+        "week_ending": "2024-10-05",
+        "week": 40,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 0.674062
+      },
+      {
+        "week_start": "2024-10-06",
+        "week_ending": "2024-10-12",
+        "week": 41,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 0.671276
+      },
+      {
+        "week_start": "2024-10-13",
+        "week_ending": "2024-10-19",
+        "week": 42,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 0.725614
+      },
+      {
+        "week_start": "2024-10-20",
+        "week_ending": "2024-10-26",
+        "week": 43,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 0.96557
+      },
+      {
+        "week_start": "2024-10-27",
+        "week_ending": "2024-11-02",
+        "week": 44,
+        "Negative_count": 5,
+        "Positive_count": 3,
+        "percent_positive_twitter_x": 37.5,
+        "year": 2024.0,
+        "percent_positive_cdc": 1.21979
+      },
+      {
+        "week_start": "2024-11-03",
+        "week_ending": "2024-11-09",
+        "week": 45,
+        "Negative_count": 64,
+        "Positive_count": 39,
+        "percent_positive_twitter_x": 37.9,
+        "year": 2024.0,
+        "percent_positive_cdc": 1.52769
+      },
+      {
+        "week_start": "2024-11-10",
+        "week_ending": "2024-11-16",
+        "week": 46,
+        "Negative_count": 52,
+        "Positive_count": 61,
+        "percent_positive_twitter_x": 54.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 2.11081
+      },
+      {
+        "week_start": "2024-11-17",
+        "week_ending": "2024-11-23",
+        "week": 47,
+        "Negative_count": 142,
+        "Positive_count": 286,
+        "percent_positive_twitter_x": 66.8,
+        "year": 2024.0,
+        "percent_positive_cdc": 2.83392
+      },
+      {
+        "week_start": "2024-11-24",
+        "week_ending": "2024-11-30",
+        "week": 48,
+        "Negative_count": 55,
+        "Positive_count": 55,
+        "percent_positive_twitter_x": 50.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 3.94822
+      },
+      {
+        "week_start": "2024-12-01",
+        "week_ending": "2024-12-07",
+        "week": 49,
+        "Negative_count": 54,
+        "Positive_count": 49,
+        "percent_positive_twitter_x": 47.6,
+        "year": 2024.0,
+        "percent_positive_cdc": 5.18611
+      },
+      {
+        "week_start": "2024-12-08",
+        "week_ending": "2024-12-14",
+        "week": 50,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 8.59349
+      },
+      {
+        "week_start": "2024-12-15",
+        "week_ending": "2024-12-21",
+        "week": 51,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 14.1792
+      },
+      {
+        "week_start": "2024-12-22",
+        "week_ending": "2024-12-28",
+        "week": 52,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 18.2751
+      },
+      {
+        "week_start": "2024-12-29",
+        "week_ending": "2025-01-04",
+        "week": 1,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2025.0,
+        "percent_positive_cdc": 18.2181
+      },
+      {
+        "week_start": "2025-01-05",
+        "week_ending": "2025-01-11",
+        "week": 2,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2025.0,
+        "percent_positive_cdc": 18.3932
+      },
+      {
+        "week_start": "2025-01-12",
+        "week_ending": "2025-01-18",
+        "week": 3,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2025.0,
+        "percent_positive_cdc": 23.855
+      },
+      {
+        "week_start": "2025-01-19",
+        "week_ending": "2025-01-25",
+        "week": 4,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2025.0,
+        "percent_positive_cdc": 28.5333
+      },
+      {
+        "week_start": "2025-01-26",
+        "week_ending": "2025-02-01",
+        "week": 5,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2025.0,
+        "percent_positive_cdc": 31.4284
+      },
+      {
+        "week_start": "2025-02-02",
+        "week_ending": "2025-02-08",
+        "week": 6,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2025.0,
+        "percent_positive_cdc": 31.3893
+      },
+      {
+        "week_start": "2025-02-09",
+        "week_ending": "2025-02-15",
+        "week": 7,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2025.0,
+        "percent_positive_cdc": 26.8508
+      },
+      {
+        "week_start": "2025-02-16",
+        "week_ending": "2025-02-22",
+        "week": 8,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-02-23",
+        "week_ending": "2025-03-01",
+        "week": 9,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-03-02",
+        "week_ending": "2025-03-08",
+        "week": 10,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-03-09",
+        "week_ending": "2025-03-15",
+        "week": 11,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-03-16",
+        "week_ending": "2025-03-22",
+        "week": 12,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-03-23",
+        "week_ending": "2025-03-29",
+        "week": 13,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-03-30",
+        "week_ending": "2025-04-05",
+        "week": 14,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-04-06",
+        "week_ending": "2025-04-12",
+        "week": 15,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-04-13",
+        "week_ending": "2025-04-19",
+        "week": 16,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-04-20",
+        "week_ending": "2025-04-26",
+        "week": 17,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      }
+    ],
+    "AK": [
+      {
+        "week_start": "2024-09-29",
+        "week_ending": "2024-10-05",
+        "week": 40,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 0.674062
+      },
+      {
+        "week_start": "2024-10-06",
+        "week_ending": "2024-10-12",
+        "week": 41,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 0.671276
+      },
+      {
+        "week_start": "2024-10-13",
+        "week_ending": "2024-10-19",
+        "week": 42,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 0.725614
+      },
+      {
+        "week_start": "2024-10-20",
+        "week_ending": "2024-10-26",
+        "week": 43,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 0.96557
+      },
+      {
+        "week_start": "2024-10-27",
+        "week_ending": "2024-11-02",
+        "week": 44,
+        "Negative_count": 5,
+        "Positive_count": 3,
+        "percent_positive_twitter_x": 37.5,
+        "year": 2024.0,
+        "percent_positive_cdc": 1.21979
+      },
+      {
+        "week_start": "2024-11-03",
+        "week_ending": "2024-11-09",
+        "week": 45,
+        "Negative_count": 64,
+        "Positive_count": 39,
+        "percent_positive_twitter_x": 37.9,
+        "year": 2024.0,
+        "percent_positive_cdc": 1.52769
+      },
+      {
+        "week_start": "2024-11-10",
+        "week_ending": "2024-11-16",
+        "week": 46,
+        "Negative_count": 52,
+        "Positive_count": 61,
+        "percent_positive_twitter_x": 54.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 2.11081
+      },
+      {
+        "week_start": "2024-11-17",
+        "week_ending": "2024-11-23",
+        "week": 47,
+        "Negative_count": 142,
+        "Positive_count": 286,
+        "percent_positive_twitter_x": 66.8,
+        "year": 2024.0,
+        "percent_positive_cdc": 2.83392
+      },
+      {
+        "week_start": "2024-11-24",
+        "week_ending": "2024-11-30",
+        "week": 48,
+        "Negative_count": 55,
+        "Positive_count": 55,
+        "percent_positive_twitter_x": 50.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 3.94822
+      },
+      {
+        "week_start": "2024-12-01",
+        "week_ending": "2024-12-07",
+        "week": 49,
+        "Negative_count": 54,
+        "Positive_count": 49,
+        "percent_positive_twitter_x": 47.6,
+        "year": 2024.0,
+        "percent_positive_cdc": 5.18611
+      },
+      {
+        "week_start": "2024-12-08",
+        "week_ending": "2024-12-14",
+        "week": 50,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 8.59349
+      },
+      {
+        "week_start": "2024-12-15",
+        "week_ending": "2024-12-21",
+        "week": 51,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 14.1792
+      },
+      {
+        "week_start": "2024-12-22",
+        "week_ending": "2024-12-28",
+        "week": 52,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2024.0,
+        "percent_positive_cdc": 18.2751
+      },
+      {
+        "week_start": "2024-12-29",
+        "week_ending": "2025-01-04",
+        "week": 1,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2025.0,
+        "percent_positive_cdc": 18.2181
+      },
+      {
+        "week_start": "2025-01-05",
+        "week_ending": "2025-01-11",
+        "week": 2,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2025.0,
+        "percent_positive_cdc": 18.3932
+      },
+      {
+        "week_start": "2025-01-12",
+        "week_ending": "2025-01-18",
+        "week": 3,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2025.0,
+        "percent_positive_cdc": 23.855
+      },
+      {
+        "week_start": "2025-01-19",
+        "week_ending": "2025-01-25",
+        "week": 4,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2025.0,
+        "percent_positive_cdc": 28.5333
+      },
+      {
+        "week_start": "2025-01-26",
+        "week_ending": "2025-02-01",
+        "week": 5,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2025.0,
+        "percent_positive_cdc": 31.4284
+      },
+      {
+        "week_start": "2025-02-02",
+        "week_ending": "2025-02-08",
+        "week": 6,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2025.0,
+        "percent_positive_cdc": 31.3893
+      },
+      {
+        "week_start": "2025-02-09",
+        "week_ending": "2025-02-15",
+        "week": 7,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": 2025.0,
+        "percent_positive_cdc": 26.8508
+      },
+      {
+        "week_start": "2025-02-16",
+        "week_ending": "2025-02-22",
+        "week": 8,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-02-23",
+        "week_ending": "2025-03-01",
+        "week": 9,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-03-02",
+        "week_ending": "2025-03-08",
+        "week": 10,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-03-09",
+        "week_ending": "2025-03-15",
+        "week": 11,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-03-16",
+        "week_ending": "2025-03-22",
+        "week": 12,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-03-23",
+        "week_ending": "2025-03-29",
+        "week": 13,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-03-30",
+        "week_ending": "2025-04-05",
+        "week": 14,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-04-06",
+        "week_ending": "2025-04-12",
+        "week": 15,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-04-13",
+        "week_ending": "2025-04-19",
+        "week": 16,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      },
+      {
+        "week_start": "2025-04-20",
+        "week_ending": "2025-04-26",
+        "week": 17,
+        "Negative_count": -1,
+        "Positive_count": -1,
+        "percent_positive_twitter_x": -1.0,
+        "year": -1.0,
+        "percent_positive_cdc": -1.0
+      }
+    ]
+  }
+}

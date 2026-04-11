@@ -132,6 +132,9 @@ temp/
 *.yaml
 *.yml
 
+# public/ static assets — required for Docker build
+!public/**
+
 # Specific files you might want to ignore
 public/uploads/
 data/

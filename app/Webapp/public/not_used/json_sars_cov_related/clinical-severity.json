@@ -1,0 +1,14 @@
+{
+  "Clinical-Severity": [
+    {
+      "category": "No",
+      "count": 160,
+      "percentage": 74.1
+    },
+    {
+      "category": "Yes",
+      "count": 56,
+      "percentage": 25.9
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "Clinical-Signs/Symptoms": [
+    {
+      "category": "Yes",
+      "count": 142,
+      "percentage": 65.7
+    },
+    {
+      "category": "No",
+      "count": 74,
+      "percentage": 34.3
+    }
+  ]
+}

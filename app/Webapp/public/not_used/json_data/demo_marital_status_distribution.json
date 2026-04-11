@@ -1,0 +1,25 @@
+{
+  "title": "Marital Status Distribution",
+  "data": [
+    {
+      "category": "Married",
+      "count": 18,
+      "percentage": 72.0
+    },
+    {
+      "category": "Single",
+      "count": 5,
+      "percentage": 20.0
+    },
+    {
+      "category": "Domestic Partner",
+      "count": 1,
+      "percentage": 4.0
+    },
+    {
+      "category": "Widowed",
+      "count": 1,
+      "percentage": 4.0
+    }
+  ]
+}

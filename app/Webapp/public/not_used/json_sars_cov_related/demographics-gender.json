@@ -1,0 +1,14 @@
+{
+  "Demographics-Gender": [
+    {
+      "category": "Yes",
+      "count": 192,
+      "percentage": 88.9
+    },
+    {
+      "category": "No",
+      "count": 24,
+      "percentage": 11.1
+    }
+  ]
+}

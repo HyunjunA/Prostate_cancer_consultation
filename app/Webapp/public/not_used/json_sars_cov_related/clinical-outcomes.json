@@ -1,0 +1,14 @@
+{
+  "Clinical-Outcomes": [
+    {
+      "category": "No",
+      "count": 156,
+      "percentage": 72.2
+    },
+    {
+      "category": "Yes",
+      "count": 60,
+      "percentage": 27.8
+    }
+  ]
+}

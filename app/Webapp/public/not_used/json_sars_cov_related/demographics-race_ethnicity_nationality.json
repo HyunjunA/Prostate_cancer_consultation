@@ -1,0 +1,14 @@
+{
+  "Demographics-Race.Ethnicity.Nationality": [
+    {
+      "category": "No",
+      "count": 174,
+      "percentage": 80.6
+    },
+    {
+      "category": "Yes",
+      "count": 42,
+      "percentage": 19.4
+    }
+  ]
+}

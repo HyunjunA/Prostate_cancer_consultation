@@ -1,0 +1,15 @@
+{
+  "title": "Ethnicity Distribution",
+  "data": [
+    {
+      "category": "Non-Hispanic",
+      "count": 19,
+      "percentage": 76.0
+    },
+    {
+      "category": "Hispanic",
+      "count": 6,
+      "percentage": 24.0
+    }
+  ]
+}

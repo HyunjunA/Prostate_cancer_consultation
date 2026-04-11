@@ -1,0 +1,14 @@
+{
+  "Clinical-Treatment": [
+    {
+      "category": "No",
+      "count": 169,
+      "percentage": 78.2
+    },
+    {
+      "category": "Yes",
+      "count": 47,
+      "percentage": 21.8
+    }
+  ]
+}

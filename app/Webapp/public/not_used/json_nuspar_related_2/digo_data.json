@@ -1,0 +1,652 @@
+{
+    "CSCS1": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-03-16",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CSCS2": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2022-08-11",
+            "diagnosis_disease_class": 30.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CSCS3": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2022-08-30",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CSCS4": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-06-20",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CSCS5": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-05-22",
+            "diagnosis_disease_class": 30.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CSCS6": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-06-08",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CSCS7": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2022-10-07",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CSCS8": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-06-05",
+            "diagnosis_disease_class": null,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CSCS9": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-06-12",
+            "diagnosis_disease_class": 30.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CSCS10": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-08-15",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CSCS11": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-10-03",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CSCS12": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-03-14",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CSCS13": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-10-18",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CSCS14": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-09-25",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CSCS15": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-10-05",
+            "diagnosis_disease_class": null,
+            "diagnosis_complete": 2
+        }
+    ],
+    "STST49": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2024-11-11",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "STST51": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2025-01-20",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "STST52": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2025-01-07",
+            "diagnosis_disease_class": 30.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "STST53": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2025-01-14",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "STST54": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2025-01-15",
+            "diagnosis_disease_class": 30.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "STST55": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2025-01-01",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "STST56": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2025-01-02",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "STST58": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2025-01-15",
+            "diagnosis_disease_class": 10.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "STST59": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2025-01-21",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "STST60": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2025-01-21",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "STST61": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2025-01-30",
+            "diagnosis_disease_class": 10.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CS1": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-03-16",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CS2": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2022-08-11",
+            "diagnosis_disease_class": 30.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CS3": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2022-08-30",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CS4": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-06-20",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CS5": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-05-22",
+            "diagnosis_disease_class": 30.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CS6": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-06-08",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CS7": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2022-10-07",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CS8": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-06-05",
+            "diagnosis_disease_class": null,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CS9": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-06-12",
+            "diagnosis_disease_class": 30.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CS10": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-08-15",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CS11": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-10-03",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CS12": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-03-14",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CS13": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-10-18",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CS14": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-09-25",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "CS15": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-10-05",
+            "diagnosis_disease_class": null,
+            "diagnosis_complete": 2
+        }
+    ],
+    "JHJH17": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-12-05",
+            "diagnosis_disease_class": 45.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "JHJH18": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-11-10",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "JHJH19": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-12-19",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "JHJH26": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2024-02-08",
+            "diagnosis_disease_class": 10.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "JHJH27": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2024-02-01",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "JHJH28": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2024-01-03",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "JHJH29": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-12-12",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "JHJH30": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-12-21",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "JHJH31": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2024-04-22",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "JHJH32": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2024-04-10",
+            "diagnosis_disease_class": 10.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "OROR33": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2024-03-14",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "OROR34": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2024-04-23",
+            "diagnosis_disease_class": 30.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "OROR35": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2024-04-12",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "OROR36": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2024-06-07",
+            "diagnosis_disease_class": 10.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "OROR37": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2024-05-20",
+            "diagnosis_disease_class": 20.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "OROR38": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2024-01-31",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "OROR39": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2024-05-08",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "OROR40": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2024-07-16",
+            "diagnosis_disease_class": 20.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "OROR41": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2024-05-23",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "OROR42": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2024-07-30",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "OROR43": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2023-09-25",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "OROR44": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2024-10-01",
+            "diagnosis_disease_class": 10.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "OROR45": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2025-01-15",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ],
+    "OROR47": [
+        {
+            "redcap_event_name": "registration_arm_1",
+            "redcap_repeat_instrument": "diagnosis",
+            "redcap_repeat_instance": 1,
+            "diagnosis_date": "2024-11-10",
+            "diagnosis_disease_class": 50.0,
+            "diagnosis_complete": 2
+        }
+    ]
+}

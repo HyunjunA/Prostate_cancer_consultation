@@ -1,0 +1,10 @@
+{
+  "title": "Occupation Distribution",
+  "data": [
+    {
+      "category": "Unknown",
+      "count": 25,
+      "percentage": 100.0
+    }
+  ]
+}
