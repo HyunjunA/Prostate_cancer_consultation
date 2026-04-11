@@ -65,6 +65,7 @@ export const usePatientData = () => {
   const [summariesAll, setSummariesAll] = useState<any | null>(null);
   const [summariesFiltered, setSummariesFiltered] = useState<any | null>(null);
   const [summaryDetail, setSummaryDetail] = useState<any | null>(null);
+  const [aiSummary, setAiSummary] = useState<any | null>(null);
   const [scoringAll, setScoringAll] = useState<any | null>(null);
   const [scoringFiltered, setScoringFiltered] = useState<any | null>(null);
   const [responsesAll, setResponsesAll] = useState<any | null>(null);
@@ -176,6 +177,23 @@ export const usePatientData = () => {
       return null; // ← 추가
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 4b) Get AI Summary — GPT-4o generated patient-facing risk summaries
+  const fetchAISummary = async (file: string): Promise<any | null> => {
+    try {
+      const response = await fetch(
+        `${BASE_URL}/api/patient/ai-summary/${encodeURIComponent(file)}`,
+        { method: "GET", headers: getHeaders() }
+      );
+      if (!response.ok) return null; // silently fail — fallback to existing summary
+      const data = await response.json();
+      setAiSummary(data);
+      return data;
+    } catch (err) {
+      console.log("[usePatientData] AI summary not available, using fallback");
+      return null;
     }
   };
 
@@ -444,6 +462,7 @@ export const usePatientData = () => {
     summariesAll,
     summariesFiltered,
     summaryDetail,
+    aiSummary,
     scoringAll,
     scoringFiltered,
     responsesAll,
@@ -456,6 +475,7 @@ export const usePatientData = () => {
     fetchSummariesAll,
     fetchSummariesFiltered,
     fetchSummaryDetail,
+    fetchAISummary,
     fetchScoringAll,
     fetchScoringFiltered,
     fetchResponsesAll,

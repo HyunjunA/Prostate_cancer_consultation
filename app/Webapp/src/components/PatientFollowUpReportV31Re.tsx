@@ -996,6 +996,7 @@ const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
                     eventType: "survey_answer",
                     elementId: `RiskPerception_${currentQuestion.id}`,
                     metadata: {
+                      survey: "risk_perception",
                       questionId: currentQuestion.id,
                       answer: option.value,
                       topic: currentQuestion.topic,
@@ -1152,7 +1153,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
   // ─────────────────────────────────────────────────────────────────────────
   const patientId = usePatientId((state) => state.patientId);
   const fileId = useFileId((state) => state.fileId);
-  const { fetchSummaryDetail } = usePatientData();
+  const { fetchSummaryDetail, fetchAISummary } = usePatientData();
 
   const currentFile = fileId || "Input_Keystrokes REC001 (SID 14).xlsx";
   const currentSpeaker = patientId || "Patient_Input_Keystrokes REC001 (SID 14)";
@@ -1171,6 +1172,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
   const [summaryData, setSummaryData] = useState<SummaryDetailResponse | null>(
     null,
   );
+  const [aiSummaryData, setAiSummaryData] = useState<any | null>(null);
   const [apiLoading, setApiLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
 
@@ -1210,7 +1212,16 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
         setApiLoading(true);
         setApiError(null);
 
-        const result = await fetchSummaryDetail(currentFile, currentSpeaker);
+        const [result, aiResult] = await Promise.all([
+          fetchSummaryDetail(currentFile, currentSpeaker),
+          fetchAISummary(currentFile),
+        ]);
+
+        // Store AI summary data for GPT-4o reformat sentences
+        if (aiResult?.source === "ai_pipeline_gpt4o" && aiResult.domains?.length > 0) {
+          setAiSummaryData(aiResult);
+        }
+
         if (result) {
           setSummaryData(result);
         } else {
@@ -1287,7 +1298,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
   const pageLoadTimeRef = useRef<number>(Date.now());
 
   useEffect(() => {
-    const flushEvents = () => {
+    const flushEvents = (useKeepalive: boolean = false) => {
       const events = trackingManager.getEvents();
       if (events.length === 0) return;
 
@@ -1299,14 +1310,15 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
         currentSpeaker,
         session.deviceType,
         events,
-        true, // keepalive for unload
+        useKeepalive,
+        "followup",
       );
       trackingManager.clear();
     };
 
     const recordTimeSpent = () => {
       const durationMs = Date.now() - pageLoadTimeRef.current;
-      if (durationMs < 1000) return; // ignore < 1s visits
+      if (durationMs < 1000) return;
       trackingManager.recordEvent({
         eventType: "dwell_time",
         elementId: "page_total_time",
@@ -1318,18 +1330,17 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         recordTimeSpent();
-        flushEvents();
+        flushEvents(true);
         pageLoadTimeRef.current = Date.now();
       }
     };
 
     const handleBeforeUnload = () => {
       recordTimeSpent();
-      flushEvents();
+      flushEvents(true);
     };
 
-    // Periodic flush every 30 seconds for real-time dashboard visibility
-    const periodicFlushTimer = setInterval(flushEvents, 30_000);
+    const periodicFlushTimer = setInterval(() => flushEvents(false), 10_000);
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("beforeunload", handleBeforeUnload);
@@ -1337,7 +1348,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
     return () => {
       clearInterval(periodicFlushTimer);
       recordTimeSpent();
-      flushEvents(); // flush on unmount
+      flushEvents(true);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
@@ -1347,6 +1358,29 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
   // 7.4 Derived Data
   // ─────────────────────────────────────────────────────────────────────────
 
+  // Build AI summary lookup from GPT-4o results
+  const aiSummaryByTopic = useMemo(() => {
+    const map: Record<string, string> = {};
+    if (aiSummaryData?.domains) {
+      const domainToTopic: Record<string, string> = {
+        "Cancer Prognosis": "Cancer Prognosis",
+        "Life Expectancy": "Life Expectancy",
+        "Erectile Dysfunction": "Erectile Dysfunction",
+        "Urinary Incontinence": "Urinary Incontinence",
+        "Irritative Urinary Symptoms": "Irritative Urinary Symptoms",
+      };
+      for (const d of aiSummaryData.domains) {
+        const topic = domainToTopic[d.domain_name] || d.domain_name;
+        if (map[topic] && d.reformat_sentence) {
+          map[topic] += "\n\n" + d.reformat_sentence;
+        } else if (d.reformat_sentence) {
+          map[topic] = d.reformat_sentence;
+        }
+      }
+    }
+    return map;
+  }, [aiSummaryData]);
+
   const topicSummaries = useMemo((): TopicSummaryMap => {
     const summaries: TopicSummaryMap = {};
 
@@ -1354,8 +1388,10 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
       summaryData.summary.classes.forEach((cls: ClassSummary) => {
         const topicName = CLASS_TO_TOPIC_MAP[cls.class_name];
         if (topicName) {
+          // Use GPT-4o AI summary if available, fallback to existing rewriter
+          const aiText = aiSummaryByTopic[topicName];
           summaries[topicName] = {
-            aiSummary: cls.summary || "Summary not available.",
+            aiSummary: aiText || cls.summary || "Summary not available.",
             extractedSentences: [],
           };
         }
@@ -1363,7 +1399,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
     }
 
     return summaries;
-  }, [summaryData]);
+  }, [summaryData, aiSummaryByTopic]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // 7.5 Navigation Handlers
@@ -1403,12 +1439,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
     value: YesNoAnswer | ScaleAnswer,
   ) => {
     setSdmAnswers((prev) => ({ ...prev, [questionId]: value }));
-    trackingManager.recordEvent({
-      eventType: "survey_answer",
-      elementId: `SDM_${String(questionId)}`,
-      timestamp: new Date().toISOString(),
-      metadata: { survey: "sdm", questionId: String(questionId), answer: value },
-    });
+    // Tracking handled by SDMQuestions component via onTrackEvent
   };
 
   const handleDCSChange = (
@@ -1416,12 +1447,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
     value: LikertAnswer,
   ) => {
     setDcsAnswers((prev) => ({ ...prev, [questionId]: value }));
-    trackingManager.recordEvent({
-      eventType: "survey_answer",
-      elementId: `DCS_${String(questionId)}`,
-      timestamp: new Date().toISOString(),
-      metadata: { survey: "dcs", questionId: String(questionId), answer: value },
-    });
+    // Tracking handled by DecisionalConflictSurvey component via onTrackEvent
   };
 
   const handleRiskChange = (
@@ -1429,12 +1455,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
     value: string,
   ) => {
     setRiskAnswers((prev) => ({ ...prev, [questionId]: value }));
-    trackingManager.recordEvent({
-      eventType: "survey_answer",
-      elementId: `Risk_${String(questionId)}`,
-      timestamp: new Date().toISOString(),
-      metadata: { survey: "risk_perception", questionId: String(questionId), answer: value },
-    });
+    // Tracking handled by RiskPerceptionSurvey component via onTrackEvent
   };
 
   const handleSatisfactionChange = (
@@ -1442,12 +1463,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
     value: any,
   ) => {
     setSatisfactionAnswers((prev) => ({ ...prev, [field]: value }));
-    trackingManager.recordEvent({
-      eventType: "survey_answer",
-      elementId: `Satisfaction_${String(field)}`,
-      timestamp: new Date().toISOString(),
-      metadata: { survey: "satisfaction", questionId: String(field), answer: typeof value === "string" ? value : JSON.stringify(value) },
-    });
+    // Tracking handled by PatientSatisfactionSurvey component via onTrackEvent
   };
 
   const handleTrackEvent = (eventData: any) => {
