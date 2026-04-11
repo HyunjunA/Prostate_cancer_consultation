@@ -135,6 +135,12 @@ temp/
 # public/ static assets — required for Docker build
 !public/**
 
+# public/ subfolders not needed for this project
+public/flu_json_data/
+public/json_nuspar_related/
+public/json_nuspar_related_2/
+public/not_used/
+
 # Specific files you might want to ignore
 public/uploads/
 data/
