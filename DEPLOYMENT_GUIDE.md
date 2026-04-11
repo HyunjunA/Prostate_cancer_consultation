@@ -100,17 +100,11 @@ cd Prostate_cancer_consultation/app/Backend
 cp .env.example .env
 ```
 
-### 3b. Edit `.env` — Required Changes
+### 3b. Ready to Use (No Changes Required for Development)
 
-Open `.env` in a text editor and replace the following `CHANGE_ME` values:
+The `.env.example` ships with prototype default values (`dev_password_2026`, `dev_api_key_prostate_cancer_2026`, `dev_secret_key_prostate_cancer_2026`). For development and testing, **no edits are needed** — just copy and run.
 
-| Variable | Description | Example |
-|---|---|---|
-| `POSTGRES_PASSWORD` | PostgreSQL database password | `my_secure_db_password_123` |
-| `API_KEY` | Backend API authentication key | `sk_live_your_random_key_here` |
-| `SECRET_KEY` | JWT signing secret | `your_random_secret_key_here` |
-
-Generate random keys:
+For production, replace `dev_*` values with strong random keys:
 ```bash
 python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
@@ -148,16 +142,16 @@ REDCAP_API_TOKEN=your_redcap_api_token
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `POSTGRES_USER` | Yes | `prostatecancer_user` | DB username (default is fine) |
-| `POSTGRES_PASSWORD` | **Yes — CHANGE** | `CHANGE_ME` | DB password |
+| `POSTGRES_PASSWORD` | Yes | `dev_password_2026` | DB password (change for production) |
 | `POSTGRES_DB` | Yes | `prostatecancer_db` | DB name (default is fine) |
-| `API_KEY` | **Yes — CHANGE** | `CHANGE_ME` | API authentication key |
-| `SECRET_KEY` | **Yes — CHANGE** | `CHANGE_ME` | JWT signing secret |
+| `API_KEY` | Yes | `dev_api_key_prostate_cancer_2026` | API authentication key (change for production) |
+| `SECRET_KEY` | Yes | `dev_secret_key_prostate_cancer_2026` | JWT signing secret (change for production) |
 | `API_HOST` | Yes | `0.0.0.0` | Keep default |
 | `API_PORT` | Yes | `8000` | Keep default |
 | `DEBUG` | Yes | `True` | Set `False` for production |
 | `AUTH_MODE` | Yes | `api_key` | Authentication mode |
 | `CORS_ORIGINS` | Yes | `localhost:3000,5173,8080` | Adjust for your domain |
-| `REDCAP_ENABLED` | Yes | `True` | Set `False` if not using REDCap |
+| `REDCAP_ENABLED` | Yes | `False` | Set `True` and configure tokens for REDCap |
 | `AZURE_OPENAI_ENDPOINT` | No | (empty) | Azure OpenAI endpoint |
 | `AZURE_OPENAI_KEY` | No | (empty) | Azure OpenAI API key |
 
@@ -385,7 +379,7 @@ git clone https://github.com/HyunjunA/Prostate_cancer_consultation.git
 git clone -b dev/jun https://github.com/jifa83/AI_physician_patient_communication.git
 cd Prostate_cancer_consultation
 cp app/Backend/.env.example app/Backend/.env
-# Edit app/Backend/.env (set POSTGRES_PASSWORD, API_KEY, SECRET_KEY)
+# Default dev keys work as-is — no edits needed for prototype
 chmod +x run_all.sh
 ./run_all.sh
 
