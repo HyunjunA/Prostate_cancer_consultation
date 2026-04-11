@@ -29,8 +29,6 @@ def load_config(path: str = None) -> Dict[str, Any]:
     _override("paths.output_dir", "OUTPUT_DIR", str)
     _override("worker.enabled", "WORKER_ENABLED", lambda v: v.lower() == "true")
     _override("worker.scan_interval_seconds", "WORKER_SCAN_INTERVAL", int)
-    _override("scoring.scorer_url", "SCORER_API_URL", str)
-    _override("scoring.rewriter_url", "REWRITER_API_URL", str)
     _override("nlp.api_url", "NLP_API_URL", str)
 
     return _config

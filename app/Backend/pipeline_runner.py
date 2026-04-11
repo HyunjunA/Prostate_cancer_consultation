@@ -40,8 +40,6 @@ async def process_single_file(
     Every step delegates to its responsible module.
     """
     import transcript_service
-    import scorer_service
-    import rewriter_service
     import persistence
     import ai_pipeline_service
 
@@ -59,7 +57,6 @@ async def process_single_file(
 
     top_n = cfg["pipeline"]["top_n"]
     context_window = cfg["pipeline"]["context_window"]
-    summary_top_k = cfg["scoring"]["summary_top_k"]
 
     # ── Step 1: Read transcript (xlsx or csv, with patient_id extraction) ──
     try:
@@ -96,17 +93,7 @@ async def process_single_file(
     doctor_speaker = df_filtered["speaker"].iloc[0] if len(df_filtered) > 0 else "Unknown"
     patient_speaker = f"Patient_{Path(filename).stem}"
 
-    # ── Step 8: Score sentences (single call to scorer_service) ──────────
-    scorer_keys, scores = await scorer_service.run_scoring(
-        df_sentences, final_results, doctor_speaker, _DOMAIN_SHORT_MAP
-    )
-
-    # ── Step 9: Rewrite patient summaries (single call to rewriter_service)
-    summaries_by_domain = await rewriter_service.run_rewriting(
-        final_results, summary_top_k, transcript_service.OUTCOME_TO_SHEET, _DOMAIN_SHORT_MAP
-    )
-
-    # ── Step 10: Save to DB ──────────────────────────────────────────────
+    # ── Step 8: Save to DB ─────────────────────────────────────────────
     success = await persistence.save_all(
         Session,
         filename=filename,
@@ -119,9 +106,6 @@ async def process_single_file(
         xlsx_bytes=xlsx_bytes,
         final_results=final_results,
         outcome_to_sheet=transcript_service.OUTCOME_TO_SHEET,
-        scorer_keys=scorer_keys,
-        scores=scores,
-        summaries_by_domain=summaries_by_domain,
         domain_slot_map=_DOMAIN_SLOT_MAP,
         domain_short_map=_DOMAIN_SHORT_MAP,
     )
@@ -129,7 +113,7 @@ async def process_single_file(
     # ── Save output files (traceability) ─────────────────────────────────
     _save_output_files(cfg, filename, patient_id, xlsx_bytes)
 
-    # ── Step 11: AI pipeline — GPT-4o scoring + patient summary rewriting ─
+    # ── Step 9: AI pipeline — GPT-4o scoring + patient summary rewriting ──
     #    Uses Guille's ai_pipeline module (volume-mounted from
     #    AI_physician_patient_communication/ai_pipeline/).
     #    Non-blocking: if Azure OpenAI is unavailable, pipeline still completes.
@@ -154,7 +138,7 @@ async def process_single_file(
             logger.warning("  [SKIP] AI pipeline error (non-blocking): %s", e)
 
     if success:
-        return {"file": filename, "patient_id": patient_id, "doctor_sentences": len(scorer_keys)}
+        return {"file": filename, "patient_id": patient_id, "total_sentences": len(df_sentences)}
     return None
 
 
@@ -244,7 +228,7 @@ async def run_pipeline(cfg: Dict[str, Any], transcript_dir: str = None, single_f
     logger.info("=" * 60)
     logger.info("  Files processed: %d / %d", len(results), len(files))
     for r in results:
-        logger.info("    %s → %d sentences", r["file"], r["doctor_sentences"])
+        logger.info("    %s → %d sentences", r["file"], r["total_sentences"])
     logger.info("=" * 60)
 
 

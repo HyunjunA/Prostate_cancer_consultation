@@ -445,7 +445,7 @@ docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
 echo ""
 echo "================================================================"
-echo "  All done! Dashboard available at http://localhost:3000"
+echo "  All done! Dashboard available at http://localhost:3001"
 echo "  Backend API docs at http://localhost:8000/docs"
 echo "  Log saved to: $LOG_FILE"
 echo "================================================================"
