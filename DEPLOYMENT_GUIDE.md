@@ -79,12 +79,12 @@ prostate-cancer-deploy/
 │   ├── app/
 │   │   ├── Backend/                       # FastAPI + Docker Compose
 │   │   └── Webapp/                        # Next.js frontend
-│   ├── nlp-classifiers/                   # NLP Docker image (Git LFS)
+│   ├── nlp-classifiers/                   # NLP Docker image (Git LFS) — developed by Michael
 │   │   └── r01-nlp-classifiers-docker-image/
 │   └── run_all.sh                         # Deployment + test script
 │
 └── AI_physician_patient_communication/    # Sibling repo (required)
-    ├── ai_pipeline/                       # LLM scoring module
+    ├── ai_pipeline/                       # LLM scoring and summary module — developed by Guillermo
     └── data/
         └── input/                         # Patient transcript xlsx files
 ```
@@ -102,58 +102,49 @@ cp .env.example .env
 
 ### 3b. Ready to Use (No Changes Required for Development)
 
-The `.env.example` ships with prototype default values (`dev_password_2026`, `dev_api_key_prostate_cancer_2026`, `dev_secret_key_prostate_cancer_2026`). For development and testing, **no edits are needed** — just copy and run.
+The `.env.example` ships with **shared team keys** that work immediately. For development and testing, **no edits are needed** — just copy and run.
 
-For production, replace `dev_*` values with strong random keys:
-```bash
-python3 -c "import secrets; print(secrets.token_hex(32))"
-```
+> **For production:** Replace the shared keys below with strong random keys unique to your deployment. These shared keys are for local development only.
 
-### 3c. Edit `.env` — Optional: Azure OpenAI (AI Pipeline)
+### 3c. Shared Keys — Descriptions and Notes
 
-To enable AI pipeline (GPT-4o scoring + patient-facing summary generation), add these lines to `.env`:
+All keys below are pre-configured in `.env.example`. They work as-is for local deployment. Replace them when deploying to a shared or production environment.
 
-```env
-# --- Azure OpenAI (AI Pipeline) ---
-AZURE_OPENAI_ENDPOINT=https://your-instance.openai.azure.com/
-AZURE_OPENAI_KEY=your-azure-openai-key
-AZURE_OPENAI_API_VERSION=2024-08-01-preview
-AZURE_OPENAI_MODEL=gpt-4o
-```
-
-> **Without these variables:** The system will work normally — NLP classification, patient summaries, and the physician dashboard will all function. The AI pipeline (GPT-4o scoring and patient-facing rewriting) will be silently skipped, and `ai_score` / `reformat_sentence` fields will remain empty.
-
-### 3d. Edit `.env` — Optional: REDCap Integration
-
-If you don't use REDCap, set:
-```env
-REDCAP_ENABLED=False
-```
-
-If you do use REDCap:
-```env
-REDCAP_ENABLED=True
-REDCAP_API_URL=https://your-redcap-instance.example.com/api/
-REDCAP_API_TOKEN=your_redcap_api_token
-```
-
-### Summary of `.env.example` Variables
-
-| Variable | Required | Default | Description |
+| Key | Value in `.env.example` | Description | Production Note |
 |---|---|---|---|
-| `POSTGRES_USER` | Yes | `prostatecancer_user` | DB username (default is fine) |
-| `POSTGRES_PASSWORD` | Yes | `dev_password_2026` | DB password (change for production) |
-| `POSTGRES_DB` | Yes | `prostatecancer_db` | DB name (default is fine) |
-| `API_KEY` | Yes | `dev_api_key_prostate_cancer_2026` | API authentication key (change for production) |
-| `SECRET_KEY` | Yes | `dev_secret_key_prostate_cancer_2026` | JWT signing secret (change for production) |
-| `API_HOST` | Yes | `0.0.0.0` | Keep default |
-| `API_PORT` | Yes | `8000` | Keep default |
-| `DEBUG` | Yes | `True` | Set `False` for production |
-| `AUTH_MODE` | Yes | `api_key` | Authentication mode |
-| `CORS_ORIGINS` | Yes | `localhost:3000,5173,8080` | Adjust for your domain |
-| `REDCAP_ENABLED` | Yes | `False` | Set `True` and configure tokens for REDCap |
-| `AZURE_OPENAI_ENDPOINT` | No | (empty) | Azure OpenAI endpoint |
-| `AZURE_OPENAI_KEY` | No | (empty) | Azure OpenAI API key |
+| `POSTGRES_PASSWORD` | `secure_password_123` | PostgreSQL database password. Used only within the Docker network — not exposed externally. | Replace with a strong random password. |
+| `API_KEY` | `sk_live_046b82a8...` | Backend API authentication key. All API requests must include this in the `X-API-Key` header. | Generate a new key per environment: `python3 -c "import secrets; print('sk_live_' + secrets.token_hex(24))"` |
+| `SECRET_KEY` | `your-secret-key-here` | Used for JWT token signing and session security. | Replace with a cryptographically random string. |
+| `REDCAP_API_URL` | `https://iredcap.csmc.edu/api/` | Cedars-Sinai iREDCap API endpoint. Survey responses are synced here. | This is the Cedars-Sinai institutional REDCap instance. Other institutions will have a different URL. |
+| `REDCAP_API_TOKEN` | (empty) | REDCap API token for the prostate cancer project. Grants read/write access to the project's survey data. | **Must be configured with your own token.** |
+| `AZURE_OPENAI_ENDPOINT` | (empty) | Your Azure OpenAI service endpoint URL. Used by the AI pipeline for GPT-4o scoring and patient summary generation. | Required to enable AI pipeline. Get from your Azure OpenAI resource. |
+| `AZURE_OPENAI_KEY` | (empty) | Your Azure OpenAI API key. | Required to enable AI pipeline. Get from your Azure OpenAI resource → Keys and Endpoint. |
+| `AZURE_OPENAI_MODEL` | `gpt-4o` | The model deployment name in Azure. | Must match the deployment name in your Azure OpenAI resource. |
+
+> **Azure OpenAI keys:** You must configure your own Azure OpenAI credentials.
+>
+> **REDCap token:** You must configure your own REDCap API token.
+
+### 3d. Summary of All `.env.example` Variables
+
+| Variable | Pre-configured | Description |
+|---|---|---|
+| `POSTGRES_USER` | `prostatecancer_user` | DB username |
+| `POSTGRES_PASSWORD` | `secure_password_123` | DB password |
+| `POSTGRES_DB` | `prostatecancer_db` | DB name |
+| `API_KEY` | `sk_live_046b82a8...` | API authentication key |
+| `SECRET_KEY` | `your-secret-key-here` | JWT signing secret |
+| `API_HOST` | `0.0.0.0` | Keep default |
+| `API_PORT` | `8000` | Keep default |
+| `DEBUG` | `True` | Set `False` for production |
+| `AUTH_MODE` | `api_key` | Authentication mode |
+| `CORS_ORIGINS` | `localhost:3000,5173,8080` | Adjust for your domain |
+| `REDCAP_ENABLED` | `True` | REDCap survey sync |
+| `REDCAP_API_URL` | `https://iredcap.csmc.edu/api/` | Cedars-Sinai iREDCap endpoint |
+| `REDCAP_API_TOKEN` | (empty) | Configure with your own token |
+| `AZURE_OPENAI_ENDPOINT` | (empty) | Your Azure OpenAI endpoint |
+| `AZURE_OPENAI_KEY` | (empty) | Your Azure OpenAI API key |
+| `AZURE_OPENAI_MODEL` | `gpt-4o` | Azure model deployment name |
 
 ---
 
@@ -178,7 +169,6 @@ AI_physician_patient_communication/data/input/
   - `SID 10` = patient identifier
 - **Content:** Consultation transcript with speaker labels and utterance text
 
-> **Without transcript files:** The system will start normally, but the NLP pipeline will have no data to process. The dashboard will show no patients. You can still use the REST API to upload transcripts later via `POST /api/transcript/analyze`.
 
 ---
 
@@ -221,7 +211,7 @@ ls ../../../AI_physician_patient_communication/ai_pipeline/
 If your directory structure is different, update the volume mount paths in `docker-compose.yml` to point to the correct locations. The two critical mounts are:
 
 1. `data/input/` → patient transcript xlsx files
-2. `ai_pipeline/` → LLM scoring module (Python package)
+2. `ai_pipeline/` → LLM scoring and summary module (Python package)
 
 ---
 
