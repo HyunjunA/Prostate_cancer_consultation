@@ -316,13 +316,25 @@ const getScoreColorForValue = (
   score: number | null,
   isDarkMode: boolean,
 ): string => {
-  if (score === null) {
+  if (score === null || score <= 0) {
     return isDarkMode
       ? "bg-gradient-to-br from-slate-700 to-slate-600 text-slate-300 border border-slate-600 shadow-lg"
       : "bg-gradient-to-br from-slate-400 to-slate-500 text-white border border-slate-300 shadow-lg";
   }
-  const roundedScore = Math.round(score);
-  return getScoreColor(roundedScore, isDarkMode);
+  // Match summary box colors: High(4-5)=emerald, Standard(3)=yellow, Low(0-2)=red
+  if (score >= 4) {
+    return isDarkMode
+      ? "bg-gradient-to-br from-emerald-600 to-emerald-700 text-emerald-100 border border-emerald-500 shadow-lg"
+      : "bg-gradient-to-br from-emerald-500 to-emerald-600 text-white border border-emerald-400 shadow-lg";
+  }
+  if (score >= 3) {
+    return isDarkMode
+      ? "bg-gradient-to-br from-yellow-600 to-yellow-700 text-yellow-100 border border-yellow-500 shadow-lg"
+      : "bg-gradient-to-br from-yellow-500 to-yellow-600 text-white border border-yellow-400 shadow-lg";
+  }
+  return isDarkMode
+    ? "bg-gradient-to-br from-red-600 to-red-700 text-red-100 border border-red-500 shadow-lg"
+    : "bg-gradient-to-br from-red-500 to-red-600 text-white border border-red-400 shadow-lg";
 };
 
 const getImprovementSuggestions = (
@@ -1525,14 +1537,20 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
                 : "bg-gradient-to-br from-white to-slate-50 divide-slate-200",
             )}
           >
-            {filteredPatients.map((patient) => (
+            {filteredPatients.map((patient) => {
+              const hasAiScore = patient.overallScore != null && patient.overallScore > 0;
+              return (
               <tr
                 key={patient.id}
                 className={cx(
                   "transition-colors duration-200",
-                  isDarkMode
-                    ? "hover:bg-slate-700/50"
-                    : "hover:bg-slate-100/50",
+                  hasAiScore
+                    ? isDarkMode
+                      ? "hover:bg-slate-700/50 cursor-pointer"
+                      : "hover:bg-slate-100/50 cursor-pointer"
+                    : isDarkMode
+                      ? "opacity-50 cursor-not-allowed"
+                      : "opacity-40 cursor-not-allowed",
                 )}
               >
                 <td className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6" style={{ width: "30%" }}>
@@ -1563,52 +1581,65 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
                         getScoreColorForValue(patient.overallScore, isDarkMode),
                       )}
                     >
-                      {patient.overallScore > 0
+                      {hasAiScore
                         ? patient.overallScore.toFixed(1)
-                        : "—"}
+                        : "N/A"}
                     </span>
                     <span
                       className={cx(
                         "text-xs font-medium px-2 py-1 rounded-full",
-                        patient.overallScore >= 4
+                        !hasAiScore
                           ? isDarkMode
-                            ? "bg-emerald-900/50 text-emerald-300"
-                            : "bg-emerald-100 text-emerald-700"
-                          : patient.overallScore >= 3
+                            ? "bg-slate-700 text-slate-400"
+                            : "bg-slate-200 text-slate-500"
+                          : patient.overallScore >= 4
                             ? isDarkMode
-                              ? "bg-yellow-900/50 text-yellow-300"
-                              : "bg-yellow-100 text-yellow-700"
-                            : isDarkMode
-                              ? "bg-red-900/50 text-red-300"
-                              : "bg-red-100 text-red-700",
+                              ? "bg-emerald-900/50 text-emerald-300"
+                              : "bg-emerald-100 text-emerald-700"
+                            : patient.overallScore >= 3
+                              ? isDarkMode
+                                ? "bg-yellow-900/50 text-yellow-300"
+                                : "bg-yellow-100 text-yellow-700"
+                              : isDarkMode
+                                ? "bg-red-900/50 text-red-300"
+                                : "bg-red-100 text-red-700",
                       )}
                     >
-                      {patient.overallScore >= 4
-                        ? "High"
-                        : patient.overallScore >= 3
-                          ? "Standard"
-                          : "Needs Improvement"}
+                      {!hasAiScore
+                        ? "AI Score Not Available"
+                        : patient.overallScore >= 4
+                          ? "High"
+                          : patient.overallScore >= 3
+                            ? "Standard"
+                            : "Needs Improvement"}
                     </span>
                   </div>
                 </td>
                 <td className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6 text-center" style={{ width: "30%" }}>
                   <button
+                    disabled={!hasAiScore}
                     onClick={() => {
+                      if (!hasAiScore) return;
                       setSelectedPatient(patient);
                       setCurrentView("grid");
                     }}
                     className={cx(
                       "px-4 py-2 sm:px-6 sm:py-3 rounded-lg text-sm font-semibold transition-all duration-200",
-                      isDarkMode
-                        ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white hover:from-cyan-500 hover:to-blue-500 shadow-lg"
-                        : "bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-600 hover:to-blue-600 shadow-lg",
+                      !hasAiScore
+                        ? isDarkMode
+                          ? "bg-slate-700 text-slate-500 cursor-not-allowed"
+                          : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                        : isDarkMode
+                          ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white hover:from-cyan-500 hover:to-blue-500 shadow-lg"
+                          : "bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:from-cyan-600 hover:to-blue-600 shadow-lg",
                     )}
                   >
-                    View Report
+                    {hasAiScore ? "View Report" : "Not Available"}
                   </button>
                 </td>
               </tr>
-            ))}
+              );
+            })}
             {filteredPatients.length === 0 && (
               <tr>
                 <td className="px-8 py-10 text-center text-sm" colSpan={3}>
@@ -1643,18 +1674,20 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
   setCurrentView,
   trajectoryData,
 }) => {
-  const highCount = patients.filter((p) => p.overallScore >= 4).length;
-  const stdCount = patients.filter(
+  // Only count patients with AI scores (GPT-4o pipeline completed)
+  const scoredPatients = patients.filter((p) => p.overallScore != null && p.overallScore > 0);
+  const highCount = scoredPatients.filter((p) => p.overallScore >= 4).length;
+  const stdCount = scoredPatients.filter(
     (p) => p.overallScore >= 3 && p.overallScore < 4,
   ).length;
-  const lowCount = patients.filter((p) => p.overallScore < 3).length;
+  const lowCount = scoredPatients.filter((p) => p.overallScore < 3).length;
 
-  // Overall average score across all patients
+  // Overall average score across scored patients only
   const overallAvg = useMemo(() => {
-    if (patients.length === 0) return 0;
-    const sum = patients.reduce((acc, p) => acc + p.overallScore, 0);
-    return sum / patients.length;
-  }, [patients]);
+    if (scoredPatients.length === 0) return 0;
+    const sum = scoredPatients.reduce((acc, p) => acc + p.overallScore, 0);
+    return sum / scoredPatients.length;
+  }, [scoredPatients]);
 
   const summaryItems: {
     label: string;
@@ -1667,7 +1700,7 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
     {
       label: "High (4–5)",
       count: highCount,
-      total: patients.length,
+      total: scoredPatients.length,
       band: "HIGH",
       dotColor: isDarkMode ? "bg-emerald-400" : "bg-emerald-500",
       textColor: isDarkMode ? "text-emerald-400" : "text-emerald-600",
@@ -1675,7 +1708,7 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
     {
       label: "Standard (3)",
       count: stdCount,
-      total: patients.length,
+      total: scoredPatients.length,
       band: "STD",
       dotColor: isDarkMode ? "bg-yellow-400" : "bg-yellow-500",
       textColor: isDarkMode ? "text-yellow-400" : "text-yellow-600",
@@ -1683,7 +1716,7 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
     {
       label: "Low (0–2)",
       count: lowCount,
-      total: patients.length,
+      total: scoredPatients.length,
       band: "LOW",
       dotColor: isDarkMode ? "bg-red-400" : "bg-red-500",
       textColor: isDarkMode ? "text-red-400" : "text-red-600",
@@ -2060,16 +2093,19 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                 isDarkMode ? "divide-slate-700/50" : "divide-slate-100",
               )}
             >
-              {filteredPatients.map((patient) => (
+              {filteredPatients.map((patient) => {
+                const hasScore = patient.overallScore != null && patient.overallScore > 0;
+                return (
                 <tr
                   key={patient.id}
                   className={cx(
-                    "transition-colors cursor-pointer",
-                    isDarkMode
-                      ? "hover:bg-slate-700/30"
-                      : "hover:bg-slate-50",
+                    "transition-colors",
+                    hasScore
+                      ? cx("cursor-pointer", isDarkMode ? "hover:bg-slate-700/30" : "hover:bg-slate-50")
+                      : cx("cursor-not-allowed", isDarkMode ? "opacity-50" : "opacity-40"),
                   )}
                   onClick={() => {
+                    if (!hasScore) return;
                     setSelectedPatient(patient);
                     setCurrentView("grid");
                   }}
@@ -2120,33 +2156,42 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                                 : "bg-red-50 text-red-700",
                         )}
                       >
-                        {patient.overallScore >= 4
-                          ? "High"
-                          : patient.overallScore >= 3
-                            ? "Standard"
-                            : "Needs Improvement"}
+                        {!hasScore
+                          ? "AI Score Not Available"
+                          : patient.overallScore >= 4
+                            ? "High"
+                            : patient.overallScore >= 3
+                              ? "Standard"
+                              : "Needs Improvement"}
                       </span>
                     </div>
                   </td>
                   <td className="px-6 py-3.5 text-center" style={{ width: "30%" }}>
                     <button
+                      disabled={!hasScore}
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (!hasScore) return;
                         setSelectedPatient(patient);
                         setCurrentView("grid");
                       }}
                       className={cx(
                         "px-4 py-2 rounded-lg text-xs font-semibold transition-colors",
-                        isDarkMode
-                          ? "bg-cyan-600 text-white hover:bg-cyan-500"
-                          : "bg-cyan-500 text-white hover:bg-cyan-600",
+                        !hasScore
+                          ? isDarkMode
+                            ? "bg-slate-700 text-slate-500 cursor-not-allowed"
+                            : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                          : isDarkMode
+                            ? "bg-cyan-600 text-white hover:bg-cyan-500"
+                            : "bg-cyan-500 text-white hover:bg-cyan-600",
                       )}
                     >
-                      View Report
+                      {hasScore ? "View Report" : "N/A"}
                     </button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
               {filteredPatients.length === 0 && (
                 <tr>
                   <td
@@ -3470,7 +3515,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
 
   // Flush events to backend
   useEffect(() => {
-    const flushEvents = () => {
+    const flushEvents = (useKeepalive: boolean = false) => {
       const events = physicianTrackingRef.current.getEvents();
       if (events.length === 0) return;
       const session = getOrCreateSession();
@@ -3482,7 +3527,8 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
         selectedSpeaker || "unknown",
         session.deviceType,
         events,
-        true,
+        useKeepalive,
+        "",
       );
       physicianTrackingRef.current.clear();
     };
@@ -3496,21 +3542,19 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         recordTimeSpent();
-        flushEvents();
+        flushEvents(true);
         pageLoadTimeRef.current = Date.now();
       }
     };
 
     const handleBeforeUnload = () => {
       recordTimeSpent();
-      flushEvents();
+      flushEvents(true);
     };
 
-    // page_enter on mount
     trackEvent("page_enter", "physician_dashboard");
 
-    // Periodic flush every 30 seconds for real-time dashboard visibility
-    const periodicFlushTimer = setInterval(flushEvents, 30_000);
+    const periodicFlushTimer = setInterval(() => flushEvents(false), 10_000);
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("beforeunload", handleBeforeUnload);
@@ -3518,7 +3562,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
     return () => {
       clearInterval(periodicFlushTimer);
       recordTimeSpent();
-      flushEvents();
+      flushEvents(true);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
@@ -3826,7 +3870,8 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   // ═══════════════════════════════════════════════════════════
   const filteredPatients = useMemo(() => {
     const q = search.trim().toLowerCase();
-    let arr = patients;
+    // Only show patients with AI scores (GPT-4o pipeline completed)
+    let arr = patients.filter((p) => p.overallScore != null && p.overallScore > 0);
     if (scoreBand === "HIGH") arr = arr.filter((p) => p.overallScore >= 4);
     if (scoreBand === "STD")
       arr = arr.filter((p) => p.overallScore >= 3 && p.overallScore < 4);
