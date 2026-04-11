@@ -51,7 +51,7 @@ mkdir prostate-cancer-deploy && cd prostate-cancer-deploy
 # Main application (Backend + Webapp + NLP classifiers via LFS)
 git clone https://github.com/HyunjunA/Prostate_cancer_consultation.git
 
-# Guille's AI pipeline + patient transcript data
+# AI pipeline + patient transcript data
 git clone -b dev/jun https://github.com/jifa83/AI_physician_patient_communication.git
 ```
 
@@ -84,7 +84,7 @@ prostate-cancer-deploy/
 │   └── run_all.sh                         # Deployment + test script
 │
 └── AI_physician_patient_communication/    # Sibling repo (required)
-    ├── ai_pipeline/                       # Guille's LLM scoring module
+    ├── ai_pipeline/                       # LLM scoring module
     └── data/
         └── input/                         # Patient transcript xlsx files
 ```
@@ -115,12 +115,12 @@ Generate random keys:
 python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-### 3c. Edit `.env` — Optional: Azure OpenAI (Guille's AI Pipeline)
+### 3c. Edit `.env` — Optional: Azure OpenAI (AI Pipeline)
 
-To enable Guille's AI pipeline (GPT-4o scoring + patient-facing summary generation), add these lines to `.env`:
+To enable AI pipeline (GPT-4o scoring + patient-facing summary generation), add these lines to `.env`:
 
 ```env
-# --- Azure OpenAI (Guille's AI Pipeline) ---
+# --- Azure OpenAI (AI Pipeline) ---
 AZURE_OPENAI_ENDPOINT=https://your-instance.openai.azure.com/
 AZURE_OPENAI_KEY=your-azure-openai-key
 AZURE_OPENAI_API_VERSION=2024-08-01-preview
@@ -196,7 +196,7 @@ The `docker-compose.yml` (at `app/Backend/docker-compose.yml`) mounts two direct
 # Patient transcript data
 - ../../../AI_physician_patient_communication/data/input:/app/data/transcripts:ro
 
-# Guille's AI pipeline module
+# AI pipeline module
 - ../../../AI_physician_patient_communication/ai_pipeline:/app/ai_pipeline:ro
 ```
 
@@ -227,7 +227,7 @@ ls ../../../AI_physician_patient_communication/ai_pipeline/
 If your directory structure is different, update the volume mount paths in `docker-compose.yml` to point to the correct locations. The two critical mounts are:
 
 1. `data/input/` → patient transcript xlsx files
-2. `ai_pipeline/` → Guille's LLM scoring module (Python package)
+2. `ai_pipeline/` → LLM scoring module (Python package)
 
 ---
 
@@ -250,7 +250,7 @@ chmod +x run_all.sh
 | 5 | Run 1000-request stress test | ~1-2 min |
 | 6 | Print final container status | instant |
 
-> *Step 3 may take up to 10 minutes if Guille's AI pipeline is enabled — it processes all patient transcripts through GPT-4o on first startup (5 domains × ~2 min per patient).
+> *Step 3 may take up to 10 minutes if AI pipeline is enabled — it processes all patient transcripts through GPT-4o on first startup (5 domains × ~2 min per patient).
 
 ### Containers started
 
@@ -315,7 +315,7 @@ git lfs pull
 
 ### Backend stuck at "health: starting"
 
-**Cause:** Guille's AI pipeline processing transcripts via GPT-4o (normal on first startup).
+**Cause:** AI pipeline processing transcripts via GPT-4o (normal on first startup).
 **Check:** `docker logs prostatecancer-backend --tail 20`
 - If you see Azure OpenAI HTTP requests → it's processing, just wait
 - If you see connection errors → check `AZURE_OPENAI_ENDPOINT` and `AZURE_OPENAI_KEY` in `.env`
