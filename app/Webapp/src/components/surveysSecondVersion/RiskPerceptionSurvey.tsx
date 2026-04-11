@@ -167,9 +167,11 @@ export const RiskQuestion: React.FC<RiskQuestionProps> = ({
     onChange(newValue);
     if (onTrackEvent && trackingName) {
       onTrackEvent({
-        eventType: "risk_perception_answer",
+        eventType: "survey_answer",
         elementId: trackingName,
         metadata: {
+          survey: "risk_perception",
+          questionId: `q${questionNumber}`,
           questionNumber,
           answer: newValue,
           answerLabel: options.find((o) => o.value === newValue)?.label,
@@ -295,12 +297,14 @@ export const RiskSliderQuestion: React.FC<RiskSliderQuestionProps> = ({
     onChange(newValue);
     if (onTrackEvent && trackingName) {
       onTrackEvent({
-        eventType: "risk_slider_answer",
+        eventType: "survey_answer",
         elementId: trackingName,
         metadata: {
+          survey: "risk_perception",
+          questionId: `q${questionNumber}`,
           questionNumber,
-          value: newValue,
-          category: sliderToCategory(newValue), // Also track the category
+          answer: newValue,
+          category: sliderToCategory(newValue),
         },
       });
     }

@@ -388,9 +388,9 @@ export const YesNoQuestion: React.FC<YesNoQuestionProps> = ({
   const handleChange = (answer: YesNoAnswer) => {
     onChange(answer);
     onTrackEvent?.({
-      eventType: "sdm_answer",
+      eventType: "survey_answer",
       elementId: trackingName,
-      metadata: { questionNumber, answer, questionType: "yes_no" },
+      metadata: { survey: "sdm", questionId: `q${questionNumber}`, questionNumber, answer, questionType: "yes_no" },
     });
   };
 
@@ -504,9 +504,9 @@ export const ScaleQuestion: React.FC<ScaleQuestionProps> = ({
   const handleChange = (answer: ScaleAnswer) => {
     onChange(answer);
     onTrackEvent?.({
-      eventType: "sdm_answer",
+      eventType: "survey_answer",
       elementId: trackingName,
-      metadata: { questionNumber, answer, questionType: "scale" },
+      metadata: { survey: "sdm", questionId: `q${questionNumber}`, questionNumber, answer, questionType: "scale" },
     });
   };
 
