@@ -1,0 +1,15 @@
+{
+  "title": "Languages Distribution",
+  "data": [
+    {
+      "category": "English",
+      "count": 24,
+      "percentage": 96.0
+    },
+    {
+      "category": "Armenian",
+      "count": 1,
+      "percentage": 4.0
+    }
+  ]
+}

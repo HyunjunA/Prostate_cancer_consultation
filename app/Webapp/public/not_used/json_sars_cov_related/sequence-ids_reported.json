@@ -1,0 +1,14 @@
+{
+  "Sequence-Sequence.IDs.reported": [
+    {
+      "category": "Yes",
+      "count": 182,
+      "percentage": 84.3
+    },
+    {
+      "category": "No",
+      "count": 34,
+      "percentage": 15.7
+    }
+  ]
+}

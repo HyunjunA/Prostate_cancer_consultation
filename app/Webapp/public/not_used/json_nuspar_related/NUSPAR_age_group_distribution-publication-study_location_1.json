@@ -1,0 +1,404 @@
+{
+  "Publication-Study.location.1": [
+    {
+      "category": "United States",
+      "count": 23,
+      "percentage": 10.8
+    },
+    {
+      "category": " Italy",
+      "count": 18,
+      "percentage": 8.5
+    },
+    {
+      "category": "Brazil",
+      "count": 17,
+      "percentage": 8.0
+    },
+    {
+      "category": " Bangladesh",
+      "count": 12,
+      "percentage": 5.7
+    },
+    {
+      "category": "India",
+      "count": 10,
+      "percentage": 4.7
+    },
+    {
+      "category": " Japan",
+      "count": 7,
+      "percentage": 3.3
+    },
+    {
+      "category": " China",
+      "count": 6,
+      "percentage": 2.8
+    },
+    {
+      "category": " France",
+      "count": 6,
+      "percentage": 2.8
+    },
+    {
+      "category": " Chile",
+      "count": 5,
+      "percentage": 2.4
+    },
+    {
+      "category": " Germany",
+      "count": 4,
+      "percentage": 1.9
+    },
+    {
+      "category": " Spain",
+      "count": 4,
+      "percentage": 1.9
+    },
+    {
+      "category": " Egypt",
+      "count": 3,
+      "percentage": 1.4
+    },
+    {
+      "category": " Kenya",
+      "count": 3,
+      "percentage": 1.4
+    },
+    {
+      "category": " Uzbekistan",
+      "count": 3,
+      "percentage": 1.4
+    },
+    {
+      "category": " Taiwan",
+      "count": 3,
+      "percentage": 1.4
+    },
+    {
+      "category": " Indonesia",
+      "count": 3,
+      "percentage": 1.4
+    },
+    {
+      "category": "UK",
+      "count": 3,
+      "percentage": 1.4
+    },
+    {
+      "category": " Russia",
+      "count": 3,
+      "percentage": 1.4
+    },
+    {
+      "category": " Iran",
+      "count": 3,
+      "percentage": 1.4
+    },
+    {
+      "category": " Mexico",
+      "count": 3,
+      "percentage": 1.4
+    },
+    {
+      "category": " Hong Kong",
+      "count": 2,
+      "percentage": 0.9
+    },
+    {
+      "category": " Saudi Arabia",
+      "count": 2,
+      "percentage": 0.9
+    },
+    {
+      "category": " Thailand",
+      "count": 2,
+      "percentage": 0.9
+    },
+    {
+      "category": " The Netherlands",
+      "count": 2,
+      "percentage": 0.9
+    },
+    {
+      "category": " Botswana",
+      "count": 2,
+      "percentage": 0.9
+    },
+    {
+      "category": " Palestine",
+      "count": 2,
+      "percentage": 0.9
+    },
+    {
+      "category": " Iraq",
+      "count": 2,
+      "percentage": 0.9
+    },
+    {
+      "category": " Australia",
+      "count": 2,
+      "percentage": 0.9
+    },
+    {
+      "category": " Ethiopia",
+      "count": 2,
+      "percentage": 0.9
+    },
+    {
+      "category": " Qatar",
+      "count": 2,
+      "percentage": 0.9
+    },
+    {
+      "category": " Canada",
+      "count": 2,
+      "percentage": 0.9
+    },
+    {
+      "category": " South Korea",
+      "count": 2,
+      "percentage": 0.9
+    },
+    {
+      "category": " Pakistan",
+      "count": 2,
+      "percentage": 0.9
+    },
+    {
+      "category": " Cameroon",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Tunisian",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Turkey",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Estonia and Germany ",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Singapore",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Serbia",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Austria",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": "  South Afric",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " South Africa",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Ukraine",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Senegal ",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Bulgaria",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Mauritania, Africa",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " portugal",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Columbia",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Jordan",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " iraq",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Oman",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Ghana",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Uruguay",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Unknown ",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Taiwan ",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Dubai",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Luxembourg",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Commonwealth of the Northern Mariana Islands",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": "N/R",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " The Gambia",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Peru",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Malawi",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Nigeria",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Dominican Republic",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Myanmar",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Tunisia ",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Argentina",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": "  Ethiopia",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Burkina Faso",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Bosnia and Herzegovina",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Switzerland ",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Greece",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Zambia",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Mali",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " New Zealand",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Switzerland",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Netherlands",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Nepal",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Norway",
+      "count": 1,
+      "percentage": 0.5
+    },
+    {
+      "category": " Morocco",
+      "count": 1,
+      "percentage": 0.5
+    }
+  ]
+}

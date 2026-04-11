@@ -1,0 +1,15 @@
+{
+  "title": "Legal Sex Distribution",
+  "data": [
+    {
+      "category": "Male",
+      "count": 17,
+      "percentage": 68.0
+    },
+    {
+      "category": "Female",
+      "count": 8,
+      "percentage": 32.0
+    }
+  ]
+}

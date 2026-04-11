@@ -1,0 +1,89 @@
+{
+  "Sequence-Repository": [
+    {
+      "category": "GISAID",
+      "count": 164,
+      "percentage": 53.8
+    },
+    {
+      "category": "GenBank",
+      "count": 55,
+      "percentage": 18.0
+    },
+    {
+      "category": "Sequence read archive (SRA)",
+      "count": 29,
+      "percentage": 9.5
+    },
+    {
+      "category": "BioProject",
+      "count": 23,
+      "percentage": 7.5
+    },
+    {
+      "category": "BioSample",
+      "count": 11,
+      "percentage": 3.6
+    },
+    {
+      "category": "ENA",
+      "count": 8,
+      "percentage": 2.6
+    },
+    {
+      "category": "Not Reported",
+      "count": 3,
+      "percentage": 1.0
+    },
+    {
+      "category": "Supplemental file",
+      "count": 2,
+      "percentage": 0.7
+    },
+    {
+      "category": "NCBI (unspecified)",
+      "count": 2,
+      "percentage": 0.7
+    },
+    {
+      "category": "the fasta files is part of supplementary material",
+      "count": 1,
+      "percentage": 0.3
+    },
+    {
+      "category": "Supplemental",
+      "count": 1,
+      "percentage": 0.3
+    },
+    {
+      "category": "OSF",
+      "count": 1,
+      "percentage": 0.3
+    },
+    {
+      "category": "figshare",
+      "count": 1,
+      "percentage": 0.3
+    },
+    {
+      "category": "Infectious Disease Clinical Research Program - contactus@idcrp.org",
+      "count": 1,
+      "percentage": 0.3
+    },
+    {
+      "category": "Indian biological data centre (IBDC)",
+      "count": 1,
+      "percentage": 0.3
+    },
+    {
+      "category": "National Genomics Data Center",
+      "count": 1,
+      "percentage": 0.3
+    },
+    {
+      "category": "popgen library",
+      "count": 1,
+      "percentage": 0.3
+    }
+  ]
+}

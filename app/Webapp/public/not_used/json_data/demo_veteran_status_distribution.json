@@ -1,0 +1,20 @@
+{
+  "title": "Veteran Status Distribution",
+  "data": [
+    {
+      "category": "Never Served (Not a Veteran)",
+      "count": 23,
+      "percentage": 92.0
+    },
+    {
+      "category": "Declined to state",
+      "count": 1,
+      "percentage": 4.0
+    },
+    {
+      "category": "Unknown",
+      "count": 1,
+      "percentage": 4.0
+    }
+  ]
+}

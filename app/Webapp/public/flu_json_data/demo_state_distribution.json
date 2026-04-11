@@ -1,0 +1,20 @@
+{
+  "title": "State Distribution",
+  "data": [
+    {
+      "category": "CALIFORNIA",
+      "count": 21,
+      "percentage": 84.0
+    },
+    {
+      "category": "HAWAII",
+      "count": 3,
+      "percentage": 12.0
+    },
+    {
+      "category": "NORTH CAROLINA",
+      "count": 1,
+      "percentage": 4.0
+    }
+  ]
+}

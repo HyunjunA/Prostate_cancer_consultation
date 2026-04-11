@@ -1,0 +1,46 @@
+[
+  {
+    "race": "Asian",
+    "Catholic": 0,
+    "Christian": 0,
+    "Declines to State": 0,
+    "Episcopalian": 0,
+    "Greek Orthodox": 0,
+    "Jewish": 0,
+    "Mormon, Church of Jesus Christ of Latter Day Saints": 0,
+    "No Religion": 2
+  },
+  {
+    "race": "Black or African American",
+    "Catholic": 0,
+    "Christian": 2,
+    "Declines to State": 0,
+    "Episcopalian": 0,
+    "Greek Orthodox": 0,
+    "Jewish": 0,
+    "Mormon, Church of Jesus Christ of Latter Day Saints": 0,
+    "No Religion": 3
+  },
+  {
+    "race": "Other",
+    "Catholic": 0,
+    "Christian": 1,
+    "Declines to State": 0,
+    "Episcopalian": 0,
+    "Greek Orthodox": 0,
+    "Jewish": 0,
+    "Mormon, Church of Jesus Christ of Latter Day Saints": 0,
+    "No Religion": 2
+  },
+  {
+    "race": "White",
+    "Catholic": 2,
+    "Christian": 0,
+    "Declines to State": 2,
+    "Episcopalian": 1,
+    "Greek Orthodox": 1,
+    "Jewish": 2,
+    "Mormon, Church of Jesus Christ of Latter Day Saints": 1,
+    "No Religion": 6
+  }
+]
