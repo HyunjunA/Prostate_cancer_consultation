@@ -765,6 +765,7 @@ interface TopicCardProps {
   topicIndex: number;
   aiSummary: string;
   extractedSentences: string[];
+  aiSourceSentence?: string;  // original sentence used to generate AI Summary
   rating: number;
   onRatingChange: (rating: number) => void;
   isExpanded: boolean;
@@ -781,6 +782,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
   topicIndex,
   aiSummary,
   extractedSentences,
+  aiSourceSentence,
   rating,
   onRatingChange,
   isExpanded,
@@ -954,65 +956,45 @@ const TopicCard: React.FC<TopicCardProps> = ({
                     isDark ? "text-slate-500" : "text-gray-400",
                   )}
                 >
-                  Excerpts from your consultation
+                  From your consultation
                 </h4>
-                {extractedSentences && extractedSentences.length > 0 ? (
-                  extractedSentences.map((item, idx) => (
+                {aiSourceSentence ? (
+                  <div
+                    className={cx(
+                      "p-4 rounded-xl border-l-4 transition-all duration-200",
+                      isDark
+                        ? "bg-indigo-900/20 border-l-violet-500 border-y border-r border-violet-700/30"
+                        : "bg-violet-50/50 border-l-violet-500 border-y border-r border-violet-200",
+                    )}
+                  >
+                    <p
+                      className={cx(
+                        "text-sm leading-relaxed italic",
+                        isDark ? "text-slate-300" : "text-gray-600",
+                      )}
+                    >
+                      &ldquo;{aiSourceSentence}&rdquo;
+                    </p>
+                  </div>
+                ) : extractedSentences && extractedSentences.length > 0 ? (
+                  extractedSentences.slice(0, 3).map((item, idx) => (
                     <div
                       key={idx}
                       className={cx(
                         "p-4 rounded-xl border-l-4 transition-all duration-200",
-                        item.is_in_summary
-                          ? isDark
-                            ? "bg-amber-900/20 border-l-amber-500 border-y border-r border-amber-700/30"
-                            : "bg-amber-50 border-l-amber-500 border-y border-r border-amber-200"
-                          : isDark
-                            ? "bg-slate-800/50 border-l-indigo-500 border-y border-r border-slate-700/50"
-                            : "bg-white border-l-indigo-500 border-y border-r border-gray-100 shadow-sm",
+                        isDark
+                          ? "bg-slate-800/50 border-l-indigo-500 border-y border-r border-slate-700/50"
+                          : "bg-white border-l-indigo-500 border-y border-r border-gray-100 shadow-sm",
                       )}
                     >
-                      <div className="flex items-start gap-3">
-                        <div
-                          className={cx(
-                            "flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold",
-                            item.is_in_summary
-                              ? isDark
-                                ? "bg-amber-500/20 text-amber-300"
-                                : "bg-amber-100 text-amber-700"
-                              : isDark
-                                ? "bg-indigo-500/20 text-indigo-300"
-                                : "bg-indigo-100 text-indigo-600",
-                          )}
-                        >
-                          {idx + 1}
-                        </div>
-                        <div className="flex-1">
-                          <p
-                            className={cx(
-                              "text-sm leading-relaxed italic",
-                              isDark ? "text-slate-300" : "text-gray-600",
-                            )}
-                          >
-                            &ldquo;{item.sentence}&rdquo;
-                          </p>
-                          <div className="flex items-center gap-3 mt-2">
-                            {item.score !== null && (
-                              <span className={cx("text-xs font-medium px-2 py-0.5 rounded",
-                                isDark ? "bg-slate-700 text-slate-300" : "bg-gray-100 text-gray-600"
-                              )}>
-                                Score: {item.score}
-                              </span>
-                            )}
-                            {item.is_in_summary && (
-                              <span className={cx("text-xs font-medium px-2 py-0.5 rounded",
-                                isDark ? "bg-amber-500/20 text-amber-300" : "bg-amber-100 text-amber-700"
-                              )}>
-                                Used in Summary
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                      <p
+                        className={cx(
+                          "text-sm leading-relaxed italic",
+                          isDark ? "text-slate-300" : "text-gray-600",
+                        )}
+                      >
+                        &ldquo;{item.sentence}&rdquo;
+                      </p>
                     </div>
                   ))
                 ) : (
@@ -1081,7 +1063,7 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
   const patientId = usePatientId((state) => state.patientId);
   const fileId = useFileId((state) => state.fileId);
 
-  const { fetchSummaryDetail, fetchSentencesByClass, updateSingleClassScore } = usePatientData();
+  const { fetchSummaryDetail, fetchAISummary, fetchSentencesByClass, updateSingleClassScore } = usePatientData();
 
   usePassiveTracking({
     proximity: { threshold: 150, debounceMs: 100 },
@@ -1119,6 +1101,7 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
   }, []);
 
   // State Management
+  const [aiSummaryData, setAiSummaryData] = useState<any | null>(null);
   const [summaryData, setSummaryData] = useState<SummaryDetailResponse | null>(
     null,
   );
@@ -1155,11 +1138,18 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
         setApiLoading(true);
         setApiError(null);
 
-        // Fetch summary and evidence sentences in parallel
-        const [result, sentencesResult] = await Promise.all([
+        // Fetch summary, AI summary, and evidence sentences in parallel
+        const [result, aiResult, sentencesResult] = await Promise.all([
           fetchSummaryDetail(currentFile, currentSpeaker),
+          fetchAISummary(currentFile),
           fetchSentencesByClass(currentFile),
         ]);
+
+        // Store AI summary if available (GPT-4o reformat sentences)
+        if (aiResult?.source === "ai_pipeline_gpt4o" && aiResult.domains?.length > 0) {
+          setAiSummaryData(aiResult);
+          console.log("[V35] AI Summary loaded:", aiResult.total_domains, "domains");
+        }
 
         if (result) {
           setSummaryData(result);
@@ -1209,6 +1199,35 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
     loadSummaryData();
   }, [currentFile, currentSpeaker, fileId, patientId]);
 
+  // Build AI summary + source sentence lookups by topic name
+  const { aiSummaryByTopic, aiSourceByTopic } = useMemo(() => {
+    const summaryMap: Record<string, string> = {};
+    const sourceMap: Record<string, string> = {};
+    if (aiSummaryData?.domains) {
+      const domainToTopic: Record<string, string> = {
+        "Cancer Prognosis": "Cancer Prognosis",
+        "Life Expectancy": "Life Expectancy",
+        "Erectile Dysfunction": "Erectile Dysfunction",
+        "Urinary Incontinence": "Urinary Incontinence",
+        "Irritative Urinary Symptoms": "Irritative Urinary Symptoms",
+      };
+      for (const d of aiSummaryData.domains) {
+        const topic = domainToTopic[d.domain_name] || d.domain_name;
+        // reformat_sentence: concat for side-effect domains with multiple treatments
+        if (summaryMap[topic] && d.reformat_sentence) {
+          summaryMap[topic] += "\n\n" + d.reformat_sentence;
+        } else if (d.reformat_sentence) {
+          summaryMap[topic] = d.reformat_sentence;
+        }
+        // source_context: surrounding conversation context used for AI scoring
+        if (d.source_context && !sourceMap[topic]) {
+          sourceMap[topic] = d.source_context;
+        }
+      }
+    }
+    return { aiSummaryByTopic: summaryMap, aiSourceByTopic: sourceMap };
+  }, [aiSummaryData]);
+
   // Derived Data
   const consultationTopics = useMemo(() => {
     const topics: Record<
@@ -1220,8 +1239,10 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
       summaryData.summary.classes.forEach((cls: ClassSummary) => {
         const topicName = CLASS_TO_TOPIC_MAP[cls.class_name];
         if (topicName) {
+          // Use GPT-4o AI summary if available, fallback to existing rewriter summary
+          const aiText = aiSummaryByTopic[topicName];
           topics[topicName] = {
-            aiSummary: cls.summary || "Summary not available.",
+            aiSummary: aiText || cls.summary || "Summary not available.",
             extractedSentences: evidenceSentences[topicName] || [],
           };
         }
@@ -1230,15 +1251,16 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
 
     TOPIC_ORDER.forEach((topic) => {
       if (!topics[topic]) {
+        const aiText = aiSummaryByTopic[topic];
         topics[topic] = {
-          aiSummary: "Summary not available for this topic.",
+          aiSummary: aiText || "Summary not available for this topic.",
           extractedSentences: evidenceSentences[topic] || [],
         };
       }
     });
 
     return topics;
-  }, [summaryData, evidenceSentences]);
+  }, [summaryData, evidenceSentences, aiSummaryByTopic]);
 
   // Event Handlers
 
@@ -1339,7 +1361,7 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
 
   // [V35] Send tracking events to backend on page unload / visibility change
   useEffect(() => {
-    const flushEvents = () => {
+    const flushEvents = (useKeepalive: boolean = false) => {
       const events = trackingManager.getEvents();
       if (events.length === 0) return;
 
@@ -1351,14 +1373,15 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
         currentSpeaker,
         session.deviceType,
         events,
-        true, // keepalive for unload
+        useKeepalive,
+        "first",
       );
       trackingManager.clear();
     };
 
     const recordTimeSpent = () => {
       const durationMs = Date.now() - pageLoadTimeRef.current;
-      if (durationMs < 1000) return; // ignore < 1s visits
+      if (durationMs < 1000) return;
       trackingManager.recordEvent({
         eventType: "dwell_time",
         elementId: "page_total_time",
@@ -1370,19 +1393,18 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         recordTimeSpent();
-        flushEvents();
-        // Reset timer for when user returns
+        flushEvents(true); // keepalive for background tab
         pageLoadTimeRef.current = Date.now();
       }
     };
 
     const handleBeforeUnload = () => {
       recordTimeSpent();
-      flushEvents();
+      flushEvents(true); // keepalive for page unload
     };
 
-    // Periodic flush every 30 seconds for real-time dashboard visibility
-    const periodicFlushTimer = setInterval(flushEvents, 30_000);
+    // Periodic flush every 10 seconds (keepalive=false for normal operation)
+    const periodicFlushTimer = setInterval(() => flushEvents(false), 10_000);
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("beforeunload", handleBeforeUnload);
@@ -1390,7 +1412,7 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
     return () => {
       clearInterval(periodicFlushTimer);
       recordTimeSpent();
-      flushEvents(); // flush on unmount
+      flushEvents(true); // keepalive on unmount
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
@@ -1654,6 +1676,7 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
                 topicIndex={index}
                 aiSummary={topicData?.aiSummary || "Summary not available."}
                 extractedSentences={topicData?.extractedSentences || []}
+                aiSourceSentence={aiSourceByTopic[topic]}
                 rating={ratings[topic] || 0}
                 onRatingChange={(rating) => handleRatingChange(topic, rating)}
                 isExpanded={expandedTopics[topic] || false}
