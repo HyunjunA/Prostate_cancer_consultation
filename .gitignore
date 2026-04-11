@@ -30,6 +30,7 @@ data/
 
 # Backend runtime data
 app/Backend/logs/
+logs/
 app/Backend/uploads/
 app/Backend/data/
 Processed_Data_DB.csv
@@ -41,3 +42,10 @@ archive/
 *_KR.md
 *_kr.txt
 *_kr_summary.txt
+
+# NLP classifiers — only Docker image needed for deployment
+nlp-classifiers/2026-02-17_michael_nlp_pilot_sid14/
+nlp-classifiers/2026-02-26/
+nlp-classifiers/Data_processing_script_for_NLP_input/
+nlp-classifiers/manual_scoring_ground_truth/
+nlp-classifiers/prediction_pipeline_and_results/
