@@ -1,6 +1,6 @@
 # Prostate Cancer Consultation Dashboard — ERD v3
 
-> Updated: 2026-04-09 | Based on actual code analysis (database_schema.sql, models.py, routes_*.py, pipeline_runner.py)
+> Updated: 2026-04-10 | Based on actual code analysis (database_schema.sql, models.py, routes_*.py, pipeline_runner.py)
 
 ### A. Doctor Interface
 
@@ -12,7 +12,7 @@ erDiagram
         INT i2 PK "e.g. 3 (sentence position in utterance)"
         VARCHAR speaker "e.g. Interviewer:"
         TEXT sentence "e.g. so i'm going to take that 12 percent and..."
-        FLOAT score "e.g. 2 (quality score 0-5)"
+        FLOAT score "e.g. 2 (consultation-scorer quality score 0-5, legacy)"
         VARCHAR class "e.g. cancer_prognosis"
         TIMESTAMPTZ time "e.g. 2026-04-10T15:33:32Z"
     }
@@ -87,6 +87,7 @@ erDiagram
         BYTEA xlsx_data "e.g. (binary, 87KB xlsx file)"
         VARCHAR source_filename "e.g. Input_Keystrokes REC 001 (SID 10).xlsx"
         TIMESTAMPTZ analyzed_at "e.g. 2026-04-10T15:33:32Z"
+        FLOAT ai_overall_score "e.g. 3.40 (avg of all domain ai_scores, 0-5)"
     }
 
     sentence_prediction {
@@ -110,7 +111,7 @@ erDiagram
 >
 > **Why `sentence_prediction.id`:** The natural key `(analysis_id, model, sentence_index)` is unique, but a single 4-byte integer PK is more efficient for JOINs and indexing than a 3-column composite key (~14 bytes). With 2,140+ rows per patient, this difference compounds.
 
-### C-2. LLM Domain Scoring & Summary (GPT-4o AI Pipeline)
+### C-2. LLM Domain Scoring & Summary (Guille's AI Pipeline)
 
 ```mermaid
 erDiagram
@@ -130,7 +131,7 @@ erDiagram
         TIMESTAMPTZ created_at "auto-generated timestamp"
     }
 
-    transcript_analysis_log ||--o{ llm_domain_scoring_and_summary : "GPT-4o scoring + patient summary per domain"
+    transcript_analysis_log ||--o{ llm_domain_scoring_and_summary : "Guille's AI scoring + patient summary per domain"
 ```
 
 > **What this table stores:** After the NLP pipeline classifies and selects top sentences (Steps 1-7), Guille's AI pipeline (Step 11) uses Azure OpenAI GPT-4o to: (1) score each sentence's clinical specificity 0-5, (2) extract the actual risk numbers, (3) select the best estimate, and (4) reformat into patient-facing language. One row per domain per analysis run (5 for regular, more for side-effect domains with multiple treatments).
@@ -212,10 +213,21 @@ erDiagram
 >
 > **Why `patient_access.id`:** One user can access multiple patients. Also has a UNIQUE constraint on `(user_id, patient_id)` to prevent duplicate grants.
 
-### E. User Interaction Tracking
+### E. User Interaction Tracking & Session Recording
 
 ```mermaid
 erDiagram
+    session_recording {
+        SERIAL id PK "auto-increment"
+        VARCHAR session_id "e.g. session_1775777136737_xs8ob"
+        INT chunk_index "e.g. 0 (sequential chunk number)"
+        VARCHAR file "e.g. Input_Keystrokes REC 001 (SID 10).xlsx"
+        VARCHAR visit_type "e.g. first (or followup, NULL for physician)"
+        BYTEA recording_data "gzipped rrweb events JSON"
+        INT event_count "e.g. 342 (DOM events in this chunk)"
+        TIMESTAMPTZ created_at "auto-generated timestamp"
+    }
+
     user_interaction_log {
         SERIAL id PK "auto-increment"
         VARCHAR session_id "e.g. session_1775777136737_xs8ob"
@@ -247,7 +259,7 @@ Displays per-sentence consultation quality scores in the Doctor Dashboard. Docto
 `pipeline_runner.py` runs automatically on Docker container startup:
 1. Scans xlsx/csv files in `/app/data/transcripts/`
 2. Classifies sentences using 5 NLP models (cp, inc, ed, ius, le)
-3. Scores consultation quality (0-5) via the `consultation-scorer` container
+3. Scores consultation quality (0-5) via the `consultation-scorer` container (legacy — now superseded by Guille's AI `ai_score` in `llm_domain_scoring_and_summary`)
 4. `persistence.py` → INSERT into this table (already-processed files auto-skipped)
 
 **React app screens:**
@@ -266,8 +278,15 @@ Displays per-sentence consultation quality scores in the Doctor Dashboard. Docto
 |---|---|
 | `GET /api/doctor/sentences/{file}/{speaker}` | Render sentence list (filtered by class != '-1') |
 | `GET /api/doctor/files` | File selector dropdown (DISTINCT file + speaker + count) |
-| `GET /api/doctor/scores/average` | Score Band Chart (sentence_prediction JOIN → quality score) |
-| `GET /api/doctor/scores/summary/{file}/{speaker}` | Per-patient domain score summary |
+| `GET /api/doctor/scores/average` | Score Band Chart — uses Guille's AI `ai_score` from `llm_domain_scoring_and_summary` |
+| `GET /api/doctor/scores/summary/{file}/{speaker}` | Per-patient domain score summary — uses Guille's AI `ai_score` (no consultation-scorer fallback) |
+| `POST /api/doctor/score-sentence` | Run Guille's AI scoring on a single sentence (GPT-4o) |
+| `POST /api/doctor/ai-rewrite` | AI-powered sentence rewriting |
+| `GET /api/doctor/scores/trajectory` | Original NLP scores from doctor_sentence_view |
+| `GET /api/doctor/class-distribution` | Class distribution across all files |
+| `GET /api/doctor/class-distribution/{file}` | Detailed class distribution for a specific file |
+| `GET /api/doctor/improvement-suggestions/{class_}` | Get improvement suggestions for a domain |
+| `POST /api/doctor/improvement-suggestions` | Generate new improvement suggestion |
 
 ---
 
@@ -366,6 +385,8 @@ Current: Normalized to 1 row per domain → flexible for N domains
 | `GET /api/patient/scoring` | Query completed domain scores (with average) |
 | `GET /api/patient/responses` | Query submitted domain responses |
 | `GET /api/patient/sentences/{file}` | "View relevant sentences" (sentence_prediction JOIN doctor_sentence_view, is_in_summary flag) |
+| `GET /api/patient/ai-summary/{file}` | Get Guille's AI summaries per domain (reformat_sentence + source_context) |
+| `GET /api/patient/ai-summary` | List all patients that have AI summaries available |
 
 ---
 
@@ -408,8 +429,15 @@ When a patient completes a survey in the Follow-up app and clicks "Submit", the 
 | Endpoint | Purpose |
 |---|---|
 | `POST /api/surveys/submit` | INSERT + attempt REDCap sync |
-| `GET /api/surveys/responses` | Query surveys by file, speaker, type, date range |
+| `GET /api/surveys/submissions` | Query all submissions with filters |
+| `GET /api/surveys/submissions/{id}` | Get specific submission by ID |
+| `GET /api/surveys/by-speaker/{speaker}` | Query submissions by speaker |
+| `GET /api/surveys/by-file/{file}` | Query submissions by file |
+| `GET /api/surveys/by-type/{survey_type}` | Query submissions by survey type |
 | `GET /api/surveys/stats` | Submission counts by type, completion rates |
+| `DELETE /api/surveys/submissions/{id}` | Delete a survey submission |
+| `GET /api/surveys/redcap/records` | List REDCap sync records |
+| `POST /api/surveys/redcap/records/{id}/import` | Re-sync a specific record to REDCap |
 | `POST /api/redcap/import` | Direct REDCap API proxy (bulk record import) |
 
 ---
@@ -438,15 +466,18 @@ The same patient can be analyzed multiple times with different parameters or aft
 - `GET /api/transcript/history/SID_10` → list all 3 analysis runs
 - `ORDER BY id DESC LIMIT 1` → get the latest run for download
 
+**`ai_overall_score` column:**
+Average of all `llm_domain_scoring_and_summary.ai_score` values for this analysis run. Calculated and saved by `ai_pipeline_service.py` after Guille's AI pipeline completes (Step 11). Used in the Physician Dashboard to display the Overall Score column and for patient filtering (patients without AI scores are hidden).
+
 **model_results column status:**
 DEPRECATED — Previously stored all model results as JSON. Now normalized to `sentence_prediction` table. Column retained for legacy data compatibility; new rows set to NULL.
 
 **Example data (actual DB values):**
 
-| id | patient_id | total_sentences | top_n | context_window | source_filename | analyzed_at | xlsx_data |
-|---|---|---|---|---|---|---|---|
-| 1 | `SID_10` | 428 | 10 | 3 | `Input_Keystrokes REC 001 (SID 10).xlsx` | 2026-04-10 15:33:32 | (binary, 87KB) |
-| 2 | `SID_14` | 423 | 10 | 3 | `Input_Keystrokes REC001 (SID 14).xlsx` | 2026-04-10 15:34:06 | (binary, 92KB) |
+| id | patient_id | total_sentences | top_n | context_window | source_filename | analyzed_at | xlsx_data | ai_overall_score |
+|---|---|---|---|---|---|---|---|---|
+| 1 | `SID_10` | 428 | 10 | 3 | `Input_Keystrokes REC 001 (SID 10).xlsx` | 2026-04-10 15:33:32 | (binary, 87KB) | 3.40 |
+| 2 | `SID_14` | 423 | 10 | 3 | `Input_Keystrokes REC001 (SID 14).xlsx` | 2026-04-10 15:34:06 | (binary, 92KB) | 3.80 |
 
 **API endpoints:**
 | Endpoint | Purpose |
@@ -693,6 +724,38 @@ Records all UI interactions (clicks, scrolls, tab switches, page views, time spe
 | `GET /api/tracking/stats` | Total events, sessions, patients, event type counts, visit_type_counts |
 | `GET /api/tracking/patients` | Patient files with event counts |
 | `GET /api/tracking/analytics` | 6 parallel queries (timeline, by_patient, sessions, device_breakdown, top_elements, hourly_heatmap) |
+| `GET /api/tracking/patient-behavior` | Per-patient, per-domain behavior summary (topic_expand, rating_click, survey counts) |
+| `POST /api/tracking/recordings` | Store rrweb session recording chunks (gzipped) |
+| `GET /api/tracking/recordings` | List available session recordings |
+| `GET /api/tracking/recordings/{session_id}` | Retrieve recording chunks for a specific session |
+
+---
+
+### 12. `session_recording` — rrweb Session Replay
+
+**Role in the app:**
+Stores rrweb DOM recording chunks for session replay in the Admin dashboard. Each chunk contains a gzipped array of rrweb events capturing the full UI interaction (mouse movements, clicks, scrolls, DOM mutations) with PHI masking applied client-side.
+
+**When data is populated:**
+1. React `sessionRecorder.ts` captures rrweb events continuously during patient/physician sessions
+2. Events are chunked and gzipped client-side (max ~500 events per chunk)
+3. `POST /api/tracking/recordings` → INSERT into `session_recording`
+
+**Why chunked storage:**
+A single session can generate thousands of rrweb events. Storing as a single blob would require buffering the entire session in memory. Chunking allows streaming uploads and partial replay.
+
+**Example data:**
+| id | session_id | chunk_index | file | visit_type | recording_data | event_count |
+|---|---|---|---|---|---|---|
+| 1 | `session_1775777136737_xs8ob` | 0 | `...REC 001 (SID 10).xlsx` | first | (gzipped, 45KB) | 342 |
+| 2 | `session_1775777136737_xs8ob` | 1 | `...REC 001 (SID 10).xlsx` | first | (gzipped, 38KB) | 287 |
+
+**API endpoints:**
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/tracking/recordings` | Store gzipped rrweb recording chunk |
+| `GET /api/tracking/recordings` | List available recordings (session_id, chunk_count, event_count) |
+| `GET /api/tracking/recordings/{session_id}` | Retrieve all chunks for a session (ordered by chunk_index) |
 
 ---
 

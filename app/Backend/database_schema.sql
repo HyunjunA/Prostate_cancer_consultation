@@ -261,9 +261,26 @@ CREATE INDEX idx_uil_file_event_type ON user_interaction_log(file, event_type);
 
 
 -- =====================================================
--- 8. LLM Domain Scoring & Summary (GPT-4o AI Pipeline)
+-- 7b. Session Recording (rrweb)
 -- =====================================================
--- Stores the output of the AI pipeline (Steps 11-14):
+CREATE TABLE session_recording (
+    id SERIAL PRIMARY KEY,
+    session_id VARCHAR(100) NOT NULL,
+    chunk_index INT NOT NULL DEFAULT 0,
+    file VARCHAR(255),
+    visit_type VARCHAR(20),
+    recording_data BYTEA,                       -- gzipped rrweb events JSON
+    event_count INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_sr_session_id ON session_recording(session_id);
+
+
+-- =====================================================
+-- 8. LLM Domain Scoring & Summary (Guille's AI Pipeline)
+-- =====================================================
+-- Stores the output of Guille's AI pipeline (Step 11):
 --   - GPT-4o scores each sentence's clinical specificity (0-5)
 --   - Extracts actual risk numbers ("24-25%", "13 years")
 --   - Reformats into patient-facing plain language
