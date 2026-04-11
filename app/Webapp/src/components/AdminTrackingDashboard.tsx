@@ -114,7 +114,45 @@ function getHeaders(): HeadersInit {
 // Tab type
 // ══════════════════════════════════════════════════════════════════════════════
 
-type TabId = "overview" | "sessions" | "elements" | "events";
+type TabId = "overview" | "behavior" | "recordings" | "sessions" | "elements" | "events";
+
+interface RecordingEntry {
+  session_id: string;
+  file: string | null;
+  visit_type: string | null;
+  chunks: number;
+  total_events: number;
+  started_at: string | null;
+}
+
+interface PatientBehaviorSession {
+  session_id: string;
+  file: string;
+  speaker: string;
+  role: string;
+  visit_type: string | null;
+  device_type: string | null;
+  first_event: string | null;
+  last_event: string | null;
+  total_events: number;
+  duration_sec: number | null;
+  page_dwell_time_ms: number;
+  domains: Record<string, {
+    opened: boolean;
+    closed: boolean;
+    evidence_opened: boolean;
+    evidence_closed: boolean;
+    rated: boolean;
+    rating_value: number | null;
+    dwell_time_ms: number;
+    proximity_entered: boolean;
+    event_count: number;
+  }>;
+  survey_progress: Record<string, {
+    answers: number;
+    unique_questions: number;
+  }>;
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Component
@@ -127,6 +165,11 @@ export default function AdminTrackingDashboard() {
   const [stats, setStats] = useState<TrackingStats | null>(null);
   const [patients, setPatients] = useState<PatientOption[]>([]);
   const [events, setEvents] = useState<TrackingEvent[]>([]);
+  const [behaviorSessions, setBehaviorSessions] = useState<PatientBehaviorSession[]>([]);
+  const [recordings, setRecordings] = useState<RecordingEntry[]>([]);
+  const [replaySessionId, setReplaySessionId] = useState<string | null>(null);
+  const [replayEvents, setReplayEvents] = useState<any[] | null>(null);
+  const [replayLoading, setReplayLoading] = useState(false);
   const [totalEvents, setTotalEvents] = useState(0);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
 
@@ -184,6 +227,55 @@ export default function AdminTrackingDashboard() {
     }
   }, [buildParams]);
 
+  const fetchRecordings = useCallback(async () => {
+    try {
+      const qs = buildParams().toString();
+      const res = await fetch(`${API_BASE_URL}/api/tracking/recordings${qs ? `?${qs}` : ""}`, {
+        headers: getHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRecordings(data.recordings || []);
+      }
+    } catch (e) {
+      console.error("[Admin] Failed to fetch recordings:", e);
+    }
+  }, [buildParams]);
+
+  const loadReplay = useCallback(async (sessionId: string) => {
+    setReplayLoading(true);
+    setReplaySessionId(sessionId);
+    setReplayEvents(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/tracking/recordings/${sessionId}`, {
+        headers: getHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setReplayEvents(data.events || []);
+      }
+    } catch (e) {
+      console.error("[Admin] Failed to load replay:", e);
+    } finally {
+      setReplayLoading(false);
+    }
+  }, []);
+
+  const fetchBehavior = useCallback(async () => {
+    try {
+      const qs = buildParams().toString();
+      const res = await fetch(`${API_BASE_URL}/api/tracking/patient-behavior${qs ? `?${qs}` : ""}`, {
+        headers: getHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setBehaviorSessions(data.sessions || []);
+      }
+    } catch (e) {
+      console.error("[Admin] Failed to fetch behavior:", e);
+    }
+  }, [buildParams]);
+
   const fetchAnalytics = useCallback(async () => {
     try {
       const qs = buildParams().toString();
@@ -230,7 +322,9 @@ export default function AdminTrackingDashboard() {
     fetchStats();
     fetchPatients();
     fetchAnalytics();
-  }, [fetchStats, fetchPatients, fetchAnalytics]);
+    fetchBehavior();
+    fetchRecordings();
+  }, [fetchStats, fetchPatients, fetchAnalytics, fetchBehavior, fetchRecordings]);
 
   useEffect(() => {
     fetchEvents();
@@ -343,7 +437,11 @@ export default function AdminTrackingDashboard() {
     fetchStats();
     fetchPatients();
     fetchAnalytics();
+    fetchBehavior();
+    fetchRecordings();
     fetchEvents();
+    setReplaySessionId(null);
+    setReplayEvents(null);
   }
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -544,6 +642,8 @@ export default function AdminTrackingDashboard() {
           {(
             [
               { id: "overview", label: "Overview" },
+              { id: "behavior", label: "Patient Behavior" },
+              { id: "recordings", label: "Recordings" },
               { id: "sessions", label: "Sessions" },
               { id: "elements", label: "Elements" },
               { id: "events", label: "Event Log" },
@@ -786,6 +886,339 @@ export default function AdminTrackingDashboard() {
                       })}
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ════════════════════════════════════════════════════════════════ */}
+        {/* TAB: Patient Behavior                                          */}
+        {/* ════════════════════════════════════════════════════════════════ */}
+        {activeTab === "behavior" && (() => {
+          // Group sessions by patient file
+          const byPatient: Record<string, PatientBehaviorSession[]> = {};
+          behaviorSessions.forEach((s) => {
+            const key = s.file || "unknown";
+            if (!byPatient[key]) byPatient[key] = [];
+            byPatient[key].push(s);
+          });
+
+          // Merge domains across all sessions for a patient
+          const ALL_DOMAINS = ["Cancer Prognosis", "Urinary Incontinence", "Erectile Dysfunction",
+            "Irritative Urinary Symptoms", "Life Expectancy"];
+
+          return (
+            <div className="pt-4 space-y-4">
+              {Object.keys(byPatient).length === 0 ? (
+                <div className={`py-16 text-center text-xs ${isDarkMode ? "text-slate-600" : "text-slate-300"}`}>
+                  No behavior data found. Visit a patient page to generate tracking events.
+                </div>
+              ) : (
+                Object.entries(byPatient).map(([file, sessions]) => {
+                  const match = file.match(/sid[\s_-]*(\d+)/i);
+                  const label = match ? `SID-${match[1]}` : file;
+                  const totalEvents = sessions.reduce((sum, s) => sum + s.total_events, 0);
+                  const visitTypes = [...new Set(sessions.map(s => s.visit_type).filter(Boolean))];
+
+                  // Merge domains across all sessions
+                  const mergedDomains: Record<string, {
+                    opened: boolean; closed: boolean; evidence_opened: boolean;
+                    rated: boolean; rating_value: number | null;
+                    dwell_time_ms: number; event_count: number;
+                  }> = {};
+                  ALL_DOMAINS.forEach(dom => {
+                    mergedDomains[dom] = {
+                      opened: false, closed: false, evidence_opened: false,
+                      rated: false, rating_value: null, dwell_time_ms: 0, event_count: 0,
+                    };
+                  });
+                  sessions.forEach(s => {
+                    Object.entries(s.domains).forEach(([dom, d]) => {
+                      if (!mergedDomains[dom]) return;
+                      const m = mergedDomains[dom];
+                      if (d.opened) m.opened = true;
+                      if (d.closed) m.closed = true;
+                      if (d.evidence_opened) m.evidence_opened = true;
+                      if (d.rated) { m.rated = true; m.rating_value = d.rating_value; }
+                      m.dwell_time_ms += d.dwell_time_ms;
+                      m.event_count += d.event_count;
+                    });
+                  });
+
+                  // Merge survey progress
+                  const mergedSurvey: Record<string, { answers: number; unique_questions: number }> = {};
+                  sessions.forEach(s => {
+                    Object.entries(s.survey_progress).forEach(([survey, data]) => {
+                      if (!mergedSurvey[survey]) mergedSurvey[survey] = { answers: 0, unique_questions: 0 };
+                      mergedSurvey[survey].answers += data.answers;
+                      mergedSurvey[survey].unique_questions = Math.max(mergedSurvey[survey].unique_questions, data.unique_questions);
+                    });
+                  });
+
+                  return (
+                    <div key={file} className={`${cardCls} overflow-hidden`}>
+                      {/* Patient header */}
+                      <div className={`px-4 py-3 flex flex-wrap items-center gap-3 ${
+                        isDarkMode ? "bg-slate-800/50" : "bg-slate-50"
+                      }`}>
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold ${
+                          isDarkMode ? "bg-blue-500/10 text-blue-400" : "bg-blue-50 text-blue-600"
+                        }`}>
+                          {match ? match[1] : "?"}
+                        </div>
+                        <span className={`font-semibold text-sm ${isDarkMode ? "text-slate-200" : "text-slate-700"}`}>
+                          {label}
+                        </span>
+                        {visitTypes.map(vt => (
+                          <span key={vt} className={`px-2 py-0.5 rounded text-xs font-medium ${
+                            vt === "first"
+                              ? isDarkMode ? "bg-blue-500/10 text-blue-400" : "bg-blue-50 text-blue-700"
+                              : isDarkMode ? "bg-teal-500/10 text-teal-400" : "bg-teal-50 text-teal-700"
+                          }`}>
+                            {vt === "first" ? "First Visit" : "Follow-up"}
+                          </span>
+                        ))}
+                        <span className={`text-xs ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
+                          {sessions.length} session{sessions.length !== 1 ? "s" : ""}
+                        </span>
+                        <span className={`text-xs ${isDarkMode ? "text-slate-600" : "text-slate-300"}`}>
+                          {totalEvents} total events
+                        </span>
+                      </div>
+
+                      {/* Merged domain behavior table */}
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className={isDarkMode ? "bg-slate-800/30" : "bg-slate-50/50"}>
+                              <th className={`px-4 py-2 text-left font-semibold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>Domain</th>
+                              <th className={`px-3 py-2 text-center font-semibold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>Opened</th>
+                              <th className={`px-3 py-2 text-center font-semibold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>Closed</th>
+                              <th className={`px-3 py-2 text-center font-semibold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>Evidence</th>
+                              <th className={`px-3 py-2 text-center font-semibold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>Rated</th>
+                              <th className={`px-3 py-2 text-right font-semibold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>Dwell</th>
+                              <th className={`px-3 py-2 text-right font-semibold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>Events</th>
+                            </tr>
+                          </thead>
+                          <tbody className={`divide-y ${isDarkMode ? "divide-slate-800" : "divide-slate-100"}`}>
+                            {ALL_DOMAINS.map((domain) => {
+                              const d = mergedDomains[domain];
+                              return (
+                                <tr key={domain} className={`transition-colors ${
+                                  d.event_count > 0
+                                    ? isDarkMode ? "hover:bg-slate-800/30" : "hover:bg-slate-50"
+                                    : isDarkMode ? "opacity-40" : "opacity-30"
+                                }`}>
+                                  <td className={`px-4 py-2 font-medium ${isDarkMode ? "text-slate-200" : "text-slate-700"}`}>{domain}</td>
+                                  <td className="px-3 py-2 text-center">
+                                    {d.opened ? <span className="text-emerald-500">Yes</span> : <span className={isDarkMode ? "text-slate-600" : "text-slate-300"}>—</span>}
+                                  </td>
+                                  <td className="px-3 py-2 text-center">
+                                    {d.closed ? <span className="text-emerald-500">Yes</span>
+                                      : d.opened ? <span className="text-amber-500">Still open</span>
+                                      : <span className={isDarkMode ? "text-slate-600" : "text-slate-300"}>—</span>}
+                                  </td>
+                                  <td className="px-3 py-2 text-center">
+                                    {d.evidence_opened ? <span className="text-emerald-500">Yes</span> : <span className={isDarkMode ? "text-slate-600" : "text-slate-300"}>—</span>}
+                                  </td>
+                                  <td className="px-3 py-2 text-center">
+                                    {d.rated ? <span className="text-amber-400">{d.rating_value != null ? `${d.rating_value}` : "Yes"}</span> : <span className={isDarkMode ? "text-slate-600" : "text-slate-300"}>—</span>}
+                                  </td>
+                                  <td className={`px-3 py-2 text-right tabular-nums ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                                    {d.dwell_time_ms > 0 ? `${(d.dwell_time_ms / 1000).toFixed(1)}s` : "—"}
+                                  </td>
+                                  <td className={`px-3 py-2 text-right tabular-nums font-medium ${
+                                    d.event_count > 0 ? isDarkMode ? "text-slate-200" : "text-slate-700" : isDarkMode ? "text-slate-600" : "text-slate-300"
+                                  }`}>
+                                    {d.event_count || "—"}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Survey progress */}
+                      {Object.keys(mergedSurvey).length > 0 && (
+                        <div className={`px-4 py-3 border-t ${isDarkMode ? "border-slate-800" : "border-slate-100"}`}>
+                          <span className={`text-xs font-semibold ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>Survey Progress:</span>
+                          <div className="flex flex-wrap gap-3 mt-1">
+                            {Object.entries(mergedSurvey)
+                              .filter(([survey]) => survey !== "unknown")
+                              .map(([survey, data]) => {
+                                const displayName: Record<string, string> = {
+                                  dcs: "Decisional Conflict (DCS)",
+                                  sdm: "Shared Decision Making (SDM)",
+                                  risk_perception: "Risk Perception",
+                                  satisfaction: "Satisfaction",
+                                };
+                                return (
+                                  <span key={survey} className={`text-xs px-2 py-1 rounded ${isDarkMode ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-600"}`}>
+                                    <strong>{displayName[survey] || survey.toUpperCase()}</strong>: {data.unique_questions} questions answered
+                                  </span>
+                                );
+                              })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Session list (collapsed details) */}
+                      <div className={`px-4 py-2 border-t ${isDarkMode ? "border-slate-800" : "border-slate-100"}`}>
+                        <span className={`text-xs ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
+                          Sessions: {sessions.map(s => {
+                            const vl = s.visit_type === "first" ? "F" : s.visit_type === "followup" ? "FU" : "Dr";
+                            const time = s.first_event ? new Date(s.first_event).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "—";
+                            return `${vl} ${time} (${s.total_events}ev)`;
+                          }).join(" | ")}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ════════════════════════════════════════════════════════════════ */}
+        {/* TAB: Recordings (rrweb session replay)                         */}
+        {/* ════════════════════════════════════════════════════════════════ */}
+        {activeTab === "recordings" && (
+          <div className="pt-4 space-y-4">
+            {/* Replay player */}
+            {replaySessionId && (
+              <div className={`${cardCls} overflow-hidden`}>
+                <div className={`px-4 py-3 flex items-center justify-between ${
+                  isDarkMode ? "bg-slate-800/50" : "bg-slate-50"
+                }`}>
+                  <span className={`text-sm font-semibold ${isDarkMode ? "text-slate-200" : "text-slate-700"}`}>
+                    Session Replay
+                  </span>
+                  <button
+                    onClick={() => { setReplaySessionId(null); setReplayEvents(null); }}
+                    className={`px-3 py-1 rounded text-xs font-medium ${
+                      isDarkMode ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-slate-200 text-slate-600 hover:bg-slate-300"
+                    }`}
+                  >
+                    Close
+                  </button>
+                </div>
+                <div className="p-4">
+                  {replayLoading ? (
+                    <div className={`flex items-center justify-center py-12 text-xs ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
+                      <svg className="animate-spin h-4 w-4 mr-2" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Loading recording...
+                    </div>
+                  ) : replayEvents && replayEvents.length > 0 ? (
+                    <div
+                      className="w-full flex justify-center"
+                      ref={(el) => {
+                        if (!el || el.children.length > 0) return;
+                        // Dynamically import rrweb-player to avoid SSR issues
+                        import("rrweb-player").then(({ default: RRWebPlayer }) => {
+                          new RRWebPlayer({
+                            target: el,
+                            props: {
+                              events: replayEvents,
+                              width: Math.min(el.parentElement?.clientWidth || 900, 900),
+                              height: 500,
+                              showController: true,
+                              autoPlay: false,
+                            },
+                          });
+                        }).catch((err) => {
+                          el.innerHTML = `<div style="padding:20px;text-align:center;color:#ef4444;">Failed to load player: ${err.message}</div>`;
+                        });
+                      }}
+                    />
+                  ) : (
+                    <div className={`text-center py-8 text-xs ${isDarkMode ? "text-slate-600" : "text-slate-300"}`}>
+                      No events in this recording.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Recording list */}
+            <div className={`overflow-hidden ${cardCls}`}>
+              <div className={`px-4 py-3 ${isDarkMode ? "bg-slate-800/50" : "bg-slate-50"}`}>
+                <span className={`text-xs font-semibold uppercase tracking-wider ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                  Session Recordings ({recordings.length})
+                </span>
+              </div>
+              {recordings.length === 0 ? (
+                <div className={`py-12 text-center text-xs ${isDarkMode ? "text-slate-600" : "text-slate-300"}`}>
+                  No recordings yet. Visit a patient page to start recording.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className={isDarkMode ? "bg-slate-800/30" : "bg-slate-50/50"}>
+                        {["Patient", "Visit", "Started", "Chunks", "Events", "Action"].map((h, i) => (
+                          <th key={h} className={`px-4 py-2.5 text-xs font-semibold uppercase tracking-wider ${
+                            i === 5 ? "text-center" : "text-left"
+                          } ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className={`divide-y ${isDarkMode ? "divide-slate-800" : "divide-slate-100"}`}>
+                      {recordings.map((r) => {
+                        const match = r.file?.match(/sid[\s_-]*(\d+)/i);
+                        const label = match ? `SID-${match[1]}` : r.file || "—";
+                        return (
+                          <tr key={r.session_id} className={`transition-colors ${isDarkMode ? "hover:bg-slate-800/50" : "hover:bg-slate-50"}`}>
+                            <td className={`px-4 py-2.5 font-medium text-xs ${isDarkMode ? "text-slate-200" : "text-slate-700"}`}>
+                              {label}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                r.visit_type === "first"
+                                  ? isDarkMode ? "bg-blue-500/10 text-blue-400" : "bg-blue-50 text-blue-700"
+                                  : r.visit_type === "followup"
+                                    ? isDarkMode ? "bg-teal-500/10 text-teal-400" : "bg-teal-50 text-teal-700"
+                                    : isDarkMode ? "bg-slate-700 text-slate-400" : "bg-slate-100 text-slate-500"
+                              }`}>
+                                {r.visit_type === "first" ? "First" : r.visit_type === "followup" ? "Follow-up" : "—"}
+                              </span>
+                            </td>
+                            <td className={`px-4 py-2.5 text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                              {r.started_at ? new Date(r.started_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}
+                            </td>
+                            <td className={`px-4 py-2.5 text-xs tabular-nums ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                              {r.chunks}
+                            </td>
+                            <td className={`px-4 py-2.5 text-xs tabular-nums font-medium ${isDarkMode ? "text-slate-200" : "text-slate-700"}`}>
+                              {r.total_events}
+                            </td>
+                            <td className="px-4 py-2.5 text-center">
+                              <button
+                                onClick={() => loadReplay(r.session_id)}
+                                disabled={replayLoading && replaySessionId === r.session_id}
+                                className={`px-3 py-1 rounded text-xs font-medium transition-all ${
+                                  replaySessionId === r.session_id
+                                    ? isDarkMode ? "bg-blue-600 text-white" : "bg-blue-600 text-white"
+                                    : isDarkMode
+                                      ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/20"
+                                      : "bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-100"
+                                }`}
+                              >
+                                {replayLoading && replaySessionId === r.session_id ? "Loading..." : replaySessionId === r.session_id ? "Playing" : "Replay"}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}

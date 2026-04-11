@@ -165,9 +165,11 @@ export const LikertQuestion: React.FC<LikertQuestionProps> = ({
     onChange(newValue);
     if (onTrackEvent && trackingName) {
       onTrackEvent({
-        eventType: "dcs_answer",
+        eventType: "survey_answer",
         elementId: trackingName,
         metadata: {
+          survey: "dcs",
+          questionId: `q${questionNumber}`,
           questionNumber,
           answer: newValue,
           answerLabel: LIKERT_OPTIONS.find((o) => o.value === newValue)?.label,

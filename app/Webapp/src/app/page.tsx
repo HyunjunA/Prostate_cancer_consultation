@@ -58,6 +58,7 @@ import { useFileId } from "@/stores/useFileId";
 import { useDoctorId } from "@/stores/useDoctorId";
 
 import { useTracking } from "@/tracking/hooks";
+import { startRecording, stopRecording } from "@/tracking/lib/sessionRecorder";
 import APITestDashboard from "@/components/ApiTestDashboard";
 
 // ═══════════════════════════════════════════════════════════
@@ -262,6 +263,17 @@ export default function Home() {
     speaker: currentView === "doctor" ? (doctorId || "") : (patientId || ""),
     visitType: currentView === "patient" ? visitType : "",
   });
+
+  // rrweb session recording with PHI masking
+  // Start new recording when patient or visit type changes
+  useEffect(() => {
+    if (currentView !== "selection" && fileId) {
+      stopRecording(); // stop previous recording if any
+      const sessionId = `rec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      startRecording(sessionId, fileId, currentView === "patient" ? visitType : "");
+    }
+    return () => { stopRecording(); };
+  }, [currentView, fileId, visitType]);
 
   // ═══════════════════════════════════════════════════════════
   // Selection Screen — Patient list + visit type buttons

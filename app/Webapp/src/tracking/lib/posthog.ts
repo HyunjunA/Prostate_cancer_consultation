@@ -24,6 +24,12 @@ interface TrackingContext {
 let _ctx: TrackingContext = { role: "", file: "", speaker: "", visitType: "" };
 
 export function setTrackingContext(ctx: Partial<TrackingContext>): void {
+  // If patient file changed to a DIFFERENT patient, flush old events first
+  if (ctx.file && ctx.file !== _ctx.file && _ctx.file) {
+    flushEvents(false);
+    // Do NOT destroy session — let it expire naturally (30min).
+    // Session ID stays the same; file context changes so events go to correct patient.
+  }
   _ctx = { ..._ctx, ...ctx };
 }
 
