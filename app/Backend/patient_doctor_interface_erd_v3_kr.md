@@ -110,6 +110,61 @@ erDiagram
 >
 > **`sentence_prediction.id`가 필요한 이유:** 자연 키 `(analysis_id, model, sentence_index)`가 유일하지만, 단일 정수 PK(4바이트)가 3컬럼 복합키(~14바이트)보다 JOIN과 인덱싱에 효율적. 환자당 2,140+행에서 차이가 누적됨.
 
+### C-2. LLM 도메인 점수 및 요약 (GPT-4o AI 파이프라인)
+
+```mermaid
+erDiagram
+    llm_domain_scoring_and_summary {
+        SERIAL id PK "자동 증가"
+        INT analysis_id FK "FK - transcript_analysis_log (CASCADE)"
+        VARCHAR patient_id "예: SID_10"
+        VARCHAR domain "예: cp (cancer_prognosis)"
+        INT ai_score "예: 4 (GPT-4o 관련성 점수 0-5)"
+        TEXT score_explanation "예: GPT-4o 추론 과정"
+        TEXT extracted_estimate "예: 24-25% 또는 13 years 또는 missing"
+        VARCHAR treatment "예: surgery (부작용 도메인만, cp/le는 NULL)"
+        TEXT source_sentence "예: so i'm going to take that 12 percent..."
+        TEXT source_context "예: 전후 맥락 문장"
+        TEXT reformat_sentence "예: Your doctor noted that your risk is 24-25%..."
+        VARCHAR source_filename "예: Input_Keystrokes REC 001 (SID 10).xlsx"
+        TIMESTAMPTZ created_at "자동 생성 시각"
+    }
+
+    transcript_analysis_log ||--o{ llm_domain_scoring_and_summary : "도메인별 GPT-4o 점수 + 환자 요약"
+```
+
+> **이 테이블이 저장하는 것:** NLP 파이프라인이 문장을 분류하고 선택한 후 (Step 1-7), Guille의 AI 파이프라인 (Step 11)이 Azure OpenAI GPT-4o를 사용하여: (1) 각 문장의 임상적 구체성 0-5점 평가, (2) 실제 위험 수치 추출, (3) 최적 추정치 선택, (4) 환자가 이해할 수 있는 문장으로 변환. 분석 실행당 도메인별 1행 (부작용 도메인은 치료법별 추가 행).
+>
+> **`ai_score` (0-5) vs `pred_score` (0.0-1.0) vs `score` (0-5) — 3가지 다른 점수:**
+> - `sentence_prediction.pred_score` (0.0-1.0) = R Random Forest 확률 (이 문장이 해당 도메인인지)
+> - `doctor_sentence_view.score` (0-5) = consultation-scorer 상담 품질 점수
+> - `llm_domain_scoring_and_summary.ai_score` (0-5) = GPT-4o가 평가한 임상적 구체성 (0=언급 없음, 5=환자 특성 반영 + 기간 포함)
+>
+> **`source_sentence` vs `source_context`:**
+> - `source_sentence` (80-175자): GPT-4o가 선택하여 AI Summary 생성의 직접 입력으로 사용한 **원본 단일 문장**. 예: *"so i'm going to take that 12 percent and cut it in half again, so six percent will die of cancer"*
+> - `source_context` (500-750자): GPT-4o가 점수를 매길 때 맥락 이해용으로 참고한 **전후 여러 문장**. 예: 치료 옵션, 위험 백분율, 예후에 대한 전체 대화 내용.
+> - **환자 앱에서:** "View relevant sentences from your visit"에는 `source_context` 표시 — AI Summary가 도출된 **전체 대화 맥락**을 환자가 볼 수 있음. 고립된 문장이 아닌 대화의 흐름을 이해할 수 있게 해줌.
+> - **AI Summary** (`reformat_sentence`): GPT-4o가 `source_sentence` + `source_context`를 바탕으로 생성한 환자 친화적 문장. 예: *"의사가 치료 없이 사망 위험이 24-25%이며, 치료 시 6%로 감소한다고 설명했습니다."*
+>
+> **부작용 도메인:** ed/inc/ius는 의사가 다른 치료법(수술 vs 방사선)별로 위험을 설명할 수 있음. `treatment` 값이 다른 별도 행으로 저장됨. 일반 도메인(cp/le)은 `treatment=NULL`.
+
+**예시 데이터 (SID-10 실제 GPT-4o 출력):**
+
+| domain | ai_score | extracted_estimate | treatment | reformat_sentence |
+|---|---|---|---|---|
+| cp | 4 | 24-25% → 6% | NULL | "치료 없이 사망 위험 24-25%, 치료 시 6%로 감소" |
+| le | 5 | 13 years | NULL | "기대수명 13년 (나이와 건강 기반)" |
+| ed | 4 | 100% 초기, 20% 영구 | surgery | "수술 후 초기 100% 발기부전, 약 20% 영구" |
+| inc | 4 | 5% 영구 | surgery | "수술 후 약 5% 완전 조절 불가" |
+| ius | 0 | missing | NULL | "의사가 이 위험을 언급하지 않았습니다" |
+
+**API 엔드포인트:**
+
+| 엔드포인트 | 용도 |
+|---|---|
+| `GET /api/patient/ai-summary/{file}` | 특정 환자의 GPT-4o 생성 도메인별 요약 조회 |
+| `GET /api/patient/ai-summary` | AI 요약이 있는 환자 목록 |
+
 ### D. 인증 및 접근 제어 (Authentication & Access Control)
 
 ```mermaid

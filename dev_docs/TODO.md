@@ -2,7 +2,205 @@
 
 > Consolidated list of outstanding items, organized by priority.  
 > Target: **Production level**  
-> Last updated: 2026-04-09
+> Last updated: 2026-04-10
+
+---
+
+## P0-A — NEW: Integrate AI Pipeline (Scoring + Reformat) into Backend
+
+**Status:** Planning | **Priority:** Highest | **Added:** 2026-04-10
+
+### What is this?
+
+Guille's `ai_pipeline/` module uses GPT-4o to take the NLP-classified sentences and:
+1. **Score** each sentence (0-5 relevance to domain)
+2. **Extract** the actual risk numbers (e.g., "12% at 15 years")
+3. **Select** the best sentence per domain
+4. **Reformat** into plain language for patients (e.g., "Your doctor noted that your risk of dying of cancer is 24-25%")
+
+This is currently a standalone Python module. We need to integrate it into the Backend so the dashboard can use these AI-generated patient summaries.
+
+### Why is this needed?
+
+Currently the Backend uses `patient-summary-rewriter` (a simple Docker service) to generate patient summaries. The new AI pipeline produces **much higher quality** summaries because:
+- It extracts actual risk numbers from the consultation (not just top sentences)
+- It scores relevance with chain-of-thought reasoning
+- It reformats medical language into patient-friendly sentences
+- It handles treatment-specific side effects (surgery vs radiation)
+
+### Current Backend Pipeline (Steps 1-10)
+
+```
+Step 1-3: Read transcript → Filter doctor → Split sentences
+Step 4:   NLP classification (R Random Forest, 5 models, Docker)
+Step 5:   Top-N selection per domain
+Step 6:   Context extraction
+Step 7:   Export xlsx
+Step 8:   Score sentences (consultation-scorer Docker)        ← quality score 0-5
+Step 9:   Rewrite summaries (patient-summary-rewriter Docker) ← current AI summary
+Step 10:  Save to DB
+```
+
+### Proposed New Pipeline (Steps 1-10 + 11-14)
+
+```
+Step 1-7:  [unchanged]
+Step 8:    [unchanged] consultation-scorer
+Step 9:    [unchanged] patient-summary-rewriter (keep as fallback)
+Step 10:   [unchanged] Save to DB
+
+NEW:
+Step 11:   AI Scoring — GPT-4o scores each top sentence (0-5 relevance)
+Step 12:   AI Extraction — GPT-4o extracts risk numbers
+Step 13:   AI Selection — GPT-4o picks best estimate per domain
+Step 14:   AI Reformat — GPT-4o converts to patient-facing sentence
+Step 15:   Save AI results to DB (new table)
+```
+
+### Implementation Plan
+
+#### Phase 1: DB Schema
+
+New table `llm_domain_scoring_and_summary`:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | SERIAL PK | auto-increment |
+| analysis_id | INT FK | → transcript_analysis_log.id |
+| patient_id | VARCHAR | e.g., SID_10 |
+| domain | VARCHAR | cp/le/ed/inc/ius |
+| ai_score | INT | 0-5 relevance score from GPT-4o |
+| score_explanation | TEXT | chain-of-thought reasoning |
+| extracted_estimate | TEXT | e.g., "24-25%" |
+| treatment | VARCHAR | surgery/radiation/null (side-effect domains) |
+| source_sentence | TEXT | original sentence used |
+| reformat_sentence | TEXT | patient-facing sentence |
+| source_filename | VARCHAR | transcript filename |
+| created_at | TIMESTAMPTZ | |
+
+#### Phase 2: Backend Service
+
+New `ai_pipeline_service.py`:
+- Import `run_ai_pipeline()` from `ai_pipeline.pipeline`
+- Configure Azure OpenAI client from `.env`
+- Accept `top_dfs_with_context` (Step 6 output) as input
+- Return structured results for DB storage
+
+#### Phase 3: Pipeline Integration
+
+Modify `pipeline_runner.py`:
+- After Step 7 (export xlsx), call `ai_pipeline_service.run()`
+- Pass the same `final_results` dict that already has top sentences + context
+- Save AI results to new `llm_domain_scoring_and_summary` table in Step 15
+
+#### Phase 4: API Endpoint
+
+New endpoint `GET /api/patient/ai-summary/{file}`:
+- Returns AI-generated reformat sentences per domain
+- Falls back to existing `patient-summary-rewriter` output if AI result not available
+
+#### Phase 5: Frontend Integration
+
+Update patient pages to display AI-generated summaries:
+- Replace or supplement `summary_text` in `patient_summary_domain` with `reformat_sentence`
+- Show extracted risk numbers alongside
+
+### Files to Create/Modify
+
+| File | Action |
+|------|--------|
+| `Backend/models.py` | Add `AIDomainResult` model |
+| `Backend/database_schema.sql` | Add `llm_domain_scoring_and_summary` table DDL |
+| `Backend/ai_pipeline_service.py` | NEW — wraps ai_pipeline for Backend use |
+| `Backend/pipeline_runner.py` | Add Steps 11-15 |
+| `Backend/routes_patient.py` | Add `GET /api/patient/ai-summary/{file}` |
+| `Backend/.env` | Add `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY` |
+| `Backend/Dockerfile` | Add `openai` package to requirements |
+| `Backend/requirements.txt` | Add `openai` dependency |
+
+### Dependencies
+
+- Azure OpenAI API access (CBM account — verified working)
+- `ai_pipeline/` module code (currently in AI_physician_patient_communication repo — need to copy or reference)
+- Existing NLP pipeline output (Step 1-7 must complete first)
+
+### Risk & Considerations
+
+- **API cost:** GPT-4o calls per patient (~50 API calls per 5 domains). Estimate ~$0.50/patient
+- **Latency:** ~3-4 minutes per patient (can run async after Step 7)
+- **Fallback:** Keep existing rewriter as fallback if Azure API is unavailable
+- **Secrets:** Azure API key must be in `.env`, never in code or git
+
+---
+
+## P0-B — BLOCKING: User Behavior Tracking & Session Recording
+
+**Status:** Critical issues across all 3 patient-facing pages. Admin Tracking Dashboard cannot reliably display user behavior data.
+
+**Impact:** Research team cannot analyze how patients and physicians interact with the consultation dashboard. Session recordings are incomplete. All behavior analytics in the Admin page are unreliable.
+
+### Problem Summary
+
+The User Interaction Tracking system — which records how users interact with the Patient First Visit, Patient Follow-up, and Physician Dashboard pages — has fundamental architecture issues that prevent most interaction events from being stored in the database. The Admin Tracking Dashboard (`/admin/tracking`) displays incomplete and inaccurate data as a result.
+
+### Affected Pages
+
+**Patient First Visit** (`PatientInitialVisitReportV35.tsx`):
+- Domain panel open/close (topic_expand/collapse) — rarely reaches DB
+- Helpfulness rating 1-5 (rating_click) — not reaching DB
+- Evidence sentence open/close (evidence_expand/collapse) — rarely reaches DB
+- Scroll depth, cursor proximity, page view — works (via separate system)
+- Page dwell time — partially works
+
+**Patient Follow-up** (`PatientFollowUpReportV31Re.tsx`):
+- Survey answers: DCS 16 items, SDM 4 items, Risk Perception 5 items (survey_answer) — not reaching DB
+- Satisfaction feedback (feedback_text_input) — not reaching DB
+- Summary toggle per domain (summary_toggle) — not reaching DB
+- Survey step navigation (survey_step_view) — not reaching DB
+- Submit button clicks — not reaching DB
+
+**Physician Dashboard** (`PhysicianReportsModifiedV41Timothy.tsx`):
+- Patient selection (patient_select) — not reaching DB
+- Score band filtering (score_band_filter) — not reaching DB
+- Topic/sentence selection — not reaching DB
+- AI rewrite workflow (generate, score, result) — not reaching DB
+- View transitions (dashboard → grid → detail) — not reaching DB
+
+### Root Cause
+
+Two independent tracking systems exist with incompatible flush mechanisms:
+
+- **System A (component-level):** Each page component has its own `TrackingEventManager` that records domain-specific events (topic_expand, rating_click, survey_answer, etc.) in memory. Events are flushed via `sendTrackingEvents()` on a 10-second `setInterval` timer. However, React re-renders reset the timer before it fires, and `useEffect` cleanup/re-setup on prop changes causes event loss.
+
+- **System B (global hooks):** `useTracking()` hook captures page-level events (scroll, cursor, page_view) via `captureEvent()` in posthog.ts, which buffers and flushes to the same Backend API every 10 seconds. This system works correctly.
+
+Result: System B events reach the DB (~95% of stored events are cursor/scroll/page_view). System A events (the research-critical ones: domain interactions, ratings, survey answers) are mostly lost.
+
+### Additional Issues
+
+- **Session fragmentation:** Same patient visit creates 4-6 separate sessions instead of 1, making per-session analysis unreliable
+- **Patient data mixing:** When switching between patients, events from one patient can be attributed to another
+- **Survey progress miscounting:** Admin dashboard shows incorrect survey completion counts due to duplicate event types and missing events
+- **Domain name inconsistency:** "Continence" vs "Urinary Incontinence" mismatch between systems
+- **rrweb session recording:** Records are stored but replay functionality not fully verified
+
+### Recommended Fix
+
+Unify System A and System B into a single tracking pipeline:
+1. Replace component-level `TrackingEventManager` + `sendTrackingEvents()` with calls to the global `captureEvent()` from posthog.ts
+2. This eliminates the dual-system problem — one buffer, one flush timer, one delivery path
+3. All events (domain interactions + page-level metrics) flow through the same pipeline that is already proven to work
+
+### Files Requiring Changes
+
+| File | Change |
+|------|--------|
+| `Webapp/src/components/PatientInitialVisitReportV35.tsx` | Replace TrackingEventManager with captureEvent() |
+| `Webapp/src/components/PatientFollowUpReportV31Re.tsx` | Replace TrackingEventManager with captureEvent() |
+| `Webapp/src/components/PhysicianReportsModifiedV41Timothy.tsx` | Replace TrackingEventManager with captureEvent() |
+| `Webapp/src/tracking/lib/posthog.ts` | Ensure context (file, visit_type) passed with each event |
+| `Webapp/src/tracking/hooks/index.ts` | Stabilize context updates to prevent session fragmentation |
+| `Backend/routes_tracking.py` | patient-behavior API domain matching fixes (partially done) |
 
 ---
 
