@@ -493,7 +493,7 @@ async def get_doctor_score_summary_by_file_speaker(
     Get score summary for specific patient (all classes).
 
     Uses Guille's GPT-4o ai_score (0-5) from llm_domain_scoring_and_summary.
-    Falls back to consultation-scorer quality score if AI scores unavailable.
+    Uses AI pipeline ai_score only.
     """
     if not speaker:
         sp_stmt = select(DoctorSentenceView.speaker).where(
@@ -517,7 +517,7 @@ async def get_doctor_score_summary_by_file_speaker(
     ).order_by(LLMDomainScoringAndSummary.domain)
     ai_results = (await db.execute(ai_stmt)).scalars().all()
 
-    # Use GPT-4o ai_score only — no consultation-scorer fallback
+    # Use AI pipeline ai_score only
     by_class = []
     scores_list = []
     for r in ai_results:
@@ -560,62 +560,53 @@ async def get_doctor_score_trajectory(
     """
     Get cumulative score trajectory over time (B-2 feedback).
 
-    Uses ONLY original NLP scores from doctor_sentence_view.
-    Rewrite scores (doctor_rewrite_log) are NOT used here — rewrites are
-    purely a training/practice tool and do not affect score analysis.
-
-    Each data point = a consultation event.
+    Uses AI pipeline ai_score (0-5) from llm_domain_scoring_and_summary.
+    Each data point = a consultation event (patient transcript analysis).
     Y-value = cumulative average of all patients seen so far,
-              where each patient contributes 5 category averages,
-              and the overall = average of 5 category averages.
+              where each patient contributes per-domain ai_scores,
+              and the overall = average of domain scores.
     """
     logger.info("[trajectory] speaker=%s", speaker)
 
-    # ── Step 1: Get all original sentences ──
-    sent_stmt = select(
-        DoctorSentenceView.file,
-        DoctorSentenceView.i,
-        DoctorSentenceView.i2,
-        DoctorSentenceView.class_,
-        DoctorSentenceView.score,
+    from models import LLMDomainScoringAndSummary
+
+    # Domain short → full name mapping
+    domain_short_to_full = {
+        "cp": "cancer_prognosis",
+        "le": "life_expectancy",
+        "ed": "erectile_dysfunction_potency",
+        "inc": "continence",
+        "ius": "irritative_urinary_symptoms",
+    }
+
+    # ── Step 1: Get all AI scores per patient per domain ──
+    score_stmt = select(
+        LLMDomainScoringAndSummary.source_filename,
+        LLMDomainScoringAndSummary.domain,
+        LLMDomainScoringAndSummary.ai_score,
+        LLMDomainScoringAndSummary.created_at,
     ).where(
-        DoctorSentenceView.class_ != '-1',
-        DoctorSentenceView.score.isnot(None),
+        LLMDomainScoringAndSummary.ai_score.isnot(None),
     )
-    if speaker:
-        sent_stmt = sent_stmt.where(DoctorSentenceView.speaker == speaker)
+    score_results = (await db.execute(score_stmt)).all()
 
-    sent_results = (await db.execute(sent_stmt)).all()
+    if not score_results:
+        return {"total_events": 0, "speaker_filter": speaker, "trajectory": []}
 
-    # Build: file_sentences[file][class][(i,i2)] = original_score
-    file_sentences: Dict[str, Dict[str, Dict[tuple, float]]] = {}
-    for r in sent_results:
-        file_sentences.setdefault(r.file, {}).setdefault(r.class_, {})[(r.i, r.i2)] = r.score
+    # Build: file_scores[file][domain_full] = ai_score
+    file_scores: Dict[str, Dict[str, float]] = {}
+    file_dates: Dict[str, Any] = {}
+    for r in score_results:
+        domain_full = domain_short_to_full.get(r.domain, r.domain)
+        file_scores.setdefault(r.source_filename, {})[domain_full] = r.ai_score
+        if r.source_filename not in file_dates or r.created_at < file_dates[r.source_filename]:
+            file_dates[r.source_filename] = r.created_at
 
-    # ── Step 2: Get consultation dates per file ──
-    consult_stmt = select(
-        DoctorSentenceView.file,
-        func.min(DoctorSentenceView.time).label('consultation_date'),
-    ).where(
-        DoctorSentenceView.class_ != '-1',
-        DoctorSentenceView.score.isnot(None),
-    )
-    if speaker:
-        consult_stmt = consult_stmt.where(DoctorSentenceView.speaker == speaker)
-    consult_stmt = consult_stmt.group_by(DoctorSentenceView.file)
-
-    consult_results = (await db.execute(consult_stmt)).all()
-
-    # ── Step 3: Build consultation timeline (sorted by date) ──
-    events = []
-    for r in consult_results:
-        events.append({
-            "time": r.consultation_date,
-            "file": r.file,
-        })
+    # ── Step 2: Build consultation timeline (sorted by date) ──
+    events = [{"time": file_dates[f], "file": f} for f in file_scores]
     events.sort(key=lambda x: x["time"])
 
-    # ── Step 4: Process timeline → cumulative trajectory ──
+    # ── Step 3: Process timeline → cumulative trajectory ──
     consulted_files: list = []
     trajectory = []
 
@@ -623,22 +614,18 @@ async def get_doctor_score_trajectory(
         file = event["file"]
         consulted_files.append(file)
 
-        # For each category, average across all consulted patients
         class_avgs: Dict[str, float] = {}
         patient_class_scores: Dict[str, Dict[str, float]] = {}
-        for cls in ["cancer_prognosis", "life_expectancy", "erectile_dysfunction_potency", "continence", "irritative_urinary_symptoms"]:
+        for cls in domain_short_to_full.values():
             patient_scores = []
             for f in consulted_files:
-                if f in file_sentences and cls in file_sentences[f]:
-                    scores = list(file_sentences[f][cls].values())
-                    if scores:
-                        avg = sum(scores) / len(scores)
-                        patient_scores.append(avg)
-                        patient_class_scores.setdefault(f, {})[cls] = avg
+                if f in file_scores and cls in file_scores[f]:
+                    score = file_scores[f][cls]
+                    patient_scores.append(score)
+                    patient_class_scores.setdefault(f, {})[cls] = score
             if patient_scores:
                 class_avgs[cls] = sum(patient_scores) / len(patient_scores)
 
-        # Compute per-patient overall score (avg of their category avgs)
         patients_detail = []
         for f in consulted_files:
             if f in patient_class_scores and patient_class_scores[f]:
@@ -649,7 +636,6 @@ async def get_doctor_score_trajectory(
                     "overall_score": round(p_overall, 4),
                 })
 
-        # Overall = average of category averages
         overall = sum(class_avgs.values()) / len(class_avgs) if class_avgs else None
 
         trajectory.append({
@@ -703,7 +689,7 @@ async def score_sentence(
       4 = Numeric estimate with timeline
       5 = Patient-specific estimate with timeline
 
-    Falls back to consultation-scorer (score=5 placeholder) if GPT-4o unavailable.
+    Uses AI pipeline for scoring via GPT-4o.
     """
     import os, sys
     if "/app" not in sys.path:

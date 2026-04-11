@@ -30,9 +30,6 @@ async def save_all(
     xlsx_bytes: bytes,
     final_results: Dict[str, pd.DataFrame],
     outcome_to_sheet: Dict[str, str],
-    scorer_keys: List[Tuple],
-    scores: List[int],
-    summaries_by_domain: Dict[str, str],
     domain_slot_map: Dict[str, str],
     domain_short_map: Dict[str, str],
 ) -> bool:
@@ -82,18 +79,27 @@ async def save_all(
                         context=row.get("context"),
                     ))
 
-            # 3. doctor_sentence_view
-            for (i, i2, domain_full, text, speaker), score in zip(scorer_keys, scores):
-                session.add(models.DoctorSentenceView(
-                    file=filename,
-                    i=i,
-                    i2=i2,
-                    speaker=speaker,
-                    sentence=text,
-                    score=float(score),
-                    class_=domain_full,
-                    time=now,
-                ))
+            # 3. doctor_sentence_view (score populated later by AI pipeline)
+            #    PK is (file, i, i2) — same sentence can appear in multiple domains,
+            #    so deduplicate by (i, i2), keeping the first domain encountered.
+            seen_keys = set()
+            for outcome, top_df in final_results.items():
+                domain_full = outcome
+                for _, row in top_df.iterrows():
+                    key = (int(row["i"]), int(row["i2"]))
+                    if key in seen_keys:
+                        continue
+                    seen_keys.add(key)
+                    session.add(models.DoctorSentenceView(
+                        file=filename,
+                        i=key[0],
+                        i2=key[1],
+                        speaker=doctor_speaker,
+                        sentence=row["text"],
+                        score=None,
+                        class_=domain_full,
+                        time=now,
+                    ))
 
             # 4. patient_summary + domain rows
             session.add(models.PatientSummary(
@@ -108,13 +114,13 @@ async def save_all(
                     speaker=patient_speaker,
                     domain=domain_full,
                     display_order=order,
-                    summary_text=summaries_by_domain.get(short, ""),
+                    summary_text="",  # populated by AI pipeline (reformat_sentence)
                 ))
 
             await session.commit()
             logger.info(
-                "  [OK] Saved: %d doctor sentences, %d predictions, 1 patient summary",
-                len(scorer_keys), sum(len(df) for df in final_results.values()),
+                "  [OK] Saved: %d predictions, 1 patient summary",
+                sum(len(df) for df in final_results.values()),
             )
             return True
 
