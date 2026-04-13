@@ -45,20 +45,12 @@ export interface ResponsesResult {
 // ──────────────────────────────────────────────────────────────────────────────
 // API Configuration
 // ──────────────────────────────────────────────────────────────────────────────
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const API_KEY =
-  process.env.NEXT_PUBLIC_API_KEY || "REDACTED_API_KEY";
+const BASE_URL = ""; // same-origin; proxied via /api/backend/
 
-// Helper function to create headers with API Key
-const getHeaders = () => {
-  console.log("=== getHeaders called ===");
-  const headers = {
-    "Content-Type": "application/json",
-    "X-API-Key": API_KEY,
-  };
-  console.log("Headers:", headers);
-  return headers;
-};
+// Helper function to create headers
+const getHeaders = () => ({
+  "Content-Type": "application/json",
+});
 
 export const usePatientData = () => {
   const [files, setFiles] = useState<string[] | null>(null);
@@ -82,9 +74,7 @@ export const usePatientData = () => {
     try {
       setLoading(true);
       setError(null);
-      console.log("TEST-Fetching from:", `${BASE_URL}/api/patient/files`);
-      console.log("TEST-API Key:", API_KEY);
-      const response = await fetch(`${BASE_URL}/api/patient/files`, {
+      const response = await fetch(`${BASE_URL}/api/backend/patient/files`, {
         method: "GET",
         headers: getHeaders(),
       });
@@ -106,7 +96,7 @@ export const usePatientData = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`${BASE_URL}/api/patient/summaries`, {
+      const response = await fetch(`${BASE_URL}/api/backend/patient/summaries`, {
         method: "GET",
         headers: getHeaders(),
       });
@@ -133,7 +123,7 @@ export const usePatientData = () => {
       setError(null);
       const params = new URLSearchParams({ file, speaker });
       const response = await fetch(
-        `${BASE_URL}/api/patient/summaries?${params.toString()}`,
+        `${BASE_URL}/api/backend/patient/summaries?${params.toString()}`,
         {
           method: "GET",
           headers: getHeaders(),
@@ -161,7 +151,7 @@ export const usePatientData = () => {
       setLoading(true);
       setError(null);
       const response = await fetch(
-        `${BASE_URL}/api/patient/summaries/${file}/${speaker}`,
+        `${BASE_URL}/api/backend/patient/summaries/${file}/${speaker}`,
         {
           method: "GET",
           headers: getHeaders(),
@@ -184,7 +174,7 @@ export const usePatientData = () => {
   const fetchAISummary = async (file: string): Promise<any | null> => {
     try {
       const response = await fetch(
-        `${BASE_URL}/api/patient/ai-summary/${encodeURIComponent(file)}`,
+        `${BASE_URL}/api/backend/patient/ai-summary/${encodeURIComponent(file)}`,
         { method: "GET", headers: getHeaders() }
       );
       if (!response.ok) return null; // silently fail — fallback to existing summary
@@ -202,7 +192,7 @@ export const usePatientData = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`${BASE_URL}/api/patient/scoring`, {
+      const response = await fetch(`${BASE_URL}/api/backend/patient/scoring`, {
         method: "GET",
         headers: getHeaders(),
       });
@@ -229,7 +219,7 @@ export const usePatientData = () => {
       setError(null);
       const params = new URLSearchParams({ file, speaker });
       const response = await fetch(
-        `${BASE_URL}/api/patient/scoring?${params.toString()}`,
+        `${BASE_URL}/api/backend/patient/scoring?${params.toString()}`,
         {
           method: "GET",
           headers: getHeaders(),
@@ -253,7 +243,7 @@ export const usePatientData = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`${BASE_URL}/api/patient/responses`, {
+      const response = await fetch(`${BASE_URL}/api/backend/patient/responses`, {
         method: "GET",
         headers: getHeaders(),
       });
@@ -280,7 +270,7 @@ export const usePatientData = () => {
       setError(null);
       const params = new URLSearchParams({ file, speaker });
       const response = await fetch(
-        `${BASE_URL}/api/patient/responses?${params.toString()}`,
+        `${BASE_URL}/api/backend/patient/responses?${params.toString()}`,
         {
           method: "GET",
           headers: getHeaders(),
@@ -307,7 +297,7 @@ export const usePatientData = () => {
     try {
       const params = new URLSearchParams({ top_n: top_n.toString() });
       const response = await fetch(
-        `${BASE_URL}/api/patient/sentences/${encodeURIComponent(file)}?${params.toString()}`,
+        `${BASE_URL}/api/backend/patient/sentences/${encodeURIComponent(file)}?${params.toString()}`,
         {
           method: "GET",
           headers: getHeaders(),
@@ -336,7 +326,7 @@ export const usePatientData = () => {
       setError(null);
       console.log("Updating scoring:", data);
 
-      const response = await fetch(`${BASE_URL}/api/patient/scoring`, {
+      const response = await fetch(`${BASE_URL}/api/backend/patient/scoring`, {
         method: "PUT",
         headers: getHeaders(),
         body: JSON.stringify(data),
@@ -373,7 +363,7 @@ export const usePatientData = () => {
       setError(null);
       console.log("Updating responses:", data);
 
-      const response = await fetch(`${BASE_URL}/api/patient/responses`, {
+      const response = await fetch(`${BASE_URL}/api/backend/patient/responses`, {
         method: "PUT",
         headers: getHeaders(),
         body: JSON.stringify(data),

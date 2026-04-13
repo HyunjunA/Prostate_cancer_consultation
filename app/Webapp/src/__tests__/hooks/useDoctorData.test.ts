@@ -5,8 +5,7 @@ import { useDoctorData } from "../../hooks/useDoctorData";
 // ──────────────────────────────────────────────────────────────────────────────
 // Environment & Global Mocks
 // ──────────────────────────────────────────────────────────────────────────────
-process.env.NEXT_PUBLIC_API_URL = "http://localhost:8000";
-process.env.NEXT_PUBLIC_API_KEY = "test-api-key";
+// API key is now server-side only (injected by /api/backend proxy)
 
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
@@ -24,7 +23,7 @@ afterEach(() => {
 // ──────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────────────────────────────────────
-const BASE = "http://localhost:8000";
+const BASE = ""; // same-origin; uses /api/backend/ proxy
 
 /** Default mock: resolves fetchFiles (mount) with a file list. */
 function mockMountFetch() {
@@ -80,10 +79,10 @@ describe("useDoctorData", () => {
     });
 
     expect(mockFetch).toHaveBeenCalledWith(
-      `${BASE}/api/doctor/files`,
+      `${BASE}/api/backend/doctor/files`,
       expect.objectContaining({
         method: "GET",
-        headers: expect.objectContaining({ "X-API-Key": expect.any(String) }),
+        headers: expect.objectContaining({ "Content-Type": "application/json" }),
       })
     );
   });
@@ -102,7 +101,7 @@ describe("useDoctorData", () => {
     });
 
     const calledUrl = mockFetch.mock.calls[1][0] as string;
-    expect(calledUrl).toContain("/api/doctor/sentences/");
+    expect(calledUrl).toContain("/api/backend/doctor/sentences/");
     expect(calledUrl).toContain("session1.xlsx");
     expect(calledUrl).toContain("Doctor");
     expect(result.current.sentences).toEqual(mockData);
@@ -122,7 +121,7 @@ describe("useDoctorData", () => {
     });
 
     expect(mockFetch).toHaveBeenCalledWith(
-      `${BASE}/api/doctor/rewrites`,
+      `${BASE}/api/backend/doctor/rewrites`,
       expect.objectContaining({ method: "GET" })
     );
     expect(result.current.rewritesAll).toEqual(mockData);
@@ -141,7 +140,7 @@ describe("useDoctorData", () => {
     });
 
     const calledUrl = mockFetch.mock.calls[1][0] as string;
-    expect(calledUrl).toContain("/api/doctor/rewrites?");
+    expect(calledUrl).toContain("/api/backend/doctor/rewrites?");
     expect(calledUrl).toContain("file=session1.xlsx");
     expect(calledUrl).toContain("speaker=Doctor");
   });
@@ -187,7 +186,7 @@ describe("useDoctorData", () => {
     });
 
     const calledUrl = mockFetch.mock.calls[1][0] as string;
-    expect(calledUrl).toContain("/api/doctor/rewrites/session1.xlsx/3/7/history");
+    expect(calledUrl).toContain("/api/backend/doctor/rewrites/session1.xlsx/3/7/history");
     expect(result.current.rewriteHistory).toEqual(historyData);
   });
 
@@ -228,7 +227,7 @@ describe("useDoctorData", () => {
     });
 
     const calledUrl = mockFetch.mock.calls[1][0] as string;
-    expect(calledUrl).toContain("/api/doctor/scores/average?");
+    expect(calledUrl).toContain("/api/backend/doctor/scores/average?");
     expect(calledUrl).toContain("file=session1.xlsx");
     expect(calledUrl).toContain("speaker=Doctor");
     expect(calledUrl).toContain("class=2");
@@ -259,7 +258,7 @@ describe("useDoctorData", () => {
     });
 
     const putCall = mockFetch.mock.calls[1];
-    expect(putCall[0]).toBe(`${BASE}/api/doctor/rewrites`);
+    expect(putCall[0]).toBe(`${BASE}/api/backend/doctor/rewrites`);
     expect(putCall[1].method).toBe("PUT");
     expect(JSON.parse(putCall[1].body)).toEqual(rewriteData);
   });
@@ -322,7 +321,7 @@ describe("useDoctorData", () => {
     });
 
     const postCall = mockFetch.mock.calls[1];
-    expect(postCall[0]).toBe(`${BASE}/api/doctor/score-sentence`);
+    expect(postCall[0]).toBe(`${BASE}/api/backend/doctor/score-sentence`);
     expect(postCall[1].method).toBe("POST");
     const body = JSON.parse(postCall[1].body);
     expect(body.sentence).toBe("Test sentence.");

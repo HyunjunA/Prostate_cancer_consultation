@@ -14,7 +14,7 @@ import type { eventWithTime } from "rrweb/typings/types";
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE_URL = ""; // same-origin; proxied via /api/backend/
 const FLUSH_INTERVAL_MS = 30_000; // send chunk every 30 seconds
 const MAX_EVENTS_PER_CHUNK = 500; // or when 500 events buffered
 
@@ -92,13 +92,10 @@ async function flushEvents(useKeepalive: boolean = false): Promise<void> {
   });
 
   try {
-    await fetch(`${API_BASE_URL}/api/tracking/recordings`, {
+    await fetch(`${API_BASE_URL}/api/backend/tracking/recordings`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(process.env.NEXT_PUBLIC_API_KEY && {
-          "X-API-Key": process.env.NEXT_PUBLIC_API_KEY,
-        }),
       },
       body,
       keepalive: useKeepalive,

@@ -126,19 +126,16 @@ services:
       context: ../Webapp
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: http://localhost:8000
-        NEXT_PUBLIC_API_KEY: ${API_KEY}
         NEXT_PUBLIC_POSTHOG_KEY: ${POSTHOG_KEY:-}
         NEXT_PUBLIC_POSTHOG_HOST: ${POSTHOG_HOST:-}
-        NEXT_PUBLIC_OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     container_name: prostatecancer-webapp
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: http://localhost:8000
-      NEXT_PUBLIC_API_KEY: ${API_KEY}
+      # Server-only env vars (NOT baked into JS bundle)
+      BACKEND_URL: http://prostatecancer-backend:8000
+      API_KEY: ${API_KEY}
       NEXT_PUBLIC_POSTHOG_KEY: ${POSTHOG_KEY:-}
       NEXT_PUBLIC_POSTHOG_HOST: ${POSTHOG_HOST:-}
-      NEXT_PUBLIC_OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     depends_on:
       backend:
         condition: service_healthy

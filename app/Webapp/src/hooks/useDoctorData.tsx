@@ -274,14 +274,11 @@ export interface TrajectoryResponse {
   trajectory: TrajectoryItem[];
 }
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const API_KEY =
-  process.env.NEXT_PUBLIC_API_KEY || "REDACTED_API_KEY";
+const BASE_URL = ""; // same-origin; proxied via /api/backend/
 
-// Helper function to create headers with API Key
+// Helper function to create headers
 const getHeaders = () => ({
   "Content-Type": "application/json",
-  "X-API-Key": API_KEY,
 });
 
 export const useDoctorData = () => {
@@ -341,7 +338,7 @@ export const useDoctorData = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`${BASE_URL}/api/doctor/files`, {
+      const response = await fetch(`${BASE_URL}/api/backend/doctor/files`, {
         method: "GET",
         headers: getHeaders(),
       });
@@ -367,7 +364,7 @@ export const useDoctorData = () => {
       setLoading(true);
       setError(null);
       const response = await fetch(
-        `${BASE_URL}/api/doctor/sentences/${encodeURIComponent(
+        `${BASE_URL}/api/backend/doctor/sentences/${encodeURIComponent(
           file
         )}/${encodeURIComponent(speaker)}`,
         {
@@ -396,7 +393,7 @@ export const useDoctorData = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`${BASE_URL}/api/doctor/rewrites`, {
+      const response = await fetch(`${BASE_URL}/api/backend/doctor/rewrites`, {
         method: "GET",
         headers: getHeaders(),
       });
@@ -423,7 +420,7 @@ export const useDoctorData = () => {
       setError(null);
       const params = new URLSearchParams({ file, speaker });
       const response = await fetch(
-        `${BASE_URL}/api/doctor/rewrites?${params.toString()}`,
+        `${BASE_URL}/api/backend/doctor/rewrites?${params.toString()}`,
         {
           method: "GET",
           headers: getHeaders(),
@@ -455,7 +452,7 @@ export const useDoctorData = () => {
         limit: String(limit),
       });
       const response = await fetch(
-        `${BASE_URL}/api/doctor/rewrites?${params.toString()}`,
+        `${BASE_URL}/api/backend/doctor/rewrites?${params.toString()}`,
         {
           method: "GET",
           headers: getHeaders(),
@@ -489,7 +486,7 @@ export const useDoctorData = () => {
       setError(null);
 
       const response = await fetch(
-        `${BASE_URL}/api/doctor/rewrites/${encodeURIComponent(
+        `${BASE_URL}/api/backend/doctor/rewrites/${encodeURIComponent(
           file
         )}/${i}/${i2}/history`,
         {
@@ -535,7 +532,7 @@ export const useDoctorData = () => {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(`${BASE_URL}/api/doctor/rewrites`, {
+      const response = await fetch(`${BASE_URL}/api/backend/doctor/rewrites`, {
         method: "PUT",
         headers: getHeaders(),
         body: JSON.stringify(rewriteData),
@@ -606,8 +603,8 @@ export const useDoctorData = () => {
       if (classNumber) params.append("class", classNumber);
 
       const url = params.toString()
-        ? `${BASE_URL}/api/doctor/scores/average?${params.toString()}`
-        : `${BASE_URL}/api/doctor/scores/average`;
+        ? `${BASE_URL}/api/backend/doctor/scores/average?${params.toString()}`
+        : `${BASE_URL}/api/backend/doctor/scores/average`;
 
       const response = await fetch(url, {
         method: "GET",
@@ -639,8 +636,8 @@ export const useDoctorData = () => {
       setError(null);
 
       const url = speaker
-        ? `${BASE_URL}/api/doctor/scores/summary/${encodeURIComponent(file)}/${encodeURIComponent(speaker)}`
-        : `${BASE_URL}/api/doctor/scores/summary/${encodeURIComponent(file)}`;
+        ? `${BASE_URL}/api/backend/doctor/scores/summary/${encodeURIComponent(file)}/${encodeURIComponent(speaker)}`
+        : `${BASE_URL}/api/backend/doctor/scores/summary/${encodeURIComponent(file)}`;
 
       const response = await fetch(url,
         {
@@ -681,8 +678,8 @@ export const useDoctorData = () => {
       if (includeInvalid) params.append("include_invalid", "true");
 
       const url = params.toString()
-        ? `${BASE_URL}/api/doctor/class-distribution?${params.toString()}`
-        : `${BASE_URL}/api/doctor/class-distribution`;
+        ? `${BASE_URL}/api/backend/doctor/class-distribution?${params.toString()}`
+        : `${BASE_URL}/api/backend/doctor/class-distribution`;
 
       const response = await fetch(url, {
         method: "GET",
@@ -720,10 +717,10 @@ export const useDoctorData = () => {
       if (includeInvalid) params.append("include_invalid", "true");
 
       const url = params.toString()
-        ? `${BASE_URL}/api/doctor/class-distribution/${encodeURIComponent(
+        ? `${BASE_URL}/api/backend/doctor/class-distribution/${encodeURIComponent(
             file
           )}?${params.toString()}`
-        : `${BASE_URL}/api/doctor/class-distribution/${encodeURIComponent(
+        : `${BASE_URL}/api/backend/doctor/class-distribution/${encodeURIComponent(
             file
           )}`;
 
@@ -765,7 +762,7 @@ export const useDoctorData = () => {
         class_: classNumber,
       };
 
-      const response = await fetch(`${BASE_URL}/api/doctor/score-sentence`, {
+      const response = await fetch(`${BASE_URL}/api/backend/doctor/score-sentence`, {
         method: "POST",
         headers: getHeaders(),
         body: JSON.stringify(requestBody),
@@ -807,7 +804,7 @@ export const useDoctorData = () => {
         context,
       };
 
-      const response = await fetch(`${BASE_URL}/api/doctor/ai-rewrite`, {
+      const response = await fetch(`${BASE_URL}/api/backend/doctor/ai-rewrite`, {
         method: "POST",
         headers: getHeaders(),
         body: JSON.stringify(requestBody),
@@ -857,10 +854,10 @@ export const useDoctorData = () => {
       }
 
       const url = params.toString()
-        ? `${BASE_URL}/api/doctor/improvement-suggestions/${encodeURIComponent(
+        ? `${BASE_URL}/api/backend/doctor/improvement-suggestions/${encodeURIComponent(
             classNumber
           )}?${params.toString()}`
-        : `${BASE_URL}/api/doctor/improvement-suggestions/${encodeURIComponent(
+        : `${BASE_URL}/api/backend/doctor/improvement-suggestions/${encodeURIComponent(
             classNumber
           )}`;
 
@@ -896,7 +893,7 @@ export const useDoctorData = () => {
         setError(null);
 
         const response = await fetch(
-          `${BASE_URL}/api/doctor/improvement-suggestions`,
+          `${BASE_URL}/api/backend/doctor/improvement-suggestions`,
           {
             method: "GET",
             headers: getHeaders(),
@@ -942,8 +939,8 @@ export const useDoctorData = () => {
       if (speaker) params.append("speaker", speaker);
 
       const url = params.toString()
-        ? `${BASE_URL}/api/doctor/scores/trajectory?${params.toString()}`
-        : `${BASE_URL}/api/doctor/scores/trajectory`;
+        ? `${BASE_URL}/api/backend/doctor/scores/trajectory?${params.toString()}`
+        : `${BASE_URL}/api/backend/doctor/scores/trajectory`;
 
       const response = await fetch(url, {
         method: "GET",
@@ -976,8 +973,8 @@ export const useDoctorData = () => {
       if (speaker) params.append("speaker", speaker);
 
       const url = params.toString()
-        ? `${BASE_URL}/api/doctor/rewrites/stats?${params.toString()}`
-        : `${BASE_URL}/api/doctor/rewrites/stats`;
+        ? `${BASE_URL}/api/backend/doctor/rewrites/stats?${params.toString()}`
+        : `${BASE_URL}/api/backend/doctor/rewrites/stats`;
 
       const response = await fetch(url, {
         method: "GET",

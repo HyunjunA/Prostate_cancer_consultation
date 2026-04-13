@@ -16,8 +16,7 @@ import { usePatientData } from "@/hooks/usePatientData";
 // Environment & Global Mocks
 // ──────────────────────────────────────────────────────────────────────────────
 
-process.env.NEXT_PUBLIC_API_URL = "http://localhost:8000";
-process.env.NEXT_PUBLIC_API_KEY = "test-api-key";
+// API key is now server-side only (injected by /api/backend proxy)
 
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
@@ -36,7 +35,7 @@ afterEach(() => {
 // Helpers
 // ──────────────────────────────────────────────────────────────────────────────
 
-const BASE = "http://localhost:8000";
+const BASE = ""; // same-origin; uses /api/backend/ proxy
 
 /** Mock the initial mount fetch (fetchFiles) with a file list. */
 function mockMountFetch(files: string[] = ["session1.xlsx"]) {
@@ -86,12 +85,12 @@ describe("Patient Data Flow Integration", () => {
 
     // Verify the correct endpoint was called
     expect(mockFetch).toHaveBeenCalledWith(
-      `${BASE}/api/patient/files`,
+      `${BASE}/api/backend/patient/files`,
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({
           "Content-Type": "application/json",
-          "X-API-Key": expect.any(String),
+          "Content-Type": "application/json",
         }),
       })
     );
@@ -183,7 +182,7 @@ describe("Patient Data Flow Integration", () => {
 
     // Verify the PUT was sent
     const putCall = mockFetch.mock.calls[1];
-    expect(putCall[0]).toBe(`${BASE}/api/patient/scoring`);
+    expect(putCall[0]).toBe(`${BASE}/api/backend/patient/scoring`);
     expect(putCall[1].method).toBe("PUT");
     expect(JSON.parse(putCall[1].body)).toEqual(updateData);
 
@@ -192,7 +191,7 @@ describe("Patient Data Flow Integration", () => {
 
     // Verify it automatically refreshed filtered scoring (third fetch call)
     const refreshCall = mockFetch.mock.calls[2];
-    expect(refreshCall[0]).toContain("/api/patient/scoring?");
+    expect(refreshCall[0]).toContain("/api/backend/patient/scoring?");
     expect(refreshCall[0]).toContain("file=session1.xlsx");
     expect(refreshCall[0]).toContain("speaker=Patient_sid-1");
 

@@ -16,8 +16,7 @@ import { useDoctorData } from "@/hooks/useDoctorData";
 // Environment & Global Mocks
 // ──────────────────────────────────────────────────────────────────────────────
 
-process.env.NEXT_PUBLIC_API_URL = "http://localhost:8000";
-process.env.NEXT_PUBLIC_API_KEY = "test-api-key";
+// API key is now server-side only (injected by /api/backend proxy)
 
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
@@ -36,7 +35,7 @@ afterEach(() => {
 // Helpers
 // ──────────────────────────────────────────────────────────────────────────────
 
-const BASE = "http://localhost:8000";
+const BASE = ""; // same-origin; uses /api/backend/ proxy
 
 /** Mock the initial mount fetch (fetchFiles) with a file list. */
 function mockMountFetch(files: string[] = ["session1.xlsx"]) {
@@ -87,12 +86,12 @@ describe("Doctor Data Flow Integration", () => {
 
     // Verify correct endpoint
     expect(mockFetch).toHaveBeenCalledWith(
-      `${BASE}/api/doctor/files`,
+      `${BASE}/api/backend/doctor/files`,
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({
           "Content-Type": "application/json",
-          "X-API-Key": expect.any(String),
+          "Content-Type": "application/json",
         }),
       })
     );
@@ -156,7 +155,7 @@ describe("Doctor Data Flow Integration", () => {
 
     // Verify the URL contains path params
     const calledUrl = mockFetch.mock.calls[1][0] as string;
-    expect(calledUrl).toContain("/api/doctor/sentences/");
+    expect(calledUrl).toContain("/api/backend/doctor/sentences/");
     expect(calledUrl).toContain("session1.xlsx");
     expect(calledUrl).toContain("Interviewer%3A");
   });
@@ -196,7 +195,7 @@ describe("Doctor Data Flow Integration", () => {
 
     // Verify the PUT call
     const putCall = mockFetch.mock.calls[1];
-    expect(putCall[0]).toBe(`${BASE}/api/doctor/rewrites`);
+    expect(putCall[0]).toBe(`${BASE}/api/backend/doctor/rewrites`);
     expect(putCall[1].method).toBe("PUT");
 
     const body = JSON.parse(putCall[1].body);
@@ -232,7 +231,7 @@ describe("Doctor Data Flow Integration", () => {
 
     // Verify the POST call
     const postCall = mockFetch.mock.calls[1];
-    expect(postCall[0]).toBe(`${BASE}/api/doctor/score-sentence`);
+    expect(postCall[0]).toBe(`${BASE}/api/backend/doctor/score-sentence`);
     expect(postCall[1].method).toBe("POST");
 
     const body = JSON.parse(postCall[1].body);

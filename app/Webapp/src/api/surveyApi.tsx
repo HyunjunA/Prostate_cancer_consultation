@@ -9,7 +9,7 @@
 // Configuration
 // ══════════════════════════════════════════════════════════════════════════════
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE_URL = ""; // same-origin; proxied via /api/backend/
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Types
@@ -83,14 +83,10 @@ export async function submitSurvey(
   submission: SurveySubmission
 ): Promise<SurveyResponse> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/surveys/submit`, {
+    const response = await fetch(`${API_BASE_URL}/api/backend/surveys/submit`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        // Add API key if configured
-        ...(process.env.NEXT_PUBLIC_API_KEY && {
-          "X-API-Key": process.env.NEXT_PUBLIC_API_KEY,
-        }),
       },
       body: JSON.stringify(submission),
     });
@@ -246,14 +242,11 @@ export async function fetchSurveySubmissions(
 ): Promise<SurveySubmissionsByType | null> {
   try {
     const response = await fetch(
-      `${API_BASE_URL}/api/surveys/by-speaker/${encodeURIComponent(speaker)}`,
+      `${API_BASE_URL}/api/backend/surveys/by-speaker/${encodeURIComponent(speaker)}`,
       {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
-          ...(process.env.NEXT_PUBLIC_API_KEY && {
-            "X-API-Key": process.env.NEXT_PUBLIC_API_KEY,
-          }),
         },
       }
     );
