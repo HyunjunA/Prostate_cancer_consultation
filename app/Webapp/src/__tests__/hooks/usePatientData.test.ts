@@ -5,8 +5,7 @@ import { usePatientData } from "../../hooks/usePatientData";
 // ──────────────────────────────────────────────────────────────────────────────
 // Environment & Global Mocks
 // ──────────────────────────────────────────────────────────────────────────────
-process.env.NEXT_PUBLIC_API_URL = "http://localhost:8000";
-process.env.NEXT_PUBLIC_API_KEY = "test-api-key";
+// API key is now server-side only (injected by /api/backend proxy)
 
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
@@ -25,7 +24,7 @@ afterEach(() => {
 // ──────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────────────────────────────────────
-const BASE = "http://localhost:8000";
+const BASE = ""; // same-origin; uses /api/backend/ proxy
 
 /** Default mock: resolves fetchFiles (mount) with an empty file list. */
 function mockMountFetch() {
@@ -82,12 +81,11 @@ describe("usePatientData", () => {
     });
 
     expect(mockFetch).toHaveBeenCalledWith(
-      `${BASE}/api/patient/files`,
+      `${BASE}/api/backend/patient/files`,
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({
           "Content-Type": "application/json",
-          "X-API-Key": expect.any(String),
         }),
       })
     );
@@ -145,7 +143,7 @@ describe("usePatientData", () => {
     });
 
     expect(mockFetch).toHaveBeenCalledWith(
-      `${BASE}/api/patient/summaries`,
+      `${BASE}/api/backend/patient/summaries`,
       expect.objectContaining({ method: "GET" })
     );
     expect(result.current.summariesAll).toEqual(mockSummaries);
@@ -164,7 +162,7 @@ describe("usePatientData", () => {
     });
 
     const calledUrl = mockFetch.mock.calls[1][0] as string;
-    expect(calledUrl).toContain("/api/patient/summaries?");
+    expect(calledUrl).toContain("/api/backend/patient/summaries?");
     expect(calledUrl).toContain("file=test.xlsx");
     expect(calledUrl).toContain("speaker=Doctor");
   });
@@ -181,7 +179,7 @@ describe("usePatientData", () => {
     });
 
     expect(mockFetch).toHaveBeenCalledWith(
-      `${BASE}/api/patient/summaries/report.xlsx/Patient`,
+      `${BASE}/api/backend/patient/summaries/report.xlsx/Patient`,
       expect.objectContaining({ method: "GET" })
     );
   });
@@ -199,7 +197,7 @@ describe("usePatientData", () => {
     });
 
     expect(mockFetch).toHaveBeenCalledWith(
-      `${BASE}/api/patient/scoring`,
+      `${BASE}/api/backend/patient/scoring`,
       expect.objectContaining({ method: "GET" })
     );
     expect(result.current.scoringAll).toEqual(mockScoring);
@@ -218,7 +216,7 @@ describe("usePatientData", () => {
     });
 
     expect(mockFetch).toHaveBeenCalledWith(
-      `${BASE}/api/patient/responses`,
+      `${BASE}/api/backend/patient/responses`,
       expect.objectContaining({ method: "GET" })
     );
     expect(result.current.responsesAll).toEqual(mockResponses);
@@ -254,7 +252,7 @@ describe("usePatientData", () => {
 
     // Check the PUT call (call index 1, because 0 is the mount fetchFiles)
     const putCall = mockFetch.mock.calls[1];
-    expect(putCall[0]).toBe(`${BASE}/api/patient/scoring`);
+    expect(putCall[0]).toBe(`${BASE}/api/backend/patient/scoring`);
     expect(putCall[1].method).toBe("PUT");
     expect(JSON.parse(putCall[1].body)).toEqual(updateData);
   });
@@ -287,7 +285,7 @@ describe("usePatientData", () => {
 
     // The third fetch call (index 2) should be the fetchScoringFiltered refresh
     const refreshCall = mockFetch.mock.calls[2];
-    expect(refreshCall[0]).toContain("/api/patient/scoring?");
+    expect(refreshCall[0]).toContain("/api/backend/patient/scoring?");
     expect(refreshCall[0]).toContain("file=test.xlsx");
     expect(refreshCall[0]).toContain("speaker=Doctor");
   });
@@ -319,7 +317,7 @@ describe("usePatientData", () => {
     });
 
     const putCall = mockFetch.mock.calls[1];
-    expect(putCall[0]).toBe(`${BASE}/api/patient/responses`);
+    expect(putCall[0]).toBe(`${BASE}/api/backend/patient/responses`);
     expect(putCall[1].method).toBe("PUT");
     expect(JSON.parse(putCall[1].body)).toEqual(updateData);
   });

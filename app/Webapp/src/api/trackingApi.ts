@@ -9,7 +9,7 @@
 // Configuration
 // ══════════════════════════════════════════════════════════════════════════════
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE_URL = ""; // same-origin; proxied via /api/backend/
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Types
@@ -97,13 +97,10 @@ export async function sendTrackingEvents(
   };
 
   try {
-    const response = await fetch(`${API_BASE_URL}/api/tracking/events`, {
+    const response = await fetch(`${API_BASE_URL}/api/backend/tracking/events`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(process.env.NEXT_PUBLIC_API_KEY && {
-          "X-API-Key": process.env.NEXT_PUBLIC_API_KEY,
-        }),
       },
       body: JSON.stringify(batch),
       keepalive: useKeepalive,

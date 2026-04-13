@@ -76,8 +76,7 @@ beforeEach(() => {
   jest.resetAllMocks();
   // Isolate env mutations
   process.env = { ...originalEnv };
-  process.env.NEXT_PUBLIC_API_URL = "http://localhost:8000";
-  process.env.NEXT_PUBLIC_API_KEY = "test-api-key";
+  // API key is now server-side only (injected by /api/backend proxy)
   // Suppress console.error noise in test output
   jest.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -105,12 +104,12 @@ describe("submitSurvey", () => {
     await submitSurvey(mockSubmission);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8000/api/surveys/submit",
+      "/api/backend/surveys/submit",
       expect.anything()
     );
   });
 
-  it("sends correct headers including X-API-Key when env var is set", async () => {
+  it("sends correct headers without X-API-Key (handled by server proxy)", async () => {
     const fetchMock = mockFetchSuccess();
 
     await submitSurvey(mockSubmission);
@@ -119,9 +118,9 @@ describe("submitSurvey", () => {
     expect(callArgs.headers).toEqual(
       expect.objectContaining({
         "Content-Type": "application/json",
-        "X-API-Key": "test-api-key",
       })
     );
+    expect(callArgs.headers).not.toHaveProperty("X-API-Key");
   });
 
   it("sends the submission as JSON body", async () => {
@@ -134,8 +133,7 @@ describe("submitSurvey", () => {
     expect(JSON.parse(callArgs.body)).toEqual(mockSubmission);
   });
 
-  it("does NOT send X-API-Key header when env var is not set", async () => {
-    delete process.env.NEXT_PUBLIC_API_KEY;
+  it("never sends X-API-Key header from client (server proxy injects it)", async () => {
     const fetchMock = mockFetchSuccess();
 
     await submitSurvey(mockSubmission);
@@ -193,23 +191,13 @@ describe("submitSurvey", () => {
     expect(body.metadata).toEqual({ source: "web", version: "1.0" });
   });
 
-  it("uses NEXT_PUBLIC_API_URL env var for base URL", async () => {
-    process.env.NEXT_PUBLIC_API_URL = "https://api.example.com";
-
-    // The module reads process.env at import time, so we re-import to pick up
-    // the changed value. Use jest.isolateModules to get a fresh module.
-    let freshSubmitSurvey: typeof submitSurvey;
-    jest.isolateModules(() => {
-      freshSubmitSurvey =
-        require("@/api/surveyApi").submitSurvey;
-    });
-
+  it("uses relative /api/backend/ path (no external base URL)", async () => {
     const fetchMock = mockFetchSuccess();
 
-    await freshSubmitSurvey!(mockSubmission);
+    await submitSurvey(mockSubmission);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.example.com/api/surveys/submit",
+      "/api/backend/surveys/submit",
       expect.anything()
     );
   });

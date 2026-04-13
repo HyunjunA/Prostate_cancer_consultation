@@ -284,11 +284,7 @@ export default function Home() {
   useEffect(() => {
     if (currentView === "selection") {
       setLoadingPatients(true);
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      const apiKey = process.env.NEXT_PUBLIC_API_KEY || "";
-      fetch(`${apiUrl}/api/patient/files`, {
-        headers: apiKey ? { "X-API-Key": apiKey } : {},
-      })
+      fetch(`/api/backend/patient/files`)
         .then((r) => r.json())
         .then((data) => {
           console.log("[SelectionScreen] Patient files loaded:", data);

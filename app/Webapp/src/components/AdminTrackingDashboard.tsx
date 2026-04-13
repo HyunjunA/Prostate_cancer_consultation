@@ -80,7 +80,7 @@ interface AnalyticsData {
 // Constants
 // ══════════════════════════════════════════════════════════════════════════════
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE_URL = ""; // same-origin; proxied via /api/backend/
 const PAGE_SIZE = 100;
 
 const CHART_COLORS = [
@@ -104,9 +104,6 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
 function getHeaders(): HeadersInit {
   return {
     "Content-Type": "application/json",
-    ...(process.env.NEXT_PUBLIC_API_KEY && {
-      "X-API-Key": process.env.NEXT_PUBLIC_API_KEY,
-    }),
   };
 }
 
@@ -203,7 +200,7 @@ export default function AdminTrackingDashboard() {
   const fetchStats = useCallback(async () => {
     try {
       const qs = buildParams().toString();
-      const res = await fetch(`${API_BASE_URL}/api/tracking/stats${qs ? `?${qs}` : ""}`, {
+      const res = await fetch(`${API_BASE_URL}/api/backend/tracking/stats${qs ? `?${qs}` : ""}`, {
         headers: getHeaders(),
       });
       if (res.ok) setStats(await res.json());
@@ -215,7 +212,7 @@ export default function AdminTrackingDashboard() {
   const fetchPatients = useCallback(async () => {
     try {
       const qs = buildParams().toString();
-      const res = await fetch(`${API_BASE_URL}/api/tracking/patients${qs ? `?${qs}` : ""}`, {
+      const res = await fetch(`${API_BASE_URL}/api/backend/tracking/patients${qs ? `?${qs}` : ""}`, {
         headers: getHeaders(),
       });
       if (res.ok) {
@@ -230,7 +227,7 @@ export default function AdminTrackingDashboard() {
   const fetchRecordings = useCallback(async () => {
     try {
       const qs = buildParams().toString();
-      const res = await fetch(`${API_BASE_URL}/api/tracking/recordings${qs ? `?${qs}` : ""}`, {
+      const res = await fetch(`${API_BASE_URL}/api/backend/tracking/recordings${qs ? `?${qs}` : ""}`, {
         headers: getHeaders(),
       });
       if (res.ok) {
@@ -247,7 +244,7 @@ export default function AdminTrackingDashboard() {
     setReplaySessionId(sessionId);
     setReplayEvents(null);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/tracking/recordings/${sessionId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/backend/tracking/recordings/${sessionId}`, {
         headers: getHeaders(),
       });
       if (res.ok) {
@@ -264,7 +261,7 @@ export default function AdminTrackingDashboard() {
   const fetchBehavior = useCallback(async () => {
     try {
       const qs = buildParams().toString();
-      const res = await fetch(`${API_BASE_URL}/api/tracking/patient-behavior${qs ? `?${qs}` : ""}`, {
+      const res = await fetch(`${API_BASE_URL}/api/backend/tracking/patient-behavior${qs ? `?${qs}` : ""}`, {
         headers: getHeaders(),
       });
       if (res.ok) {
@@ -279,7 +276,7 @@ export default function AdminTrackingDashboard() {
   const fetchAnalytics = useCallback(async () => {
     try {
       const qs = buildParams().toString();
-      const res = await fetch(`${API_BASE_URL}/api/tracking/analytics${qs ? `?${qs}` : ""}`, {
+      const res = await fetch(`${API_BASE_URL}/api/backend/tracking/analytics${qs ? `?${qs}` : ""}`, {
         headers: getHeaders(),
       });
       if (res.ok) setAnalytics(await res.json());
@@ -299,7 +296,7 @@ export default function AdminTrackingDashboard() {
       params.set("offset", String(page * PAGE_SIZE));
 
       const res = await fetch(
-        `${API_BASE_URL}/api/tracking/events?${params.toString()}`,
+        `${API_BASE_URL}/api/backend/tracking/events?${params.toString()}`,
         { headers: getHeaders() },
       );
       if (res.ok) {

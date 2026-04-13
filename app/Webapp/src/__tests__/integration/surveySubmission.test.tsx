@@ -115,8 +115,7 @@ const originalEnv = process.env;
 beforeEach(() => {
   jest.resetAllMocks();
   process.env = { ...originalEnv };
-  process.env.NEXT_PUBLIC_API_URL = "http://localhost:8000";
-  process.env.NEXT_PUBLIC_API_KEY = "test-api-key";
+  // API key is now server-side only (injected by /api/backend proxy)
   jest.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -139,12 +138,11 @@ describe("Survey Submission Integration", () => {
     // Verify fetch was called with correct URL and method
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8000/api/surveys/submit",
+      "/api/backend/surveys/submit",
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({
           "Content-Type": "application/json",
-          "X-API-Key": "test-api-key",
         }),
       })
     );
