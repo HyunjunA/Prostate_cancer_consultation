@@ -1,6 +1,6 @@
 # Full Pipeline Detailed Guide
 
-> **Updated:** 2026-04-02 | Actual Transcript -> NLP -> Scorer -> Rewriter -> DB -> Dashboard
+> **Updated:** 2026-04-16 | Actual Transcript -> NLP -> AI Pipeline (GPT-4o) -> DB -> Dashboard
 
 ---
 
@@ -248,75 +248,7 @@ This xlsx is later stored as binary in `transcript_analysis_log.xlsx_data`.
 
 ---
 
-## Step 8: Score Sentences (Consultation Quality 0-5)
-
-**Function:** `scorer_service.score_batch(scorer_input)`
-
-**What it does:**
-1. Deduplicate from Top-N results (if the same sentence appears in multiple domains, keep only the one with the highest probability)
-2. Send each sentence to the `consultation-scorer` Docker service
-3. Receive a 0-5 integer quality score
-
-**Call:**
-```
-POST http://consultation-scorer:8001/score/batch
-Body: {"sentences": [
-    {"text": "the cancer is slow-growing.", "domain": "cp"},
-    {"text": "reducing your risk of death...", "domain": "cp"},
-    ...
-]}
-```
-
-**Response:**
-```json
-{"scores": [
-    {"text": "the cancer is slow-growing.", "domain": "cp", "score": 4},
-    {"text": "reducing your risk of death...", "domain": "cp", "score": 2},
-    ...
-]}
-```
-
-Currently a placeholder: deterministic pseudo-random (hash-based). Will be replaced with Guillermo's AI model in the future.
-
-SID 14: **47 sentences scored with 0-5 scores**
-
----
-
-## Step 9: Rewrite Patient Summaries
-
-**Function:** `rewriter_service.rewrite_batch(domains_for_rewrite)`
-
-**What it does:**
-1. Extract Top-3 sentences per domain (`summary_top_k: 3` in `config.yaml`)
-2. Send to the `patient-summary-rewriter` Docker service
-3. Receive patient-friendly summary text
-
-**Call:**
-```
-POST http://patient-summary-rewriter:8002/rewrite/batch
-Body: {"domains": [
-    {"sentences": ["sentence1", "sentence2", "sentence3"], "domain": "cp"},
-    {"sentences": [...], "domain": "le"},
-    {"sentences": [...], "domain": "ed"},
-    {"sentences": [...], "domain": "inc"},
-    {"sentences": [...], "domain": "ius"}
-]}
-```
-
-**Response:**
-```json
-{"summaries": [
-    {"domain": "cp", "summary": "sentence1 sentence2 sentence3"},
-    {"domain": "le", "summary": "..."},
-    ...
-]}
-```
-
-Currently a placeholder: pass-through (input sentences are simply concatenated). Will be replaced with Guillermo's AI model in the future.
-
----
-
-## Step 10: Save to DB
+## Step 8: Save to DB
 
 **Function:** `persistence.save_all(Session, ...)`
 
@@ -331,11 +263,80 @@ Currently a placeholder: pass-through (input sentences are simply concatenated).
 | 5 | `patient_summary_scoring` | 1 | Patient ratings for 5 domains (initially NULL -- patient enters later) |
 | 6 | `patient_responses` | 1 | Free-text responses for 5 domains (initially NULL) |
 
-+ Save xlsx file to output folder:
++ Save xlsx file and all intermediate results to output folder:
+
 ```
-/app/data/output/Input_Keystrokes REC001 (SID 14)/
-  └── Input_Keystrokes REC001 (SID 14)_predictions.xlsx
+/app/data/output/{filename_stem}/
+├── step0_raw.csv                ← Step 1: Original input (all speakers)
+├── step1_filtered.csv           ← Step 2: Doctor utterances only
+├── step2_sentences.csv          ← Step 3: Sentence segmentation result
+├── step3_predictions.csv        ← Step 4: NLP 5-model prediction scores
+├── step4_top10.xlsx             ← Step 5: Top-10 per domain (5 sheets)
+├── step5_top10_context.xlsx     ← Step 6: Top-10 + surrounding context (5 sheets)
+└── {patient_id}_predictions.xlsx ← Combined final xlsx (5 sheets)
 ```
+
+**Intermediate result files** are saved for debugging and traceability. Each step's input/output
+can be inspected independently:
+
+| File | Rows (SID 10 example) | Description |
+|------|:---------------------:|-------------|
+| `step0_raw.csv` | 344 | All utterances (patient + doctor) |
+| `step1_filtered.csv` | 161 | Doctor utterances only (patient rows removed) |
+| `step2_sentences.csv` | 428 | Individual sentences (utterances split by R stringi) |
+| `step3_predictions.csv` | 428 | Same rows + 5 prediction score columns (cp, le, ed, inc, ius) |
+| `step4_top10.xlsx` | 10 per sheet × 5 | Top-10 sentences per domain, sorted by `.pred_1` descending |
+| `step5_top10_context.xlsx` | 10 per sheet × 5 | Same + `context` column (±3 surrounding sentences with `<main>` tag) |
+
+**Row count progression:**
+```
+Step 0:  344 rows  (original)
+Step 1:  161 rows  (doctor only, -183)
+Step 2:  428 rows  (sentence split, +267)
+Step 3:  428 rows  (predictions added, same rows)
+Step 4:   10 × 5   (top-K selection, intentional reduction)
+Step 5:   10 × 5   (context added, same rows)
+```
+
+These files are stored inside the Docker volume at `/app/data/output/` which is mounted
+from the host at `app/Backend/data/output/`.
+
+---
+
+## Step 9: AI Pipeline — GPT-4o Scoring + Patient Summary
+
+**Function:** `ai_pipeline_service.run_ai_scoring_and_summary(Session, ...)`
+
+**What it does:**
+Uses Guillermo's `ai_pipeline` module (volume-mounted from `AI_physician_patient_communication/ai_pipeline/`)
+to run GPT-4o on each domain's Top-10 sentences. Non-blocking: if Azure OpenAI is unavailable,
+the pipeline still completes with NLP results only.
+
+**Sub-steps per domain (5 domains × 5 sub-steps = 25 total):**
+
+| Sub-step | Name | Input | Output | GPT-4o calls |
+|----------|------|-------|--------|:------------:|
+| 1 | **Scoring** | 10 sentences + context | 10 sentences + ai_score (0-5) | 10 |
+| 2 | **Extraction** | 10 sentences + ai_score | 10 sentences + extracted estimate | 10 |
+| 3 | **Filtering** | 10 sentences + score + estimate | 1-3 candidates (low scores / `<missing>` removed) | 0 (rule-based) |
+| 4 | **Selection** | 1-3 candidates | 1 final selection | 0-1 |
+| 5 | **Reformat** | 1 selected estimate | Patient-friendly text | 1 |
+
+**Example (cp domain, SID 15):**
+```
+Scoring:    10 sentences → ai_score 0-5 assigned
+Extraction: 10 sentences → "13% risk of death at 14 years" extracted
+Filtering:  10 → 3 candidates (7 had score=0 or estimate=<missing>)
+Selection:  3 → 1 best candidate selected
+Reformat:   "Your doctor noted that your risk of dying of prostate cancer
+             is 13% if you do nothing, and that death would not occur
+             until about 14 years later."
+```
+
+**DB storage:** Results saved to `llm_domain_scoring_and_summary` table with:
+- `ai_score`, `score_explanation`, `extracted_estimate`, `treatment`
+- `source_sentence`, `source_context`, `reformat_sentence`
+- `analysis_id` (FK to `transcript_analysis_log`)
 
 ---
 
@@ -385,6 +386,6 @@ GET /api/surveys/by-speaker/{speaker} -> restore previous responses
 |---|---|---|
 | **Range** | 0.0 ~ 1.0 | 0 ~ 5 |
 | **Meaning** | The **probability** determined by the NLP model that "this sentence is related to the given domain" | Consultation **quality** score |
-| **Generated at** | Step 4 (NLP Docker) | Step 8 (consultation-scorer) |
+| **Generated at** | Step 4 (NLP Docker) | Step 9 (AI Pipeline — GPT-4o) |
 | **Usage** | Basis for Top-N sentence selection | Score displayed on the dashboard |
 | **Naming convention** | `.pred_1` is "probability" | score is "score" |

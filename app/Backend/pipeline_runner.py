@@ -111,7 +111,15 @@ async def process_single_file(
     )
 
     # ── Save output files (traceability) ─────────────────────────────────
-    _save_output_files(cfg, filename, patient_id, xlsx_bytes)
+    _save_output_files(
+        cfg, filename, patient_id, xlsx_bytes,
+        df_raw=df_raw,
+        df_filtered=df_filtered,
+        df_sentences=df_sentences,
+        df_predicted=df_predicted,
+        top_by_model=top_by_model,
+        final_results=final_results,
+    )
 
     # ── Step 9: AI pipeline — GPT-4o scoring + patient summary rewriting ──
     #    Uses Guille's ai_pipeline module (volume-mounted from
@@ -161,16 +169,63 @@ _DOMAIN_SLOT_MAP = {
 }
 
 
-def _save_output_files(cfg, filename, patient_id, xlsx_bytes):
-    """Save output files to per-file subfolder (Ivan's traceability rule)."""
+def _save_output_files(cfg, filename, patient_id, xlsx_bytes,
+                       df_raw=None, df_filtered=None, df_sentences=None,
+                       df_predicted=None, top_by_model=None, final_results=None):
+    """Save output files to per-file subfolder (Ivan's traceability rule).
+
+    Saves all intermediate results for debugging and traceability:
+      - step0_raw.csv           (original input)
+      - step1_filtered.csv      (doctor utterances only)
+      - step2_sentences.csv     (sentence segmentation)
+      - step3_predictions.csv   (NLP 5-model scores)
+      - step4_top10.xlsx        (top-K per domain)
+      - step5_top10_context.xlsx (top-K + surrounding context)
+      - {patient_id}_predictions.xlsx (combined final xlsx)
+    """
+    import pandas as pd
+
     output_dir = cfg.get("paths", {}).get("output_dir", "/app/data/output")
     stem = Path(filename).stem
     file_output_dir = Path(output_dir) / stem
 
     try:
         file_output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Existing: combined xlsx
         (file_output_dir / f"{patient_id}_predictions.xlsx").write_bytes(xlsx_bytes)
-        logger.info("  Output saved: %s/", file_output_dir)
+
+        # Step 0: Raw input
+        if df_raw is not None:
+            df_raw.to_csv(file_output_dir / "step0_raw.csv", index=False)
+
+        # Step 1: Doctor-filtered utterances
+        if df_filtered is not None:
+            df_filtered.to_csv(file_output_dir / "step1_filtered.csv", index=False)
+
+        # Step 2: Segmented sentences
+        if df_sentences is not None:
+            df_sentences.to_csv(file_output_dir / "step2_sentences.csv", index=False)
+
+        # Step 3: NLP predictions (all 5 models)
+        if df_predicted is not None:
+            df_predicted.to_csv(file_output_dir / "step3_predictions.csv", index=False)
+
+        # Step 4: Top-K selection per domain
+        if top_by_model is not None:
+            with pd.ExcelWriter(file_output_dir / "step4_top10.xlsx") as w:
+                for domain, df in top_by_model.items():
+                    sheet = domain[:31]  # Excel sheet name max 31 chars
+                    df.to_excel(w, sheet_name=sheet, index=False)
+
+        # Step 5: Top-K with context
+        if final_results is not None:
+            with pd.ExcelWriter(file_output_dir / "step5_top10_context.xlsx") as w:
+                for domain, df in final_results.items():
+                    sheet = domain[:31]
+                    df.to_excel(w, sheet_name=sheet, index=False)
+
+        logger.info("  Output saved: %s/ (step0-step5 + xlsx)", file_output_dir)
     except Exception as e:
         logger.debug("  Output save skipped (non-fatal): %s", e)
 
