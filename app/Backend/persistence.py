@@ -41,10 +41,8 @@ async def save_all(
     Tables written:
       - transcript_analysis_log (1 row)
       - sentence_prediction (N rows)
-      - doctor_sentence_view (N rows)
       - patient_summary (1 row)
-      - patient_summary_scoring (1 row, NULLs)
-      - patient_responses (1 row, NULLs)
+      - patient_summary_domain (N rows)
     """
     now = datetime.now(timezone.utc)
 
@@ -82,29 +80,7 @@ async def save_all(
                         context=row.get("context"),
                     ))
 
-            # 3. doctor_sentence_view (score populated later by AI pipeline)
-            #    PK is (file, i, i2) — same sentence can appear in multiple domains,
-            #    so deduplicate by (i, i2), keeping the first domain encountered.
-            seen_keys = set()
-            for outcome, top_df in final_results.items():
-                domain_full = outcome
-                for _, row in top_df.iterrows():
-                    key = (int(row["i"]), int(row["i2"]))
-                    if key in seen_keys:
-                        continue
-                    seen_keys.add(key)
-                    session.add(models.DoctorSentenceView(
-                        file=filename,
-                        i=key[0],
-                        i2=key[1],
-                        speaker=doctor_speaker,
-                        sentence=row["text"],
-                        score=None,
-                        class_=domain_full,
-                        time=now,
-                    ))
-
-            # 4. patient_summary + domain rows
+            # 3. patient_summary + domain rows
             session.add(models.PatientSummary(
                 file=filename, speaker=patient_speaker,
             ))
@@ -134,14 +110,14 @@ async def save_all(
 
 
 async def file_already_processed(Session: async_sessionmaker, filename: str) -> bool:
-    """Check if a file has already been processed (exists in doctor_sentence_view)."""
+    """Check if a file has already been processed (exists in sentence_prediction)."""
     from sqlalchemy import select, func
 
     async with Session() as session:
         count = (await session.execute(
             select(func.count())
-            .select_from(models.DoctorSentenceView)
-            .where(models.DoctorSentenceView.file == filename)
+            .select_from(models.SentencePrediction)
+            .where(models.SentencePrediction.patient_id == filename)
         )).scalar()
         return count is not None and count > 0
 

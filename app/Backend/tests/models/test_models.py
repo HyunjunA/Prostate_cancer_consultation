@@ -1,14 +1,13 @@
 """Tests for SQLAlchemy models defined in models.py.
 
-Models tested (8 total):
-  1. DoctorSentenceView  — composite PK (file, i, i2)
-  2. DoctorRewriteLog    — composite PK + FK constraint to DoctorSentenceView
-  3. PatientSummary      — composite PK (file, speaker)
-  4. PatientSummaryScoring — FK to PatientSummary, check constraints (0-10)
-  5. PatientResponses    — FK to PatientSummary
-  6. SurveySubmissionLog — FK to PatientSummary, autoincrement PK
-  7. TranscriptAnalysisLog — autoincrement PK, relationship to SentencePrediction
-  8. SentencePrediction  — FK to TranscriptAnalysisLog, cascade delete
+Models tested (7 total):
+  1. DoctorRewriteLog    — composite PK (file, i, i2, time)
+  2. PatientSummary      — composite PK (file, speaker)
+  3. PatientSummaryScoring — FK to PatientSummary, check constraints (0-10)
+  4. PatientResponses    — FK to PatientSummary
+  5. SurveySubmissionLog — FK to PatientSummary, autoincrement PK
+  6. TranscriptAnalysisLog — autoincrement PK, relationship to SentencePrediction
+  7. SentencePrediction  — FK to TranscriptAnalysisLog, cascade delete
 """
 
 import json
@@ -19,7 +18,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import (
     Base,
-    DoctorSentenceView,
     DoctorRewriteLog,
     PatientSummary,
     PatientSummaryScoring,
@@ -31,64 +29,11 @@ from models import (
 from tests.factories import TestDataFactory
 
 
-# ── DoctorSentenceView ────────────────────────────────────────────────────
-
-
-class TestDoctorSentenceView:
-    """DoctorSentenceView model — composite PK (file, i, i2)."""
-
-    async def test_instantiation_with_defaults(self):
-        """Factory creates a valid instance with all expected fields."""
-        obj = TestDataFactory.doctor_sentence()
-        assert obj.file == "test-file.xlsx"
-        assert obj.i == 1
-        assert obj.i2 == 1
-        assert obj.speaker == "Interviewer"
-        assert obj.sentence == "This is a test sentence."
-        assert obj.score == 0.85
-        assert obj.class_ == "Cancer Prognosis"
-
-    async def test_composite_primary_key(self):
-        """Table uses a composite PK of (file, i, i2)."""
-        mapper = inspect(DoctorSentenceView)
-        pk_cols = [col.name for col in mapper.primary_key]
-        assert pk_cols == ["file", "i", "i2"]
-
-    async def test_repr(self):
-        """__repr__ includes file, i, i2."""
-        obj = TestDataFactory.doctor_sentence(file="f.xlsx", i=3, i2=5)
-        r = repr(obj)
-        assert "f.xlsx" in r
-        assert "3" in r
-        assert "5" in r
-
-    async def test_persist_and_query(self, db):
-        """Round-trip: insert and query back."""
-        obj = TestDataFactory.doctor_sentence(file="rt.xlsx", i=1, i2=1)
-        db.add(obj)
-        await db.commit()
-
-        result = await db.execute(
-            select(DoctorSentenceView).where(DoctorSentenceView.file == "rt.xlsx")
-        )
-        row = result.scalar_one()
-        assert row.speaker == "Interviewer"
-        assert row.score == 0.85
-
-    async def test_class_column_maps_to_class_attribute(self):
-        """The 'class' DB column is accessed as class_ in Python."""
-        obj = DoctorSentenceView(file="x", i=1, i2=1, class_="ED")
-        assert obj.class_ == "ED"
-
-    async def test_tablename(self):
-        assert DoctorSentenceView.__tablename__ == "doctor_sentence_view"
-
-
 # ── DoctorRewriteLog ─────────────────────────────────────────────────────
 
 
 class TestDoctorRewriteLog:
-    """DoctorRewriteLog model — composite FK to DoctorSentenceView."""
+    """DoctorRewriteLog model — composite PK (file, i, i2, time)."""
 
     async def test_instantiation(self):
         obj = TestDataFactory.doctor_rewrite()
@@ -105,10 +50,6 @@ class TestDoctorRewriteLog:
 
     async def test_default_selected_applied_on_persist(self, db):
         """Column default=False is applied at INSERT time, not at __init__."""
-        parent = TestDataFactory.doctor_sentence(file="sel.xlsx", i=1, i2=1)
-        db.add(parent)
-        await db.flush()
-
         obj = DoctorRewriteLog(
             file="sel.xlsx", i=1, i2=1,
             time=datetime.now(timezone.utc),
@@ -128,14 +69,10 @@ class TestDoctorRewriteLog:
         assert "rw.xlsx" in r
         assert "DoctorRewriteLog" in r
 
-    async def test_persist_with_parent(self, db):
-        """Insert parent DoctorSentenceView, then child DoctorRewriteLog."""
-        parent = TestDataFactory.doctor_sentence(file="fk.xlsx", i=1, i2=1)
-        db.add(parent)
-        await db.flush()
-
-        child = TestDataFactory.doctor_rewrite(file="fk.xlsx", i=1, i2=1)
-        db.add(child)
+    async def test_persist_and_query(self, db):
+        """Insert and query back a DoctorRewriteLog record."""
+        obj = TestDataFactory.doctor_rewrite(file="fk.xlsx", i=1, i2=1)
+        db.add(obj)
         await db.commit()
 
         result = await db.execute(
@@ -490,7 +427,7 @@ class TestBaseMetadata:
 
     async def test_all_models_share_same_base(self):
         models = [
-            DoctorSentenceView, DoctorRewriteLog,
+            DoctorRewriteLog,
             PatientSummary, PatientSummaryScoring, PatientResponses,
             SurveySubmissionLog,
             TranscriptAnalysisLog, SentencePrediction,
@@ -500,7 +437,7 @@ class TestBaseMetadata:
 
     async def test_all_table_names_in_metadata(self):
         expected = {
-            "doctor_sentence_view", "doctor_rewrite_log",
+            "doctor_rewrite_log",
             "patient_summary", "patient_summary_scoring", "patient_responses",
             "survey_submission_log",
             "transcript_analysis_log", "sentence_prediction",

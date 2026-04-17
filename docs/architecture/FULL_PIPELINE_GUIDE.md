@@ -258,10 +258,9 @@ This xlsx is later stored as binary in `transcript_analysis_log.xlsx_data`.
 |-------|-------|-----------|----------|
 | 1 | `transcript_analysis_log` | 1 | Execution record (patient_id, top_n, context_window, xlsx binary, pipeline_started_at, analyzed_at, processed, processed_at, ai_overall_score) |
 | 2 | `sentence_prediction` | 50 | 5 domains x 10 sentences, `.pred_1` probability + context |
-| 3 | `doctor_sentence_view` | 47 | Deduplicated sentences + **0-5 quality score** + domain name |
-| 4 | `patient_summary` | 1 | AI summary text for 5 domains (class_1~5, summary_class_1~5) |
-| 5 | `patient_summary_scoring` | 1 | Patient ratings for 5 domains (initially NULL -- patient enters later) |
-| 6 | `patient_responses` | 1 | Free-text responses for 5 domains (initially NULL) |
+| 3 | `patient_summary` | 1 | AI summary text for 5 domains (class_1~5, summary_class_1~5) |
+| 4 | `patient_summary_scoring` | 1 | Patient ratings for 5 domains (initially NULL -- patient enters later) |
+| 5 | `patient_responses` | 1 | Free-text responses for 5 domains (initially NULL) |
 
 + Save xlsx file and all intermediate results to output folder:
 
@@ -360,7 +359,7 @@ Reformat:   "Your doctor noted that your risk of dying of prostate cancer
 ### Doctor Demo (`PhysicianReportsModifiedV41Timothy.tsx`)
 ```
 GET /api/doctor/files -> file_details (file + speaker mapping)
-GET /api/doctor/sentences/{file}/{speaker} -> reads from doctor_sentence_view
+GET /api/doctor/sentences/{file}/{speaker} -> reads from sentence_prediction (DISTINCT)
 GET /api/doctor/scores/average -> average score per domain
 GET /api/doctor/scores/trajectory -> score trends over time
 ```
@@ -368,7 +367,7 @@ GET /api/doctor/scores/trajectory -> score trends over time
 ### Patient First Visit (`PatientInitialVisitReportV35.tsx`)
 ```
 GET /api/patient/summaries/{file}/{speaker} -> patient_summary + patient_summary_scoring
-GET /api/patient/sentences/{file} -> top 7 sentences per domain from doctor_sentence_view
+GET /api/patient/sentences/{file} -> top 7 sentences per domain from sentence_prediction
 ```
 
 ### Patient Follow-Up (`PatientFollowUpReportV31Re.tsx`)
@@ -382,10 +381,10 @@ GET /api/surveys/by-speaker/{speaker} -> restore previous responses
 
 ## Distinguishing the Two Types of Scores
 
-| | `sentence_prediction.pred_score` | `doctor_sentence_view.score` |
+| | `sentence_prediction.pred_score` | Quality score (0-5) |
 |---|---|---|
 | **Range** | 0.0 ~ 1.0 | 0 ~ 5 |
 | **Meaning** | The **probability** determined by the NLP model that "this sentence is related to the given domain" | Consultation **quality** score |
-| **Generated at** | Step 4 (NLP Docker) | Step 9 (AI Pipeline — GPT-4o) |
+| **Generated at** | Step 4 (NLP Docker) | Step 8 (consultation-scorer) |
 | **Usage** | Basis for Top-N sentence selection | Score displayed on the dashboard |
 | **Naming convention** | `.pred_1` is "probability" | score is "score" |

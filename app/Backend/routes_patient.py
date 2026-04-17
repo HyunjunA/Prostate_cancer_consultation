@@ -21,7 +21,6 @@ from auth.access_control import check_patient_access
 from auth.base import AuthUser
 from db import get_db
 from models import (
-    DoctorSentenceView,
     DoctorRewriteLog,
     PatientSummary,
     PatientSummaryDomain,
@@ -425,17 +424,18 @@ async def get_patient_sentences_by_class(
 
     results = (await db.execute(top_stmt)).all()
 
-    # Join with doctor_sentence_view for quality scores
+    # Build ai_score lookup from llm_domain_scoring_and_summary
+    ai_score_map: dict[str, int | None] = {}
+    ai_stmt = select(
+        LLMDomainScoringAndSummary.source_sentence,
+        LLMDomainScoringAndSummary.ai_score,
+    ).where(LLMDomainScoringAndSummary.analysis_id == analysis_id)
+    for ai_row in (await db.execute(ai_stmt)).all():
+        if ai_row.source_sentence:
+            ai_score_map[ai_row.source_sentence] = ai_row.ai_score
+
     by_class: dict[str, list[dict]] = {}
     for r in results:
-        # Look up quality score from doctor_sentence_view
-        score_stmt = select(DoctorSentenceView.score).where(
-            DoctorSentenceView.file == file,
-            DoctorSentenceView.i == r.utterance_index,
-            DoctorSentenceView.i2 == r.sentence_in_utterance,
-        )
-        quality_score = (await db.execute(score_stmt)).scalar_one_or_none()
-
         model = r.model
         if model not in by_class:
             by_class[model] = []
@@ -443,7 +443,7 @@ async def get_patient_sentences_by_class(
         by_class[model].append({
             "sentence": r.sentence_text,
             "pred_score": round(float(r.pred_score), 4),
-            "score": quality_score if quality_score is not None else None,
+            "score": ai_score_map.get(r.sentence_text),
             "speaker": r.speaker,
             "i": r.utterance_index,
             "i2": r.sentence_in_utterance,
@@ -471,10 +471,12 @@ async def get_dashboard_stats(
     print("=" * 80)
     print("[DEBUG] [get_dashboard_stats] - Querying statistics")
 
-    # Doctor stats
+    # Doctor stats (from sentence_prediction, distinct sentences)
     print("   Querying doctor interface stats...")
     doctor_sentences_count = (await db.execute(
-        select(func.count()).select_from(DoctorSentenceView)
+        select(func.count(func.distinct(
+            func.concat(SentencePrediction.patient_id, ':', SentencePrediction.utterance_index, ':', SentencePrediction.sentence_in_utterance)
+        )))
     )).scalar_one()
     print(f"   - doctor_sentences_count: {doctor_sentences_count}")
 
@@ -483,7 +485,7 @@ async def get_dashboard_stats(
     )).scalar_one()
 
     doctor_files_count = (await db.execute(
-        select(func.count(func.distinct(DoctorSentenceView.file)))
+        select(func.count(func.distinct(SentencePrediction.patient_id)))
     )).scalar_one()
 
     # Patient stats

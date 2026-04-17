@@ -16,11 +16,11 @@ This database serves two systems that share the same PostgreSQL instance:
 1. **NLP Pipeline** (`AI_physician_patient_communication/`) — writes analysis results
 2. **Dashboard Backend** (`Backend/`) — reads results for display, writes user interactions
 
-There are **12 tables** organized into 5 functional groups:
+There are **11 tables** organized into 5 functional groups:
 
 | Group | Tables | Purpose |
 |-------|--------|---------|
-| Physician Interface | `doctor_sentence_view`, `doctor_rewrite_log` | NLP-scored sentences + rewrite practice history |
+| Physician Interface | `doctor_rewrite_log` | Sentence rewrite practice history (queries `sentence_prediction` directly) |
 | Patient Interface | `patient_summary`, `patient_summary_scoring`, `patient_responses`* | AI summaries + patient feedback (*`patient_responses` not used in active UI) |
 | Survey System | `survey_submission_log` | SDM, DCS, Risk Perception, Satisfaction surveys |
 | ML Pipeline Results | `transcript_analysis_log`, `sentence_prediction` | Raw NLP pipeline output storage |
@@ -36,10 +36,10 @@ There are **12 tables** organized into 5 functional groups:
 
 | Screen Element | Data Source | Description |
 |---------------|-----------|-------------|
-| Patient list (left panel) | `doctor_sentence_view` | File list = patient list |
-| Domain sentence cards | `doctor_sentence_view` | Each sentence's text, NLP score (0-5), domain |
-| Domain average scores | `doctor_sentence_view` | Calculated from score column |
-| Score trend graph | `doctor_sentence_view` | Score changes over time per patient |
+| Patient list (left panel) | `sentence_prediction` | Distinct patient_id list |
+| Domain sentence cards | `sentence_prediction` | Each sentence's text, NLP pred_score (0.0-1.0), domain |
+| Domain average scores | `sentence_prediction` | Calculated from pred_score + `llm_domain_scoring_and_summary.ai_score` |
+| Score trend graph | `sentence_prediction` | Score changes over time per patient |
 | Sentence rewrite tool | `doctor_rewrite_log` | Doctor rewrites a sentence → stored here. Original score unchanged |
 | Rewrite history | `doctor_rewrite_log` | Previous rewrite attempts for same sentence |
 
@@ -48,7 +48,7 @@ There are **12 tables** organized into 5 functional groups:
 | Screen Element | Data Source | Description |
 |---------------|-----------|-------------|
 | 5 AI summary cards | `patient_summary` | Per-domain AI-generated summary text |
-| Evidence sentences below summary | `doctor_sentence_view` | Original sentences that the summary is based on |
+| Evidence sentences below summary | `sentence_prediction` | Original sentences that the summary is based on |
 | Summary usefulness rating | `patient_summary_scoring` | Patient rates 1-5: "Was this information helpful?" |
 | ~~Free-text feedback~~ | `patient_responses` | **Not used in active UI.** Table/API exist but no active component calls them. Legacy only. |
 
@@ -75,7 +75,7 @@ There are **12 tables** organized into 5 functional groups:
 | Role | Table | Description |
 |------|-------|-------------|
 | NLP pipeline run records | `transcript_analysis_log` | Parameters, timestamp, xlsx backup per analysis run |
-| NLP detailed predictions | `sentence_prediction` | Per-sentence per-domain probability (0.0-1.0). Source data for doctor_sentence_view |
+| NLP detailed predictions | `sentence_prediction` | Per-sentence per-domain probability (0.0-1.0). Primary source for physician and patient dashboards. |
 | User authentication | `auth_user`, `auth_api_key` | API key-based auth (currently simple mode) |
 | Patient access control | `patient_access` | Which user can access which patient data (not yet active) |
 
@@ -86,7 +86,6 @@ There are **12 tables** organized into 5 functional groups:
 ```mermaid
 erDiagram
     transcript_analysis_log ||--o{ sentence_prediction : "1:N CASCADE"
-    doctor_sentence_view ||--o{ doctor_rewrite_log : "1:N CASCADE"
     patient_summary ||--|| patient_summary_scoring : "1:1 CASCADE"
     patient_summary ||--|| patient_responses : "1:1 CASCADE"
     patient_summary ||--o{ survey_submission_log : "1:N CASCADE"
@@ -96,54 +95,7 @@ erDiagram
 
 ---
 
-## 1. `doctor_sentence_view` — Physician Dashboard Sentence Data
-
-### Why this table exists
-
-This is the **primary data source for the physician dashboard**. When a physician opens the dashboard, every sentence they see — along with its NLP score and domain classification — comes from this table. Without it, the physician dashboard has nothing to display.
-
-### How data gets in
-
-- **Pipeline path**: NLP pipeline Step 10 → `persistence.save_doctor_sentences()` → INSERT
-- **CSV seed path**: `convert_output_to_csv.py` → `docter_interface_render_processed.csv` → `init_db.py` → INSERT
-- Both paths produce identical data; the CSV path is used for initial seeding when the pipeline hasn't been run against the Docker DB yet.
-
-### Who reads it
-
-- **Physician Dashboard**: `GET /api/doctor/sentences/{file}/{speaker}` — fetches sentences grouped by domain
-- **Physician Dashboard**: `GET /api/doctor/scores/summary/{file}/{speaker}` — computes average score per domain
-- **Physician Dashboard**: `GET /api/doctor/scores/trajectory?speaker=...` — builds score trend across patients
-- **Patient First Visit**: `GET /api/patient/sentences/{file}/{speaker}` — shows evidence sentences under AI summary cards
-
-### Column details
-
-| Column | Type | PK | Description |
-|--------|------|:--:|-------------|
-| `file` | VARCHAR(255) | PK1 | Transcript filename. Acts as the patient identifier across the dashboard. Example: `Input_Keystrokes REC001 (SID 14).xlsx` |
-| `i` | INT | PK2 | Utterance index (1-based). Corresponds to the row number in the original transcript before sentence segmentation. |
-| `i2` | INT | PK3 | Sentence index within the utterance (1-based). If utterance 5 was split into 3 sentences, `i2` = 1, 2, 3. |
-| `speaker` | VARCHAR(100) | | Speaker label from the transcript. Always the doctor's label (e.g., `Interviewer:`). Includes trailing colon — the frontend queries with this exact string. |
-| `sentence` | TEXT | | The actual sentence text (lowercased by the pipeline's segmentation step). This is what the physician reads on the dashboard. |
-| `score` | FLOAT | | Consultation quality score (0–5). Assigned by the NLP pipeline's scoring step. Higher = better communication quality for the classified domain. |
-| `class` | VARCHAR(100) | | Domain full name: `cancer_prognosis`, `life_expectancy`, `erectile_dysfunction_potency`, `continence`, or `irritative_urinary_symptoms`. The frontend groups sentences by this column. |
-| `time` | TIMESTAMP WITH TIME ZONE | | Timestamp of when this record was created. Used for ordering in trajectory views. |
-
-### Primary Key logic
-
-The composite PK `(file, i, i2)` uniquely identifies one sentence from one patient's transcript. A single sentence can appear in multiple domains in `sentence_prediction`, but in `doctor_sentence_view` each `(file, i, i2)` appears once — the `convert_output_to_csv.py` deduplication keeps only the highest-scoring domain for each sentence.
-
-### Indexes
-
-| Index | Columns | Purpose |
-|-------|---------|---------|
-| PK (implicit) | `(file, i, i2)` | Unique sentence lookup + covers `file`-only queries |
-| `idx_dsv_file_speaker_class_i` | `(file, speaker, class, i DESC, i2 DESC) WHERE class != '-1' AND score IS NOT NULL` | Partial + composite index for scores/average 3-stage subquery — the physician dashboard's heaviest query |
-
-> Note: `idx_doctor_render_file (file)` was removed — redundant with PK first column.
-
----
-
-## 2. `doctor_rewrite_log` — Physician Rewrite Practice History
+## 1. `doctor_rewrite_log` — Physician Rewrite Practice History
 
 ### Why this table exists
 
@@ -151,7 +103,7 @@ Physicians can practice improving low-scoring sentences by rewriting them and ge
 1. **Learning persistence**: When a physician refreshes the page, their latest rewrite is restored from this table.
 2. **Research data**: Researchers can analyze how physicians improve their communication over time.
 
-**Important**: Rewrites are a learning tool only. They do NOT change the original score in `doctor_sentence_view`. This was explicitly decided on 2026-03-13 (Ivan) to prevent score gaming.
+**Important**: Rewrites are a learning tool only. They do NOT change the original NLP scores in `sentence_prediction`. This was explicitly decided on 2026-03-13 (Ivan) to prevent score gaming.
 
 ### How data gets in
 
@@ -168,11 +120,11 @@ Physicians can practice improving low-scoring sentences by rewriting them and ge
 
 | Column | Type | PK | Description |
 |--------|------|:--:|-------------|
-| `file` | VARCHAR(255) | PK1 | FK → `doctor_sentence_view.file`. Links to the patient transcript. |
-| `i` | INT | PK2 | FK → `doctor_sentence_view.i`. Utterance index of the original sentence. |
-| `i2` | INT | PK3 | FK → `doctor_sentence_view.i2`. Sentence-within-utterance index. |
+| `file` | VARCHAR(255) | PK1 | Transcript filename (= `sentence_prediction.patient_id` mapped filename). Links to the patient transcript. |
+| `i` | INT | PK2 | Utterance index (= `sentence_prediction.utterance_index`). Identifies the original sentence. |
+| `i2` | INT | PK3 | Sentence-within-utterance index (= `sentence_prediction.sentence_in_utterance`). |
 | `time` | TIMESTAMP WITH TIME ZONE | PK4 | Timestamp of this rewrite attempt. Part of PK to allow multiple rewrites of the same sentence. |
-| `speaker` | VARCHAR(100) | | Doctor speaker label (same as in `doctor_sentence_view`). |
+| `speaker` | VARCHAR(100) | | Doctor speaker label (same as in `sentence_prediction`). |
 | `original_sentence` | TEXT | | The original sentence text that was rewritten. Stored redundantly for self-contained history. |
 | `revised_sentence` | TEXT | | The physician's rewritten version of the sentence. |
 | `score` | FLOAT | | The NLP score of the rewritten sentence. **Currently hardcoded to 5** (temporary — will be replaced with actual NLP re-scoring). |
@@ -180,11 +132,7 @@ Physicians can practice improving low-scoring sentences by rewriting them and ge
 
 ### Foreign Key
 
-```
-(file, i, i2) → doctor_sentence_view(file, i, i2) ON DELETE CASCADE
-```
-
-If a sentence is removed from `doctor_sentence_view`, all its rewrites are automatically deleted.
+The FK to `doctor_sentence_view` was removed. `doctor_rewrite_log` now stands alone — rows reference sentences logically via `(file, i, i2)` which correspond to `(patient_id, utterance_index, sentence_in_utterance)` in `sentence_prediction`, but there is no enforced DB-level FK.
 
 ---
 
@@ -208,7 +156,7 @@ When a patient opens their report page, they see **5 AI-generated summary cards*
 
 | Column | Type | PK | Description |
 |--------|------|:--:|-------------|
-| `file` | VARCHAR(255) | PK1 | Transcript filename (same as `doctor_sentence_view.file`). |
+| `file` | VARCHAR(255) | PK1 | Transcript filename (same format as `sentence_prediction.patient_id` mapped filename). |
 | `speaker` | VARCHAR(100) | PK2 | Patient identifier label. Format: `Patient_{filename}`. |
 | `entire_summary` | TEXT | | Combined summary across all 5 domains. Currently NULL — reserved for future use. |
 | `class_1` | VARCHAR(100) | | Domain name for slot 1 (e.g., `cancer_prognosis`). |
@@ -406,7 +354,7 @@ Deleting an analysis run cascades to delete all associated sentence predictions.
 
 ### Why this table exists
 
-This is the **most granular NLP output** — one row per sentence per domain. While `doctor_sentence_view` stores only the highest-scoring domain for each sentence (for dashboard display), `sentence_prediction` stores **all 5 domain scores** for each of the top-K sentences. This enables:
+This is the **most granular NLP output** — one row per sentence per domain. `sentence_prediction` stores **all 5 domain scores** for each of the top-K sentences and is the primary source for all dashboard queries. This enables:
 - Querying "show me all sentences scored > 0.8 for cancer prognosis"
 - Comparing how the same sentence scores across different domains
 - Full context preservation (the `context` column with ±3 surrounding sentences)
@@ -444,15 +392,18 @@ This is the **most granular NLP output** — one row per sentence per domain. Wh
 | `idx_sp_patient_model` | `(patient_id, model)` | Filter by patient + domain |
 | `idx_sp_pred_score` | `pred_score DESC` | "Top scoring sentences" queries |
 
-### Difference from `doctor_sentence_view`
+### Note on column mapping to `doctor_rewrite_log`
 
-| Aspect | `sentence_prediction` | `doctor_sentence_view` |
-|--------|-----------------------|------------------------|
-| **Granularity** | One row per sentence **per domain** | One row per sentence (highest domain only) |
-| **Rows for 1 patient** | ~50 (10 sentences × 5 domains) | ~45-50 (deduplicated) |
-| **Has context** | Yes (`context` column) | No |
-| **Has analysis_id** | Yes (links to pipeline run) | No |
-| **Used by** | API predictions endpoint | Physician + Patient dashboards |
+`doctor_rewrite_log` references sentences via `(file, i, i2)` which correspond to `sentence_prediction` columns as follows:
+
+| `doctor_rewrite_log` | `sentence_prediction` |
+|----------------------|-----------------------|
+| `file` | `patient_id` (filename form) |
+| `i` | `utterance_index` |
+| `i2` | `sentence_in_utterance` |
+| `speaker` | `speaker` |
+| (no score column) | `pred_score` (NLP probability 0.0-1.0) |
+| `class` | `model` (abbreviated domain) |
 
 ---
 
@@ -535,8 +486,7 @@ The frontend batches events and sends them via `POST /api/tracking/events`.
 Pipeline output
     │
     ├──→ transcript_analysis_log    (1 row per pipeline run)
-    ├──→ sentence_prediction        (N rows per run: 5 domains × top-K)
-    ├──→ doctor_sentence_view       (deduplicated for dashboard display)
+    ├──→ sentence_prediction        (N rows per run: 5 domains × top-K; primary source for dashboards)
     └──→ patient_summary            (temporary summaries; future: AI-generated)
               │
               ├──→ patient_summary_scoring   (patient rates each summary)
@@ -547,7 +497,7 @@ User interactions
     └──→ user_interaction_log       (clicks, views, time tracking)
 
 Physician rewrites
-    └──→ doctor_rewrite_log         (practice history, does NOT change scores)
+    └──→ doctor_rewrite_log         (practice history, does NOT change scores; no FK, references sentence_prediction logically)
 ```
 
 ---
@@ -556,7 +506,6 @@ Physician rewrites
 
 | Table | Row Count | Notes |
 |-------|-----------|-------|
-| `doctor_sentence_view` | 266 | ~44 sentences per patient |
 | `sentence_prediction` | 300 | 50 per patient (10 per domain × 5) |
 | `transcript_analysis_log` | 18 | Multiple runs during testing |
 | `patient_summary` | 6 | 1 per patient |

@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from models import (
-    DoctorSentenceView,
     DoctorRewriteLog,
     PatientSummary,
     PatientSummaryScoring,
@@ -35,27 +34,6 @@ class TestDataFactory:
         cls._counter = 0
 
     # ── Doctor Interface ──────────────────────────────────────────────
-
-    @staticmethod
-    def doctor_sentence(
-        file: str = "test-file.xlsx",
-        i: int = 1,
-        i2: int = 1,
-        speaker: str = "Interviewer",
-        sentence: str = "This is a test sentence.",
-        score: float = 0.85,
-        class_: str = "Cancer Prognosis",
-    ) -> DoctorSentenceView:
-        return DoctorSentenceView(
-            file=file,
-            i=i,
-            i2=i2,
-            speaker=speaker,
-            sentence=sentence,
-            score=score,
-            class_=class_,
-            time=datetime.now(timezone.utc),
-        )
 
     @staticmethod
     def doctor_rewrite(
@@ -201,28 +179,6 @@ class TestDataFactory:
         )
 
     # ── Bulk helpers ──────────────────────────────────────────────────
-
-    @classmethod
-    def doctor_sentence_set(
-        cls,
-        file: str = "test-file.xlsx",
-        count: int = 5,
-        speaker: str = "Interviewer",
-        class_: str = "Cancer Prognosis",
-    ) -> list[DoctorSentenceView]:
-        """Create multiple distinct doctor sentences."""
-        return [
-            cls.doctor_sentence(
-                file=file,
-                i=idx,
-                i2=1,
-                speaker=speaker,
-                sentence=f"Sentence number {idx}.",
-                score=round(0.5 + idx * 0.05, 2),
-                class_=class_,
-            )
-            for idx in range(1, count + 1)
-        ]
 
     @classmethod
     def prediction_set(

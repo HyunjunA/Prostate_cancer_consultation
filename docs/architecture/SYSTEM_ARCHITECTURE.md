@@ -413,21 +413,21 @@ Retry backoff: 2^attempt seconds (1s → 2s)
 
 ```
   ┌─────────────────────────┐        ┌─────────────────────────────┐
-  │   doctor_sentence_view  │        │  transcript_analysis_log    │
+  │   sentence_prediction   │        │  transcript_analysis_log    │
   │─────────────────────────│        │─────────────────────────────│
-  │ PK: file, i, i2        │        │ PK: id (SERIAL)             │
-  │    speaker              │        │    patient_id               │
-  │    class_               │        │    total_sentences          │
-  │    sentence             │        │    model_results (JSON)     │
-  │    score                │        │    xlsx_data (BYTEA)        │
+  │ PK: id (SERIAL)         │        │ PK: id (SERIAL)             │
+  │    analysis_id (FK)     │        │    patient_id               │
+  │    patient_id, model    │        │    total_sentences          │
+  │    sentence_text        │        │    model_results (JSON)     │
+  │    pred_score           │        │    xlsx_data (BYTEA)        │
   │    context              │        │    pipeline_started_at      │
   │                         │        │    analyzed_at              │
   │                         │        │    processed (BOOLEAN)      │
   │                         │        │    processed_at             │
   │                         │        │    ai_overall_score (FLOAT) │
-  └────────┬────────────────┘        └────────────┬────────────────┘
-           │ FK (file, i, i2)                     │ FK (analysis_id)
-           ▼                                      ▼
+  └─────────────────────────┘        └────────────┬────────────────┘
+                                                   │ FK (analysis_id)
+                                                   ▼
   ┌─────────────────────────┐        ┌─────────────────────────────┐
   │   doctor_rewrite_log    │        │    sentence_prediction      │
   │─────────────────────────│        │─────────────────────────────│
@@ -480,26 +480,7 @@ Retry backoff: 2^attempt seconds (1s → 2s)
 
 ### 6.2 Key Table Column Details
 
-**doctor_sentence_view** (Physician dashboard core table):
-
-```
-  PK: (file, i, i2) — file + utterance# + sentence within utterance
-  ┌───────────┬────────────┬──────────────────────────────┐
-  │ Column    │ Type       │ Description                  │
-  ├───────────┼────────────┼──────────────────────────────┤
-  │ file      │ VARCHAR    │ Patient/file identifier      │
-  │ i         │ INT        │ Original utterance row (1+)  │
-  │ i2        │ INT        │ Sentence within utterance(1+)│
-  │ speaker   │ VARCHAR    │ Speaker label                │
-  │ class_    │ VARCHAR    │ Domain (1-5, -1=none)        │
-  │ sentence  │ TEXT       │ Lowercased sentence text     │
-  │ score     │ FLOAT      │ Quality score (0-5)          │
-  │ context   │ TEXT       │ ±3 context (<main> tags)     │
-  │ time      │ TIMESTAMP  │ Record timestamp             │
-  └───────────┴────────────┴──────────────────────────────┘
-```
-
-**sentence_prediction** (ML pipeline results):
+**sentence_prediction** (ML pipeline results — also queried by the physician dashboard):
 
 ```
   PK: id (SERIAL), FK: analysis_id → transcript_analysis_log
@@ -561,7 +542,7 @@ Retry backoff: 2^attempt seconds (1s → 2s)
 
 | Group | Tables | Purpose |
 |-------|--------|---------|
-| **Doctor Interface** | `doctor_sentence_view`, `doctor_rewrite_log` | NLP scored sentences + rewrite history |
+| **Doctor Interface** | `sentence_prediction`, `doctor_rewrite_log` | NLP scored sentences + rewrite history |
 | **Patient Interface** | `patient_summary`, `patient_summary_scoring`, `patient_responses` | AI summaries + patient ratings + Q&A |
 | **Survey** | `survey_submission_log` | Survey answers + REDCap sync status |
 | **ML Pipeline** | `transcript_analysis_log`, `sentence_prediction` | Pipeline results + per-sentence scores |
@@ -702,7 +683,7 @@ Retry backoff: 2^attempt seconds (1s → 2s)
   ┌────────────────────────────────────────────────────────────────────┐
   │  3. DATABASE POPULATION                                            │
   │                                                                    │
-  │  doctor_sentence_view ← NLP scores per sentence (file, i, i2)     │
+  │  sentence_prediction ← NLP scores per sentence (id, analysis_id)  │
   │  patient_summary ← AI-generated class summaries                    │
   └───────────────────────────────┬────────────────────────────────────┘
                                   │

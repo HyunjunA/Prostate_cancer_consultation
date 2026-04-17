@@ -43,7 +43,7 @@ X-API-Key: {{api_key}}
 
 ############################################################ 
 ### 3) Doctor Interface - Get Sentences by File & Speaker
-# get all sentences for a given file and speaker (DoctorID or Interviewer) from the doctor_sentence_view table
+# get all sentences for a given file and speaker (DoctorID or Interviewer) from the sentence_prediction table
 # For a given file, extract only the sentences whose class is between 1 and 5 and whose speaker column is 'Interviewer (doctor)'.
 ############################################################
 GET {{base}}/api/doctor/sentences/processed_transcripts_sid-01.xlsx/Interviewer
