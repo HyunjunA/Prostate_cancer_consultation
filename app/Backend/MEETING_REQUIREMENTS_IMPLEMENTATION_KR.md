@@ -238,11 +238,92 @@ erDiagram
 
 | 순서 | 테이블 | 행 수 | 내용 |
 |:----:|--------|:-----:|------|
-| 1 | <u>**`transcript_analysis_log`**</u> | 1 | 분석 실행 기록 (patient_id, 설정값, xlsx, 타이밍, processed flag) |
-| 2 | <u>**`sentence_prediction`**</u> | 50 | 5 도메인 × 10 문장, NLP `.pred_1` 확률 + context |
-| 3 | `doctor_sentence_view` | ~47 | 중복 제거된 의사 문장 + 도메인 분류 |
+| 1 | <u>**`transcript_analysis_log`**</u> | 1 | 분석 실행 기록 |
+| 2 | <u>**`sentence_prediction`**</u> | 50 | NLP 문장별 예측 |
+| 3 | `doctor_sentence_view` | ~47 | 의사 대시보드용 문장 |
 | 4 | `patient_summary` | 1 | 환자 요약 기본 행 |
-| 5 | <u>**`patient_summary_domain`**</u> | 5 | 도메인별 요약 + patient_scoring(NULL) + patient_response(NULL) |
+| 5 | <u>**`patient_summary_domain`**</u> | 5 | 도메인별 환자 데이터 |
+
+*AI Pipeline (Step 9) 완료 후 추가 저장:*
+
+| 순서 | 테이블 | 행 수 | 내용 |
+|:----:|--------|:-----:|------|
+| 6 | <u>**`llm_domain_scoring_and_summary`**</u> | 5~9 | GPT-4o AI 결과 |
+
+**각 테이블이 왜 필요한가 (실제 데이터 기준: 5명 환자 처리 완료):**
+
+---
+
+**테이블 1: `transcript_analysis_log` (현재 5행)**
+
+> 왜 필요한가: 파이프라인이 언제, 어떤 설정으로, 어떤 파일을 처리했는지 **기록**이 필요합니다. 이 테이블이 없으면 "SID 14는 처리되었는가?", "언제 처리되었는가?", "다시 처리해야 하는가?"를 알 수 없습니다.
+
+| 사용처 | 코드 | 역할 |
+|--------|------|------|
+| 파이프라인 중복 방지 | `persistence.file_already_processed()` | 이미 처리된 파일은 `[SKIP]`으로 건너뜀. 이 테이블의 `source_filename`을 확인. |
+| xlsx 다운로드 fallback | `routes_transcript.py` → `GET /api/transcript/download/{patient_id}` | 디스크에서 xlsx 파일이 삭제되었을 때, `xlsx_data` (BYTEA) 컬럼에서 복구. |
+| 분석 이력 조회 | `routes_transcript.py` → `GET /api/transcript/history/{patient_id}` | 환자별 분석 실행 이력 표시. |
+| AI Pipeline FK | `llm_domain_scoring_and_summary.analysis_id` → 이 테이블의 `id` | AI 결과가 어떤 분석 실행에 속하는지 연결. |
+| <u>**처리 완료 추적**</u> | `processed` + `processed_at` 컬럼 | `processed=False`인 행 조회 → **AI pipeline 재처리 대상** 파악. |
+
+---
+
+**테이블 2: `sentence_prediction` (현재 250행 = 5환자 × 50문장)**
+
+> 왜 필요한가: NLP 모델이 선택한 **Top-10 문장 + 확률 점수**를 도메인별로 저장합니다. 이 테이블이 없으면 의사 대시보드에서 "어떤 문장이 얼마나 관련있는가"를 표시할 수 없습니다.
+
+| 사용처 | 코드 | 역할 |
+|--------|------|------|
+| 환자 페이지 — 근거 문장 | `routes_patient.py` → `GET /api/patient/sentences/{file}` | 환자에게 "의사가 이런 말을 했습니다" 근거 문장 표시. `pred_score` (NLP 확률)로 정렬. |
+| 분석 결과 재구성 | `routes_transcript.py` | 분석 기록에서 어떤 문장이 선택되었는지 조회. |
+
+---
+
+**테이블 3: `doctor_sentence_view` (현재 221행)**
+
+> 왜 필요한가: 의사 대시보드에서 보여줄 문장 목록을 **중복 없이** 저장합니다. `sentence_prediction`에서는 같은 문장이 여러 도메인에 중복 등장할 수 있지만, 의사에게는 **문장 1개 = 1행**으로 보여야 합니다.
+
+| 사용처 | 코드 | 역할 |
+|--------|------|------|
+| <u>**의사 대시보드 — 문장 목록**</u> | `routes_doctor.py` → `GET /api/doctor/sentences/{file}/{speaker}` | 의사가 리뷰할 문장 목록. 도메인(`class`) + 문장(`sentence`) + 점수(`score`). |
+| 의사 대시보드 — 파일 목록 | `routes_doctor.py` → `GET /api/doctor/files` | 처리된 환자 파일 목록. 이 테이블에 파일이 있으면 "처리됨". |
+| 의사 rewrite 대상 | `routes_doctor.py` → `PUT /api/doctor/rewrites` | 의사가 문장을 수정(rewrite)할 때, 이 테이블의 `(file, i, i2)`가 대상 식별자. |
+
+---
+
+**테이블 4: `patient_summary` (현재 5행)**
+
+> 왜 필요한가: **환자별 1행**의 기본 레코드. `patient_summary_domain` (도메인별 5행)의 부모 테이블. 이 테이블이 없으면 FK 관계가 성립하지 않습니다.
+
+| 사용처 | 코드 | 역할 |
+|--------|------|------|
+| 환자 페이지 — 요약 조회 | `routes_patient.py` → `GET /api/patient/summaries/{file}/{speaker}` | `patient_summary` + `patient_summary_domain` JOIN하여 5개 도메인 요약 반환. |
+| FK 부모 | `patient_summary_domain`의 `(file, speaker)` → 이 테이블의 PK | CASCADE 삭제: 환자 삭제 시 도메인 데이터도 삭제. |
+
+---
+
+**테이블 5: `patient_summary_domain` (현재 25행 = 5환자 × 5도메인)**
+
+> 왜 필요한가: 환자 페이지에서 **도메인별로** 요약 텍스트, 환자 평점, 환자 응답을 저장합니다. 환자가 대시보드에서 별점을 매기면 이 테이블이 UPDATE됩니다.
+
+| 사용처 | 코드 | 역할 |
+|--------|------|------|
+| 환자 페이지 — 도메인별 요약 | `routes_patient.py` → `GET /api/patient/summaries/{file}/{speaker}` | `summary_text` (도메인별 텍스트) 표시. |
+| <u>**환자 별점 저장**</u> | `routes_patient.py` → `PUT /api/patient/scoring` | `patient_scoring` (0-10) UPDATE. `PatientInitialVisitReportV35.tsx`에서 호출. |
+| 환자 응답 저장 | `routes_patient.py` → `PUT /api/patient/responses` | `patient_response` UPDATE. ⚠️ **UI 미구현** — API만 존재. |
+
+---
+
+**테이블 6: `llm_domain_scoring_and_summary` (현재 33행)**
+
+> 왜 필요한가: Guillermo의 AI pipeline (GPT-4o)이 생성한 **도메인별 분석 결과**를 저장합니다. NLP가 "어떤 문장이 관련있는가"를 찾았다면, AI pipeline은 "그 문장이 얼마나 구체적으로 위험을 전달하는가"를 평가합니다.
+
+| 사용처 | 코드 | 역할 |
+|--------|------|------|
+| <u>**의사 페이지 — 상담 품질 점수**</u> | `routes_doctor.py` → `GET /api/doctor/scores/average` | `ai_score` (0-5)의 도메인별/전체 평균. 의사 대시보드 메인 지표. |
+| 의사 페이지 — 점수 궤적 | `routes_doctor.py` → `GET /api/doctor/scores/trajectory` | 시간에 따른 `ai_score` 변화 그래프. |
+| <u>**환자 페이지 — AI 요약 카드**</u> | `routes_patient.py` → `GET /api/patient/ai-summary/{file}` | `reformat_sentence`를 환자에게 AI 요약 카드로 표시. |
+| 의사 AI rewrite | `routes_doctor.py` → `POST /api/doctor/ai-rewrite` | `source_sentence` + `source_context`를 GPT-4o에 보내 문장 개선 제안. |
 
 ---
 
