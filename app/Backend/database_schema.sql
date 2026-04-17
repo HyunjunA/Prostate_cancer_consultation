@@ -127,8 +127,11 @@ CREATE TABLE transcript_analysis_log (
     model_results JSONB,                   -- per-model NLP scores (validated JSON)
     xlsx_data BYTEA,                       -- binary xlsx file for DB-backed download
     source_filename VARCHAR(500),
-    analyzed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    ai_overall_score FLOAT                  -- GPT-4o average score across all domains (0-5)
+    pipeline_started_at TIMESTAMP WITH TIME ZONE,  -- when pipeline_runner began processing
+    analyzed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),  -- when NLP results saved to DB
+    ai_overall_score FLOAT,                 -- GPT-4o average score across all domains (0-5)
+    processed BOOLEAN DEFAULT FALSE,        -- True when full pipeline (NLP + AI) completed
+    processed_at TIMESTAMP WITH TIME ZONE   -- when AI pipeline completed
 );
 
 -- Note: idx_transcript_log_patient_id removed — redundant with composite (patient_id, analyzed_at DESC)

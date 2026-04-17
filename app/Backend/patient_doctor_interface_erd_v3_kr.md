@@ -86,7 +86,11 @@ erDiagram
         JSONB model_results "DEPRECATED (신규 행은 NULL)"
         BYTEA xlsx_data "예: (바이너리, 87KB xlsx 파일)"
         VARCHAR source_filename "예: Input_Keystrokes REC 001 (SID 10).xlsx"
-        TIMESTAMPTZ analyzed_at "예: 2026-04-10T15:33:32Z"
+        TIMESTAMPTZ pipeline_started_at "파이프라인 처리 시작 시각"
+        TIMESTAMPTZ analyzed_at "NLP 결과 DB 저장 시각 (Step 8)"
+        FLOAT ai_overall_score "예: 3.40 (전체 도메인 ai_score 평균, 0-5)"
+        BOOLEAN processed "전체 파이프라인(NLP + AI) 완료 여부"
+        TIMESTAMPTZ processed_at "AI 파이프라인(Step 9) 완료 시각"
     }
 
     sentence_prediction {

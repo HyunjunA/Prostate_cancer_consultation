@@ -86,8 +86,11 @@ erDiagram
         JSONB model_results "DEPRECATED (NULL for new rows)"
         BYTEA xlsx_data "e.g. (binary, 87KB xlsx file)"
         VARCHAR source_filename "e.g. Input_Keystrokes REC 001 (SID 10).xlsx"
-        TIMESTAMPTZ analyzed_at "e.g. 2026-04-10T15:33:32Z"
+        TIMESTAMPTZ pipeline_started_at "when pipeline_runner began processing"
+        TIMESTAMPTZ analyzed_at "when NLP results saved to DB (Step 8)"
         FLOAT ai_overall_score "e.g. 3.40 (avg of all domain ai_scores, 0-5)"
+        BOOLEAN processed "True when full pipeline (NLP + AI) completed"
+        TIMESTAMPTZ processed_at "when AI pipeline (Step 9) completed"
     }
 
     sentence_prediction {

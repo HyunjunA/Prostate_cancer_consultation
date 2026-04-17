@@ -188,10 +188,15 @@ async def run_ai_scoring_and_summary(
                 overall = round(sum(all_scores) / len(all_scores), 2)
                 from sqlalchemy import update
                 from models import TranscriptAnalysisLog as TAL
+                from datetime import datetime, timezone
                 await db.execute(
-                    update(TAL).where(TAL.id == analysis_id).values(ai_overall_score=overall)
+                    update(TAL).where(TAL.id == analysis_id).values(
+                        ai_overall_score=overall,
+                        processed=True,
+                        processed_at=datetime.now(timezone.utc),
+                    )
                 )
-                logger.info("AI pipeline: overall score = %.2f (%d domains)", overall, len(all_scores))
+                logger.info("AI pipeline: overall score = %.2f (%d domains), processed=True", overall, len(all_scores))
 
             await db.commit()
             logger.info("AI pipeline: saved %d rows to llm_domain_scoring_and_summary", rows_saved)
