@@ -461,7 +461,151 @@ erDiagram
 
 ---
 
-## 3. 파이프라인 타이밍 (검증 완료)
+## 3. 프론트엔드 화면 ↔ DB 테이블 관계
+
+아래는 사용자가 **브라우저에서 실제로 보는 것**이 **어떤 테이블에서** 오는지를 보여줍니다.
+
+### 의사 페이지 (`PhysicianReportsModifiedV41Timothy.tsx`)
+
+```mermaid
+flowchart LR
+    subgraph 의사 대시보드
+        A[환자 목록]
+        B[문장 목록 + 도메인 분류]
+        C[상담 품질 점수 0-5]
+        D[점수 궤적 그래프]
+        E[AI Rewrite 제안]
+        F[Rewrite 이력]
+    end
+
+    subgraph DB 테이블
+        T1[doctor_sentence_view]
+        T2[llm_domain_scoring_and_summary]
+        T3[doctor_rewrite_log]
+    end
+
+    A -->|GET /api/doctor/files| T1
+    B -->|GET /api/doctor/sentences| T1
+    C -->|GET /api/doctor/scores/average| T2
+    D -->|GET /api/doctor/scores/trajectory| T2
+    E -->|POST /api/doctor/ai-rewrite| T2
+    F -->|GET /api/doctor/rewrites| T3
+```
+
+| 화면에 보이는 것 | DB 테이블 | 컬럼 | API |
+|----------------|----------|------|-----|
+| 환자 파일 목록 | `doctor_sentence_view` | `file` (DISTINCT) | `GET /api/doctor/files` |
+| 도메인별 문장 목록 | `doctor_sentence_view` | `sentence`, `class`, `i`, `i2` | `GET /api/doctor/sentences/{file}/{speaker}` |
+| <u>**상담 품질 점수 (0-5)**</u> | `llm_domain_scoring_and_summary` | <u>**`ai_score`**</u> | `GET /api/doctor/scores/average` |
+| 점수 변화 궤적 | `llm_domain_scoring_and_summary` | `ai_score` (시간순) | `GET /api/doctor/scores/trajectory` |
+| 도메인별 점수 요약 | `llm_domain_scoring_and_summary` | `ai_score` + `doctor_sentence_view.score` | `GET /api/doctor/scores/summary/{file}` |
+| AI Rewrite 제안 | `llm_domain_scoring_and_summary` | `source_sentence`, `source_context` → GPT-4o 호출 | `POST /api/doctor/ai-rewrite` |
+| 의사가 수정한 이력 | `doctor_rewrite_log` | `original_sentence`, `revised_sentence`, `score` | `GET /api/doctor/rewrites` |
+
+---
+
+### 환자 초진 페이지 (`PatientInitialVisitReportV35.tsx`)
+
+```mermaid
+flowchart LR
+    subgraph 환자 초진 대시보드
+        A[도메인별 요약 카드]
+        B[AI 위험 요약 카드]
+        C[근거 문장 목록]
+        D[별점 평가]
+    end
+
+    subgraph DB 테이블
+        T1[patient_summary + patient_summary_domain]
+        T2[llm_domain_scoring_and_summary]
+        T3[sentence_prediction via doctor_sentence_view]
+        T4[patient_summary_domain]
+    end
+
+    A -->|GET /api/patient/summaries| T1
+    B -->|GET /api/patient/ai-summary| T2
+    C -->|GET /api/patient/sentences| T3
+    D -->|PUT /api/patient/scoring| T4
+```
+
+| 화면에 보이는 것 | DB 테이블 | 컬럼 | API |
+|----------------|----------|------|-----|
+| 도메인별 요약 텍스트 | `patient_summary_domain` | `summary_text`, `display_order` | `GET /api/patient/summaries/{file}/{speaker}` |
+| <u>**AI 위험 요약 카드**</u> (GPT-4o) | `llm_domain_scoring_and_summary` | <u>**`reformat_sentence`**</u> | `GET /api/patient/ai-summary/{file}` |
+| 근거 문장 (의사가 한 말) | `doctor_sentence_view` | `sentence`, `class` (Top-7) | `GET /api/patient/sentences/{file}` |
+| <u>**환자 별점 (0-10)**</u> | `patient_summary_domain` | <u>**`patient_scoring`**</u> | `PUT /api/patient/scoring` |
+
+**AI 위험 요약 카드 예시** (실제 DB 데이터):
+> *"Your doctor noted that, without treatment, your risk of dying of cancer is 24–25%. With treatment, this risk decreases to 6%."*  
+> ← `llm_domain_scoring_and_summary.reformat_sentence` (cp 도메인, SID 10)
+
+---
+
+### 환자 재진 페이지 (`PatientFollowUpReportV31Re.tsx`)
+
+```mermaid
+flowchart LR
+    subgraph 환자 재진 대시보드
+        A[도메인별 요약 카드]
+        B[AI 위험 요약 카드]
+        C[SDM 설문]
+        D[DCS 설문]
+        E[위험 인식 설문]
+        F[만족도 설문]
+    end
+
+    subgraph DB 테이블
+        T1[patient_summary + patient_summary_domain]
+        T2[llm_domain_scoring_and_summary]
+        T3[survey_submission_log]
+    end
+
+    A -->|GET /api/patient/summaries| T1
+    B -->|GET /api/patient/ai-summary| T2
+    C -->|POST /api/surveys/submit| T3
+    D -->|POST /api/surveys/submit| T3
+    E -->|POST /api/surveys/submit| T3
+    F -->|POST /api/surveys/submit| T3
+```
+
+| 화면에 보이는 것 | DB 테이블 | 컬럼 | API |
+|----------------|----------|------|-----|
+| 도메인별 요약 텍스트 | `patient_summary_domain` | `summary_text` | `GET /api/patient/summaries/{file}/{speaker}` |
+| <u>**AI 위험 요약 카드**</u> | `llm_domain_scoring_and_summary` | <u>**`reformat_sentence`**</u> | `GET /api/patient/ai-summary/{file}` |
+| SDM 설문 제출 | `survey_submission_log` | `answers` (JSONB), `survey_type='sdm'` | `POST /api/surveys/submit` |
+| DCS 설문 제출 | `survey_submission_log` | `answers` (JSONB), `survey_type='dcs'` | `POST /api/surveys/submit` |
+| 위험 인식 설문 | `survey_submission_log` | `answers`, `survey_type='risk_perception'` | `POST /api/surveys/submit` |
+| 만족도 설문 | `survey_submission_log` | `answers`, `survey_type='satisfaction'` | `POST /api/surveys/submit` |
+| 이전 설문 복원 | `survey_submission_log` | `answers` (기존 제출 조회) | `GET /api/surveys/by-speaker/{speaker}` |
+
+**설문 → REDCap 동기화 흐름:**
+```
+환자가 설문 제출 → survey_submission_log INSERT (redcap_synced=False)
+  → 백그라운드 REDCap API 호출
+  → 성공: redcap_synced=True, redcap_record_id 저장
+  → 실패: redcap_synced=False, redcap_error에 에러 기록
+```
+
+---
+
+### 전체 요약: 테이블별 프론트엔드 사용처
+
+| DB 테이블 | 의사 페이지 | 환자 초진 | 환자 재진 |
+|----------|:---:|:---:|:---:|
+| `transcript_analysis_log` | — | — | — |
+| `sentence_prediction` | — | 근거 문장 | — |
+| <u>**`doctor_sentence_view`**</u> | **문장 목록, 파일 목록** | 근거 문장 | — |
+| `doctor_rewrite_log` | Rewrite 이력 | — | — |
+| `patient_summary` | — | FK 부모 | FK 부모 |
+| <u>**`patient_summary_domain`**</u> | — | **요약 + 별점** | 요약 |
+| `survey_submission_log` | — | — | **설문 4종** |
+| <u>**`llm_domain_scoring_and_summary`**</u> | **품질 점수, 궤적** | **AI 요약 카드** | **AI 요약 카드** |
+
+> 참고: `transcript_analysis_log`는 프론트엔드에 직접 표시되지 않지만, **파이프라인 관리** (중복 방지, xlsx 다운로드, processed 추적)에 사용됩니다.
+
+---
+
+## 4. 파이프라인 타이밍 (검증 완료)
 
 ```
 SID 10: pipeline_started_at=05:26:14 → analyzed_at=05:26:30 → processed_at=05:29:28 (3분14초)
