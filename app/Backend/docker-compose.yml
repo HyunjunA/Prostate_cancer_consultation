@@ -120,9 +120,10 @@ services:
       interval: 15s
       timeout: 5s
       retries: 40
-      # Extended start_period: pipeline_runner Steps 1-10 (~3min) + Step 11 AI pipeline
-      # AI pipeline processes all patients on first startup (5 domains × ~3min each)
-      start_period: 1200s
+      # Extended start_period: pipeline_runner Steps 1-8 (NLP ~1min per patient)
+      # + Step 9 AI pipeline (GPT-4o ~3min per patient × 5 patients = ~15min)
+      # Total first startup: ~25min. Set 2400s (40min) for safety margin.
+      start_period: 2400s
     ulimits:
       nofile:
         soft: 1048576

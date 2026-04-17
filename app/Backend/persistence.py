@@ -32,6 +32,7 @@ async def save_all(
     outcome_to_sheet: Dict[str, str],
     domain_slot_map: Dict[str, str],
     domain_short_map: Dict[str, str],
+    pipeline_started_at=None,
 ) -> bool:
     """Save all pipeline results to DB in a single transaction.
 
@@ -49,7 +50,7 @@ async def save_all(
 
     async with Session() as session:
         try:
-            # 1. transcript_analysis_log
+            # 1. transcript_analysis_log (processed=False until AI pipeline completes)
             analysis_log = models.TranscriptAnalysisLog(
                 patient_id=patient_id,
                 total_sentences=total_sentences,
@@ -58,6 +59,8 @@ async def save_all(
                 model_results=None,
                 xlsx_data=xlsx_bytes,
                 source_filename=filename,
+                pipeline_started_at=pipeline_started_at,
+                processed=False,
             )
             session.add(analysis_log)
             await session.flush()

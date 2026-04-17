@@ -152,7 +152,14 @@ class SurveySubmissionLog(Base):
 # =====================================================
 
 class TranscriptAnalysisLog(Base):
-    """Stores each transcript analysis run: metadata, JSON results, and xlsx binary."""
+    """Stores each transcript analysis run: metadata, JSON results, and xlsx binary.
+
+    Pipeline timing:
+      - pipeline_started_at: when pipeline_runner began processing this file
+      - analyzed_at: when NLP results were saved to DB (Step 8)
+      - processed_at: when AI pipeline (GPT-4o) completed (Step 9)
+      - processed: True if full pipeline (NLP + AI) completed successfully
+    """
     __tablename__ = 'transcript_analysis_log'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -163,8 +170,11 @@ class TranscriptAnalysisLog(Base):
     model_results = Column(JSONB)            # per-model scores (auto dict↔JSON)
     xlsx_data = Column(LargeBinary)         # binary xlsx for DB-backed download
     source_filename = Column(String(500))
-    analyzed_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), index=True)
+    pipeline_started_at = Column(TIMESTAMP(timezone=True))  # when processing began
+    analyzed_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), index=True)  # when NLP saved to DB
     ai_overall_score = Column(Float)  # GPT-4o average score across all domains (0-5)
+    processed = Column(Boolean, default=False)  # True when full pipeline (NLP + AI) completed
+    processed_at = Column(TIMESTAMP(timezone=True))  # when AI pipeline completed
 
     predictions = relationship("SentencePrediction", back_populates="analysis", cascade="all, delete-orphan")
 

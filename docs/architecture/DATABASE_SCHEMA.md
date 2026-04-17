@@ -366,7 +366,22 @@ Every time the NLP pipeline processes a transcript file, it creates one row in t
 | `model_results` | JSONB | | **Deprecated** — set to NULL for new analysis runs. Per-model result data is now stored exclusively in the `sentence_prediction` table. Kept for backward compatibility with legacy rows that predate the `sentence_prediction` feature; `_backfill_predictions()` reads this column to reconstruct old data. |
 | `xlsx_data` | BYTEA | | Binary xlsx file for DB-backed download. Allows result retrieval even after disk cleanup. Can be large (~50-200KB per file). |
 | `source_filename` | VARCHAR(500) | | Original input filename (e.g., `Input_Keystrokes REC001 (SID 14).xlsx`). |
-| `analyzed_at` | TIMESTAMP | | When this analysis was run. Indexed for chronological queries. |
+| `pipeline_started_at` | TIMESTAMP | | When `pipeline_runner.py` began processing this file. Used to calculate total pipeline duration. |
+| `analyzed_at` | TIMESTAMP | | When NLP results were saved to DB (Step 8). Indexed for chronological queries. |
+| `ai_overall_score` | FLOAT | | GPT-4o average ai_score across all domains (0-5). Set by `ai_pipeline_service.py` after Step 9 completes. Displayed on the DOCTOR page as overall consultation quality. |
+| `processed` | BOOLEAN | | `False` after NLP save (Step 8), `True` after AI pipeline completes (Step 9). Indicates whether the full pipeline (NLP + AI) has finished. Patients with `processed=False` can be re-processed for the AI step. |
+| `processed_at` | TIMESTAMP | | When the AI pipeline (Step 9) completed. `NULL` if `processed=False`. Together with `pipeline_started_at`, gives total end-to-end processing time. |
+
+### Pipeline timing
+
+```
+pipeline_started_at  →  analyzed_at  →  processed_at
+     (start)           (NLP saved)     (AI completed)
+     
+NLP time  = analyzed_at - pipeline_started_at     (~10-15 seconds)
+AI time   = processed_at - analyzed_at            (~3 minutes)
+Total     = processed_at - pipeline_started_at    (~3-4 minutes)
+```
 
 ### Indexes
 

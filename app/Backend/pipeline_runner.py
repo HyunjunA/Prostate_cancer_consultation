@@ -139,6 +139,9 @@ async def process_single_file(
         logger.info("[SKIP] Skipping %s — already in DB", filename)
         return None
 
+    from datetime import datetime, timezone
+    pipeline_started_at = datetime.now(timezone.utc)
+
     logger.info("=" * 60)
     logger.info("Processing: %s", filename)
     logger.info("=" * 60)
@@ -194,7 +197,7 @@ async def process_single_file(
     doctor_speaker = df_filtered["speaker"].iloc[0] if len(df_filtered) > 0 else "Unknown"
     patient_speaker = f"Patient_{Path(filename).stem}"
 
-    # ── Step 8: Save to DB ─────────────────────────────────────────────
+    # ── Step 8: Save to DB (processed=False, AI pipeline not yet run) ───
     success = await persistence.save_all(
         Session,
         filename=filename,
@@ -209,6 +212,7 @@ async def process_single_file(
         outcome_to_sheet=OUTCOME_TO_SHEET,
         domain_slot_map=_DOMAIN_SLOT_MAP,
         domain_short_map=_DOMAIN_SHORT_MAP,
+        pipeline_started_at=pipeline_started_at,
     )
 
     # ── Save output files (traceability) ─────────────────────────────────
