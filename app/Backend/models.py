@@ -14,33 +14,9 @@ Base = declarative_base()
 # 1. Doctor Interface Tables
 # =====================================================
 
-class DoctorSentenceView(Base):
-    """Doctor interface render table - displays sentences with scores."""
-    __tablename__ = 'doctor_sentence_view'
-
-    file = Column(String(255), primary_key=True, nullable=False)
-    i = Column(Integer, primary_key=True, nullable=False)
-    i2 = Column(Integer, primary_key=True, nullable=False)
-    speaker = Column(String(100))
-    sentence = Column(Text)
-    score = Column(Float)
-    class_ = Column('class', String(100))
-    time = Column(TIMESTAMP(timezone=True))
-
-    def __repr__(self):
-        return f"<DoctorSentenceView(file={self.file}, i={self.i}, i2={self.i2})>"
-
-
 class DoctorRewriteLog(Base):
     """Doctor rewriting history - tracks AI-powered sentence revisions."""
     __tablename__ = 'doctor_rewrite_log'
-    __table_args__ = (
-        ForeignKeyConstraint(
-            ['file', 'i', 'i2'],
-            ['doctor_sentence_view.file', 'doctor_sentence_view.i', 'doctor_sentence_view.i2'],
-            ondelete='CASCADE'
-        ),
-    )
 
     file = Column(String(255), primary_key=True, nullable=False)
     i = Column(Integer, primary_key=True, nullable=False)

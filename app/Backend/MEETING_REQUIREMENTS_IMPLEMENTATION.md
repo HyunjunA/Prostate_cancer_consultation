@@ -145,7 +145,7 @@ data/output_test/SID_15/
 | Data | Table | Column | API |
 |------|-------|--------|-----|
 | AI quality score | `llm_domain_scoring_and_summary` | `ai_score` | `GET /api/doctor/scores/average` |
-| Top sentences | `doctor_sentence_view` | `sentence`, `class` | `GET /api/doctor/sentences/{file}/{speaker}` |
+| Top sentences | `sentence_prediction` | `sentence_text`, `model` | `GET /api/doctor/sentences/{file}/{speaker}` |
 | Score trajectory | `llm_domain_scoring_and_summary` | `ai_score` | `GET /api/doctor/scores/trajectory` |
 
 **Doctor does not save** — doctor view is read-only. Rewriting saves to `doctor_rewrite_log` from the dashboard (not pipeline).
@@ -160,7 +160,7 @@ data/output_test/SID_15/
 | **Called by** | `pipeline_runner.py` (Step 8) |
 | **Key** | `transcript_analysis_log.patient_id` (e.g., SID_10) |
 | **Transaction** | Single transaction — all tables or none |
-| **Tables written** | `transcript_analysis_log` (1), `sentence_prediction` (50), `doctor_sentence_view` (~47), `patient_summary` (1), `patient_summary_domain` (5) |
+| **Tables written** | `transcript_analysis_log` (1), `sentence_prediction` (50), `patient_summary` (1), `patient_summary_domain` (5) |
 
 ---
 

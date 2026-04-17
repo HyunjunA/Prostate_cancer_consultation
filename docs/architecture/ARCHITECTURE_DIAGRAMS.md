@@ -132,7 +132,6 @@ flowchart TD
     end
 
     subgraph DB[" PostgreSQL"]
-        DSV["doctor_sentence_view<br/>sentence + score(0-5) + class"]
         SP["sentence_prediction<br/>pred_score(0-1) × 5 domains"]
         TAL["transcript_analysis_log<br/>run metadata + xlsx binary"]
         PS["patient_summary<br/>5 domain AI summaries"]
@@ -145,7 +144,7 @@ flowchart TD
     S4 --> S8
     S5 --> S9
     S7 -->|xlsx_data| TAL
-    S8 -->|score 0-5| DSV
+    S8 -->|score 0-5| SP
     S4 -->|.pred_1| SP
     S9 -->|summary text| PS
     PS -.->|FK| PSS
@@ -162,17 +161,6 @@ flowchart TD
 
 ```mermaid
 erDiagram
-    doctor_sentence_view {
-        varchar file PK
-        int i PK
-        int i2 PK
-        varchar speaker
-        text sentence
-        float score "0-5 quality"
-        varchar class "domain name"
-        timestamptz time
-    }
-
     doctor_rewrite_log {
         varchar file PK-FK
         int i PK-FK
@@ -290,7 +278,6 @@ erDiagram
         varchar access_type "read/write/admin"
     }
 
-    doctor_sentence_view ||--o{ doctor_rewrite_log : "1:N CASCADE"
     patient_summary ||--|| patient_summary_scoring : "1:1 CASCADE"
     patient_summary ||--|| patient_responses : "1:1 CASCADE"
     patient_summary ||--o{ survey_submission_log : "1:N CASCADE"
@@ -599,7 +586,7 @@ graph TD
 
     subgraph Scores["Scoring"]
         PRED[".pred_1 (0.0-1.0)<br/>NLP relevance probability<br/>→ sentence_prediction.pred_score"]
-        QUAL["Quality Score (0-5)<br/>Consultation quality<br/>→ doctor_sentence_view.score"]
+        QUAL["Quality Score (0-5)<br/>Consultation quality<br/>→ sentence_prediction (stored alongside pred_score)"]
     end
 
     subgraph Outputs["Dashboard Output"]
