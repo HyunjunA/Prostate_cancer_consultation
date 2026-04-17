@@ -77,8 +77,20 @@ class PatientSummary(Base):
 
 class PatientSummaryDomain(Base):
     """Per-domain summary, scoring, and response — one row per patient per domain.
-    Replaces the old patient_summary class_1~5 columns, patient_summary_scoring,
-    and patient_responses tables."""
+
+    Frontend usage:
+      - patient_scoring (0-10) → PATIENT page: star rating entered by the patient
+                                  on the follow-up visit ("How well did your doctor
+                                  explain this topic?"). Saved via PUT /api/patient/scoring.
+                                  Initially NULL — populated when patient submits rating.
+      - patient_response       → PATIENT page: free-text response entered by the patient.
+                                  Saved via PUT /api/patient/responses.
+      - summary_text           → PATIENT page: domain summary text (populated by pipeline).
+
+    NOTE: patient_scoring is NOT the same as llm_domain_scoring_and_summary.ai_score.
+      - patient_scoring = patient's subjective rating of doctor communication (PATIENT page)
+      - ai_score = GPT-4o's objective scoring of sentence relevance (DOCTOR page)
+    """
     __tablename__ = 'patient_summary_domain'
     __table_args__ = (
         ForeignKeyConstraint(
@@ -93,8 +105,8 @@ class PatientSummaryDomain(Base):
     domain = Column(String(100), primary_key=True, nullable=False)
     display_order = Column(Integer, nullable=False, default=0)
     summary_text = Column(Text)
-    patient_scoring = Column(Integer, CheckConstraint('patient_scoring BETWEEN 0 AND 10'))
-    patient_response = Column(Text)
+    patient_scoring = Column(Integer, CheckConstraint('patient_scoring BETWEEN 0 AND 10'))  # PATIENT enters this
+    patient_response = Column(Text)  # PATIENT enters this
 
     summary = relationship("PatientSummary", back_populates="domains")
 
@@ -243,13 +255,18 @@ class SessionRecording(Base):
 # =====================================================
 
 class LLMDomainScoringAndSummary(Base):
-    """Stores GPT-4o AI pipeline results per domain per analysis run.
+    """GPT-4o AI pipeline results per domain per analysis run.
 
-    Each row = one domain's final result from the AI pipeline:
-    - ai_score (0-5): how specifically the doctor communicated risk for this domain
-    - extracted_estimate: the actual risk number extracted (e.g., "24-25%", "13 years")
-    - reformat_sentence: patient-facing plain-language summary
-    - treatment: which treatment the estimate refers to (side-effect domains only)
+    Each row = one domain's final result from the AI pipeline
+    (Guillermo's ai_pipeline module: scoring → extraction → filtering → selection → reformat).
+
+    Frontend usage:
+      - ai_score (0-5)        → DOCTOR page: displayed as consultation quality score
+                                 via /api/doctor/scores/average, /scores/summary, /scores/trajectory
+      - reformat_sentence     → PATIENT page: displayed as AI-generated risk summary card
+                                 via /api/patient/ai-summary/{file}
+      - extracted_estimate    → DOCTOR page: raw risk estimate for review
+      - score_explanation     → Internal: chain-of-thought reasoning (not displayed)
     """
     __tablename__ = 'llm_domain_scoring_and_summary'
 
@@ -257,13 +274,13 @@ class LLMDomainScoringAndSummary(Base):
     analysis_id = Column(Integer, ForeignKey('transcript_analysis_log.id', ondelete='CASCADE'), nullable=False)
     patient_id = Column(String(255), nullable=False)
     domain = Column(String(10), nullable=False)              # cp, le, ed, inc, ius
-    ai_score = Column(Integer)                               # 0-5 GPT-4o relevance score
-    score_explanation = Column(Text)                         # chain-of-thought reasoning
+    ai_score = Column(Integer)                               # 0-5 GPT-4o score → DOCTOR page (quality metric)
+    score_explanation = Column(Text)                         # GPT-4o reasoning for the ai_score (from ai_pipeline/scoring.py)
     extracted_estimate = Column(Text)                        # "24-25%", "13 years", "<missing>"
     treatment = Column(String(50))                           # "surgery", "radiation", NULL
     source_sentence = Column(Text)                           # original single sentence (input to reformat)
     source_context = Column(Text)                            # surrounding context sentences
-    reformat_sentence = Column(Text)                         # patient-facing summary sentence
+    reformat_sentence = Column(Text)                         # patient-facing summary → PATIENT page
     source_filename = Column(String(500))
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 

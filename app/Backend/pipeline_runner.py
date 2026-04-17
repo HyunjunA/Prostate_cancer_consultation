@@ -182,6 +182,11 @@ async def process_single_file(
         df_sentences, top_by_model, window=context_window,
     )
 
+    # ── Convert keys: sentence_classification uses short names (cp, le, ...)
+    #    but persistence.save_all expects full names (cancer_prognosis, ...)
+    _short_to_full = {v: k for k, v in OUTCOME_TO_SHEET.items()}
+    final_results = {_short_to_full.get(k, k): v for k, v in final_results.items()}
+
     # ── Step 7: Export xlsx (in-memory bytes for DB) ─────────────────────
     xlsx_bytes = _export_to_xlsx_bytes(final_results)
 
