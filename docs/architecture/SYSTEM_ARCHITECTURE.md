@@ -420,7 +420,11 @@ Retry backoff: 2^attempt seconds (1s → 2s)
   │    class_               │        │    total_sentences          │
   │    sentence             │        │    model_results (JSON)     │
   │    score                │        │    xlsx_data (BYTEA)        │
-  │    context              │        │    analyzed_at              │
+  │    context              │        │    pipeline_started_at      │
+  │                         │        │    analyzed_at              │
+  │                         │        │    processed (BOOLEAN)      │
+  │                         │        │    processed_at             │
+  │                         │        │    ai_overall_score (FLOAT) │
   └────────┬────────────────┘        └────────────┬────────────────┘
            │ FK (file, i, i2)                     │ FK (analysis_id)
            ▼                                      ▼
@@ -530,7 +534,11 @@ Retry backoff: 2^attempt seconds (1s → 2s)
   │ model_results    │ TEXT         │ Per-model results (JSON)     │
   │ xlsx_data        │ BYTEA        │ Result xlsx binary           │
   │ source_filename  │ VARCHAR(500) │ Original filename            │
-  │ analyzed_at      │ TIMESTAMPTZ  │ Analysis time (default NOW())│
+  │ pipeline_started_at│ TIMESTAMP  │ When pipeline_runner began   │
+  │ analyzed_at      │ TIMESTAMPTZ  │ When NLP results saved (Stp8)│
+  │ processed        │ BOOLEAN      │ True when full pipeline done │
+  │ processed_at     │ TIMESTAMP    │ When AI pipeline (Step 9) done│
+  │ ai_overall_score │ FLOAT        │ Overall AI score             │
   └──────────────────┴──────────────┴──────────────────────────────┘
 ```
 

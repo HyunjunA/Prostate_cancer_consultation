@@ -256,7 +256,7 @@ This xlsx is later stored as binary in `transcript_analysis_log.xlsx_data`.
 
 | Order | Table | Row Count | Contents |
 |-------|-------|-----------|----------|
-| 1 | `transcript_analysis_log` | 1 | Execution record (patient_id, top_n, context_window, xlsx binary) |
+| 1 | `transcript_analysis_log` | 1 | Execution record (patient_id, top_n, context_window, xlsx binary, pipeline_started_at, analyzed_at, processed, processed_at, ai_overall_score) |
 | 2 | `sentence_prediction` | 50 | 5 domains x 10 sentences, `.pred_1` probability + context |
 | 3 | `doctor_sentence_view` | 47 | Deduplicated sentences + **0-5 quality score** + domain name |
 | 4 | `patient_summary` | 1 | AI summary text for 5 domains (class_1~5, summary_class_1~5) |
