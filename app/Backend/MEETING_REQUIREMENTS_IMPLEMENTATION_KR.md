@@ -105,6 +105,15 @@ erDiagram
     }
 ```
 
+**각 컬럼의 프론트엔드 사용 현황:**
+
+| 컬럼 | 프론트엔드 사용 | 상세 |
+|------|:-:|------|
+| `display_order` | ✅ 사용 중 | 환자 페이지에서 도메인 카드 표시 순서 결정 |
+| `summary_text` | ✅ 사용 중 | 환자 페이지에서 도메인별 요약 텍스트 표시 |
+| <u>**`patient_scoring`**</u> | ✅ 사용 중 | `PatientInitialVisitReportV35.tsx`에서 `updateSingleClassScore()`로 별점 저장. `PUT /api/patient/scoring` |
+| <u>**`patient_response`**</u> | ❌ **미사용** | `usePatientData.tsx`에 `updateResponses()` 함수가 **정의는** 되어 있지만, 실제 환자 페이지(`PatientInitialVisitReportV35`, `PatientFollowUpReportV31Re`)에서 **호출하지 않음**. `ApiTestDashboard.tsx`(개발자 테스트 전용)에서만 사용. 즉, **환자가 자유 텍스트 피드백을 입력하는 UI가 아직 구현되지 않은 상태.** |
+
 **중요 구분:** `patient_scoring` ≠ `ai_score`
 - <u>**`patient_scoring`**</u> = 환자의 주관적 평가 ("의사가 이 주제를 잘 설명했나?") → **환자 페이지**에서 입력
 - <u>**`ai_score`**</u> = GPT-4o의 객관적 문장 관련도 점수 (0-5) → **의사 페이지**에서 표시
@@ -198,7 +207,7 @@ erDiagram
 |--------|--------|------|-----|------|
 | <u>**AI 위험 요약**</u> | `llm_domain_scoring_and_summary` | <u>**`reformat_sentence`**</u> | `GET /api/patient/ai-summary/{file}` | GPT-4o가 환자 친화적 언어로 변환한 텍스트. 예: *"Your doctor noted that your risk of dying of prostate cancer is 24-25%."* |
 | <u>**환자 평점**</u> | `patient_summary_domain` | <u>**`patient_scoring`**</u> | `PUT /api/patient/scoring` | 환자가 재진 시 직접 입력하는 0-10 별점 |
-| 환자 응답 | `patient_summary_domain` | `patient_response` | `PUT /api/patient/responses` | 환자가 직접 입력하는 자유 텍스트 |
+| 환자 응답 | `patient_summary_domain` | `patient_response` | `PUT /api/patient/responses` | ⚠️ **API는 존재하지만 환자 페이지 UI 미구현** — 자유 텍스트 입력 화면이 아직 없음 |
 
 **의사에게 가는 것 (읽기 전용):**
 
@@ -313,7 +322,8 @@ erDiagram
 
 | 컬럼 | 미팅 요구사항 | 왜 이 테이블에 있는가 |
 |------|-------------|-------------------|
-| <u>**`patient_scoring`**</u> | *"rating from patients"*, *"the review part they are rating"* | 미팅에서 요청한 환자 평점. **환자가 직접 입력**하는 것이므로 파이프라인 결과(`llm_domain_scoring_and_summary`)와 분리. 환자 대시보드에서 `PUT /api/patient/scoring`으로 UPDATE. 이 테이블이 이미 **환자 × 도메인** 단위이므로 도메인별 평점 저장에 적합. |
+| <u>**`patient_scoring`**</u> | *"rating from patients"*, *"the review part they are rating"* | 미팅에서 요청한 환자 평점. **환자가 직접 입력**하는 것이므로 파이프라인 결과(`llm_domain_scoring_and_summary`)와 분리. `PatientInitialVisitReportV35.tsx`에서 `updateSingleClassScore()`로 호출 → `PUT /api/patient/scoring`으로 UPDATE. |
+| `patient_response` | *"things for the patient, the review part"* | 도메인별 자유 텍스트 피드백. ⚠️ **DB 컬럼 + API(`PUT /api/patient/responses`) + hook 함수(`updateResponses`)는 존재하지만, 실제 환자 페이지 UI가 미구현.** `ApiTestDashboard.tsx`(개발자 테스트용)에서만 호출됨. |
 
 이 두 테이블은 <u>**`analysis_id` (FK)**</u>로 연결됩니다:
 
