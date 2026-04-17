@@ -40,6 +40,7 @@ def _create_client():
             azure_endpoint=endpoint,
             api_key=key,
             api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-08-01-preview"),
+            timeout=1800.0,  # 30 min — AI pipeline processes 5 domains × 5 steps sequentially
         )
     except ImportError:
         logger.warning("openai package not installed — AI pipeline disabled")
