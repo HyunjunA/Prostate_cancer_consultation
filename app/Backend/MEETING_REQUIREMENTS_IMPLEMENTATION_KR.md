@@ -7,7 +7,8 @@
 
 ## 1. 개요
 
-이 문서는 2026-04-16 미팅의 각 요구사항을 실제 코드 변경사항에 매핑합니다.
+이 문서는 2026-04-16 미팅의 각 요구사항을 실제 코드 변경사항에 매핑합니다.  
+각 요구사항에서 ***핵심 구현 포인트***는 <u>밑줄</u>과 **굵은 글씨**로 강조하였습니다.
 
 ```mermaid
 flowchart TD
@@ -28,14 +29,29 @@ flowchart TD
 
 ## 2. 요구사항별 구현 매핑
 
-### 요구사항 1: "AI result output — Guillermo 코드 확인"
+### 요구사항 1: "Guillermo 코드에서 AI result output 확인 필요하고 DB persistency"
 
-| 항목 | 구현 내용 |
-|------|----------|
-| **위치** | `ai_pipeline_service.py` → `ai_pipeline/pipeline.py` (Guillermo 코드) 호출 |
-| **생성하는 것** | 도메인별: `ai_score` (0-5), `score_explanation`, `extracted_estimate`, `treatment`, `reformat_sentence` |
-| **저장 위치** | `llm_domain_scoring_and_summary` 테이블 (환자당 5-9행) |
-| **검증** | SID 10, 14, 15, 18, 33 — 모든 도메인 처리 및 저장 완료 |
+> 원문: *"check Guillermo's code, ai result code output, and db persistency"*
+
+**구현 요약:** Guillermo의 `ai_pipeline/` 모듈이 <u>**`ai_pipeline_service.py`를 통해 Docker 안에서 호출**</u>되며, 결과는 <u>**`llm_domain_scoring_and_summary` 테이블에 자동 저장**</u>됩니다.
+
+**상세 구현:**
+
+1. **호출 경로:**  
+   `pipeline_runner.py` (Step 9) → <u>**`ai_pipeline_service.run_ai_scoring_and_summary()`**</u> → `ai_pipeline/pipeline.py` → `run_ai_pipeline()`
+
+2. **Guillermo 코드가 생성하는 것** (도메인당):
+   - <u>**`ai_score` (0-5)**</u>: GPT-4o가 "의사가 이 도메인의 위험을 얼마나 명확히 전달했는가"를 평가한 점수. **의사 페이지**에서 상담 품질 지표로 표시됨 (`GET /api/doctor/scores/average`, `/scores/trajectory`).
+   - **`score_explanation`**: GPT-4o가 점수를 매긴 근거 (chain-of-thought reasoning). 내부 디버깅용.
+   - <u>**`extracted_estimate`**</u>: 의사가 말한 구체적 수치 추정값 (예: `"24-25% risk of death"`, `"13 years"`). **의사 페이지**에서 원본 추정값 리뷰용.
+   - **`treatment`**: 해당 추정값과 관련된 치료법 (예: `"surgery"`, `"radiation"`, 또는 `NULL`). 부작용 도메인(ed, inc, ius)에서만 값이 있음.
+   - <u>**`reformat_sentence`**</u>: GPT-4o가 환자가 이해할 수 있는 언어로 변환한 텍스트. **환자 페이지**에서 AI 요약 카드로 표시됨 (`GET /api/patient/ai-summary/{file}`).
+
+3. **DB 저장 위치:**  
+   <u>**`llm_domain_scoring_and_summary` 테이블**</u> — 환자당 5~9행 (도메인당 1~2행)
+
+4. **검증 결과:**  
+   SID 10, 14, 15, 18, 33 — **총 33행 저장**, 5명 환자, 5개 도메인 모두 처리 완료
 
 ```mermaid
 erDiagram
@@ -56,22 +72,25 @@ erDiagram
     }
 ```
 
-**프론트엔드 사용:**
-- `ai_score` → **의사 페이지**: 상담 품질 지표 (scores/average, scores/trajectory)
-- `reformat_sentence` → **환자 페이지**: AI 생성 위험 요약 카드
-- `extracted_estimate` → **의사 페이지**: 원본 위험 추정값 리뷰용
-
 ---
 
-### 요구사항 2: "환자 평점 — 변경 필요한 부분"
+### 요구사항 2: "환자 평점(rating) — 변경 필요한 부분"
 
-| 항목 | 구현 내용 |
-|------|----------|
-| **위치** | `patient_summary_domain` 테이블 |
-| **컬럼** | `patient_scoring` (INT, 0-10, 환자가 평가할 때까지 NULL) |
-| **환자 입력 방법** | 재진 대시보드 → 도메인별 별점 평가 |
-| **API** | `PUT /api/patient/scoring` |
-| **검증** | 컬럼 존재, 초기값 NULL, 환자 제출 시 업데이트 |
+> 원문: *"there is couple of things we need to change, which is rating from patients"*  
+> 원문: *"things for the patient, the review part they are rating"*
+
+**구현 요약:** <u>**`patient_summary_domain.patient_scoring` 컬럼**</u>이 환자의 별점 평가를 저장합니다. 파이프라인에서는 NULL로 초기화되고, <u>**환자가 재진 대시보드에서 직접 입력**</u>합니다.
+
+**상세 구현:**
+
+1. **저장 테이블:** <u>**`patient_summary_domain`**</u>
+2. **컬럼:** `patient_scoring` (INT, 0-10)
+   - 파이프라인 실행 시: <u>**NULL로 초기화**</u> (아직 환자가 평가하지 않음)
+   - 환자가 대시보드에서 별점 클릭 시: <u>**`PUT /api/patient/scoring`**</u> API로 업데이트
+3. **프론트엔드:**  
+   `PatientFollowUpReportV31Re.tsx` → 각 도메인(cp, le, ed, inc, ius)별로 별점(star rating) UI 표시
+4. **INSERT vs UPDATE:**  
+   <u>**UPDATE 방식**</u> — "현재 평점"만 중요하므로 이전 값을 덮어씀. 평점 이력은 보존하지 않음.
 
 ```mermaid
 erDiagram
@@ -86,99 +105,181 @@ erDiagram
     }
 ```
 
-**참고:** `patient_scoring` ≠ `ai_score`
-- `patient_scoring` = 환자의 주관적 평가 ("의사가 이 주제를 잘 설명했나?") → **환자 페이지**
-- `ai_score` = GPT-4o의 객관적 문장 관련도 점수 → **의사 페이지**
+**중요 구분:** `patient_scoring` ≠ `ai_score`
+- <u>**`patient_scoring`**</u> = 환자의 주관적 평가 ("의사가 이 주제를 잘 설명했나?") → **환자 페이지**에서 입력
+- <u>**`ai_score`**</u> = GPT-4o의 객관적 문장 관련도 점수 (0-5) → **의사 페이지**에서 표시
+- 두 점수는 **서로 다른 테이블, 다른 페이지, 다른 목적**
 
 ---
 
-### 요구사항 3: "처리 완료 여부 플래그"
+### 요구사항 3: "처리 완료 여부 플래그 추가"
 
-| 항목 | 구현 내용 |
-|------|----------|
-| **위치** | `transcript_analysis_log` 테이블 |
-| **컬럼** | `processed` (BOOLEAN), `processed_at` (TIMESTAMP) |
-| **False일 때** | NLP 저장(Step 8) 후 — AI 파이프라인 미실행 |
-| **True일 때** | AI 파이프라인 완료(Step 9) 후 |
-| **코드** | `persistence.py`에서 `False` 설정, `ai_pipeline_service.py`에서 `True` 설정 |
-| **검증** | 5명 환자 모두 `processed=True` + 타임스탬프 확인 |
+> 원문: *"we also need to flag if it is been processed or not"*  
+> 원문: *"add if it is been processed or not"*
+
+**구현 요약:** <u>**`transcript_analysis_log` 테이블에 `processed` (BOOLEAN) + `processed_at` (TIMESTAMP) 컬럼**</u>을 추가했습니다.
+
+**상세 구현:**
+
+1. **Step 8 (NLP 저장 시):**  
+   `persistence.py`의 `save_all()` → <u>**`processed=False`**</u>, `processed_at=NULL`로 저장
+   
+2. **Step 9 (AI 파이프라인 성공 시):**  
+   `ai_pipeline_service.py` → <u>**`processed=True`**</u>, <u>**`processed_at=datetime.now(UTC)`**</u>로 UPDATE
+
+3. **Step 9 (AI 파이프라인 실패 시):**  
+   `processed=False` **유지** → 나중에 재처리 가능 (non-blocking)
+
+4. **추가 타이밍 컬럼:**  
+   <u>**`pipeline_started_at`**</u> = 파이프라인이 이 파일 처리를 시작한 시각  
+   이를 통해 전체 소요 시간 계산: `processed_at - pipeline_started_at`
+
+5. **검증 결과:**
+   ```
+   SID 10: processed=True, pipeline_started_at=05:26:14, processed_at=05:29:28 (3분14초)
+   SID 14: processed=True, pipeline_started_at=05:29:28, processed_at=05:32:40 (3분12초)
+   SID 15: processed=True, pipeline_started_at=05:32:40, processed_at=05:35:32 (2분52초)
+   SID 18: processed=True, pipeline_started_at=05:35:32, processed_at=05:38:36 (3분04초)
+   SID 33: processed=True, pipeline_started_at=05:38:36, processed_at=05:41:43 (3분07초)
+   ```
+   **5명 환자 모두 `processed=True`** 확인
 
 ---
 
 ### 요구사항 4: "main_complete_pipeline.py 실행하여 출력 이해"
 
-| 항목 | 구현 내용 |
-|------|----------|
-| **테스트 파일** | SID 15 (Input_Keystrokes REC001 (SID 15).xlsx) |
-| **환경** | conda `prostate_cancer_py_3.10`, NLP socat 프록시 (localhost:9999) |
-| **결과** | Step 0-9 전체 완료, 26개 출력 파일 생성 |
-| **브랜치** | `test/complete-pipeline` (AI_physician_patient_communication 레포) |
+> 원문: *"run main_complete_pipeline.py and understand what is here (maybe the ai result variable in the Guillermo code)"*
 
-환자별 파이프라인 출력:
+**구현 요약:** <u>**SID 15 파일로 `main_complete_pipeline.py`를 로컬에서 실행**</u>하여 Step 0~9 전체 출력을 확인했습니다. 각 Step의 DataFrame 행 수, 컬럼, 샘플 데이터를 디버그 로그로 출력하도록 코드를 수정했습니다.
 
-```
-data/output_test/SID_15/
-├── segmented_sentences.csv      (Step 2: 122개 문장)
-├── predictions_long.csv         (Step 3: 122 × 5개 모델 점수)
-├── top10_by_outcome.xlsx        (Step 4: 도메인당 10개)
-├── top10_with_context.xlsx      (Step 5: 10개 + context)
-├── {domain}_extraction.csv      (Step 7: 추출된 추정값)
-├── {domain}_filtering.csv       (Step 8: 필터링된 후보)
-├── {domain}_result.csv          (Step 9: 최종 선택 + 환자용 변환)
-└── {domain}.xlsx                (도메인별 통합)
-```
+**상세 구현:**
+
+1. **실행 환경:** conda `prostate_cancer_py_3.10`, NLP Docker 프록시 (`localhost:9999`), Azure OpenAI
+2. **테스트 브랜치:** `test/complete-pipeline` (AI_physician_patient_communication 레포, 커밋 `582e046`)
+3. **코드 수정:**  
+   `main_complete_pipeline.py`에 <u>**각 Step 후 DataFrame 상세 로그 출력**</u> 추가 (행 수, 컬럼, 샘플)  
+   `Path()` 래핑 에러 수정 (line 83: `config.output_path / patient_id` → `Path(config.output_path) / patient_id`)
+4. **실행 결과 (SID 15):**
+   ```
+   Step 0:   29 rows   (원본 파일)
+   Step 1:   14 rows   (의사 발화만 필터링)
+   Step 2:  122 rows   (R stringi 문장 분리)
+   Step 3:  122 rows   (NLP 5모델 점수 추가)
+   Step 4:   10 × 5    (도메인별 Top-K 선택)
+   Step 5:   10 × 5    (context 추가)
+   Step 6-9: 5 domains (AI pipeline — Scoring, Extraction, Filtering, Selection, Reformat)
+   ```
+5. **26개 출력 파일** 생성:
+   ```
+   data/output_test/SID_15/
+   ├── segmented_sentences.csv      (Step 2: 122개 문장)
+   ├── predictions_long.csv         (Step 3: 122 × 5개 모델 점수)
+   ├── top10_by_outcome.xlsx        (Step 4: 도메인당 10개)
+   ├── top10_with_context.xlsx      (Step 5: 10개 + context)
+   ├── {domain}_extraction.csv      (Step 7: 추출된 추정값)
+   ├── {domain}_filtering.csv       (Step 8: 필터링된 후보)
+   ├── {domain}_result.csv          (Step 9: 최종 선택 + reformat)
+   └── {domain}.xlsx                (도메인별 통합)
+   ```
 
 ---
 
 ### 요구사항 5: "무엇을 저장하고 어디로 가는지 확인"
 
+> 원문: *"we need the result and check what needs to be saved and where does it go"*  
+> 원문: *"you will see what is the thing that are going to patient and to doctor"*  
+> 원문: *"for doctor, i think we do not save anything"*
+
+**구현 요약:** <u>**환자에게 가는 데이터**</u>와 <u>**의사에게 가는 데이터**</u>를 명확히 분리했습니다. **의사는 저장하지 않음** (읽기 전용).
+
 **환자에게 가는 것:**
 
-| 데이터 | 테이블 | 컬럼 | API |
-|--------|--------|------|-----|
-| AI 위험 요약 | `llm_domain_scoring_and_summary` | `reformat_sentence` | `GET /api/patient/ai-summary/{file}` |
-| 환자 평점 | `patient_summary_domain` | `patient_scoring` | `PUT /api/patient/scoring` |
-| 환자 응답 | `patient_summary_domain` | `patient_response` | `PUT /api/patient/responses` |
+| 데이터 | 테이블 | 컬럼 | API | 설명 |
+|--------|--------|------|-----|------|
+| <u>**AI 위험 요약**</u> | `llm_domain_scoring_and_summary` | <u>**`reformat_sentence`**</u> | `GET /api/patient/ai-summary/{file}` | GPT-4o가 환자 친화적 언어로 변환한 텍스트. 예: *"Your doctor noted that your risk of dying of prostate cancer is 24-25%."* |
+| <u>**환자 평점**</u> | `patient_summary_domain` | <u>**`patient_scoring`**</u> | `PUT /api/patient/scoring` | 환자가 재진 시 직접 입력하는 0-10 별점 |
+| 환자 응답 | `patient_summary_domain` | `patient_response` | `PUT /api/patient/responses` | 환자가 직접 입력하는 자유 텍스트 |
 
-**의사에게 가는 것:**
+**의사에게 가는 것 (읽기 전용):**
 
-| 데이터 | 테이블 | 컬럼 | API |
-|--------|--------|------|-----|
-| AI 품질 점수 | `llm_domain_scoring_and_summary` | `ai_score` | `GET /api/doctor/scores/average` |
-| 상위 문장 | `doctor_sentence_view` | `sentence`, `class` | `GET /api/doctor/sentences/{file}/{speaker}` |
-| 점수 궤적 | `llm_domain_scoring_and_summary` | `ai_score` | `GET /api/doctor/scores/trajectory` |
+| 데이터 | 테이블 | 컬럼 | API | 설명 |
+|--------|--------|------|-----|------|
+| <u>**AI 품질 점수**</u> | `llm_domain_scoring_and_summary` | <u>**`ai_score`**</u> | `GET /api/doctor/scores/average` | GPT-4o의 0-5 점수. 의사 대시보드에 상담 품질 지표로 표시 |
+| 상위 문장 | `doctor_sentence_view` | `sentence`, `class` | `GET /api/doctor/sentences/{file}/{speaker}` | NLP Top-10 문장 |
+| <u>**점수 궤적**</u> | `llm_domain_scoring_and_summary` | <u>**`ai_score`**</u> | `GET /api/doctor/scores/trajectory` | 시간에 따른 상담 품질 변화 추이 |
 
-**의사는 저장하지 않음** — 의사 뷰는 읽기 전용. Rewriting은 대시보드에서 `doctor_rewrite_log`로 별도 저장 (파이프라인이 아님).
+**의사는 저장하지 않음** — 의사 뷰는 <u>**읽기 전용(read-only)**</u>. 의사가 문장을 rewrite하면 `doctor_rewrite_log`에 저장되지만 이것은 **대시보드 UI에서 발생**하며 파이프라인과 무관합니다.
 
 ---
 
 ### 요구사항 6: "Persistence 모듈 생성 — 키는 patient_id"
 
-| 항목 | 구현 내용 |
-|------|----------|
-| **모듈** | `persistence.py` — `save_all()` 함수 |
-| **호출** | `pipeline_runner.py` (Step 8) |
-| **키** | `transcript_analysis_log.patient_id` (예: SID_10) |
-| **트랜잭션** | 단일 트랜잭션 — 모든 테이블 또는 없음 |
-| **저장 테이블** | `transcript_analysis_log` (1), `sentence_prediction` (50), `doctor_sentence_view` (~47), `patient_summary` (1), `patient_summary_domain` (5) |
+> 원문: *"create module of persistency, and then call that module there and save those things to the db"*  
+> 원문: *"key should be patient id"*
+
+**구현 요약:** <u>**`persistence.py`의 `save_all()` 함수**</u>가 모든 DB 저장을 <u>**단일 트랜잭션**</u>으로 처리합니다. 키는 <u>**`patient_id`**</u>.
+
+**상세 구현:**
+
+1. **모듈:** <u>**`persistence.py`**</u> — `save_all()` 함수 1개로 모든 DB 쓰기 담당
+2. **호출:** `pipeline_runner.py` Step 8에서 <u>**`persistence.save_all(Session, ...)`**</u> 한 줄로 호출
+3. **키:** `transcript_analysis_log.patient_id` (예: `SID_10`)
+4. **트랜잭션:** <u>**단일 트랜잭션 — 모든 테이블에 성공하거나 모두 롤백**</u>
+5. **저장하는 테이블 (한 번의 호출로):**
+
+| 순서 | 테이블 | 행 수 | 내용 |
+|:----:|--------|:-----:|------|
+| 1 | <u>**`transcript_analysis_log`**</u> | 1 | 분석 실행 기록 (patient_id, 설정값, xlsx, 타이밍, processed flag) |
+| 2 | <u>**`sentence_prediction`**</u> | 50 | 5 도메인 × 10 문장, NLP `.pred_1` 확률 + context |
+| 3 | `doctor_sentence_view` | ~47 | 중복 제거된 의사 문장 + 도메인 분류 |
+| 4 | `patient_summary` | 1 | 환자 요약 기본 행 |
+| 5 | <u>**`patient_summary_domain`**</u> | 5 | 도메인별 요약 + patient_scoring(NULL) + patient_response(NULL) |
 
 ---
 
-### 요구사항 7: "AI summary → AI reformat (용어 변경)"
+### 요구사항 7: "AI summary가 아니라 다른 이름 (AI reformat)"
 
-| 항목 | 구현 내용 |
-|------|----------|
-| **이전 용어** | "AI summary" |
-| **새 용어** | `reformat_sentence` (`llm_domain_scoring_and_summary` 테이블 컬럼) |
-| **코드** | `ai_pipeline/reformat.py` → GPT-4o가 선택된 추정값을 환자 친화적 언어로 변환 |
-| **예시** | 입력: "24-25% risk of death" → 출력: "Your doctor noted that your risk of dying of prostate cancer is 24-25%." |
-| **프론트엔드** | `PatientInitialVisitReportV35.tsx`가 `GET /api/patient/ai-summary/{file}`로 `reformat_sentence` 읽음 |
+> 원문: *"make sure that you have the rating for the sentence, they call it now something different, it is not the ai summary (i think it is ai reformat?)"*  
+> 원문: *"check the right language on the video"*
+
+**구현 요약:** <u>**"AI summary"라는 용어가 `reformat_sentence`로 변경**</u>되었습니다. 이것은 `llm_domain_scoring_and_summary` 테이블의 컬럼명입니다.
+
+**상세 구현:**
+
+1. **이전 용어:** "AI summary"
+2. **새 용어:** <u>**`reformat_sentence`**</u>
+3. **생성 과정:**  
+   `ai_pipeline/reformat.py` → GPT-4o가 <u>**Selection에서 선택된 1개 추정값을 환자가 이해할 수 있는 언어로 변환**</u>
+4. **실제 예시:**
+   - 입력 (의사 원문): `"the chances of you dying from this prostate cancer is coming out at about 24 percent"`
+   - GPT-4o Extraction: `"24% risk of death without treatment"`
+   - <u>**GPT-4o Reformat**</u>: `"Your doctor noted that your risk of dying of prostate cancer is 24-25%. With treatment, this risk decreases to 6%."`
+5. **프론트엔드에서의 사용:**  
+   `PatientInitialVisitReportV35.tsx`와 `PatientFollowUpReportV31Re.tsx`가 <u>**`GET /api/patient/ai-summary/{file}`**</u> API를 호출하면, `routes_patient.py`가 `llm_domain_scoring_and_summary.reformat_sentence`를 반환하고, 프론트엔드가 이것을 **환자용 AI 요약 카드**로 표시합니다.
 
 ---
 
 ### 요구사항 8: "테이블: id, sentence, domain, rating, processed flag"
 
-**두 테이블에 걸쳐 구현:**
+> 원문: *"Basically the table is the id, sentence, and then the domain, and then the rating, and then the flag to show processed or not. So basically we are doing the ground work. This is the saving step."*
+
+**구현 요약:** 미팅에서 요청한 5개 필드가 <u>**두 테이블에 걸쳐 구현**</u>되었습니다.
+
+**미팅 요구사항과 실제 구현의 매핑:**
+
+| 미팅에서 요청한 것 | 실제 구현 위치 | 컬럼 | 설명 |
+|------------------|-------------|------|------|
+| <u>**id**</u> | `transcript_analysis_log` | <u>**`id`**</u> (SERIAL PK) | 환자별 분석 실행 고유 ID |
+| <u>**sentence**</u> | `llm_domain_scoring_and_summary` | <u>**`source_sentence`**</u> (TEXT) | AI가 평가한 원본 문장 |
+| <u>**domain**</u> | `llm_domain_scoring_and_summary` | <u>**`domain`**</u> (VARCHAR) | cp, le, ed, inc, ius |
+| <u>**rating**</u> | `llm_domain_scoring_and_summary` | <u>**`ai_score`**</u> (INT, 0-5) | GPT-4o의 문장 관련도 점수 |
+| <u>**processed flag**</u> | `transcript_analysis_log` | <u>**`processed`**</u> (BOOLEAN) | True = NLP + AI 완료 |
+
+**왜 두 테이블인가:**
+- `transcript_analysis_log` = <u>**환자 단위**</u> (1 patient = 1 row) — 전체 파이프라인 메타데이터 + processed flag
+- `llm_domain_scoring_and_summary` = <u>**도메인 단위**</u> (1 patient × 5 domains = 5+ rows) — AI 결과 상세
+
+이 두 테이블은 `analysis_id` (FK)로 연결됩니다:
 
 ```mermaid
 erDiagram
@@ -205,13 +306,6 @@ erDiagram
     transcript_analysis_log ||--o{ llm_domain_scoring_and_summary : "도메인별 AI 결과"
 ```
 
-**미팅 요구사항과의 매핑:**
-- `id` → `transcript_analysis_log.id` + `llm_domain_scoring_and_summary.id`
-- `sentence` → `llm_domain_scoring_and_summary.source_sentence`
-- `domain` → `llm_domain_scoring_and_summary.domain`
-- `rating` → `llm_domain_scoring_and_summary.ai_score` (0-5)
-- `processed flag` → `transcript_analysis_log.processed` (Boolean)
-
 ---
 
 ## 3. 파이프라인 타이밍 (검증 완료)
@@ -224,7 +318,7 @@ SID 18: pipeline_started_at=05:35:32 → analyzed_at=05:35:41 → processed_at=0
 SID 33: pipeline_started_at=05:38:36 → analyzed_at=05:38:46 → processed_at=05:41:43 (3분07초)
 ```
 
-5명 환자 모두: `processed=True`
+**5명 환자 모두: `processed=True`**
 
 ---
 
@@ -232,13 +326,13 @@ SID 33: pipeline_started_at=05:38:36 → analyzed_at=05:38:46 → processed_at=0
 
 | 파일 | 변경 내용 |
 |------|----------|
-| `pipeline_runner.py` | `transcript_service`를 `sentence_classification` (R stringi)으로 교체. `pipeline_started_at` 기록, 중간 결과 파일 저장 (step0-step5) 추가. |
-| `persistence.py` | 초기 저장 시 `pipeline_started_at` + `processed=False` 추가. |
-| `ai_pipeline_service.py` | AI 성공 시 `processed=True` + `processed_at` 설정. Azure 타임아웃 30분으로 증가. |
-| `models.py` | `TranscriptAnalysisLog`에 `pipeline_started_at`, `processed`, `processed_at` 추가. 프론트엔드 사용 주석 추가. |
-| `database_schema.sql` | `transcript_analysis_log` CREATE TABLE에 3개 새 컬럼 추가. |
-| `docker-compose.yml` | `sentence_classification/` 볼륨 마운트 추가. `start_period` 2400초로 확장. |
-| `Dockerfile` | R + stringi 1.8.4 (번들 ICU 74.1) + rpy2 설치. prestart에 ICU 버전 검증 추가. |
+| <u>**`pipeline_runner.py`**</u> | `transcript_service`를 `sentence_classification` (R stringi)으로 교체. `pipeline_started_at` 기록, 중간 결과 파일 저장 (step0-step5) 추가. |
+| <u>**`persistence.py`**</u> | 초기 저장 시 `pipeline_started_at` + `processed=False` 추가. |
+| <u>**`ai_pipeline_service.py`**</u> | AI 성공 시 `processed=True` + `processed_at` 설정. Azure 타임아웃 30분으로 증가. |
+| <u>**`models.py`**</u> | `TranscriptAnalysisLog`에 `pipeline_started_at`, `processed`, `processed_at` 추가. 프론트엔드 사용 주석 추가. |
+| <u>**`database_schema.sql`**</u> | `transcript_analysis_log` CREATE TABLE에 3개 새 컬럼 추가. |
+| <u>**`docker-compose.yml`**</u> | `sentence_classification/` 볼륨 마운트 추가. `start_period` 2400초로 확장. |
+| <u>**`Dockerfile`**</u> | R + stringi 1.8.4 (번들 ICU 74.1) + rpy2 설치. prestart에 ICU 버전 검증 추가. |
 | `routes_transcript.py` | `transcript_service.analyze_transcript`를 `sentence_classification` 기반으로 교체. |
 | `transcript_service.py` | `archive/`로 이동 (더 이상 사용 안 함). |
 
@@ -248,9 +342,9 @@ SID 33: pipeline_started_at=05:38:36 → analyzed_at=05:38:46 → processed_at=0
 
 | 항목 | 상태 | 비고 |
 |------|:----:|------|
-| 처리 완료 플래그 | 완료 | `transcript_analysis_log.processed` + `processed_at` |
-| 환자 평점 | 존재 | `patient_summary_domain.patient_scoring` (환자가 대시보드에서 입력) |
-| AI reformat | 완료 | `llm_domain_scoring_and_summary.reformat_sentence` |
-| 의사 읽기 전용 | 확인 | 의사 뷰는 저장 안 함 — DB에서 읽기만 |
-| 통합 테스트 | 다음 주 | End-to-end: 입력 → 파이프라인 → DB → 대시보드 표시 |
-| 설문 변경 | 보류 | 미팅 결정에 따라 — 변경 확정 전까지 미착수 |
+| 처리 완료 플래그 | **완료** | `transcript_analysis_log.processed` + `processed_at` |
+| 환자 평점 | **존재** | `patient_summary_domain.patient_scoring` (환자가 대시보드에서 입력) |
+| AI reformat | **완료** | `llm_domain_scoring_and_summary.reformat_sentence` |
+| 의사 읽기 전용 | **확인** | 의사 뷰는 저장 안 함 — DB에서 읽기만 |
+| 통합 테스트 | **다음 주** | End-to-end: 입력 → 파이프라인 → DB → 대시보드 표시 |
+| 설문 변경 | **보류** | 미팅 결정에 따라 — 변경 확정 전까지 미착수 |
