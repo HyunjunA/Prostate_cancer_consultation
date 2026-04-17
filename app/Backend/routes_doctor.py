@@ -17,7 +17,7 @@ from auth import get_current_user
 from auth.access_control import check_patient_access
 from auth.base import AuthUser
 from db import get_db
-from models import DoctorSentenceView, DoctorRewriteLog, SentencePrediction, TranscriptAnalysisLog
+from models import DoctorRewriteLog, SentencePrediction, TranscriptAnalysisLog
 from nlp_classifier_client import predict_single, CLASS_TO_MODEL, NLPServiceError
 
 logger = logging.getLogger(__name__)
@@ -49,61 +49,65 @@ async def get_doctor_sentences(
     """Get doctor sentence view data for specific file and speaker where class != -1"""
     await check_patient_access(file, user, db)
 
-    # Get speakers for the file
-    all_speakers_stmt = select(DoctorSentenceView.speaker).distinct().where(
-        DoctorSentenceView.file == file
+    # Find latest analysis for this file
+    analysis_stmt = select(TranscriptAnalysisLog.id).where(
+        TranscriptAnalysisLog.source_filename == file
+    ).order_by(TranscriptAnalysisLog.analyzed_at.desc()).limit(1)
+    analysis_id = (await db.execute(analysis_stmt)).scalar_one_or_none()
+
+    if not analysis_id:
+        raise HTTPException(
+            status_code=404,
+            detail="No data found for the specified file and speaker."
+        )
+
+    # Get unique sentences from sentence_prediction (DISTINCT on i, i2)
+    from sqlalchemy.dialects.postgresql import aggregate_order_by
+    distinct_stmt = (
+        select(
+            SentencePrediction.utterance_index.label('i'),
+            SentencePrediction.sentence_in_utterance.label('i2'),
+            SentencePrediction.speaker,
+            SentencePrediction.sentence_text.label('sentence'),
+            SentencePrediction.context,
+            func.array_agg(SentencePrediction.model).label('models'),
+        )
+        .where(
+            SentencePrediction.analysis_id == analysis_id,
+            SentencePrediction.speaker == speaker,
+        )
+        .group_by(
+            SentencePrediction.utterance_index,
+            SentencePrediction.sentence_in_utterance,
+            SentencePrediction.speaker,
+            SentencePrediction.sentence_text,
+            SentencePrediction.context,
+        )
+        .order_by(
+            SentencePrediction.utterance_index,
+            SentencePrediction.sentence_in_utterance,
+        )
     )
-    all_speakers_raw = (await db.execute(all_speakers_stmt)).scalars().all()
+    results = (await db.execute(distinct_stmt)).all()
 
-    # Filter out None values to prevent TypeError
-    all_speakers = [s for s in all_speakers_raw if s is not None]
-
-    logger.debug("get_doctor_sentences: file=%s, speaker=%s, available_speakers=%d", file, speaker, len(all_speakers))
-
-    # Execute actual query
-    stmt = select(DoctorSentenceView).where(
-        DoctorSentenceView.file == file,
-        DoctorSentenceView.speaker == speaker,
-        DoctorSentenceView.class_ != '-1'
-    ).order_by(DoctorSentenceView.i, DoctorSentenceView.i2)
-    
-    results = (await db.execute(stmt)).scalars().all()
-    logger.debug("get_doctor_sentences: found %d rows for file=%s, speaker=%s", len(results), file, speaker)
+    logger.debug("get_doctor_sentences: found %d unique rows for file=%s, speaker=%s", len(results), file, speaker)
 
     if not results:
         raise HTTPException(
             status_code=404,
             detail="No data found for the specified file and speaker."
         )
-    
-    # Get context (with <main> tags) from sentence_prediction for each sentence
-    analysis_stmt = select(TranscriptAnalysisLog.id).where(
-        TranscriptAnalysisLog.source_filename == file
-    ).order_by(TranscriptAnalysisLog.analyzed_at.desc()).limit(1)
-    analysis_id = (await db.execute(analysis_stmt)).scalar_one_or_none()
 
-    # Build lookups from sentence_prediction: (i, i2) → context
-    # and from llm_domain_scoring_and_summary: sentence_text → ai_score
-    context_map = {}
+    # Build ai_score lookup from llm_domain_scoring_and_summary
+    from models import LLMDomainScoringAndSummary
     ai_score_map = {}
-    if analysis_id:
-        ctx_stmt = select(
-            SentencePrediction.utterance_index,
-            SentencePrediction.sentence_in_utterance,
-            SentencePrediction.context,
-        ).where(SentencePrediction.analysis_id == analysis_id)
-        for row in (await db.execute(ctx_stmt)).all():
-            context_map[(row.utterance_index, row.sentence_in_utterance)] = row.context
-
-        # Get ai_score from llm_domain_scoring_and_summary (no duplication needed)
-        from models import LLMDomainScoringAndSummary
-        ai_stmt = select(
-            LLMDomainScoringAndSummary.source_sentence,
-            LLMDomainScoringAndSummary.ai_score,
-        ).where(LLMDomainScoringAndSummary.analysis_id == analysis_id)
-        for row in (await db.execute(ai_stmt)).all():
-            if row.source_sentence:
-                ai_score_map[row.source_sentence] = row.ai_score
+    ai_stmt = select(
+        LLMDomainScoringAndSummary.source_sentence,
+        LLMDomainScoringAndSummary.ai_score,
+    ).where(LLMDomainScoringAndSummary.analysis_id == analysis_id)
+    for row in (await db.execute(ai_stmt)).all():
+        if row.source_sentence:
+            ai_score_map[row.source_sentence] = row.ai_score
 
     return {
         "file": file,
@@ -114,10 +118,10 @@ async def get_doctor_sentences(
                 "i": r.i,
                 "i2": r.i2,
                 "sentence": r.sentence,
-                "context": context_map.get((r.i, r.i2)),
+                "context": r.context,
                 "score": ai_score_map.get(r.sentence),
-                "class": r.class_,
-                "time": r.time.isoformat() if r.time else None
+                "class": r.models[0] if r.models else None,
+                "time": None
             }
             for r in results
         ]
@@ -180,12 +184,12 @@ async def update_doctor_rewrite(
     """Insert new doctor rewrite log record with full data"""
     logger.debug("update_doctor_rewrite: file=%s, i=%d, i2=%d, class=%s", update_data.file, update_data.i, update_data.i2, update_data.class_)
 
-    # Check if file exists in DoctorSentenceView
-    file_exists_stmt = select(func.count()).select_from(DoctorSentenceView).where(
-        DoctorSentenceView.file == update_data.file
+    # Check if file exists in sentence_prediction
+    file_exists_stmt = select(func.count()).select_from(SentencePrediction).where(
+        SentencePrediction.patient_id == update_data.file
     )
     file_exists = (await db.execute(file_exists_stmt)).scalar_one() > 0
-    
+
     if not file_exists:
         raise HTTPException(
             status_code=404,
@@ -233,7 +237,7 @@ async def get_doctor_rewrite_history(
     Get revision history for a specific sentence (file, i, i2)
     
     Returns all revisions ordered by time (oldest to newest)
-    Includes original_score from doctor_sentence_view
+    Includes original_score from llm_domain_scoring_and_summary
     """
     logger.debug("get_doctor_rewrite_history: file=%s, i=%d, i2=%d", file, i, i2)
 
@@ -257,26 +261,33 @@ async def get_doctor_rewrite_history(
     speaker = results[0].speaker
     class_ = results[0].class_
     
-    # ═══════════════════════════════════════════════════════════
-    # NEW: Get original_score from doctor_sentence_view
-    # ═══════════════════════════════════════════════════════════
+    # Get original_score from llm_domain_scoring_and_summary via sentence_prediction
     original_score = None
     try:
-        # Query doctor_sentence_view to get the original score
-        sentence_stmt = select(DoctorSentenceView).where(
-            DoctorSentenceView.file == file,
-            DoctorSentenceView.i == i,
-            DoctorSentenceView.i2 == i2
-        )
-        sentence_result = (await db.execute(sentence_stmt)).scalars().first()
-        
-        if sentence_result:
-            original_score = sentence_result.score
-            print(f"   Original score from doctor_sentence_view: {original_score}")
-        else:
-            print(f"   [WARN] No matching sentence found in doctor_sentence_view")
+        from models import LLMDomainScoringAndSummary
+        # Find the sentence text from sentence_prediction
+        sp_stmt = select(SentencePrediction.sentence_text).where(
+            SentencePrediction.patient_id == file,
+            SentencePrediction.utterance_index == i,
+            SentencePrediction.sentence_in_utterance == i2,
+        ).limit(1)
+        sentence_text = (await db.execute(sp_stmt)).scalar_one_or_none()
+
+        if sentence_text:
+            # Find analysis_id for this file
+            analysis_stmt = select(TranscriptAnalysisLog.id).where(
+                TranscriptAnalysisLog.source_filename == file
+            ).order_by(TranscriptAnalysisLog.analyzed_at.desc()).limit(1)
+            analysis_id = (await db.execute(analysis_stmt)).scalar_one_or_none()
+
+            if analysis_id:
+                ai_stmt = select(LLMDomainScoringAndSummary.ai_score).where(
+                    LLMDomainScoringAndSummary.analysis_id == analysis_id,
+                    LLMDomainScoringAndSummary.source_sentence == sentence_text,
+                ).limit(1)
+                original_score = (await db.execute(ai_stmt)).scalar_one_or_none()
     except Exception as e:
-        print(f"   [WARN] Error fetching original score: {e}")
+        logger.warning("Error fetching original score: %s", e)
     
     print(f"   Found {len(results)} revisions")
     print("=" * 80)
@@ -409,15 +420,23 @@ async def get_doctor_files(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user)
 ):
-    """Get list of unique files with their doctor speaker label."""
+    """Get list of unique files with their doctor speaker label.
+
+    Returns `file` as `source_filename` to align with /sentences/{file}/{speaker},
+    /scores/average, /scores/summary/{file}, /scores/trajectory, and the patient
+    view convention (frontend ?fileid=... also uses source_filename).
+    """
     stmt = (
         select(
-            DoctorSentenceView.file,
-            DoctorSentenceView.speaker,
-            func.count().label("sentence_count"),
+            TranscriptAnalysisLog.source_filename.label("file"),
+            SentencePrediction.speaker,
+            func.count(func.distinct(
+                func.concat(SentencePrediction.utterance_index, ':', SentencePrediction.sentence_in_utterance)
+            )).label("sentence_count"),
         )
-        .group_by(DoctorSentenceView.file, DoctorSentenceView.speaker)
-        .order_by(DoctorSentenceView.file)
+        .join(TranscriptAnalysisLog, SentencePrediction.analysis_id == TranscriptAnalysisLog.id)
+        .group_by(TranscriptAnalysisLog.source_filename, SentencePrediction.speaker)
+        .order_by(TranscriptAnalysisLog.source_filename)
         .limit(limit)
     )
     rows = (await db.execute(stmt)).all()
@@ -479,11 +498,11 @@ async def get_doctor_score_average(
     stmt = stmt.order_by(LLMDomainScoringAndSummary.source_filename, LLMDomainScoringAndSummary.domain)
     results = (await db.execute(stmt)).all()
 
-    # Get speaker from doctor_sentence_view
+    # Get speaker from sentence_prediction
     speaker_val = speaker
     if not speaker_val and file:
-        sp_stmt = select(DoctorSentenceView.speaker).where(
-            DoctorSentenceView.file == file
+        sp_stmt = select(SentencePrediction.speaker).where(
+            SentencePrediction.patient_id == file
         ).distinct().limit(1)
         speaker_val = (await db.execute(sp_stmt)).scalar_one_or_none() or ""
 
@@ -526,8 +545,8 @@ async def get_doctor_score_summary_by_file_speaker(
     Uses AI pipeline ai_score only.
     """
     if not speaker:
-        sp_stmt = select(DoctorSentenceView.speaker).where(
-            DoctorSentenceView.file == file
+        sp_stmt = select(SentencePrediction.speaker).where(
+            SentencePrediction.patient_id == file
         ).distinct().limit(1)
         speaker = (await db.execute(sp_stmt)).scalar_one_or_none() or ""
 
@@ -559,24 +578,19 @@ async def get_doctor_score_summary_by_file_speaker(
         context_with_tags = r.source_context  # fallback: without <main> tags
         if r.source_sentence:
             match_stmt = select(
-                DoctorSentenceView.i, DoctorSentenceView.i2
+                SentencePrediction.utterance_index,
+                SentencePrediction.sentence_in_utterance,
+                SentencePrediction.context,
             ).where(
-                DoctorSentenceView.file == file,
-                DoctorSentenceView.sentence == r.source_sentence,
+                SentencePrediction.analysis_id == analysis_id,
+                SentencePrediction.sentence_text == r.source_sentence,
             ).limit(1)
             match_row = (await db.execute(match_stmt)).first()
             if match_row:
-                i_val = match_row.i
-                i2_val = match_row.i2
-                # Get context with <main> tags from sentence_prediction
-                ctx_stmt = select(SentencePrediction.context).where(
-                    SentencePrediction.analysis_id == analysis_id,
-                    SentencePrediction.utterance_index == i_val,
-                    SentencePrediction.sentence_in_utterance == i2_val,
-                ).limit(1)
-                ctx_row = (await db.execute(ctx_stmt)).scalar()
-                if ctx_row:
-                    context_with_tags = ctx_row
+                i_val = match_row.utterance_index
+                i2_val = match_row.sentence_in_utterance
+                if match_row.context:
+                    context_with_tags = match_row.context
 
         by_class.append({
             "class": r.domain,
@@ -817,45 +831,39 @@ async def get_doctor_class_distribution(
     user: AuthUser = Depends(get_current_user)
 ):
     """
-    Get class distribution per file in doctor_sentence_view
-    
-    Returns count of each class (1~5) for each file
-    
+    Get class (model/domain) distribution per file from sentence_prediction.
+
+    Each sentence_prediction row has a model (cp, le, ed, inc, ius).
+    Returns count of each model for each file.
+
     Parameters:
     - file: Optional filter for specific file
-    - include_invalid: If True, include class=-1 in results (default: False)
+    - include_invalid: kept for API compatibility (no-op, sentence_prediction has no invalid class)
     """
-    print("=" * 80)
-    print("DEBUG [get_doctor_class_distribution] - Input Parameters:")
-    print(f"   file: {file}")
-    print(f"   include_invalid: {include_invalid}")
-    
-    # Base query
+    logger.debug("get_doctor_class_distribution: file=%s, include_invalid=%s", file, include_invalid)
+
+    # Base query — count predictions per (patient_id, model)
     stmt = select(
-        DoctorSentenceView.file,
-        DoctorSentenceView.class_,
+        SentencePrediction.patient_id.label('file'),
+        SentencePrediction.model.label('class_'),
         func.count().label('count')
     )
-    
-    # Exclude invalid class unless requested
-    if not include_invalid:
-        stmt = stmt.where(DoctorSentenceView.class_ != '-1')
-    
+
     # Apply file filter if provided
     if file:
-        stmt = stmt.where(DoctorSentenceView.file == file)
-    
-    # Group by file and class
+        stmt = stmt.where(SentencePrediction.patient_id == file)
+
+    # Group by file and model
     stmt = stmt.group_by(
-        DoctorSentenceView.file,
-        DoctorSentenceView.class_
+        SentencePrediction.patient_id,
+        SentencePrediction.model,
     ).order_by(
-        DoctorSentenceView.file,
-        DoctorSentenceView.class_
+        SentencePrediction.patient_id,
+        SentencePrediction.model,
     )
-    
+
     results = (await db.execute(stmt)).all()
-    
+
     # Organize results by file
     distribution = {}
     for r in results:
@@ -867,13 +875,10 @@ async def get_doctor_class_distribution(
             }
         distribution[r.file]["classes"][r.class_] = r.count
         distribution[r.file]["total"] += r.count
-    
+
     # Convert to list format
     data = list(distribution.values())
-    
-    print(f"   Found {len(data)} files")
-    print("=" * 80)
-    
+
     return {
         "total_files": len(data),
         "filters": {
@@ -892,48 +897,40 @@ async def get_doctor_class_distribution_by_file(
     user: AuthUser = Depends(get_current_user)
 ):
     """
-    Get detailed class distribution for a specific file
-    
+    Get detailed class (model/domain) distribution for a specific file.
+
     Returns:
-    - Count of each class
-    - Percentage of each class
-    - List of sentences per class (optional summary)
+    - Count of each model
+    - Percentage of each model
     """
-    print("=" * 80)
-    print("DEBUG [get_doctor_class_distribution_by_file] - Input Parameters:")
-    print(f"   file: {file}")
-    print(f"   include_invalid: {include_invalid}")
-    
-    # Base query
+    logger.debug("get_doctor_class_distribution_by_file: file=%s, include_invalid=%s", file, include_invalid)
+
+    # Base query — count predictions per model for this file
     stmt = select(
-        DoctorSentenceView.class_,
+        SentencePrediction.model.label('class_'),
         func.count().label('count')
     ).where(
-        DoctorSentenceView.file == file
+        SentencePrediction.patient_id == file
     )
-    
-    # Exclude invalid class unless requested
-    if not include_invalid:
-        stmt = stmt.where(DoctorSentenceView.class_ != '-1')
-    
-    # Group by class
+
+    # Group by model
     stmt = stmt.group_by(
-        DoctorSentenceView.class_
+        SentencePrediction.model
     ).order_by(
-        DoctorSentenceView.class_
+        SentencePrediction.model
     )
-    
+
     results = (await db.execute(stmt)).all()
-    
+
     if not results:
         raise HTTPException(
             status_code=404,
             detail=f"No data found for file: {file}"
         )
-    
+
     # Calculate total and percentages
     total = sum(r.count for r in results)
-    
+
     class_distribution = [
         {
             "class": r.class_,
@@ -942,10 +939,7 @@ async def get_doctor_class_distribution_by_file(
         }
         for r in results
     ]
-    
-    print(f"   Found {len(class_distribution)} classes, total {total} sentences")
-    print("=" * 80)
-    
+
     return {
         "file": file,
         "total_sentences": total,

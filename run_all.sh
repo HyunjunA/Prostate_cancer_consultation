@@ -287,8 +287,14 @@ if ! python3 -c "import aiohttp" 2>/dev/null; then
     python3 -m pip install aiohttp -q
 fi
 
-# Generate and run the stress test script
-STRESS_TEST=$(mktemp /tmp/nlp_stress_test_XXXX.py)
+# Generate and run the stress test script.
+# X's must be at the end for BSD mktemp on macOS — the previous "XXXX.py"
+# pattern was treated literally, causing collisions on re-runs after Ctrl-C.
+# trap ensures the temp file is removed even if the script is interrupted.
+STRESS_TEST=$(mktemp /tmp/nlp_stress_test.XXXXXX)
+mv "$STRESS_TEST" "${STRESS_TEST}.py"
+STRESS_TEST="${STRESS_TEST}.py"
+trap 'rm -f "$STRESS_TEST"' EXIT INT TERM
 cat > "$STRESS_TEST" << PYEOF
 """NLP API 1000-request stress test via Backend -> nlp-classifiers."""
 import asyncio, aiohttp, time, random
@@ -433,7 +439,7 @@ if __name__ == "__main__":
 PYEOF
 
 python3 "$STRESS_TEST"
-rm -f "$STRESS_TEST"
+# Cleanup handled by trap above (fires on EXIT/INT/TERM)
 
 ok "1000-request stress test complete"
 
