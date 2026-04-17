@@ -39,7 +39,10 @@ When the pipeline processes `Input_Keystrokes REC001 (SID 14).xlsx`, one row is 
 
 **NLP model predictions — stores the Top-10 sentences per domain with their probability scores, as determined by the 5 NLP classification models.**
 
-For example, out of SID 10's 428 sentences, the cp (cancer prognosis) model assigned 95.1% probability to "so i'm going to take that 12 percent and cut it in half...", making it one of the Top-10 for that domain. 5 domains × 10 sentences = 50 rows per patient. The patient page uses this data to show "your doctor said these things" evidence sentences.
+For example, out of SID 10's 428 sentences, the cp (cancer prognosis) model assigned 95.1% probability to "so i'm going to take that 12 percent and cut it in half...", making it one of the Top-10 for that domain. 5 domains × 10 sentences = 50 rows per patient.
+
+**Where this appears in the UI:**
+In `PatientInitialVisitReportV35.tsx`, each TopicCard has a collapsible "Evidence" section. When the patient clicks "Show Evidence", it displays a list of sentences ranked by `pred_score`. These sentences come from this table via `GET /api/patient/sentences/{file}` (Top-7 per domain).
 
 | Column | Type | Sample (SID_10, cp) | Description |
 |--------|------|---------------------|-------------|
@@ -67,6 +70,9 @@ For example, out of SID 10's 428 sentences, the cp (cancer prognosis) model assi
 
 The reason this table has 221 rows (less than sentence_prediction's 250) is deduplication: if the same sentence ranked in Top-10 for both cp and le domains, it appears in sentence_prediction twice but in doctor_sentence_view only once. The doctor sees each sentence exactly once. When the doctor rewrites a sentence, `(file, i, i2)` from this table identifies the target.
 
+**Where this appears in the UI:**
+In `PhysicianReportsModifiedV41Timothy.tsx`, the **GridView** displays a table with columns: "Topic", "Your Score", "Representative Sentence", "Suggestions for Improvement", and "Suggested Rephrasing". Each row in this table corresponds to one sentence from `doctor_sentence_view`, grouped by `class` (domain). The **DashboardView** shows the patient list with overall scores, and clicking a patient navigates to their GridView.
+
 | Column | Type | Sample | Description |
 |--------|------|--------|-------------|
 | `file` | VARCHAR PK | Input_Keystrokes REC 001 (SID 10).xlsx | Patient file |
@@ -91,6 +97,9 @@ The reason this table has 221 rows (less than sentence_prediction's 250) is dedu
 **Doctor rewrite history — records every time a doctor modifies a sentence on the dashboard, storing both the original and revised versions with timestamps.**
 
 Currently 0 rows because no doctor has rewritten any sentences yet. When a doctor changes "so i'm going to take that 12 percent..." to "Your cancer risk is about 6% with treatment", both versions are INSERT'd here. Multiple rewrites of the same sentence create multiple rows, preserving the full edit history.
+
+**Where this appears in the UI:**
+In `PhysicianReportsModifiedV41Timothy.tsx`, the **GridView** has a "Suggested Rephrasing" column. When the doctor clicks "AI Rewrite", GPT-4o generates an improved version. If the doctor accepts and saves, the original and revised sentences are stored here. The **HistoryModal** component shows the full rewrite history for a selected sentence.
 
 | Column | Type | Example | Description |
 |--------|------|---------|-------------|
@@ -132,7 +141,10 @@ One row per patient. The actual domain-level data (summary_text, patient_scoring
 
 **Patient per-domain feedback — stores the star rating and text response that the patient enters on the dashboard for each domain. The pipeline creates empty rows (NULL values), and the patient fills them in later during a follow-up visit.**
 
-Like a patient survey form: the pipeline creates 5 blank domain cards (cp, le, ed, inc, ius), and when the patient clicks a star rating for "cancer prognosis", `patient_scoring` is UPDATE'd from NULL to the rating value. Note: `patient_response` (free text) has an API but no UI implementation yet.
+Like a patient survey form: the pipeline creates 5 blank domain cards (cp, le, ed, inc, ius), and when the patient clicks a rating for "cancer prognosis", `patient_scoring` is UPDATE'd from NULL to the rating value. Note: `patient_response` (free text) has an API but no UI implementation yet.
+
+**Where this appears in the UI:**
+In `PatientInitialVisitReportV35.tsx`, each **TopicCard** has a NIH PROMIS unipolar helpfulness scale (5 levels: "Not at all helpful" to "Extremely helpful") at the bottom. When the patient selects a level, `updateSingleClassScore()` is called → `PUT /api/patient/scoring` → this table's `patient_scoring` column is UPDATE'd. The `display_order` determines the vertical order of the 5 topic cards on the page (1=Cancer Prognosis at top, 5=Life Expectancy at bottom).
 
 | Column | Type | Sample (SID_10, cp) | Description |
 |--------|------|---------------------|-------------|
@@ -156,6 +168,9 @@ Like a patient survey form: the pipeline creates 5 blank domain cards (cp, le, e
 **Patient survey responses — stores the full JSON answers when a patient submits SDM, DCS, Risk Perception, or Satisfaction surveys on the follow-up page, and tracks synchronization status with the REDCap research database.**
 
 Currently 0 rows because no patient has submitted a survey yet. When a patient completes the DCS (16 questions), the entire response is stored as JSON in `answers`. Immediately after, a background task calls the REDCap API to sync. Same patient submitting the same survey again creates a NEW row (INSERT, not UPDATE) to preserve responses at different timepoints.
+
+**Where this appears in the UI:**
+In `PatientFollowUpReportV31Re.tsx`, the follow-up visit has a multi-step survey flow: Welcome → SDM (9 questions) → DCS (16 questions) → Risk Perception (with collapsible AI summaries) → Patient Satisfaction → Completion. Each survey shows one question at a time. When the patient clicks "Submit", `submitSurvey()` from `surveyApi.tsx` calls `POST /api/surveys/submit`, which INSERTs a row here. On page refresh, `fetchSurveySubmissions()` restores previous answers so the patient can continue where they left off.
 
 | Column | Type | Example | Description |
 |--------|------|---------|-------------|
@@ -182,6 +197,15 @@ Currently 0 rows because no patient has submitted a survey yet. When a patient c
 **GPT-4o AI pipeline results — stores the per-domain evaluation of "how specifically did the doctor communicate risk to the patient", including a 0-5 score, extracted numerical estimates, and a patient-friendly reformatted summary.**
 
 While NLP (sentence_prediction) determines "which sentences are related to this domain", this table stores "how specifically did the doctor communicate risk in those sentences". Example: "There's some cancer risk" = ai_score 1 (vague), "24% risk without treatment, decreases to 6% with surgery" = ai_score 4 (very specific). The 33 rows (more than 5×5=25) occur because some domains have multiple treatment comparisons stored as separate rows.
+
+**Where this appears in the UI (two different pages, two different columns):**
+
+1. **Doctor page** (`PhysicianReportsModifiedV41Timothy.tsx`):
+   - **DashboardView**: The patient list shows each patient's `overallScore` (from `ai_overall_score` in `transcript_analysis_log`, which is the average of this table's `ai_score`). Patients are color-coded: green (score ≥ 4), yellow (2-3), red (< 2).
+   - **GridView**: The "Your Score" column shows per-domain `ai_score` (0-5) for the selected patient. The **DetailView** shows a Recharts `LineChart` trajectory of `ai_score` over time via `GET /api/doctor/scores/trajectory`.
+
+2. **Patient page** (`PatientInitialVisitReportV35.tsx` and `PatientFollowUpReportV31Re.tsx`):
+   - Each **TopicCard** displays the `reformat_sentence` as the main AI summary text. For example, the Cancer Prognosis card shows: *"Your doctor noted that, without treatment, your risk of dying of cancer is 24–25%. With treatment, this risk decreases to 6%."* This text comes from `GET /api/patient/ai-summary/{file}` → this table's `reformat_sentence` column.
 
 | Column | Type | Sample (SID_10, cp) | Description |
 |--------|------|---------------------|-------------|
@@ -213,6 +237,9 @@ While NLP (sentence_prediction) determines "which sentences are related to this 
 
 For example, when a patient hovers near the "cancer prognosis" card for 38 seconds, an event is recorded with `event_type=cursor_proximity_leave` and `hoverDuration: 38007071ms`. This data enables research questions like "Which domain information do patients spend the most time reading?" or "Which sentences do doctors click on most?"
 
+**Where this appears in the UI:**
+This table is NOT visible to patients or doctors. It is consumed by the **AdminTrackingDashboard** (`AdminTrackingDashboard.tsx`), which shows event counts, session timelines, per-patient behavior heatmaps, and event type distributions. Accessible only to administrators.
+
 | Column | Type | Sample | Description |
 |--------|------|--------|-------------|
 | `id` | SERIAL PK | 1 | Event ID |
@@ -239,7 +266,10 @@ For example, when a patient hovers near the "cancer prognosis" card for 38 secon
 
 **Session replay data — stores rrweb-recorded user sessions as binary chunks, enabling video-like playback of how users navigated the dashboard. PHI (Protected Health Information) is masked so patient names and sentence text appear as "***" in recordings.**
 
-While `user_interaction_log` records individual events, this table stores the raw data needed to replay the entire session visually. Chunks are sent every 30 seconds or every 500 events. The admin tracking dashboard can play back these recordings to observe user behavior.
+While `user_interaction_log` records individual events, this table stores the raw data needed to replay the entire session visually. Chunks are sent every 30 seconds or every 500 events.
+
+**Where this appears in the UI:**
+In the **AdminTrackingDashboard** (`AdminTrackingDashboard.tsx`), the "Recordings" tab lists all recorded sessions. Clicking a session opens the **rrweb-player** component, which plays back the session as a video showing mouse movements, clicks, scrolls, and page content (with PHI masked as "***"). Not visible to patients or doctors.
 
 | Column | Type | Sample | Description |
 |--------|------|--------|-------------|
