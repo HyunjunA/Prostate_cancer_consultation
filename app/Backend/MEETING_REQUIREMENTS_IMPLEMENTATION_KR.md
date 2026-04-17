@@ -275,11 +275,41 @@ erDiagram
 | <u>**rating**</u> | `llm_domain_scoring_and_summary` | <u>**`ai_score`**</u> (INT, 0-5) | GPT-4o의 문장 관련도 점수 |
 | <u>**processed flag**</u> | `transcript_analysis_log` | <u>**`processed`**</u> (BOOLEAN) | True = NLP + AI 완료 |
 
-**왜 두 테이블인가:**
-- `transcript_analysis_log` = <u>**환자 단위**</u> (1 patient = 1 row) — 전체 파이프라인 메타데이터 + processed flag
-- `llm_domain_scoring_and_summary` = <u>**도메인 단위**</u> (1 patient × 5 domains = 5+ rows) — AI 결과 상세
+**왜 두 테이블로 나누었는가:**
 
-이 두 테이블은 `analysis_id` (FK)로 연결됩니다:
+미팅에서는 하나의 테이블을 요청했지만, 실제로는 <u>**데이터의 단위(granularity)가 다르기 때문에**</u> 두 테이블로 분리했습니다:
+
+| 판단 근거 | `transcript_analysis_log` | `llm_domain_scoring_and_summary` |
+|----------|--------------------------|----------------------------------|
+| **데이터 단위** | <u>**환자 단위**</u> (1 patient = 1 row) | <u>**도메인 단위**</u> (1 patient × 5 domains = 5+ rows) |
+| **여기에 넣은 이유** | `processed` flag는 **환자 전체**에 대한 상태이므로 환자 단위 테이블에 속함. 도메인별로 processed를 따로 추적할 필요 없음 (전체가 한 번에 처리됨). | `ai_score`, `source_sentence`, `reformat_sentence`는 **도메인별**로 다른 값을 가지므로 도메인 단위 테이블에 속함. cp의 점수와 le의 점수는 다름. |
+| **만약 하나로 합치면** | `processed` flag가 5번 중복 저장됨 (비효율) | 환자별 메타데이터(`pipeline_started_at` 등)가 5번 중복됨 |
+
+**각 컬럼이 해당 테이블에 있는 구체적 이유:**
+
+**`transcript_analysis_log` — 환자 단위 컬럼들:**
+
+| 컬럼 | 왜 이 테이블인가 |
+|------|----------------|
+| <u>**`pipeline_started_at`**</u> | 파이프라인 시작은 **환자 단위** 이벤트. 5개 도메인이 동시에 시작하므로 1번만 기록하면 됨. |
+| <u>**`analyzed_at`**</u> | NLP 저장도 **환자 단위** — `persistence.save_all()`이 5개 도메인을 한 트랜잭션으로 저장. |
+| <u>**`processed`**</u> | "이 환자의 파이프라인이 완료되었는가?"는 **환자 단위** 질문. 도메인별로 따로 완료될 수 없음 (AI pipeline이 5개를 순차 처리 후 한 번에 True). |
+| <u>**`processed_at`**</u> | AI pipeline 완료 시각도 **환자 단위** — 5개 도메인 모두 끝난 후 1번 기록. |
+| <u>**`ai_overall_score`**</u> | 5개 도메인 ai_score의 **평균**이므로 환자 단위. 의사 대시보드에서 "이 환자의 전체 상담 품질"로 표시. |
+
+**`llm_domain_scoring_and_summary` — 도메인 단위 컬럼들:**
+
+| 컬럼 | 왜 이 테이블인가 |
+|------|----------------|
+| <u>**`domain`**</u> | cp/le/ed/inc/ius — **각 도메인마다 다른 값**을 가져야 하므로 도메인 단위 테이블 필수. |
+| <u>**`ai_score`**</u> | GPT-4o가 **도메인별로** 다른 점수를 매김 (cp=3, le=5 등). 환자 단위 테이블에 넣으면 5개 컬럼(`ai_score_cp`, `ai_score_le`...)이 필요해져 확장성이 나빠짐. |
+| <u>**`score_explanation`**</u> | GPT-4o의 chain-of-thought 추론. 도메인별 프롬프트(`ai_pipeline/prompts/scoring/cp.py`, `le.py` 등)가 다르므로 **각 도메인마다 다른 추론 과정**이 생성됨. `scoring.py` line 40에서 `pred["explanation"]`으로 추출. |
+| <u>**`extracted_estimate`**</u> | 의사가 말한 수치 추정값. **도메인마다 다른 종류**의 추정값 (cp="24% 사망 위험", le="14년 기대수명", ed="10-20% 영구 발기부전"). |
+| <u>**`treatment`**</u> | 부작용 도메인(ed, inc, ius)에만 존재하는 치료법. cp/le에는 NULL. **도메인별로 유무가 다름**. |
+| <u>**`source_sentence`**</u> | AI가 평가한 원본 문장. **도메인마다 다른 문장**이 선택됨 (cp Top-1 ≠ le Top-1). |
+| <u>**`reformat_sentence`**</u> | 환자용 변환 텍스트. **도메인마다 다른 내용** (cp 요약 ≠ le 요약). 환자 페이지에서 5개 카드로 각각 표시. |
+
+이 두 테이블은 <u>**`analysis_id` (FK)**</u>로 연결됩니다:
 
 ```mermaid
 erDiagram
