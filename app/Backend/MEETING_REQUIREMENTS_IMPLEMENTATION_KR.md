@@ -285,29 +285,35 @@ erDiagram
 | **여기에 넣은 이유** | `processed` flag는 **환자 전체**에 대한 상태이므로 환자 단위 테이블에 속함. 도메인별로 processed를 따로 추적할 필요 없음 (전체가 한 번에 처리됨). | `ai_score`, `source_sentence`, `reformat_sentence`는 **도메인별**로 다른 값을 가지므로 도메인 단위 테이블에 속함. cp의 점수와 le의 점수는 다름. |
 | **만약 하나로 합치면** | `processed` flag가 5번 중복 저장됨 (비효율) | 환자별 메타데이터(`pipeline_started_at` 등)가 5번 중복됨 |
 
-**각 컬럼이 해당 테이블에 있는 구체적 이유:**
+**각 컬럼이 왜 이 테이블에 추가되었는가 (미팅 요구사항 → 컬럼):**
 
-**`transcript_analysis_log` — 환자 단위 컬럼들:**
+**`transcript_analysis_log` 테이블 — 새로 추가된 컬럼 3개:**
 
-| 컬럼 | 왜 이 테이블인가 |
-|------|----------------|
-| <u>**`pipeline_started_at`**</u> | 파이프라인 시작은 **환자 단위** 이벤트. 5개 도메인이 동시에 시작하므로 1번만 기록하면 됨. |
-| <u>**`analyzed_at`**</u> | NLP 저장도 **환자 단위** — `persistence.save_all()`이 5개 도메인을 한 트랜잭션으로 저장. |
-| <u>**`processed`**</u> | "이 환자의 파이프라인이 완료되었는가?"는 **환자 단위** 질문. 도메인별로 따로 완료될 수 없음 (AI pipeline이 5개를 순차 처리 후 한 번에 True). |
-| <u>**`processed_at`**</u> | AI pipeline 완료 시각도 **환자 단위** — 5개 도메인 모두 끝난 후 1번 기록. |
-| <u>**`ai_overall_score`**</u> | 5개 도메인 ai_score의 **평균**이므로 환자 단위. 의사 대시보드에서 "이 환자의 전체 상담 품질"로 표시. |
+| 컬럼 | 미팅 요구사항 | 왜 이 테이블에 추가했는가 |
+|------|-------------|----------------------|
+| <u>**`pipeline_started_at`**</u> | *"we need to flag if it is been processed or not"* — 처리 시간을 추적하려면 시작 시각이 필요. | 이 테이블이 이미 **파이프라인 실행 기록**을 저장하는 테이블(`analyzed_at` 존재). 시작 시각도 같은 곳에 기록하는 것이 자연스러움. `analyzed_at`(NLP 저장 시각)과 함께 NLP 소요 시간 = `analyzed_at - pipeline_started_at`으로 계산 가능. |
+| <u>**`processed`**</u> | *"we also need to flag if it is been processed or not"* — 미팅에서 직접 요청. | 이 테이블이 이미 **환자별 분석 실행 1건 = 1행**이므로, "이 분석이 완료되었는가?"를 여기에 기록하는 것이 가장 직관적. 다른 테이블에 넣으면 JOIN이 필요해져 복잡해짐. `processed=False`인 행을 조회하면 **재처리 대상**을 바로 찾을 수 있음. |
+| <u>**`processed_at`**</u> | *"flag if it is been processed or not"* — flag만으로는 "언제 완료되었는가"를 알 수 없으므로 시각도 추가. | `pipeline_started_at`과 함께 **전체 소요 시간** = `processed_at - pipeline_started_at`으로 계산. 성능 모니터링에 필요. |
 
-**`llm_domain_scoring_and_summary` — 도메인 단위 컬럼들:**
+> 참고: `ai_overall_score` (FLOAT)도 이 테이블에 있는데, 이것은 5개 도메인 `ai_score`의 평균으로 **환자 전체 상담 품질**을 한 숫자로 요약한 것. AI pipeline 완료 시 `processed=True`와 함께 설정됨.
 
-| 컬럼 | 왜 이 테이블인가 |
-|------|----------------|
-| <u>**`domain`**</u> | cp/le/ed/inc/ius — **각 도메인마다 다른 값**을 가져야 하므로 도메인 단위 테이블 필수. |
-| <u>**`ai_score`**</u> | GPT-4o가 **도메인별로** 다른 점수를 매김 (cp=3, le=5 등). 환자 단위 테이블에 넣으면 5개 컬럼(`ai_score_cp`, `ai_score_le`...)이 필요해져 확장성이 나빠짐. |
-| <u>**`score_explanation`**</u> | GPT-4o의 chain-of-thought 추론. 도메인별 프롬프트(`ai_pipeline/prompts/scoring/cp.py`, `le.py` 등)가 다르므로 **각 도메인마다 다른 추론 과정**이 생성됨. `scoring.py` line 40에서 `pred["explanation"]`으로 추출. |
-| <u>**`extracted_estimate`**</u> | 의사가 말한 수치 추정값. **도메인마다 다른 종류**의 추정값 (cp="24% 사망 위험", le="14년 기대수명", ed="10-20% 영구 발기부전"). |
-| <u>**`treatment`**</u> | 부작용 도메인(ed, inc, ius)에만 존재하는 치료법. cp/le에는 NULL. **도메인별로 유무가 다름**. |
-| <u>**`source_sentence`**</u> | AI가 평가한 원본 문장. **도메인마다 다른 문장**이 선택됨 (cp Top-1 ≠ le Top-1). |
-| <u>**`reformat_sentence`**</u> | 환자용 변환 텍스트. **도메인마다 다른 내용** (cp 요약 ≠ le 요약). 환자 페이지에서 5개 카드로 각각 표시. |
+**`llm_domain_scoring_and_summary` 테이블 — Guillermo 코드에서 생성되는 컬럼들:**
+
+| 컬럼 | 미팅 요구사항 | 왜 이 테이블에 있는가 |
+|------|-------------|-------------------|
+| <u>**`ai_score`**</u> | *"the rating"*, *"make sure that you have the rating for the sentence"* | 미팅에서 요청한 "rating". GPT-4o가 **도메인별로** 다른 점수를 매기므로 (cp=3, le=5 등) 도메인 단위 테이블에 저장. `ai_pipeline/scoring.py`의 `run_scoring()` → `pred["score"]`에서 추출. 의사 페이지에서 표시. |
+| <u>**`score_explanation`**</u> | *"check Guillermo's code"* — Guillermo의 AI pipeline이 생성하는 부산물. | GPT-4o가 `ai_score`를 매길 때 "왜 이 점수인가"를 단계별로 설명한 텍스트. `ai_pipeline/prompts/scoring/cp.py`의 시스템 프롬프트가 "Step 1 → Step 2 → Step 3 → Step 4" 단계별 평가를 지시하고, GPT-4o가 이 과정을 `explanation` 필드로 반환. `scoring.py` line 40에서 `pred["explanation"]`으로 추출. |
+| <u>**`extracted_estimate`**</u> | *"we need the result and check what needs to be saved"* | Guillermo의 AI pipeline Step 7 (Extraction)에서 의사가 말한 구체적 수치를 추출한 것. 도메인마다 다른 종류의 추정값 (cp="24% 사망 위험", le="14년", ed="10-20% ED"). `ai_pipeline/extraction.py`에서 생성. |
+| <u>**`treatment`**</u> | *"what is the thing that are going to patient and to doctor"* | 부작용 도메인(ed, inc, ius)에서 어떤 치료법과 관련된 위험인지 표시 ("surgery", "radiation"). cp/le에는 해당 없음 (NULL). `ai_pipeline/extraction.py`에서 함께 추출. |
+| <u>**`source_sentence`**</u> | *"the sentence"*, *"Basically the table is the id, sentence, and then the domain"* | 미팅에서 요청한 "sentence". AI가 최종 선택한 1개 원본 문장. `ai_pipeline/selection.py`에서 결정. |
+| <u>**`reformat_sentence`**</u> | *"it is not the ai summary (i think it is ai reformat?)"* | 미팅에서 용어 확인 요청한 "AI reformat". GPT-4o가 `source_sentence`를 환자가 이해할 수 있는 언어로 변환한 텍스트. `ai_pipeline/reformat.py`에서 생성. 환자 페이지에서 AI 요약 카드로 표시. |
+| <u>**`source_context`**</u> | *"understand that output"* — 출력 이해를 위해 문맥도 함께 저장. | AI가 점수를 매길 때 참고한 주변 ±3 문장. `<main>` 태그로 감싼 형태. 디버깅 및 결과 검증에 필요. |
+
+**`patient_summary_domain` 테이블 — 기존 컬럼 (새로 추가한 것 아님):**
+
+| 컬럼 | 미팅 요구사항 | 왜 이 테이블에 있는가 |
+|------|-------------|-------------------|
+| <u>**`patient_scoring`**</u> | *"rating from patients"*, *"the review part they are rating"* | 미팅에서 요청한 환자 평점. **환자가 직접 입력**하는 것이므로 파이프라인 결과(`llm_domain_scoring_and_summary`)와 분리. 환자 대시보드에서 `PUT /api/patient/scoring`으로 UPDATE. 이 테이블이 이미 **환자 × 도메인** 단위이므로 도메인별 평점 저장에 적합. |
 
 이 두 테이블은 <u>**`analysis_id` (FK)**</u>로 연결됩니다:
 
