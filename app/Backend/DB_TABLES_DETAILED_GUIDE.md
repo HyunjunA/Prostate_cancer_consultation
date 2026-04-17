@@ -1,11 +1,11 @@
 # Database Tables — Detailed Guide
 
 > Updated: 2026-04-17 | Based on actual production DB (5 patients processed)  
-> Total: 9 tables | Branch: `feat/save-intermediate-results`
+> Total: 12 tables (9 application + 3 auth) | Branch: `feat/save-intermediate-results`
 
 ---
 
-## 1. `transcript_analysis_log` (5 rows)
+## 1. `transcript_analysis_log`
 
 **Pipeline execution record — stores the fact that "this patient file was processed" along with all metadata about the processing.**
 
@@ -35,7 +35,7 @@ When the pipeline processes `Input_Keystrokes REC001 (SID 14).xlsx`, one row is 
 
 ---
 
-## 2. `sentence_prediction` (250 rows = 5 patients × 50 sentences)
+## 2. `sentence_prediction`
 
 **NLP model predictions — stores the Top-10 sentences per domain with their probability scores, as determined by the 5 NLP classification models.**
 
@@ -64,7 +64,7 @@ In `PatientInitialVisitReportV35.tsx`, each TopicCard has a collapsible "Evidenc
 
 ---
 
-## 3. `doctor_rewrite_log` (0 rows)
+## 3. `doctor_rewrite_log`
 
 **Doctor rewrite history — records every time a doctor modifies a sentence on the dashboard, storing both the original and revised versions with timestamps.**
 
@@ -91,7 +91,7 @@ In `PhysicianReportsModifiedV41Timothy.tsx`, the **GridView** has a "Suggested R
 
 ---
 
-## 4. `patient_summary` (5 rows)
+## 4. `patient_summary`
 
 **Patient summary parent record — represents "a summary exists for this patient". Acts as the FK parent for patient_summary_domain (5 domain rows per patient).**
 
@@ -109,7 +109,7 @@ One row per patient. The actual domain-level data (summary_text, patient_scoring
 
 ---
 
-## 5. `patient_summary_domain` (25 rows = 5 patients × 5 domains)
+## 5. `patient_summary_domain`
 
 **Patient per-domain feedback — stores the star rating and text response that the patient enters on the dashboard for each domain. The pipeline creates empty rows (NULL values), and the patient fills them in later during a follow-up visit.**
 
@@ -135,7 +135,7 @@ In `PatientInitialVisitReportV35.tsx`, each **TopicCard** has a NIH PROMIS unipo
 
 ---
 
-## 6. `survey_submission_log` (0 rows)
+## 6. `survey_submission_log`
 
 **Patient survey responses — stores the full JSON answers when a patient submits SDM, DCS, Risk Perception, or Satisfaction surveys on the follow-up page, and tracks synchronization status with the REDCap research database.**
 
@@ -164,7 +164,7 @@ In `PatientFollowUpReportV31Re.tsx`, the follow-up visit has a multi-step survey
 
 ---
 
-## 7. `llm_domain_scoring_and_summary` (33 rows)
+## 7. `llm_domain_scoring_and_summary`
 
 **GPT-4o AI pipeline results — stores the per-domain evaluation of "how specifically did the doctor communicate risk to the patient", including a 0-5 score, extracted numerical estimates, and a patient-friendly reformatted summary.**
 
@@ -203,7 +203,7 @@ While NLP (sentence_prediction) determines "which sentences are related to this 
 
 ---
 
-## 8. `user_interaction_log` (108 rows)
+## 8. `user_interaction_log`
 
 **User behavior tracking — records every user action on the dashboard (clicks, scrolls, mouse movements, dwell time) in real-time for research analysis of how patients and doctors interact with the consultation information.**
 
@@ -234,7 +234,7 @@ This table is NOT visible to patients or doctors. It is consumed by the **AdminT
 
 ---
 
-## 9. `session_recording` (2 rows)
+## 9. `session_recording`
 
 **Session replay data — stores rrweb-recorded user sessions as binary chunks, enabling video-like playback of how users navigated the dashboard. PHI (Protected Health Information) is masked so patient names and sentence text appear as "***" in recordings.**
 
@@ -258,3 +258,73 @@ In the **AdminTrackingDashboard** (`AdminTrackingDashboard.tsx`), the "Recording
 - `POST /api/tracking/recordings` — chunk upload from frontend (sessionRecorder.ts)
 - `GET /api/tracking/recordings` — recording list on admin dashboard
 - `GET /api/tracking/recordings/{sessionId}` — session replay playback
+
+---
+
+## 10. `auth_user`
+
+**Application user accounts — represents every individual that can authenticate against the backend (admin, regular user, read-only). Defined in `auth/models.py` and created automatically via `init_db.py` (Base.metadata).**
+
+Backing model for FastAPI's `get_current_user` dependency. The `role` column drives authorization checks across the doctor/admin endpoints. Stored credentials are bcrypt hashes; rows authored by external SSO will have `password_hash = NULL` and a non-`local` `auth_provider`.
+
+| Column | Type | Sample | Description |
+|--------|------|--------|-------------|
+| `id` | SERIAL PK | 1 | User identifier |
+| `username` | VARCHAR | clinician_a | Login name (indexed) |
+| `email` | VARCHAR UNIQUE | a@cedars-sinai.org | Email (unique constraint) |
+| `password_hash` | VARCHAR | $2b$12$... | bcrypt hash; NULL when SSO is used |
+| `role` | VARCHAR | user | admin / user / readonly (CHECK constraint) |
+| `is_superuser` | BOOLEAN | false | Bypass per-patient ACL when true |
+| `is_active` | BOOLEAN | true | Soft-delete flag |
+| `auth_provider` | VARCHAR | local | local / azure_ad / etc. |
+| `created_at` | TIMESTAMP | 2026-03-12T... | Account creation time |
+| `updated_at` | TIMESTAMP | 2026-03-15T... | Last update (auto-updated) |
+
+**Used by:**
+- `auth/__init__.py:21` `get_current_user()` — FastAPI dependency on every protected route (delegates to the backend selected by `AUTH_MODE`)
+- `auth/access_control.check_patient_access()` — called from `routes_doctor.py:50` and the patient-scoped endpoints in `routes_transcript.py`
+- `auth/admin_routes.py` (`/api/auth/users` `GET`/`POST`/`PATCH`/`DELETE`) — implemented user-management endpoints (UI: in progress)
+
+---
+
+## 11. `auth_api_key`
+
+**Per-user API keys for the `multi_key` auth mode — lets one user own multiple revocable keys (e.g. dashboard token + CLI token). Defined in `auth/models.py`.**
+
+In `multi_key` mode, the backend reads `X-API-Key` from request headers, hashes it, and looks up `key_hash` in this table. The matching `user_id` becomes the request's `current_user`. `is_active=false` or `expires_at < NOW()` causes lookup failure → 401.
+
+| Column | Type | Sample | Description |
+|--------|------|--------|-------------|
+| `id` | SERIAL PK | 1 | Key record id |
+| `user_id` | INT FK | 1 | → auth_user.id (CASCADE on delete) |
+| `key_hash` | VARCHAR | sha256(...) | Hashed API key (raw key never stored) |
+| `label` | VARCHAR | dashboard-prod | Human-readable name |
+| `is_active` | BOOLEAN | true | Revocation flag |
+| `created_at` | TIMESTAMP | 2026-03-12T... | Issue time |
+| `expires_at` | TIMESTAMP | 2027-03-12T... | Expiry (NULL = never) |
+| `last_used_at` | TIMESTAMP | 2026-04-17T... | Updated on every successful auth |
+
+**Used by:**
+- `auth/backends/api_key.py` and `auth/backends/multi_key.py` — request-time `X-API-Key` verification
+- `auth/admin_routes.py` `POST /api/auth/users/{user_id}/keys` (issue) and `DELETE /api/auth/users/{user_id}/keys/{key_id}` (revoke) — implemented; admin UI in progress
+
+---
+
+## 12. `patient_access`
+
+**Mapping of which `auth_user`s may access which patient files — the per-patient ACL layer on top of the role-based check.**
+
+A user may have a role of `user` (default) but still need an explicit grant per patient before any doctor endpoint will return data for that patient. `is_superuser=true` bypasses this check entirely. Composite unique constraint `(user_id, patient_id)` prevents duplicate grants.
+
+| Column | Type | Sample | Description |
+|--------|------|--------|-------------|
+| `id` | SERIAL PK | 1 | Grant id |
+| `user_id` | INT FK | 1 | → auth_user.id (CASCADE on delete) |
+| `patient_id` | VARCHAR | SID_10 | Patient identifier (matches `transcript_analysis_log.patient_id`) |
+| `access_type` | VARCHAR | read | read / write / admin (CHECK constraint) |
+| `granted_at` | TIMESTAMP | 2026-04-01T... | When the grant was created |
+| `granted_by` | INT FK | 1 | → auth_user.id of the granter (NULL allowed) |
+
+**Used by:**
+- `auth/access_control.check_patient_access(patient_id, user, db)` — called at the top of `/sentences/{file}/{speaker}` (`routes_doctor.py:50`) and all patient-scoped transcript endpoints (`routes_transcript.py`)
+- `auth/admin_routes.py` `POST /api/auth/users/{user_id}/patients` (grant) and `DELETE /api/auth/users/{user_id}/patients/{patient_id}` (revoke) — implemented; admin UI in progress
