@@ -63,6 +63,7 @@ interface SentenceDetail {
   i: number;
   i2: number;
   sentence: string;
+  context?: string;
   time: string;
   score?: number;
   hasRewrite?: boolean;
@@ -2245,14 +2246,16 @@ const GridView: React.FC<GridViewProps> = ({
   const isLoadingSentences =
     apiLoading && (!sentences?.data || sentences.data.length === 0);
 
-  // Representative sentence: directly from scores/summary API (pred_score highest sentence)
+  // Representative sentence: from sentences API, matched by AI-selected (i, i2)
   const getRepresentativeSentence = (data: TopicData): string => {
-    if ((data as any).representativeSentence) {
-      console.log(`[getRepresentativeSentence] Using API sentence: "${((data as any).representativeSentence || "").slice(0, 50)}..."`);
-      return (data as any).representativeSentence;
+    const repI = (data as any).representativeI;
+    const repI2 = (data as any).representativeI2;
+    if (repI != null && repI2 != null) {
+      const match = data.sentenceDetails.find((d) => d.i === repI && d.i2 === repI2);
+      if (match) return match.context || match.sentence;
     }
-    console.log("[getRepresentativeSentence] No API sentence, falling back to first sentenceDetail");
-    return data.sentenceDetails[0]?.sentence || "No sentence available";
+    const first = data.sentenceDetails[0];
+    return first?.context || first?.sentence || "No sentence available";
   };
 
   // Score for grid display: directly from scores/summary API
@@ -2583,11 +2586,26 @@ const GridView: React.FC<GridViewProps> = ({
                     <td className="px-4 py-5">
                       <div
                         className={cx(
-                          "text-sm leading-relaxed line-clamp-3",
+                          "text-sm leading-relaxed max-h-32 overflow-y-auto pr-2",
                           isDarkMode ? "text-slate-300" : "text-slate-700",
                         )}
                       >
-                        {representativeSentence}
+                        {representativeSentence.includes("<main>") ? (
+                          <>
+                            {representativeSentence.split("<main>").map((part: string, idx: number) => {
+                              if (idx === 0) return <span key={idx}>{part}</span>;
+                              const [highlighted, rest] = part.split("</main>");
+                              return (
+                                <span key={idx}>
+                                  <span className={cx("font-bold underline", isDarkMode ? "text-cyan-300" : "text-cyan-700")}>{highlighted}</span>
+                                  {rest}
+                                </span>
+                              );
+                            })}
+                          </>
+                        ) : (
+                          representativeSentence
+                        )}
                       </div>
                     </td>
 
@@ -3085,7 +3103,7 @@ const DetailView: React.FC<DetailViewProps> = ({
             title={titleByScore(data.score)}
             subtitle="Quality of Risk Communication"
             sentences={data.sentenceDetails.map((detail) => ({
-              sentence: detail.sentence,
+              sentence: detail.context || detail.sentence,
               hasRewrite: detail.hasRewrite,
               revisedSentence: detail.revisedSentence,
               score: detail.score,
@@ -3220,13 +3238,30 @@ const DetailView: React.FC<DetailViewProps> = ({
                   </div>
                   <div
                     className={cx(
-                      "p-4 rounded-lg text-base leading-relaxed border-l-4",
+                      "p-4 rounded-lg text-base leading-relaxed border-l-4 max-h-40 overflow-y-auto",
                       isDarkMode
                         ? "bg-slate-700/50 text-slate-200 border-slate-500"
                         : "bg-slate-50 text-slate-800 border-slate-300",
                     )}
                   >
-                    &quot;{currentSentence.sentence}&quot;
+                    {(currentSentence.context || currentSentence.sentence).includes("<main>") ? (
+                      <>
+                        &quot;
+                        {(currentSentence.context || currentSentence.sentence).split("<main>").map((part: string, idx: number) => {
+                          if (idx === 0) return <span key={idx}>{part}</span>;
+                          const [highlighted, rest] = part.split("</main>");
+                          return (
+                            <span key={idx}>
+                              <span className={cx("font-bold underline", isDarkMode ? "text-cyan-300" : "text-cyan-700")}>{highlighted}</span>
+                              {rest}
+                            </span>
+                          );
+                        })}
+                        &quot;
+                      </>
+                    ) : (
+                      <>&quot;{currentSentence.context || currentSentence.sentence}&quot;</>
+                    )}
                   </div>
                 </div>
 
@@ -3806,6 +3841,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
         i: item.i,
         i2: item.i2,
         sentence: item.sentence,
+        context: item.context,
         time: item.time,
         score: item.score,
         hasRewrite: !!rewrite,
@@ -3824,7 +3860,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
         if (topicName && result[topicName]) {
           result[topicName].score = item.score ?? item.avg_score ?? null;
           // Store representative sentence info from API (no frontend processing needed)
-          result[topicName].representativeSentence = item.sentence ?? null;
+          // representativeSentence: not used (context comes from sentences API via sentenceDetails)
           result[topicName].representativeI = item.i ?? null;
           result[topicName].representativeI2 = item.i2 ?? null;
           result[topicName].predScore = item.pred_score ?? null;
