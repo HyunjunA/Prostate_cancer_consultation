@@ -71,7 +71,7 @@ In `PatientInitialVisitReportV35.tsx`, each TopicCard has a collapsible "Evidenc
 The reason this table has 221 rows (less than sentence_prediction's 250) is deduplication: if the same sentence ranked in Top-10 for both cp and le domains, it appears in sentence_prediction twice but in doctor_sentence_view only once. The doctor sees each sentence exactly once. When the doctor rewrites a sentence, `(file, i, i2)` from this table identifies the target.
 
 **Where this appears in the UI:**
-In `PhysicianReportsModifiedV41Timothy.tsx`, the **GridView** displays a table with columns: "Topic", "Your Score", "Representative Sentence", "Suggestions for Improvement", and "Suggested Rephrasing". Each row in this table corresponds to one sentence from `doctor_sentence_view`, grouped by `class` (domain). The **DashboardView** shows the patient list with overall scores, and clicking a patient navigates to their GridView.
+In `PhysicianReportsModifiedV41Timothy.tsx`, the **GridView** displays a table with columns: "Topic", "Your Score", "Representative Sentence", "Suggestions for Improvement", and "Suggested Rephrasing". The "Your Score" comes from `llm_domain_scoring_and_summary.ai_score` (via `scores/summary` API). The "Representative Sentence" shows the full context (±3 sentences) from `sentence_prediction.context` (via `sentences` API), with the key sentence highlighted in bold+underline. Clicking a topic opens the **DetailView** with Consultation Scoring bubble and Re-write Practice, which also display context from the same `sentences` API.
 
 | Column | Type | Sample | Description |
 |--------|------|--------|-------------|
@@ -80,7 +80,7 @@ In `PhysicianReportsModifiedV41Timothy.tsx`, the **GridView** displays a table w
 | `i2` | INT PK | 3 | Sentence within utterance |
 | `speaker` | VARCHAR | Interviewer: | Speaker |
 | `sentence` | TEXT | "so i'm going to take that 12 percent..." | Sentence text |
-| `score` | FLOAT | None | Quality score (can be populated later) |
+| `score` | FLOAT | None | Not used directly. AI score is read from `llm_domain_scoring_and_summary.ai_score` via JOIN in the sentences API. This column remains NULL. |
 | `class` | VARCHAR | cancer_prognosis | Representative domain |
 | `time` | TIMESTAMP | 05:26:30 | Creation time |
 
