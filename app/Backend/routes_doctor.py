@@ -76,6 +76,35 @@ async def get_doctor_sentences(
             detail="No data found for the specified file and speaker."
         )
     
+    # Get context (with <main> tags) from sentence_prediction for each sentence
+    analysis_stmt = select(TranscriptAnalysisLog.id).where(
+        TranscriptAnalysisLog.source_filename == file
+    ).order_by(TranscriptAnalysisLog.analyzed_at.desc()).limit(1)
+    analysis_id = (await db.execute(analysis_stmt)).scalar_one_or_none()
+
+    # Build lookups from sentence_prediction: (i, i2) → context
+    # and from llm_domain_scoring_and_summary: sentence_text → ai_score
+    context_map = {}
+    ai_score_map = {}
+    if analysis_id:
+        ctx_stmt = select(
+            SentencePrediction.utterance_index,
+            SentencePrediction.sentence_in_utterance,
+            SentencePrediction.context,
+        ).where(SentencePrediction.analysis_id == analysis_id)
+        for row in (await db.execute(ctx_stmt)).all():
+            context_map[(row.utterance_index, row.sentence_in_utterance)] = row.context
+
+        # Get ai_score from llm_domain_scoring_and_summary (no duplication needed)
+        from models import LLMDomainScoringAndSummary
+        ai_stmt = select(
+            LLMDomainScoringAndSummary.source_sentence,
+            LLMDomainScoringAndSummary.ai_score,
+        ).where(LLMDomainScoringAndSummary.analysis_id == analysis_id)
+        for row in (await db.execute(ai_stmt)).all():
+            if row.source_sentence:
+                ai_score_map[row.source_sentence] = row.ai_score
+
     return {
         "file": file,
         "speaker": speaker,
@@ -85,7 +114,8 @@ async def get_doctor_sentences(
                 "i": r.i,
                 "i2": r.i2,
                 "sentence": r.sentence,
-                "score": r.score,
+                "context": context_map.get((r.i, r.i2)),
+                "score": ai_score_map.get(r.sentence),
                 "class": r.class_,
                 "time": r.time.isoformat() if r.time else None
             }
@@ -522,11 +552,39 @@ async def get_doctor_score_summary_by_file_speaker(
     scores_list = []
     for r in ai_results:
         score_val = r.ai_score
+
+        # Find matching (i, i2) and context with <main> tags from sentence_prediction
+        i_val = None
+        i2_val = None
+        context_with_tags = r.source_context  # fallback: without <main> tags
+        if r.source_sentence:
+            match_stmt = select(
+                DoctorSentenceView.i, DoctorSentenceView.i2
+            ).where(
+                DoctorSentenceView.file == file,
+                DoctorSentenceView.sentence == r.source_sentence,
+            ).limit(1)
+            match_row = (await db.execute(match_stmt)).first()
+            if match_row:
+                i_val = match_row.i
+                i2_val = match_row.i2
+                # Get context with <main> tags from sentence_prediction
+                ctx_stmt = select(SentencePrediction.context).where(
+                    SentencePrediction.analysis_id == analysis_id,
+                    SentencePrediction.utterance_index == i_val,
+                    SentencePrediction.sentence_in_utterance == i2_val,
+                ).limit(1)
+                ctx_row = (await db.execute(ctx_stmt)).scalar()
+                if ctx_row:
+                    context_with_tags = ctx_row
+
         by_class.append({
             "class": r.domain,
             "score": score_val,
             "pred_score": None,
             "sentence": r.source_sentence,
+            "i": i_val,
+            "i2": i2_val,
             "explanation": r.score_explanation,
             "extracted_estimate": r.extracted_estimate,
             "treatment": r.treatment,
@@ -741,13 +799,11 @@ async def score_sentence(
         }
 
     except Exception as e:
-        logger.warning("GPT-4o scoring failed, using fallback: %s", e)
-        # Fallback: return placeholder score
-        return {
-            "score": 5,
-            "sentence": request_data.sentence,
-            "explanation": None,
-        }
+        logger.error("GPT-4o scoring failed: %s", e)
+        raise HTTPException(
+            status_code=503,
+            detail="AI scoring service temporarily unavailable. Please try again later."
+        )
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Doctor Interface - Class Distribution API

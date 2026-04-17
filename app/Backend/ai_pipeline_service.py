@@ -196,6 +196,7 @@ async def run_ai_scoring_and_summary(
                         processed_at=datetime.now(timezone.utc),
                     )
                 )
+
                 logger.info("AI pipeline: overall score = %.2f (%d domains), processed=True", overall, len(all_scores))
 
             await db.commit()
