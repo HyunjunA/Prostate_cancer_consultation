@@ -3210,12 +3210,12 @@ const DetailView: React.FC<DetailViewProps> = ({
                       className={cx(
                         "inline-flex items-center justify-center min-w-[2.5rem] px-3 py-1 rounded text-sm font-bold ml-auto",
                         getScoreColorForValue(
-                          currentSentence.score ?? null,
+                          currentSentence.score ?? data.score ?? null,
                           isDarkMode,
                         ),
                       )}
                     >
-                      Score: {currentSentence.score ?? "N/A"}
+                      Score: {currentSentence.score ?? data.score ?? "N/A"}
                     </span>
                   </div>
                   <div
