@@ -240,7 +240,11 @@ erDiagram
         jsonb model_results "deprecated"
         bytea xlsx_data
         varchar source_filename
-        timestamptz analyzed_at
+        timestamp pipeline_started_at "when pipeline_runner began"
+        timestamptz analyzed_at "when NLP results saved to DB"
+        boolean processed "true when full pipeline done"
+        timestamp processed_at "when AI pipeline completed"
+        float ai_overall_score
     }
 
     sentence_prediction {
