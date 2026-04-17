@@ -96,6 +96,12 @@ services:
       - ./uploads:/app/uploads
       # Transcript input files from the NLP pipeline data folder
       - ../../../AI_physician_patient_communication/data/input:/app/data/transcripts:ro
+      # NLP sentence classification modules (R stringi segmentation).
+      # These replace transcript_service.py to guarantee identical sentence
+      # segmentation with the original R pipeline. DO NOT remove these mounts.
+      - ../../../AI_physician_patient_communication/sentence_classification:/app/sentence_classification:ro
+      - ../../../AI_physician_patient_communication/utils:/app/pipeline_utils:ro
+      - ../../../AI_physician_patient_communication/config.py:/app/pipeline_config.py:ro
       # Guille's AI pipeline — LLM-powered scoring (0-5 clinical relevance)
       # and rewriting/reformatting system that generates patient-facing
       # risk summaries using Azure OpenAI GPT-4o

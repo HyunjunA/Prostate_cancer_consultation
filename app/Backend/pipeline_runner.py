@@ -18,7 +18,6 @@ Usage:
 import asyncio
 import logging
 import os
-import re
 import sys
 import time
 from pathlib import Path
@@ -26,22 +25,112 @@ from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 
+import io
+
+import pandas as pd
+
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
+
+# ── Constants (matches R pipeline outcome names) ─────────────────────────────
+
+OUTCOME_TO_SHEET = {
+    "cancer_prognosis": "cp",
+    "continence": "inc",
+    "erectile_dysfunction_potency": "ed",
+    "irritative_urinary_symptoms_frequency_urgency_nocturnia": "ius",
+    "life_expectancy": "le",
+}
+
+
+def _read_transcript(filepath: str, filename: str):
+    """Read transcript file identically to sentence_classification's read_input_file.
+
+    Mirrors the exact logic of AI_physician_patient_communication/utils/file_manager.py
+    read_input_file() — no column normalization, no text stripping — so that
+    sentence segmentation via R stringi produces identical results.
+    """
+    import re
+
+    path = Path(filepath)
+    suffix = path.suffix.lower()
+    if suffix == ".csv":
+        df = pd.read_csv(path)
+    else:
+        df = pd.read_excel(path, engine="openpyxl")
+
+    # Validate required columns (same check as read_input_file)
+    if "speaker" not in df.columns or "text" not in df.columns:
+        raise ValueError(f"Missing 'speaker' or 'text' columns in {filename}")
+
+    # Extract patient_id (same logic as extract_patient_id)
+    stem = path.stem
+    match = re.search(r"processed_transcripts_(.+)", stem)
+    if match:
+        patient_id = match.group(1)
+    else:
+        match = re.search(r"SID\s*(\d+)", stem, re.IGNORECASE)
+        if match:
+            patient_id = f"SID_{match.group(1)}"
+        else:
+            patient_id = re.sub(r"\s+", "_", stem)
+
+    return df, patient_id
+
+
+def _export_to_xlsx_bytes(final_results) -> bytes:
+    """Convert final_results dict to in-memory xlsx bytes for DB storage."""
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        for outcome, df in final_results.items():
+            sheet = OUTCOME_TO_SHEET.get(outcome, outcome)[:31]
+            df.to_excel(writer, sheet_name=sheet, index=False)
+    return output.getvalue()
 
 
 async def process_single_file(
     filepath: str, Session, cfg: Dict[str, Any]
 ) -> Optional[Dict[str, Any]]:
-    """Process one transcript through Steps 1-10. Each Step = one call.
+    """Process one transcript through Steps 1-9. Each Step = one call.
 
-    Ivan's Thin Main: no inline logic, no for-loops, no data processing.
-    Every step delegates to its responsible module.
+    Uses sentence_classification/ modules (R stringi for sentence segmentation)
+    instead of transcript_service.py to guarantee identical results with the
+    original R pipeline.
     """
-    import transcript_service
     import persistence
     import ai_pipeline_service
+
+    # Patch: sentence_classification modules import "from config import MODEL_TO_FULL"
+    # but Docker's /app/config.py is the Backend config, not the pipeline config.
+    # Inject a shim module so sentence_classification finds the right constants.
+    import types
+    _sc_config = types.ModuleType("sc_config")
+    _sc_config.MODEL_TO_FULL = {
+        "cp": "cancer_prognosis",
+        "le": "life_expectancy",
+        "ed": "erectile_dysfunction_potency",
+        "inc": "continence",
+        "ius": "irritative_urinary_symptoms_frequency_urgency_nocturnia",
+    }
+    _sc_config.MODEL_TO_SHEET = {v: k for k, v in OUTCOME_TO_SHEET.items()}
+    _sc_config.SHEET_ORDER = ["cp", "inc", "ed", "ius", "le"]
+
+    # Temporarily replace 'config' in sys.modules for sentence_classification imports
+    _orig_config = sys.modules.get("config")
+    sys.modules["config"] = _sc_config
+
+    from sentence_classification.preprocessing import identify_doctor_speaker, filter_doctor_rows
+    from sentence_classification.segmentation import segment_sentences
+    from sentence_classification.classification import classify_all_models
+    from sentence_classification.selection import select_top_sentences_all_outcomes
+    from sentence_classification.context import add_context_all_outcomes
+
+    # Restore original config module
+    if _orig_config is not None:
+        sys.modules["config"] = _orig_config
+    else:
+        del sys.modules["config"]
 
     filename = os.path.basename(filepath)
 
@@ -50,44 +139,51 @@ async def process_single_file(
         logger.info("[SKIP] Skipping %s — already in DB", filename)
         return None
 
-    file_bytes = Path(filepath).read_bytes()
     logger.info("=" * 60)
     logger.info("Processing: %s", filename)
     logger.info("=" * 60)
 
     top_n = cfg["pipeline"]["top_n"]
     context_window = cfg["pipeline"]["context_window"]
+    nlp_url = cfg.get("nlp", {}).get("api_url", "http://nlp-classifiers:8000")
+    outcomes = list(OUTCOME_TO_SHEET.values())  # ["cp", "inc", "ed", "ius", "le"]
 
-    # ── Step 1: Read transcript (xlsx or csv, with patient_id extraction) ──
+    # ── Step 1: Read transcript (xlsx or csv) ────────────────────────────
     try:
-        df_raw, patient_id = transcript_service.read_transcript(file_bytes, filename)
+        df_raw, patient_id = _read_transcript(filepath, filename)
     except Exception as e:
         logger.error("  Skipping %s — cannot read: %s", filename, e)
         return None
 
-    # ── Step 2: Identify & filter doctor ─────────────────────────────────
-    df_filtered = transcript_service.filter_interviewer(df_raw)
+    # ── Step 2: Identify & filter doctor (sentence_classification) ───────
+    doctor = identify_doctor_speaker(df_raw, "speaker", "text")
+    df_filtered = filter_doctor_rows(df_raw, "speaker", "text", doctor=doctor)
     if len(df_filtered) == 0:
         logger.warning("  Skipping %s — no doctor utterances found", filename)
         return None
 
-    # ── Step 3: Split into sentences ─────────────────────────────────────
-    df_sentences = transcript_service.split_sentences(df_filtered)
-    logger.info("  %d sentences after segmentation", len(df_sentences))
+    # ── Step 3: Sentence segmentation (R stringi via rpy2) ───────────────
+    df_sentences = segment_sentences(df_filtered, text_col="text")
+    logger.info("  %d sentences after segmentation (R stringi)", len(df_sentences))
 
-    # ── Step 4: NLP prediction (5 models, parallel) ──────────────────────
-    df_predicted = await transcript_service.run_predictions(df_sentences)
-
-    # ── Step 5: Select top-N per domain ──────────────────────────────────
-    top_by_model = transcript_service.select_top_n(df_predicted, n=top_n)
-
-    # ── Step 6: Generate context (single call, no for-loop in main) ──────
-    final_results = transcript_service.generate_all_contexts(
-        top_by_model, df_sentences, window=context_window
+    # ── Step 4: NLP prediction (5 models) ────────────────────────────────
+    df_predicted = await asyncio.to_thread(
+        classify_all_models, df_sentences,
+        outcomes=outcomes, base_url=nlp_url, text_col="text",
     )
 
-    # ── Step 7: Export xlsx ──────────────────────────────────────────────
-    xlsx_bytes = transcript_service.export_to_xlsx(final_results, patient_id)
+    # ── Step 5: Select top-N per domain ──────────────────────────────────
+    top_by_model = select_top_sentences_all_outcomes(
+        df_predicted, outcomes=outcomes, k=top_n,
+    )
+
+    # ── Step 6: Generate context ─────────────────────────────────────────
+    final_results = add_context_all_outcomes(
+        df_sentences, top_by_model, window=context_window,
+    )
+
+    # ── Step 7: Export xlsx (in-memory bytes for DB) ─────────────────────
+    xlsx_bytes = _export_to_xlsx_bytes(final_results)
 
     # ── Determine speakers ───────────────────────────────────────────────
     doctor_speaker = df_filtered["speaker"].iloc[0] if len(df_filtered) > 0 else "Unknown"
@@ -105,7 +201,7 @@ async def process_single_file(
         context_window=context_window,
         xlsx_bytes=xlsx_bytes,
         final_results=final_results,
-        outcome_to_sheet=transcript_service.OUTCOME_TO_SHEET,
+        outcome_to_sheet=OUTCOME_TO_SHEET,
         domain_slot_map=_DOMAIN_SLOT_MAP,
         domain_short_map=_DOMAIN_SHORT_MAP,
     )
@@ -136,7 +232,7 @@ async def process_single_file(
                     patient_id=patient_id,
                     source_filename=filename,
                     final_results=final_results,
-                    outcome_to_sheet=transcript_service.OUTCOME_TO_SHEET,
+                    outcome_to_sheet=OUTCOME_TO_SHEET,
                 )
                 if ai_ok:
                     logger.info("  [OK] AI pipeline: scoring + patient summary saved")
@@ -183,8 +279,6 @@ def _save_output_files(cfg, filename, patient_id, xlsx_bytes,
       - step5_top10_context.xlsx (top-K + surrounding context)
       - {patient_id}_predictions.xlsx (combined final xlsx)
     """
-    import pandas as pd
-
     output_dir = cfg.get("paths", {}).get("output_dir", "/app/data/output")
     stem = Path(filename).stem
     file_output_dir = Path(output_dir) / stem
