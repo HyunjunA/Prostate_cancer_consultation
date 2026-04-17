@@ -1,7 +1,7 @@
 # Database Tables — Detailed Guide
 
 > Updated: 2026-04-17 | Based on actual production DB (5 patients processed)  
-> Total: 10 tables | Branch: `feat/save-intermediate-results`
+> Total: 9 tables | Branch: `feat/save-intermediate-results`
 
 ---
 
@@ -64,35 +64,7 @@ In `PatientInitialVisitReportV35.tsx`, each TopicCard has a collapsible "Evidenc
 
 ---
 
-## 3. `doctor_sentence_view` (221 rows)
-
-**Doctor dashboard sentence list — stores deduplicated sentences for the doctor to review and optionally rewrite. Unlike sentence_prediction where the same sentence can appear in multiple domains, here each sentence appears only once with one representative domain.**
-
-The reason this table has 221 rows (less than sentence_prediction's 250) is deduplication: if the same sentence ranked in Top-10 for both cp and le domains, it appears in sentence_prediction twice but in doctor_sentence_view only once. The doctor sees each sentence exactly once. When the doctor rewrites a sentence, `(file, i, i2)` from this table identifies the target.
-
-**Where this appears in the UI:**
-In `PhysicianReportsModifiedV41Timothy.tsx`, the **GridView** displays a table with columns: "Topic", "Your Score", "Representative Sentence", "Suggestions for Improvement", and "Suggested Rephrasing". The "Your Score" comes from `llm_domain_scoring_and_summary.ai_score` (via `scores/summary` API). The "Representative Sentence" shows the full context (±3 sentences) from `sentence_prediction.context` (via `sentences` API), with the key sentence highlighted in bold+underline. Clicking a topic opens the **DetailView** with Consultation Scoring bubble and Re-write Practice, which also display context from the same `sentences` API.
-
-| Column | Type | Sample | Description |
-|--------|------|--------|-------------|
-| `file` | VARCHAR PK | Input_Keystrokes REC 001 (SID 10).xlsx | Patient file |
-| `i` | INT PK | 67 | Utterance number |
-| `i2` | INT PK | 3 | Sentence within utterance |
-| `speaker` | VARCHAR | Interviewer: | Speaker |
-| `sentence` | TEXT | "so i'm going to take that 12 percent..." | Sentence text |
-| `score` | FLOAT | None | Not used directly. AI score is read from `llm_domain_scoring_and_summary.ai_score` via JOIN in the sentences API. This column remains NULL. |
-| `class` | VARCHAR | cancer_prognosis | Representative domain |
-| `time` | TIMESTAMP | 05:26:30 | Creation time |
-
-**Used by:**
-- `GET /api/doctor/sentences/{file}/{speaker}` — DOCTOR page sentence list
-- `GET /api/doctor/files` — processed patient file list (DISTINCT file)
-- `PUT /api/doctor/rewrites` — rewrite target identification via (file, i, i2)
-- `GET /api/patient/sentences/{file}` — evidence sentences on PATIENT page
-
----
-
-## 4. `doctor_rewrite_log` (0 rows)
+## 3. `doctor_rewrite_log` (0 rows)
 
 **Doctor rewrite history — records every time a doctor modifies a sentence on the dashboard, storing both the original and revised versions with timestamps.**
 
@@ -103,9 +75,9 @@ In `PhysicianReportsModifiedV41Timothy.tsx`, the **GridView** has a "Suggested R
 
 | Column | Type | Example | Description |
 |--------|------|---------|-------------|
-| `file` | VARCHAR PK,FK | Input_Keystrokes REC 001 (SID 10).xlsx | Target file |
-| `i` | INT PK,FK | 67 | Target utterance number |
-| `i2` | INT PK,FK | 3 | Target sentence number |
+| `file` | VARCHAR PK | Input_Keystrokes REC 001 (SID 10).xlsx | Target file |
+| `i` | INT PK | 67 | Target utterance number |
+| `i2` | INT PK | 3 | Target sentence number |
 | `time` | TIMESTAMP PK | 2026-04-17T14:30:00Z | Rewrite time (multiple rewrites = multiple rows) |
 | `speaker` | VARCHAR | Interviewer: | Speaker |
 | `original_sentence` | TEXT | "so i'm going to take..." | Original sentence |
@@ -119,7 +91,7 @@ In `PhysicianReportsModifiedV41Timothy.tsx`, the **GridView** has a "Suggested R
 
 ---
 
-## 5. `patient_summary` (5 rows)
+## 4. `patient_summary` (5 rows)
 
 **Patient summary parent record — represents "a summary exists for this patient". Acts as the FK parent for patient_summary_domain (5 domain rows per patient).**
 
@@ -137,7 +109,7 @@ One row per patient. The actual domain-level data (summary_text, patient_scoring
 
 ---
 
-## 6. `patient_summary_domain` (25 rows = 5 patients × 5 domains)
+## 5. `patient_summary_domain` (25 rows = 5 patients × 5 domains)
 
 **Patient per-domain feedback — stores the star rating and text response that the patient enters on the dashboard for each domain. The pipeline creates empty rows (NULL values), and the patient fills them in later during a follow-up visit.**
 
@@ -163,7 +135,7 @@ In `PatientInitialVisitReportV35.tsx`, each **TopicCard** has a NIH PROMIS unipo
 
 ---
 
-## 7. `survey_submission_log` (0 rows)
+## 6. `survey_submission_log` (0 rows)
 
 **Patient survey responses — stores the full JSON answers when a patient submits SDM, DCS, Risk Perception, or Satisfaction surveys on the follow-up page, and tracks synchronization status with the REDCap research database.**
 
@@ -192,7 +164,7 @@ In `PatientFollowUpReportV31Re.tsx`, the follow-up visit has a multi-step survey
 
 ---
 
-## 8. `llm_domain_scoring_and_summary` (33 rows)
+## 7. `llm_domain_scoring_and_summary` (33 rows)
 
 **GPT-4o AI pipeline results — stores the per-domain evaluation of "how specifically did the doctor communicate risk to the patient", including a 0-5 score, extracted numerical estimates, and a patient-friendly reformatted summary.**
 
@@ -231,7 +203,7 @@ While NLP (sentence_prediction) determines "which sentences are related to this 
 
 ---
 
-## 9. `user_interaction_log` (108 rows)
+## 8. `user_interaction_log` (108 rows)
 
 **User behavior tracking — records every user action on the dashboard (clicks, scrolls, mouse movements, dwell time) in real-time for research analysis of how patients and doctors interact with the consultation information.**
 
@@ -262,7 +234,7 @@ This table is NOT visible to patients or doctors. It is consumed by the **AdminT
 
 ---
 
-## 10. `session_recording` (2 rows)
+## 9. `session_recording` (2 rows)
 
 **Session replay data — stores rrweb-recorded user sessions as binary chunks, enabling video-like playback of how users navigated the dashboard. PHI (Protected Health Information) is masked so patient names and sentence text appear as "***" in recordings.**
 
