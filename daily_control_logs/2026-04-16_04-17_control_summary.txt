@@ -1,0 +1,89 @@
+Prostate Cancer Project - Work Log (Summary)
+=================================================
+
+Branch: feat/save-intermediate-results
+Total: 33 commits (Apr 16: 5, Apr 17: 28)
+
+April 16, 2026 — Pipeline lifecycle hardening (5 commits):
+
+1. Sentence classification rewired to R stringi
+   - transcript_service replaced by sentence_classification module
+   - Old transcript_service.py archived
+
+2. Persistence DB save key mapping fixed
+   - Frontend usage comments added to model definitions
+
+3. Azure OpenAI client timeout raised to 30 minutes
+   - Mitigates AI pipeline failures under Azure latency / retry stacking
+
+4. transcript_analysis_log lifecycle columns added
+   - pipeline_started_at, processed (BOOLEAN), processed_at, ai_overall_score
+   - Lets the dashboard distinguish "NLP done" from "AI pipeline complete"
+
+April 17, 2026 — Documentation push + operational fixes (28 commits):
+
+1. Schema/ERD docs synced with new transcript_analysis_log columns
+   - All DB docs updated, ERD PDF regenerated
+
+2. MEETING_REQUIREMENTS_IMPLEMENTATION created (EN + KR + PDF, 5 commits)
+   - Each meeting requirement traced to its implementing table/column
+
+3. DB_TABLES_DETAILED_GUIDE built (EN + KR + PDF, 12 commits)
+   - Per-table purpose, columns, frontend usage status, UI component
+     mapping, design rationale, Mermaid frontend → DB flow diagrams
+   - Korean variants gitignored after a brief tracking accident
+   - Header: "12 tables (9 application + 3 auth)"
+   - Per-section row counts removed (avoids drift)
+
+4. Doctor page score handling unified (2 commits)
+   - Re-write Practice now reads ai_score (was N/A)
+   - Context display unified, score sources realigned
+
+5. /api/doctor/files file matching fixed (1 commit, bad82f3)
+   - Now returns source_filename like the rest of the doctor surface
+   - Removes "No reports available" symptom on the dashboard
+   - Same commit also hardens run_all.sh stress-test temp-file cleanup
+     (mktemp pattern + trap on EXIT/INT/TERM)
+
+6. Auth tables added to DB tables guide (1 commit, 783c47f)
+   - auth_user, auth_api_key, patient_access documented
+   - Cited actual code locations (auth/__init__.py:21, admin_routes.py
+     /api/auth/users/{id}/keys, …); previous "planned UI" labels corrected
+   - Both PDFs regenerated with Apple SD Gothic Neo (Korean + arrow
+     glyphs) and landscape layout
+
+7. Gitignore housekeeping (2 commits)
+   - *_KR.pdf added (mirrors *_KR.md rule)
+   - .harness/ added (Claude Code evaluation tooling, local only)
+   - Previously committed KR PDF removed from index (local file kept)
+
+8. doctor_sentence_view removal refactor (1 commit, ed467fb — the big one)
+   - Old single-table design retired; sentence catalogue now in
+     sentence_prediction, per-sentence quality score in
+     llm_domain_scoring_and_summary
+   - 19 files changed, +109 / -409
+   - Touches schema, models, persistence, routes_patient, tests,
+     ERDs, all DB/pipeline/architecture docs, and one frontend component
+   - routes_patient.get_patient_sentences_by_class: per-row
+     DoctorSentenceView lookup → single llm_domain_scoring_and_summary
+     fetch keyed by analysis_id (N queries → 1)
+
+9. AI pipeline TODO captured (1 commit, ab9f9e1)
+   - dev_docs/AI_PIPELINE_TODO.md (145 lines) for follow-up work
+     on the GPT-4o stage
+
+End-of-day verification:
+- All backend modules import cleanly inside the running container
+- DoctorSentenceView import explicitly fails (as intended)
+- Live DB: SID_10 ai_overall_score=3.00 processed=true,
+           SID_14 ai_overall_score=3.57 processed=true
+- /api/doctor/files now returns source_filename keys that match
+  /api/doctor/scores/average — original dashboard symptom resolved
+
+Outstanding items (carried forward):
+- ai_overall_score arithmetic differs across DB column,
+  /scores/average, and /scores/trajectory — pick one aggregation
+- GPT-4o concurrency: tried ThreadPoolExecutor (10, then 4),
+  hit Azure rate limits, reverted to serial. Needs token-aware throttling
+- Determinism: ai_overall_score wandered (3.0 / 3.4 / 3.5 / 3.57)
+  even with seed=0 / temperature=0.3
