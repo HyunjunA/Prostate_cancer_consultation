@@ -6,7 +6,7 @@ Endpoints tested:
   PUT  /api/doctor/rewrites                       (create new DoctorRewriteLog record)
   GET  /api/doctor/rewrites/{file}/{i}/{i2}/history  (revision history for a sentence)
   GET  /api/doctor/rewrites/{file}/{i}/{i2}/{class_} (specific rewrite by composite key)
-  GET  /api/doctor/files                          (distinct files from DoctorSentenceView)
+  GET  /api/doctor/files                          (distinct files from sentence_prediction)
   GET  /api/doctor/scores/average                 (average scores with optional filters)
   GET  /api/stats/dashboard                       (dashboard stats from doctor + patient tables)
 """

@@ -270,7 +270,7 @@ Unify System A and System B into a single tracking pipeline:
 
 | # | Item | Details |
 |---|------|---------|
-| 13 | **Convert `doctor_sentence_view` to Materialized View** | Same data in `sentence_prediction` and `doctor_sentence_view`. Convert to View to eliminate duplication. Blocked by: class abbreviation mapping (cp vs cancer_prognosis) |
+| ~~13~~ | ~~**Convert `doctor_sentence_view` to Materialized View**~~ | ~~Removed: `doctor_sentence_view` table eliminated. All queries now go directly to `sentence_prediction`.~~ |
 | 14 | **Introduce `patient` master table** | Unify patient identity — `file` (full filename) vs `patient_id` (clean ID). Blocked by: large migration scope across all tables + frontend |
 | 15 | **Fix `doctor_rewrite_log.score` hardcoded to 5** | `/score-sentence` always returns 5. Call consultation-scorer for actual score |
 

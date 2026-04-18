@@ -40,8 +40,12 @@ archive/
 
 # Korean-only document versions (local only, not pushed)
 *_KR.md
+*_KR.pdf
 *_kr.txt
 *_kr_summary.txt
+
+# Claude Code evaluation harness (local-only test/eval tooling)
+.harness/
 
 # NLP classifiers — only Docker image needed for deployment
 nlp-classifiers/2026-02-17_michael_nlp_pilot_sid14/

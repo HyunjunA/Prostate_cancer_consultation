@@ -6,21 +6,10 @@
 
 ```mermaid
 erDiagram
-    doctor_sentence_view {
-        VARCHAR file PK "예: Input_Keystrokes REC 001 (SID 10).xlsx"
-        INT i PK "예: 67 (발화 순번)"
-        INT i2 PK "예: 3 (발화 내 문장 위치)"
-        VARCHAR speaker "예: Interviewer:"
-        TEXT sentence "예: so i'm going to take that 12 percent and..."
-        FLOAT score "예: 2 (품질 점수 0-5)"
-        VARCHAR class "예: cancer_prognosis"
-        TIMESTAMPTZ time "예: 2026-04-10T15:33:32Z"
-    }
-
     doctor_rewrite_log {
-        VARCHAR file PK,FK "예: Input_Keystrokes REC 001 (SID 10).xlsx"
-        INT i PK,FK "예: 67"
-        INT i2 PK,FK "예: 2"
+        VARCHAR file PK "예: Input_Keystrokes REC 001 (SID 10).xlsx"
+        INT utterance_index PK "예: 67 (= sentence_prediction.utterance_index)"
+        INT sentence_in_utterance PK "예: 2 (= sentence_prediction.sentence_in_utterance)"
         TIMESTAMPTZ time PK "예: 2026-04-09T14:30:00Z"
         VARCHAR speaker "예: Interviewer:"
         TEXT original_sentence "예: so if your cancer—if you're an older man..."
@@ -28,8 +17,6 @@ erDiagram
         FLOAT score "예: 4 (개선 후 품질 점수)"
         VARCHAR class "예: cancer_prognosis"
     }
-
-    doctor_sentence_view ||--o{ doctor_rewrite_log : "문장별 AI 리라이트 이력"
 ```
 
 ### B. 환자 인터페이스 (Patient Interface)
@@ -86,7 +73,11 @@ erDiagram
         JSONB model_results "DEPRECATED (신규 행은 NULL)"
         BYTEA xlsx_data "예: (바이너리, 87KB xlsx 파일)"
         VARCHAR source_filename "예: Input_Keystrokes REC 001 (SID 10).xlsx"
-        TIMESTAMPTZ analyzed_at "예: 2026-04-10T15:33:32Z"
+        TIMESTAMPTZ pipeline_started_at "파이프라인 처리 시작 시각"
+        TIMESTAMPTZ analyzed_at "NLP 결과 DB 저장 시각 (Step 8)"
+        FLOAT ai_overall_score "예: 3.40 (전체 도메인 ai_score 평균, 0-5)"
+        BOOLEAN processed "전체 파이프라인(NLP + AI) 완료 여부"
+        TIMESTAMPTZ processed_at "AI 파이프라인(Step 9) 완료 시각"
     }
 
     sentence_prediction {
@@ -95,8 +86,8 @@ erDiagram
         VARCHAR patient_id "예: SID_10"
         VARCHAR model "예: cp (cancer_prognosis)"
         INT sentence_index "예: 167 (전체 문장 순번)"
-        INT utterance_index "예: 67 (= doctor_sentence_view.i)"
-        INT sentence_in_utterance "예: 3 (= doctor_sentence_view.i2)"
+        INT utterance_index "예: 67 (원본 트랜스크립트 발화 행)"
+        INT sentence_in_utterance "예: 3 (발화 내 문장 위치)"
         VARCHAR speaker "예: Interviewer:"
         TEXT sentence_text "예: so i'm going to take that 12 percent..."
         FLOAT pred_score "예: 0.951 (확률, 품질 점수 아님!)"
@@ -135,9 +126,8 @@ erDiagram
 
 > **이 테이블이 저장하는 것:** NLP 파이프라인이 문장을 분류하고 선택한 후 (Step 1-7), Guille의 AI 파이프라인 (Step 11)이 Azure OpenAI GPT-4o를 사용하여: (1) 각 문장의 임상적 구체성 0-5점 평가, (2) 실제 위험 수치 추출, (3) 최적 추정치 선택, (4) 환자가 이해할 수 있는 문장으로 변환. 분석 실행당 도메인별 1행 (부작용 도메인은 치료법별 추가 행).
 >
-> **`ai_score` (0-5) vs `pred_score` (0.0-1.0) vs `score` (0-5) — 3가지 다른 점수:**
+> **`ai_score` (0-5) vs `pred_score` (0.0-1.0) — 2가지 다른 점수:**
 > - `sentence_prediction.pred_score` (0.0-1.0) = R Random Forest 확률 (이 문장이 해당 도메인인지)
-> - `doctor_sentence_view.score` (0-5) = consultation-scorer 상담 품질 점수
 > - `llm_domain_scoring_and_summary.ai_score` (0-5) = GPT-4o가 평가한 임상적 구체성 (0=언급 없음, 5=환자 특성 반영 + 기간 포함)
 >
 > **`source_sentence` vs `source_context`:**

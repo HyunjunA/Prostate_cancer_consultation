@@ -4,21 +4,10 @@ erDiagram
     %% Doctor Interface Tables
     %% ============================================
 
-    doctor_sentence_view {
+    doctor_rewrite_log {
         VARCHAR file PK
         INT i PK
         INT i2 PK
-        VARCHAR speaker
-        TEXT sentences
-        FLOAT score
-        VARCHAR class
-        TIMESTAMP time
-    }
-
-    doctor_rewrite_log {
-        VARCHAR file PK,FK
-        INT i PK,FK
-        INT i2 PK,FK
         TIMESTAMP time PK
         VARCHAR speaker
         TEXT original_sentences
@@ -28,8 +17,6 @@ erDiagram
         VARCHAR class
         BOOLEAN selected
     }
-
-    doctor_sentence_view ||--o{ doctor_rewrite_log : "FK file,i,i2"
 
 
     %% ============================================

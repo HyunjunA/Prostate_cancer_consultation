@@ -1,26 +1,15 @@
 # Prostate Cancer Consultation Dashboard — ERD v3
 
-> Updated: 2026-04-10 | Based on actual code analysis (database_schema.sql, models.py, routes_*.py, pipeline_runner.py)
+> Updated: 2026-04-17 | Based on actual code analysis (database_schema.sql, models.py, routes_*.py, pipeline_runner.py)
 
 ### A. Doctor Interface
 
 ```mermaid
 erDiagram
-    doctor_sentence_view {
-        VARCHAR file PK "e.g. Input_Keystrokes REC 001 (SID 10).xlsx"
-        INT i PK "e.g. 67 (utterance sequence number)"
-        INT i2 PK "e.g. 3 (sentence position in utterance)"
-        VARCHAR speaker "e.g. Interviewer:"
-        TEXT sentence "e.g. so i'm going to take that 12 percent and..."
-        FLOAT score "e.g. 2 (consultation-scorer quality score 0-5, legacy)"
-        VARCHAR class "e.g. cancer_prognosis"
-        TIMESTAMPTZ time "e.g. 2026-04-10T15:33:32Z"
-    }
-
     doctor_rewrite_log {
-        VARCHAR file PK,FK "e.g. Input_Keystrokes REC 001 (SID 10).xlsx"
-        INT i PK,FK "e.g. 67"
-        INT i2 PK,FK "e.g. 2"
+        VARCHAR file PK "e.g. Input_Keystrokes REC 001 (SID 10).xlsx"
+        INT utterance_index PK "e.g. 67 (= sentence_prediction.utterance_index)"
+        INT sentence_in_utterance PK "e.g. 2 (= sentence_prediction.sentence_in_utterance)"
         TIMESTAMPTZ time PK "e.g. 2026-04-09T14:30:00Z"
         VARCHAR speaker "e.g. Interviewer:"
         TEXT original_sentence "e.g. so if your cancer—if you're an older man..."
@@ -28,8 +17,6 @@ erDiagram
         FLOAT score "e.g. 4 (improved quality score)"
         VARCHAR class "e.g. cancer_prognosis"
     }
-
-    doctor_sentence_view ||--o{ doctor_rewrite_log : "per-sentence AI rewrite history"
 ```
 
 ### B. Patient Interface
@@ -86,8 +73,11 @@ erDiagram
         JSONB model_results "DEPRECATED (NULL for new rows)"
         BYTEA xlsx_data "e.g. (binary, 87KB xlsx file)"
         VARCHAR source_filename "e.g. Input_Keystrokes REC 001 (SID 10).xlsx"
-        TIMESTAMPTZ analyzed_at "e.g. 2026-04-10T15:33:32Z"
+        TIMESTAMPTZ pipeline_started_at "when pipeline_runner began processing"
+        TIMESTAMPTZ analyzed_at "when NLP results saved to DB (Step 8)"
         FLOAT ai_overall_score "e.g. 3.40 (avg of all domain ai_scores, 0-5)"
+        BOOLEAN processed "True when full pipeline (NLP + AI) completed"
+        TIMESTAMPTZ processed_at "when AI pipeline (Step 9) completed"
     }
 
     sentence_prediction {
@@ -96,8 +86,8 @@ erDiagram
         VARCHAR patient_id "e.g. SID_10"
         VARCHAR model "e.g. cp (cancer_prognosis)"
         INT sentence_index "e.g. 167 (global sequence)"
-        INT utterance_index "e.g. 67 (= doctor_sentence_view.i)"
-        INT sentence_in_utterance "e.g. 3 (= doctor_sentence_view.i2)"
+        INT utterance_index "e.g. 67 (utterance row from original transcript)"
+        INT sentence_in_utterance "e.g. 3 (position within utterance)"
         VARCHAR speaker "e.g. Interviewer:"
         TEXT sentence_text "e.g. so i'm going to take that 12 percent..."
         FLOAT pred_score "e.g. 0.951 (probability, NOT quality score)"
@@ -136,9 +126,8 @@ erDiagram
 
 > **What this table stores:** After the NLP pipeline classifies and selects top sentences (Steps 1-7), Guille's AI pipeline (Step 11) uses Azure OpenAI GPT-4o to: (1) score each sentence's clinical specificity 0-5, (2) extract the actual risk numbers, (3) select the best estimate, and (4) reformat into patient-facing language. One row per domain per analysis run (5 for regular, more for side-effect domains with multiple treatments).
 >
-> **`ai_score` (0-5) vs `pred_score` (0.0-1.0) vs `score` (0-5):** Three different scores exist:
+> **`ai_score` (0-5) vs `pred_score` (0.0-1.0):** Two different scores exist:
 > - `sentence_prediction.pred_score` (0.0-1.0) = R Random Forest probability that the sentence belongs to this domain
-> - `doctor_sentence_view.score` (0-5) = consultation-scorer quality score
 > - `llm_domain_scoring_and_summary.ai_score` (0-5) = GPT-4o assessment of how specifically the doctor communicated risk (0=not mentioned, 5=patient-specific with timeline)
 >
 > **`source_sentence` vs `source_context`:**

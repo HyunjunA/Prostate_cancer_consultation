@@ -49,7 +49,7 @@ import re
 import zipfile
 from io import BytesIO
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
@@ -62,10 +62,112 @@ from auth.access_control import check_patient_access
 from auth.base import AuthUser
 from db import get_db, AsyncSessionLocal
 from models import SentencePrediction, TranscriptAnalysisLog
-from transcript_service import analyze_transcript
+from pipeline_runner import OUTCOME_TO_SHEET, _read_transcript, _export_to_xlsx_bytes  # noqa: E402
 
 load_dotenv()
 logger = logging.getLogger(__name__)
+
+
+async def analyze_transcript(
+    file_bytes: bytes,
+    filename: str,
+    top_n: int = 0,
+    context_window: int = 3,
+) -> Dict[str, Any]:
+    """Run transcript analysis using sentence_classification (R stringi).
+
+    Replaces the old transcript_service.analyze_transcript to guarantee
+    identical sentence segmentation with the original R pipeline.
+    """
+    import asyncio
+    import sys
+    import types
+    import tempfile
+
+    # Write bytes to temp file for sentence_classification (expects file path)
+    suffix = ".csv" if filename.lower().endswith(".csv") else ".xlsx"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(file_bytes)
+        tmp_path = tmp.name
+
+    try:
+        # Patch config module for sentence_classification imports
+        _sc_config = types.ModuleType("sc_config")
+        _sc_config.MODEL_TO_FULL = {v: k for k, v in OUTCOME_TO_SHEET.items()}
+        _sc_config.MODEL_TO_SHEET = dict(OUTCOME_TO_SHEET)
+        _sc_config.SHEET_ORDER = ["cp", "inc", "ed", "ius", "le"]
+
+        _orig_config = sys.modules.get("config")
+        sys.modules["config"] = _sc_config
+
+        from sentence_classification.preprocessing import identify_doctor_speaker, filter_doctor_rows
+        from sentence_classification.segmentation import segment_sentences
+        from sentence_classification.classification import classify_all_models
+        from sentence_classification.selection import select_top_sentences_all_outcomes
+        from sentence_classification.context import add_context_all_outcomes
+
+        if _orig_config is not None:
+            sys.modules["config"] = _orig_config
+        else:
+            sys.modules.pop("config", None)
+
+        # Step 1: Read
+        df_raw, patient_id = _read_transcript(tmp_path, filename)
+
+        # Step 2: Filter doctor
+        doctor = identify_doctor_speaker(df_raw, "speaker", "text")
+        df_filtered = filter_doctor_rows(df_raw, "speaker", "text", doctor=doctor)
+
+        # Step 3: Segment (R stringi)
+        df_sentences = segment_sentences(df_filtered, text_col="text")
+
+        # Step 4: NLP classify
+        nlp_url = os.getenv("NLP_API_URL", "http://nlp-classifiers:8000")
+        outcomes = list(OUTCOME_TO_SHEET.values())
+        df_predicted = await asyncio.to_thread(
+            classify_all_models, df_sentences,
+            outcomes=outcomes, base_url=nlp_url, text_col="text",
+        )
+
+        # Step 5: Select top-N
+        top_by_model = select_top_sentences_all_outcomes(
+            df_predicted, outcomes=outcomes, k=top_n if top_n > 0 else 10,
+        )
+
+        # Step 6: Context
+        final_results = add_context_all_outcomes(
+            df_sentences, top_by_model, window=context_window,
+        )
+
+        # Step 7: Export xlsx bytes
+        xlsx_bytes = _export_to_xlsx_bytes(final_results)
+
+        # Build response
+        response_models = {}
+        for outcome, df in final_results.items():
+            sheet = OUTCOME_TO_SHEET.get(outcome, outcome)
+            response_models[sheet] = [
+                {
+                    "index": int(row["index"]),
+                    "i": int(row["i"]),
+                    "i2": int(row["i2"]),
+                    "speaker": row["speaker"],
+                    "text": row["text"],
+                    "pred_1": round(float(row[".pred_1"]), 6),
+                    "context": row.get("context", ""),
+                }
+                for _, row in df.iterrows()
+            ]
+
+        return {
+            "patient_id": patient_id,
+            "total_sentences": len(df_sentences),
+            "models": response_models,
+            "xlsx_bytes": xlsx_bytes,
+            "final_results": final_results,
+        }
+    finally:
+        os.unlink(tmp_path)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Router
