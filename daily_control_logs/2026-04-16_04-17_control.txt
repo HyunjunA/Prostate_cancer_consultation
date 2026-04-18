@@ -1,0 +1,140 @@
+Prostate Cancer Consultation Dashboard - Work Log
+=======================================================
+
+April 16-17, 2026 (Thursday - Friday)
+
+Branch: feat/save-intermediate-results
+Source: derived from `git log` commit messages only.
+Total commits: 33 (5 on Apr 16, 28 on Apr 17)
+
+---
+
+## April 16, 2026 — Pipeline lifecycle + Azure resilience (5 commits)
+
+b28f547  feat: replace transcript_service with sentence_classification (R stringi)
+8c107be  fix: key mapping for DB save + add frontend usage comments to models
+1d89a47  chore: move transcript_service.py to archive (no longer used)
+0429209  fix: increase Azure OpenAI timeout to 30 min for AI pipeline
+e563b48  feat: add processed flag + pipeline timing to transcript_analysis_log
+
+Theme:
+- Sentence classification pipeline rewired to use R stringi
+  (transcript_service retired and archived).
+- Persistence-layer key mapping fixed during DB save; usage notes for
+  the frontend added to the model definitions.
+- AI pipeline made more robust against Azure latency: client timeout
+  raised to 30 minutes.
+- transcript_analysis_log gained processed/ai_overall_score columns
+  and the pipeline_started_at + processed_at timestamps so the UI can
+  distinguish "NLP done" from "fully processed".
+
+---
+
+## April 17, 2026 — Documentation push + operational fixes (28 commits)
+
+### A. Schema + ERD docs catch up (2 commits)
+40372d2  docs: update all DB docs with new transcript_analysis_log columns
+030f6e5  docs: regenerate ERD PDF with new transcript_analysis_log columns
+
+  All DB documentation aligned to the previous day's column additions;
+  ERD PDF regenerated.
+
+### B. Meeting requirements implementation map (5 commits)
+af10c75  docs: add meeting requirements implementation mapping (md + pdf)
+031ce32  docs: add Korean version of meeting requirements implementation (md + pdf)
+1231335  docs: enhance Korean meeting requirements doc with detailed implementation
+e6d957f  docs: add table design rationale to Korean meeting requirements doc
+8fca7b9  docs: add per-column design rationale linked to meeting requirements
+
+  Created MEETING_REQUIREMENTS_IMPLEMENTATION (EN + KR) tying each
+  meeting requirement back to the table/column that implements it.
+
+### C. DB tables detailed guide (12 commits)
+1c6235d  docs: add frontend usage status for patient_summary_domain columns
+101972d  docs: add detailed per-table justification with actual usage evidence
+f23ecad  docs: add existence purpose for each pipeline table
+255cca7  docs: add frontend-to-DB table mapping with Mermaid flow diagrams
+1573c01  docs: add comprehensive DB tables guide with all 10 tables
+caea387  docs: add DB tables detailed guide PDF
+d7f5fe8  docs: regenerate DB tables guide PDF with proper table rendering
+d5af09b  docs: add Korean version of DB tables detailed guide (md + pdf)
+8fbfb79  chore: remove force-added KR files from git (gitignore should
+                exclude them)
+41e601d  docs: add exact UI component mapping to each DB table
+aff5c3d  docs: update DB tables guide to reflect score JOIN changes
+37ba36e  docs: update DB tables guide to reflect score JOIN changes
+
+  Built the DB_TABLES_DETAILED_GUIDE (EN + KR + PDFs) covering each
+  table's purpose, columns, frontend usage status, UI component
+  mapping, design rationale, and Mermaid flow diagrams. Korean
+  variants gitignored after a brief tracking accident.
+
+### D. Doctor page score handling (2 commits)
+176532f  fix: show ai_score in Re-write Practice instead of N/A
+aef1cb4  feat: unify context display + fix score sources across doctor page
+
+  Doctor page now reads ai_score (instead of the legacy quality
+  field) for Re-write Practice and other score surfaces. Context
+  display unified.
+
+### E. Doctor view file matching + script hardening (1 commit)
+bad82f3  fix: align /api/doctor/files with source_filename + harden
+                stress test cleanup
+
+  Two fixes shipped together:
+    - /api/doctor/files now returns source_filename (matching the rest
+      of the doctor surface), removing the "No reports available"
+      symptom on the dashboard.
+    - run_all.sh stress-test temp file collisions on re-runs fixed
+      (mktemp pattern + trap on EXIT/INT/TERM).
+
+### F. Auth tables in DB guide (1 commit)
+783c47f  docs: add auth tables to DB tables guide + tidy table headers
+
+  DB_TABLES_DETAILED_GUIDE now documents auth_user, auth_api_key,
+  patient_access. Header switched from "9 tables" to
+  "12 tables (9 application + 3 auth)". Per-section row counts
+  removed so the doc does not drift with DB state.
+
+### G. Gitignore housekeeping (2 commits)
+5596fbf  chore: gitignore *_KR.pdf and untrack the previously committed
+                KR PDF
+6d49e7a  chore: gitignore .harness/ Claude Code evaluation tooling
+
+  *_KR.pdf rule added to mirror existing *_KR.md.
+  .harness/ (Claude Code evaluation tooling) added to .gitignore.
+
+### H. doctor_sentence_view removal (1 commit, the big refactor)
+ed467fb  refactor: remove doctor_sentence_view across schema, code,
+                  tests, and docs
+
+  Old doctor_sentence_view table retired. Sentence catalogue lives
+  in sentence_prediction; per-sentence quality score lives in
+  llm_domain_scoring_and_summary. Removal touches:
+    - database_schema.sql, models.py, persistence.py
+    - routes_patient.py (one bulk lookup against
+      llm_domain_scoring_and_summary instead of N per-row queries)
+    - tests/models, tests/factories, tests/test_doctor_endpoints
+    - all ERD diagrams + DB / pipeline / architecture docs
+    - dev_docs/TODO.md, MEETING_REQUIREMENTS, api_call_test.rest
+    - PatientInitialVisitReportV35.tsx
+  Net diff: +109, -409 across 19 files.
+
+### I. Followup TODOs (1 commit)
+ab9f9e1  docs: add AI pipeline TODO notes
+
+  New dev_docs/AI_PIPELINE_TODO.md (145 lines) capturing pending
+  work for the AI pipeline.
+
+---
+
+## Roll-up
+
+  Apr 16 (5):  pipeline lifecycle + Azure resilience
+  Apr 17 (28): documentation push (A, B, C, D — 21 commits)
+               operational fixes + refactor + housekeeping (E–I — 7 commits)
+  Branch:      feat/save-intermediate-results
+  Net change:  large doc/diagram additions + the doctor_sentence_view
+               refactor (-409 lines from 19 files in one commit).
+
+End of log.
