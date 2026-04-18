@@ -77,7 +77,7 @@ Process Manager manages AI modules **like plugins**, so when adding a new module
 
 | Function | Description | Meaning in Our Project |
 |----------|-------------|------------------------|
-| **DB Write** | Save AI processing results to the database | INSERT NLP classification results into PostgreSQL `doctor_sentence_view`, etc. |
+| **DB Write** | Save AI processing results to the database | INSERT NLP classification results into PostgreSQL `sentence_prediction`, etc. |
 | **DB Read** | Query existing data | Query already-processed patient lists, existing scores, etc. |
 | **State Tracking** | Manage pipeline execution history | Record which files were processed when, and whether they succeeded or failed |
 

@@ -342,10 +342,24 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
                   {displaySentences.map((item, idx) => (
                     <span key={idx} className="inline">
                       <span
-                        onClick={() => onSentenceClick?.(idx)}
-                        className="cursor-pointer transition-all"
+                        className="transition-all"
                       >
-                        {item.originalText}
+                        {item.originalText.includes("<main>") ? (
+                          <>
+                            {item.originalText.split("<main>").map((part: string, pidx: number) => {
+                              if (pidx === 0) return <span key={pidx}>{part}</span>;
+                              const [highlighted, rest] = part.split("</main>");
+                              return (
+                                <span key={pidx}>
+                                  <span className="font-bold underline text-cyan-600 dark:text-cyan-300">{highlighted}</span>
+                                  {rest}
+                                </span>
+                              );
+                            })}
+                          </>
+                        ) : (
+                          item.originalText
+                        )}
                       </span>
                       {idx < displaySentences.length - 1 && " "}
                     </span>

@@ -44,7 +44,7 @@
  * ✅ IMPLEMENTED (2026-03-27):
  * - Evidence sentences data connection
  *   Connected to GET /api/patient/sentences/{file}/{speaker}
- *   Fetches top-scoring sentences per class from doctor_sentence_view
+ *   Fetches top-scoring sentences per class from sentence_prediction
  *   Mapped by class → topic name in consultationTopics useMemo
  *
  * ============================================================================

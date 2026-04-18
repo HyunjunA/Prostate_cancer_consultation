@@ -88,9 +88,12 @@
 > **Two DB tables** permanently store analysis results:
 >
 > **Table 1: `transcript_analysis_log`** — one row per analysis run:
-> - Metadata (patient_id, total_sentences, top_n, context_window, source_filename, analyzed_at)
+> - Metadata (patient_id, total_sentences, top_n, context_window, source_filename)
+> - Timestamps: pipeline_started_at (pipeline start), analyzed_at (NLP results saved to DB), processed_at (AI pipeline completed)
+> - Status: processed (BOOLEAN — true when full NLP + AI pipeline completed)
 > - JSON results (model_results TEXT — full scores for all 5 models)
 > - xlsx binary (xlsx_data BYTEA — for download fallback)
+> - ai_overall_score (FLOAT — overall AI score)
 >
 > **Table 2: `sentence_prediction`** — one row per sentence per model:
 > - Links to parent analysis via `analysis_id` FK (CASCADE delete)

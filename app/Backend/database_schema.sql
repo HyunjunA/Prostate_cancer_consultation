@@ -8,20 +8,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- 1. Doctor Interface Tables
 -- =====================================================
 
--- (A) docter_interface_render_processed.csv
-CREATE TABLE doctor_sentence_view (
-    file VARCHAR(255) NOT NULL,
-    i INT NOT NULL,
-    i2 INT NOT NULL,
-    speaker VARCHAR(100),             -- PatientID or DoctorID
-    sentence TEXT,
-    score FLOAT,
-    class VARCHAR(100),
-    time TIMESTAMP WITH TIME ZONE,
-    PRIMARY KEY (file, i, i2)
-);
-
--- (B) docter_interface_ai_rewriting_history.csv
+-- Doctor rewriting history (no FK — sentence existence validated at application level)
 CREATE TABLE doctor_rewrite_log (
     file VARCHAR(255) NOT NULL,
     i INT NOT NULL,
@@ -32,11 +19,7 @@ CREATE TABLE doctor_rewrite_log (
     revised_sentence TEXT,
     score FLOAT,
     class VARCHAR(100),
-    PRIMARY KEY (file, i, i2, time),
-    CONSTRAINT fk_rewrite_to_sentence
-        FOREIGN KEY (file, i, i2)
-        REFERENCES doctor_sentence_view(file, i, i2)
-        ON DELETE CASCADE
+    PRIMARY KEY (file, i, i2, time)
 );
 
 -- =====================================================
@@ -71,15 +54,10 @@ CREATE TABLE patient_summary_domain (
 -- =====================================================
 -- 3. Indexing
 -- =====================================================
--- Note: idx_doctor_render_file (file) removed — redundant with PK (file, i, i2)
 CREATE INDEX idx_doctor_rewrite_file ON doctor_rewrite_log(file);
 CREATE INDEX idx_patient_summary_file ON patient_summary(file);
 CREATE INDEX idx_patient_domain_file ON patient_summary_domain(file);
 CREATE INDEX idx_patient_domain_order ON patient_summary_domain(file, speaker, display_order);
-
--- #1: Partial + composite index for scores/average 3-stage subquery (class != '-1' filter)
-CREATE INDEX idx_dsv_file_speaker_class_i ON doctor_sentence_view (file, speaker, class, i DESC, i2 DESC)
-    WHERE class != '-1' AND score IS NOT NULL;
 
 
 
@@ -127,8 +105,11 @@ CREATE TABLE transcript_analysis_log (
     model_results JSONB,                   -- per-model NLP scores (validated JSON)
     xlsx_data BYTEA,                       -- binary xlsx file for DB-backed download
     source_filename VARCHAR(500),
-    analyzed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    ai_overall_score FLOAT                  -- GPT-4o average score across all domains (0-5)
+    pipeline_started_at TIMESTAMP WITH TIME ZONE,  -- when pipeline_runner began processing
+    analyzed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),  -- when NLP results saved to DB
+    ai_overall_score FLOAT,                 -- GPT-4o average score across all domains (0-5)
+    processed BOOLEAN DEFAULT FALSE,        -- True when full pipeline (NLP + AI) completed
+    processed_at TIMESTAMP WITH TIME ZONE   -- when AI pipeline completed
 );
 
 -- Note: idx_transcript_log_patient_id removed — redundant with composite (patient_id, analyzed_at DESC)
