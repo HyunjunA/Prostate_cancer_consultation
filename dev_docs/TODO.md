@@ -133,6 +133,84 @@ Update patient pages to display AI-generated summaries:
 
 ---
 
+## P0-C — NEW: Transcript Input File Ingestion Hardening
+
+### What is this?
+Three related problems with how `pipeline_runner.py` handles xlsx/csv files dropped into the input directory (`AI_physician_patient_communication/data/input/`, mounted at `/app/data/transcripts/` inside the backend container):
+
+1. **No content-change detection.** `persistence.file_already_processed(filename)` keys off `sentence_prediction.patient_id` only. If a user edits `Input_Keystrokes REC 001 (SID 10).xlsx` (corrects a transcription, adds context, etc.) and overwrites the file, the next pipeline run silently SKIPs it because the patient_id is already in the table. The new content never reaches the DB. The user has no signal — no warning, no error, the dashboard just keeps showing stale data.
+
+2. **No watcher / no auto-process trigger.** Pipeline ingestion only runs via `prestart.sh` at container start. Dropping a new file into the input directory does nothing on its own. The user must `docker restart prostatecancer-backend` (which costs ~30-60s of downtime + re-runs the entire AI pipeline for any unprocessed files) or manually `docker exec` into the container to invoke `pipeline_runner.py`. There is no UI, API, or background worker that picks up new files.
+
+3. **Silent patient_id collisions.** `pipeline_runner` extracts patient_id via regex `SID\s*(\d+)` against the filename stem. If two files in the input directory both produce `SID_10` (e.g. `Input_Keystrokes REC 001 (SID 10).xlsx` + `Input_REPLAY (SID 10).xlsx`), the iteration order picks one, processes it, and the second is silently SKIPPED on the next iteration via `file_already_processed`. Whichever file `os.listdir` returns first wins — non-deterministic across filesystems — and the user gets no indication that one of their files was ignored.
+
+### Why is this needed?
+Today the only safe workflow for "I edited a transcript, please re-process it" is:
+1. SSH-equivalent into the DB
+2. `DELETE FROM llm_domain_scoring_and_summary WHERE patient_id='SID_10';`
+3. `DELETE FROM sentence_prediction WHERE patient_id='SID_10';`
+4. `DELETE FROM transcript_analysis_log WHERE patient_id='SID_10';`
+5. `DELETE FROM patient_summary_domain WHERE file LIKE '%SID 10%';`
+6. `DELETE FROM patient_summary WHERE file LIKE '%SID 10%';`
+7. `docker restart prostatecancer-backend`
+8. Wait ~5 min for the AI pipeline to re-run
+
+That is not a workflow we can hand to a non-engineer collaborator. It also blows up the rest of the unprocessed files in the same restart. Any clinician/researcher who maintains the transcript corpus needs a one-click "this file changed, re-process just this one" path.
+
+### Implementation Plan
+
+#### Phase 1: Content-change detection (Item 59)
+- Add `source_file_sha256 VARCHAR(64)` to `transcript_analysis_log` (migration via Alembic).
+- In `pipeline_runner.py` for each file:
+  - Compute sha256 of the file bytes before checking `file_already_processed`.
+  - Replace the patient_id-only check with: "skip iff a row exists for this patient_id AND its `source_file_sha256` matches".
+  - When hashes differ: log "content changed for {patient_id}, reprocessing" and run the full pipeline. (Decide: append a new `transcript_analysis_log` row, or delete the stale rows + insert? Cleanest is delete-cascade-then-insert so the dashboard shows one row per patient — but losing audit history. Recommend a new row with `replaces_id` FK to keep history.)
+- Backfill existing rows with their current file hash on first run after migration.
+
+#### Phase 2: Auto-process trigger (Item 60)
+Two interchangeable approaches — pick one:
+
+- **(a) Background watcher** — `pipeline_runner.py` already has a `--watch` flag (currently unused). Wire it via `worker.enabled=true` in `config.yaml`, run as a sidecar `command` in `docker-compose.yml`. Inside the script, use `watchdog` (Python lib) on `/app/data/transcripts/` and call `process_one(file)` per FS event. Pros: zero UI work. Cons: extra always-on process.
+
+- **(b) On-demand HTTP trigger** — add `POST /api/transcript/process` (admin-only) that accepts a filename or "all unprocessed", invokes the same code path, returns a job ID. Wire a small button into the admin tracking dashboard. Pros: explicit, auditable, no idle process. Cons: someone has to push the button.
+
+  Default recommendation: ship (b) first (small, controllable), add (a) later if it becomes annoying.
+
+#### Phase 3: Collision detection (Item 61)
+- At the top of `pipeline_runner.run_pipeline`, before the per-file loop:
+  - Build `patient_id -> [filenames]` map by running the existing `extract_patient_id` over every candidate file.
+  - For any group with `len(filenames) > 1`: log `WARNING patient_id={pid} matched by {N} files: {sorted(filenames)}` and either (i) refuse to process any of them until the user removes duplicates, or (ii) deterministically pick the lexicographically-latest filename and warn that the others are being ignored. Recommend (i) — silent fail-on-ambiguity caused this entire ticket.
+
+### Files to Create/Modify
+
+```
+app/Backend/pipeline_runner.py          (all 3 phases)
+app/Backend/persistence.py              (Phase 1: hash check)
+app/Backend/models.py                   (Phase 1: source_file_sha256)
+app/Backend/migrations/versions/        (Phase 1: new alembic revision)
+app/Backend/config.yaml                 (Phase 2a: worker.enabled)
+app/Backend/docker-compose.yml          (Phase 2a: sidecar service if chosen)
+app/Backend/routes_transcript.py        (Phase 2b: POST /api/transcript/process)
+app/Backend/auth/access_control.py      (Phase 2b: admin-only check)
+app/Webapp/src/components/AdminTrackingDashboard.tsx  (Phase 2b: trigger button, optional)
+```
+
+### Risk & Considerations
+- Phase 1 requires deciding the semantics of "reprocess": replace vs append. Replace is simpler for the UI but loses history; append plus a `replaces_id` FK is more correct but needs every "latest analysis" query to JOIN/window.
+- Phase 2a (watcher) on macOS Docker uses polling, not native FS events — has ~2s latency and burns CPU. On Linux deployments it uses inotify and is instant. Acceptable trade-off if the watcher is the chosen path.
+- Phase 3 is the cheapest of the three (under 30 LOC) and should ship even if 1 and 2 are deferred — silent collisions are the most insidious failure mode of the current system.
+- All three phases are non-breaking for existing data; they only change ingestion behavior.
+
+### Items
+
+| # | Item | Phase |
+|---|------|-------|
+| 59 | Detect content changes in re-uploaded transcript files (sha256 on `transcript_analysis_log`) | 1 |
+| 60 | Auto-process new transcripts without backend restart (watcher OR on-demand endpoint) | 2 |
+| 61 | Warn on `patient_id` collisions across input files | 3 |
+
+---
+
 ## P0-B — BLOCKING: User Behavior Tracking & Session Recording
 
 **Status:** Critical issues across all 3 patient-facing pages. Admin Tracking Dashboard cannot reliably display user behavior data.
