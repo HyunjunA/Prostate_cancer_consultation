@@ -764,8 +764,15 @@ interface TopicCardProps {
   topicName: string;
   topicIndex: number;
   aiSummary: string;
-  extractedSentences: string[];
+  extractedSentences: Array<{
+    sentence: string;
+    context: string | null;
+    pred_score: number;
+    score: number | null;
+    is_in_summary: boolean;
+  }>;
   aiSourceSentence?: string;  // original sentence used to generate AI Summary
+  aiSourceContext?: string | null;  // surrounding context with <main>...</main> around the focus sentence
   rating: number;
   onRatingChange: (rating: number) => void;
   isExpanded: boolean;
@@ -783,6 +790,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
   aiSummary,
   extractedSentences,
   aiSourceSentence,
+  aiSourceContext,
   rating,
   onRatingChange,
   isExpanded,
@@ -973,7 +981,31 @@ const TopicCard: React.FC<TopicCardProps> = ({
                         isDark ? "text-slate-300" : "text-gray-600",
                       )}
                     >
-                      &ldquo;{aiSourceSentence}&rdquo;
+                      &ldquo;
+                      {aiSourceContext && aiSourceContext.includes("<main>") ? (
+                        <>
+                          {aiSourceContext.split("<main>").map((part, pidx) => {
+                            if (pidx === 0) return <span key={pidx}>{part}</span>;
+                            const [highlighted, rest] = part.split("</main>");
+                            return (
+                              <span key={pidx}>
+                                <span
+                                  className={cx(
+                                    "font-bold underline",
+                                    isDark ? "text-cyan-300" : "text-cyan-700",
+                                  )}
+                                >
+                                  {highlighted}
+                                </span>
+                                {rest}
+                              </span>
+                            );
+                          })}
+                        </>
+                      ) : (
+                        aiSourceSentence
+                      )}
+                      &rdquo;
                     </p>
                   </div>
                 ) : extractedSentences && extractedSentences.length > 0 ? (
@@ -993,7 +1025,31 @@ const TopicCard: React.FC<TopicCardProps> = ({
                           isDark ? "text-slate-300" : "text-gray-600",
                         )}
                       >
-                        &ldquo;{item.sentence}&rdquo;
+                        &ldquo;
+                        {item.context && item.context.includes("<main>") ? (
+                          <>
+                            {item.context.split("<main>").map((part, pidx) => {
+                              if (pidx === 0) return <span key={pidx}>{part}</span>;
+                              const [highlighted, rest] = part.split("</main>");
+                              return (
+                                <span key={pidx}>
+                                  <span
+                                    className={cx(
+                                      "font-bold underline",
+                                      isDark ? "text-cyan-300" : "text-cyan-700",
+                                    )}
+                                  >
+                                    {highlighted}
+                                  </span>
+                                  {rest}
+                                </span>
+                              );
+                            })}
+                          </>
+                        ) : (
+                          item.sentence
+                        )}
+                        &rdquo;
                       </p>
                     </div>
                   ))
@@ -1107,6 +1163,7 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
   );
   const [evidenceSentences, setEvidenceSentences] = useState<Record<string, Array<{
     sentence: string;
+    context: string | null;
     pred_score: number;
     score: number | null;
     is_in_summary: boolean;
@@ -1173,12 +1230,13 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
 
         // Map evidence sentences by class → topic name (with pred_score, score, is_in_summary)
         if (sentencesResult?.by_class) {
-          const mapped: Record<string, Array<{sentence: string; pred_score: number; score: number | null; is_in_summary: boolean}>> = {};
+          const mapped: Record<string, Array<{sentence: string; context: string | null; pred_score: number; score: number | null; is_in_summary: boolean}>> = {};
           for (const [cls, sentences] of Object.entries(sentencesResult.by_class)) {
             const topicName = CLASS_TO_TOPIC_MAP[cls];
             if (topicName) {
               mapped[topicName] = (sentences as any[]).map((s: any) => ({
                 sentence: s.sentence,
+                context: s.context ?? null,
                 pred_score: s.pred_score,
                 score: s.score,
                 is_in_summary: s.is_in_summary || false,
@@ -1219,9 +1277,12 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
         } else if (d.reformat_sentence) {
           summaryMap[topic] = d.reformat_sentence;
         }
-        // source_context: surrounding conversation context used for AI scoring
-        if (d.source_context && !sourceMap[topic]) {
-          sourceMap[topic] = d.source_context;
+        // source_sentence: the focus sentence GPT-4o picked. We use this as a
+        // lookup key against sentence_prediction.context (which carries
+        // <main>...</main>) so the patient view can bold+underline the focus
+        // sentence inside its surrounding ±N-sentence window.
+        if (d.source_sentence && !sourceMap[topic]) {
+          sourceMap[topic] = d.source_sentence;
         }
       }
     }
@@ -1229,11 +1290,29 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
   }, [aiSummaryData]);
 
   // Derived Data
+  // For each topic we also resolve aiSourceContext: the sentence_prediction.context
+  // entry whose plain `sentence` matches the AI pipeline's focus sentence. That
+  // context carries <main>...</main> tags around the focus sentence so the
+  // TopicCard can render it with bold+underline highlighting. Falls back to
+  // null when no matching evidence row exists (the card then shows the plain
+  // focus sentence unchanged).
   const consultationTopics = useMemo(() => {
     const topics: Record<
       string,
-      { aiSummary: string; extractedSentences: Array<{sentence: string; pred_score: number; score: number | null; is_in_summary: boolean}> }
+      {
+        aiSummary: string;
+        aiSourceContext: string | null;
+        extractedSentences: Array<{sentence: string; context: string | null; pred_score: number; score: number | null; is_in_summary: boolean}>;
+      }
     > = {};
+
+    const lookupContext = (topicName: string): string | null => {
+      const focus = aiSourceByTopic[topicName];
+      if (!focus) return null;
+      const evidence = evidenceSentences[topicName] || [];
+      const match = evidence.find((e) => e.sentence === focus);
+      return match?.context ?? null;
+    };
 
     if (summaryData?.summary?.classes) {
       summaryData.summary.classes.forEach((cls: ClassSummary) => {
@@ -1243,6 +1322,7 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
           const aiText = aiSummaryByTopic[topicName];
           topics[topicName] = {
             aiSummary: aiText || cls.summary || "Summary not available.",
+            aiSourceContext: lookupContext(topicName),
             extractedSentences: evidenceSentences[topicName] || [],
           };
         }
@@ -1254,13 +1334,14 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
         const aiText = aiSummaryByTopic[topic];
         topics[topic] = {
           aiSummary: aiText || "Summary not available for this topic.",
+          aiSourceContext: lookupContext(topic),
           extractedSentences: evidenceSentences[topic] || [],
         };
       }
     });
 
     return topics;
-  }, [summaryData, evidenceSentences, aiSummaryByTopic]);
+  }, [summaryData, evidenceSentences, aiSummaryByTopic, aiSourceByTopic]);
 
   // Event Handlers
 
@@ -1677,6 +1758,7 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
                 aiSummary={topicData?.aiSummary || "Summary not available."}
                 extractedSentences={topicData?.extractedSentences || []}
                 aiSourceSentence={aiSourceByTopic[topic]}
+                aiSourceContext={topicData?.aiSourceContext || null}
                 rating={ratings[topic] || 0}
                 onRatingChange={(rating) => handleRatingChange(topic, rating)}
                 isExpanded={expandedTopics[topic] || false}
