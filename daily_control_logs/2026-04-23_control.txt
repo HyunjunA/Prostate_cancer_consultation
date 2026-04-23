@@ -1,0 +1,154 @@
+Prostate Cancer Consultation Dashboard - Work Log
+=======================================================
+
+April 23, 2026 (Thursday)
+
+Branch: main
+Source: derived from `git log` commit messages.
+Total commits: 4 (all on main, pushed to origin)
+
+Theme: Patient first-visit page polish — make the AI summary card a
+self-contained "read → rate" surface (focus-sentence highlight, rating
+directly under summary, per-domain question), plus the long-standing
+rrweb console-error fix.
+
+---
+
+## Patient view — visual + UX (4 commits, ordered chronologically)
+
+### 77ed7f9  feat: highlight the AI-selected focus sentence in patient view's "From your consultation" card
+
+The violet "From your consultation" box on each topic card showed the
+sentence GPT-4o picked as the basis for the AI summary, but rendered
+it as plain italics with no visual cue for which line was the focus.
+
+Backend (routes_patient.py):
+- /api/patient/sentences/{file} now returns sentence_prediction.context
+  alongside sentence/score/etc. The context column already carried the
+  surrounding window with <main>...</main> wrapping the focus
+  sentence; it just wasn't exposed on this endpoint.
+
+Frontend (PatientInitialVisitReportV35.tsx):
+- evidenceSentences state + consultationTopics carry the new context
+  field; TopicCardProps.extractedSentences typed accordingly (the
+  previous string[] declaration had been stale — the runtime value
+  was always an object array).
+- aiSourceByTopic switched from source_context (plain) to
+  source_sentence (focus). consultationTopics resolves an
+  aiSourceContext per topic by matching the focus line against
+  evidenceSentences[topic][i].sentence and reading that row's context.
+- TopicCard accepts the new aiSourceContext prop and, when the value
+  contains <main>...</main>, splits on the tags and renders the
+  highlighted portion with `font-bold underline text-cyan-700`
+  (text-cyan-300 in dark mode); otherwise falls back to the plain
+  aiSourceSentence as before. Same visual style as the doctor view.
+
+### 9ef57be  fix: upgrade rrweb to alpha.20 to silence "e.matches is not a function" console errors
+
+rrweb 2.0.0-alpha.4 ships a MutationBuffer that calls
+`node.matches(blockSelector)` without a `node.nodeType ===
+Node.ELEMENT_NODE` guard. React inserts Text/Comment nodes during
+state updates, which threw
+
+    Uncaught TypeError: e.matches is not a function
+        at isBlocked (...)
+        at MutationBuffer.genAdds (...)
+
+repeatedly on the patient page. The recording itself was non-blocking
+so behavior was unaffected, but the console noise made debugging
+painful and any new entry on the page surfaced the error.
+
+- bumped rrweb 2.0.0-alpha.4 -> 2.0.0-alpha.20
+- bumped rrweb-player 1.0.0-alpha.4 -> 2.0.0-alpha.20 (matching
+  version required for replay format compatibility; the existing
+  AdminTrackingDashboard `import("rrweb-player").then(...)` call
+  site is unchanged)
+- sessionRecorder.ts: switched the `eventWithTime` import from
+  `rrweb/typings/types` (alpha.4 layout) to `rrweb` (alpha.20 surfaces
+  types via @rrweb/types and re-exports them at the package root);
+  blockSelector / maskTextSelector / maskAllInputs / sampling all
+  preserved across the upgrade.
+
+The exact bug was patched upstream in alpha.13; alpha.20 also bundles
+post-alpha.4 fixes for snapshot fidelity and performance.
+
+### 624bca7  fix: keep all 5 helpfulness rating items on a single row in patient view
+
+Both the per-topic rating button row (HelpfulnessRating) and the
+top-of-page legend bar (HelpfulnessLegend) used `flex flex-wrap`,
+so "Extremely helpful" dropped to a new line at the typical viewport
+width.
+
+HelpfulnessRating
+- flex-wrap -> flex-nowrap (row never breaks)
+- each button: `flex-1 min-w-0 whitespace-nowrap text-center` so the
+  row shrinks to fit narrower containers without the label inside a
+  button wrapping to two lines.
+
+HelpfulnessLegend
+- flex-wrap -> flex-nowrap on the outer container
+- "Helpfulness Scale:" + each pill: `whitespace-nowrap shrink-0` so
+  items keep their natural width and stay on one line
+- `overflow-x-auto` on the container so very narrow viewports get a
+  horizontal scrollbar instead of a silent wrap.
+
+### ac573bb  feat: per-domain helpfulness question + rating directly under AI summary
+
+Two coupled UX changes.
+
+(a) Per-domain question text. Every topic card used the same generic
+    prompt ("Does this information help you understand your treatment
+    options?"), which did not tell the patient which domain they were
+    rating. Added a TOPIC_QUESTIONS map keyed by domain name, each
+    value a "How helpful was this information about <Domain>?"
+    sentence (5 entries). Wording mirrors the rating scale ("Not at
+    all helpful" → "Extremely helpful") so the question and the
+    answer share vocabulary. Falls back to the same "How helpful was
+    this information about <topicName>?" pattern if a topic name is
+    missing from the map.
+
+(b) Rating relocation. The helpfulness block (question + 5 buttons)
+    used to sit at the bottom of each topic card, below the
+    "View relevant sentences" toggle and any expanded evidence. The
+    rating block now sits directly under the AI summary paragraph and
+    above the evidence toggle. Same `bg-gray-50/80` container, same
+    HelpfulnessRating props, same "Please select one of the options
+    above..." hint when rating === 0, same `TopicRating_${topicId}`
+    tracking name — rating state, persistence, and tracking unchanged.
+
+---
+
+## Investigation findings (no code change yet)
+
+### Admin dashboard "Still open" symptom
+Triaged the cause: AdminTrackingDashboard reads `domains[d].closed`
+which is set only by `topic_collapse` events, but
+`PatientFollowUpReportV31Re.tsx:914` emits the single bidirectional
+`summary_toggle` event for both expand and close. The backend
+(`routes_tracking.py:611`) maps `summary_toggle` only to
+`opened=True`, never to `closed=True`, so the follow-up page can
+never mark a topic closed and the admin row stays "Still open"
+forever. Fix path proposed (frontend: emit topic_expand /
+topic_collapse like PatientInitialVisitReport does, OR backend:
+read an `expanded` flag from event_data) but deferred to a later
+session.
+
+### ai_overall_score still inconsistent across surfaces
+Confirmed from earlier sessions: DB column, /scores/average, and
+/scores/trajectory still produce different numbers for the same data
+(simple-row average vs. domain-level mean vs. last-write-wins per
+domain). Documented in the Apr 16-17 log; not addressed today.
+
+---
+
+## Roll-up
+
+  Apr 23 (4 commits): patient-view polish (highlight, rating
+                      relocation, per-domain question) + the long-
+                      standing rrweb 2.0.0-alpha.4 console error fix
+  Branch:             main (pushed to origin)
+  Net change:         +198 / -75 across 5 files
+  Carried forward:    admin "Still open" bug, ai_overall_score
+                      arithmetic inconsistency, broader admin audit
+
+End of log.
