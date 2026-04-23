@@ -571,7 +571,11 @@ const HelpfulnessRating: React.FC<HelpfulnessRatingProps> = React.memo(({
   disabled = false,
 }) => {
   return (
-    <div className="flex flex-wrap gap-2">
+    // flex-nowrap forces all 5 buttons onto a single row; whitespace-nowrap on
+    // each button keeps multi-word labels ("Extremely helpful") from wrapping
+    // inside the button. flex-1 + min-w-0 lets the row shrink to fit narrower
+    // containers without "Extremely helpful" being pushed to a new line.
+    <div className="flex flex-nowrap gap-2">
       {[1, 2, 3, 4, 5].map((i) => {
         const isSelected = value === i;
         return (
@@ -595,7 +599,7 @@ const HelpfulnessRating: React.FC<HelpfulnessRatingProps> = React.memo(({
               }
             }}
             className={cx(
-              "px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg sm:rounded-xl text-xs font-medium border transition-all duration-200",
+              "flex-1 min-w-0 px-2 py-1.5 sm:px-3 sm:py-2 rounded-lg sm:rounded-xl text-xs font-medium border transition-all duration-200 whitespace-nowrap text-center",
               disabled && "cursor-not-allowed opacity-50",
               isSelected
                 ? isDark
@@ -634,10 +638,10 @@ const HelpfulnessLegend: React.FC<HelpfulnessLegendProps> = ({ isDark }) => {
           : "bg-white/60 border-gray-200/50 shadow-sm",
       )}
     >
-      <div className="flex flex-wrap items-center justify-center gap-2">
+      <div className="flex flex-nowrap items-center justify-center gap-2 overflow-x-auto">
         <span
           className={cx(
-            "text-xs font-semibold mr-2",
+            "text-xs font-semibold mr-2 whitespace-nowrap shrink-0",
             isDark ? "text-slate-400" : "text-gray-500",
           )}
         >
@@ -647,7 +651,7 @@ const HelpfulnessLegend: React.FC<HelpfulnessLegendProps> = ({ isDark }) => {
           <div
             key={level}
             className={cx(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs",
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs whitespace-nowrap shrink-0",
               isDark ? "bg-slate-800/80" : "bg-gray-100/80",
             )}
           >
