@@ -10,7 +10,10 @@
  */
 
 import { record } from "rrweb";
-import type { eventWithTime } from "rrweb/typings/types";
+// rrweb 2.0.0-alpha.20 moved types into the @rrweb/types subpackage and
+// re-exports them from "rrweb"; the previous "rrweb/typings/types" path
+// only existed in alpha.4 and earlier.
+import type { eventWithTime } from "rrweb";
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
