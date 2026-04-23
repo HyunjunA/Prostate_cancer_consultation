@@ -1,8 +1,13 @@
 # Verify that the API is functioning correctly at http://localhost:8000/docs , and then proceed to check the following as well.
+#
+# API key is loaded from app/Backend/.env (the same file the backend uses).
+# `{{$dotenv API_KEY}}` is a REST Client built-in that reads the named key
+# from the nearest .env file. No edits to this file or to .vscode/ needed —
+# the .env is already gitignored, so the secret stays local.
 
 @base = http://localhost:8000
 @json = application/json
-@api_key = <YOUR_API_KEY>
+@api_key = {{$dotenv API_KEY}}
 
 # NLP Classifier API (r01-nlp Docker container)
 # Run: docker run -d --name r01-nlp -p 8001:8000 r01-nlp-classifiers:latest
@@ -46,7 +51,7 @@ X-API-Key: {{api_key}}
 # get all sentences for a given file and speaker (DoctorID or Interviewer) from the sentence_prediction table
 # For a given file, extract only the sentences whose class is between 1 and 5 and whose speaker column is 'Interviewer (doctor)'.
 ############################################################
-GET {{base}}/api/doctor/sentences/processed_transcripts_sid-01.xlsx/Interviewer
+GET {{base}}/api/doctor/sentences/Input_Keystrokes REC 001 (SID 10).xlsx/Interviewer:
 X-API-Key: {{api_key}}
 
 
@@ -62,7 +67,7 @@ X-API-Key: {{api_key}}
 ### 5) Doctor Interface - Get Rewrites (Filtered)
 # get all rewrites for a given file and speaker from the doctor_rewrite_log table
 ############################################################
-GET {{base}}/api/doctor/rewrites?file=processed_transcripts_sid-01.xlsx&speaker=Interviewer
+GET {{base}}/api/doctor/rewrites?file=Input_Keystrokes REC 001 (SID 10).xlsx&speaker=Interviewer
 X-API-Key: {{api_key}}
 
 
@@ -76,7 +81,7 @@ X-API-Key: {{api_key}}
 ### 6-1) Doctor Interface - Get Rewrite History for Specific Sentence
 # View the revision history of a specific sentence (file, i, i2)
 ############################################################
-GET {{base}}/api/doctor/rewrites/processed_transcripts_sid-01.xlsx/5/3/history
+GET {{base}}/api/doctor/rewrites/Input_Keystrokes REC 001 (SID 10).xlsx/5/3/history
 X-API-Key: {{api_key}}
 
 
@@ -439,7 +444,7 @@ Content-Type: {{json}}
 X-API-Key: {{api_key}}
 
 {
-  "file": "processed_transcripts_sid-01.xlsx",
+  "file": "Input_Keystrokes REC 001 (SID 10).xlsx",
   "i": 5,
   "i2": 3,
   "speaker": "Interviewer",
@@ -452,7 +457,7 @@ X-API-Key: {{api_key}}
 }
 
 ############################################################
-GET {{base}}/api/doctor/rewrites/processed_transcripts_sid-01.xlsx/1/1/1
+GET {{base}}/api/doctor/rewrites/Input_Keystrokes REC 001 (SID 10).xlsx/1/1/1
 X-API-Key: {{api_key}}
 
 
@@ -476,21 +481,21 @@ X-API-Key: {{api_key}}
 ############################################################
 ### 2) Get Score Averages - Filter by File
 ############################################################
-GET {{base}}/api/doctor/scores/average?file=processed_transcripts_sid-01.xlsx
+GET {{base}}/api/doctor/scores/average?file=Input_Keystrokes REC 001 (SID 10).xlsx
 X-API-Key: {{api_key}}
 
 
 ############################################################
 ### 3) Get Score Averages - Filter by File and Speaker
 ############################################################
-GET {{base}}/api/doctor/scores/average?file=processed_transcripts_sid-01.xlsx&speaker=Interviewer:
+GET {{base}}/api/doctor/scores/average?file=Input_Keystrokes REC 001 (SID 10).xlsx&speaker=Interviewer:
 X-API-Key: {{api_key}}
 
 
 ############################################################
 ### 4) Get Score Averages - Filter by File, Speaker, and Class
 ############################################################
-GET {{base}}/api/doctor/scores/average?file=Input_Keystrokes REC001 (SID 15).xlsx&speaker=Interviewer:&class=5
+GET {{base}}/api/doctor/scores/average?file=Input_Keystrokes REC001 (SID 14).xlsx&speaker=Interviewer:&class=5
 X-API-Key: {{api_key}}
 
 
@@ -513,7 +518,7 @@ X-API-Key: {{api_key}}
 
 ###
 ### 6-2) Score Summary without speaker (auto-detect)
-GET {{base}}/api/doctor/scores/summary/processed_transcripts_sid-01.xlsx
+GET {{base}}/api/doctor/scores/summary/Input_Keystrokes REC 001 (SID 10).xlsx
 X-API-Key: {{api_key}}
 
 ############################################################
@@ -601,21 +606,21 @@ X-API-Key: {{api_key}}
 ############################################################
 ### 3) Get Class Distribution for Specific File (Query Param)
 ############################################################
-GET {{base}}/api/doctor/class-distribution?file=processed_transcripts_sid-01.xlsx
+GET {{base}}/api/doctor/class-distribution?file=Input_Keystrokes REC 001 (SID 10).xlsx
 X-API-Key: {{api_key}}
 
 
 ############################################################
 ### 4) Get Detailed Class Distribution for Specific File (Path Param)
 ############################################################
-GET {{base}}/api/doctor/class-distribution/processed_transcripts_sid-01.xlsx
+GET {{base}}/api/doctor/class-distribution/Input_Keystrokes REC 001 (SID 10).xlsx
 X-API-Key: {{api_key}}
 
 
 ############################################################
 ### 5) Get Detailed Class Distribution (Include Invalid)
 ############################################################
-GET {{base}}/api/doctor/class-distribution/processed_transcripts_sid-01.xlsx?include_invalid=true
+GET {{base}}/api/doctor/class-distribution/Input_Keystrokes REC 001 (SID 10).xlsx?include_invalid=true
 X-API-Key: {{api_key}}
 
 ############################################################
@@ -630,7 +635,7 @@ X-API-Key: {{api_key}}
 ### 9) Patient Interface - Get Summaries (Filtered)
 # return summaries for a given file and speaker from the patient_summary table
 ############################################################
-GET {{base}}/api/patient/summaries?file=processed_transcripts_sid-01.xlsx&speaker=Patient_processed_transcripts_sid-01
+GET {{base}}/api/patient/summaries?file=Input_Keystrokes REC 001 (SID 10).xlsx&speaker=Patient_Input_Keystrokes REC 001 (SID 10)
 X-API-Key: {{api_key}}
 
 
@@ -639,7 +644,7 @@ X-API-Key: {{api_key}}
 ### 10) Patient Interface - Get Summary Detail
 # return detailed summary for a given file and speaker from the patient_summary_scoring table
 ############################################################
-GET {{base}}/api/patient/summaries/processed_transcripts_sid-01.xlsx/Patient_processed_transcripts_sid-01
+GET {{base}}/api/patient/summaries/Input_Keystrokes REC 001 (SID 10).xlsx/Patient_Input_Keystrokes REC 001 (SID 10)
 X-API-Key: {{api_key}}
 
 
@@ -1038,9 +1043,9 @@ GET {{base}}/api/surveys/submissions?survey_type=dcs&redcap_synced=false
 X-API-Key: {{api_key}}
 
 ############################################################
-### By Speaker - Patient_processed_transcripts_sid-01
+### By Speaker - Patient_Input_Keystrokes REC 001 (SID 10)
 ############################################################
-GET {{base}}/api/surveys/by-speaker/Patient_processed_transcripts_sid-01
+GET {{base}}/api/surveys/by-speaker/Patient_Input_Keystrokes REC 001 (SID 10)
 X-API-Key: {{api_key}}
 
 ############################################################
@@ -1275,11 +1280,11 @@ Content-Type: application/json
 ### ══════════════════════════════════════════════════════════════════════════════
 
 ### Filter by file AND speaker
-GET {{base}}/api/surveys/submissions?file=processed_transcripts_sid-01.xlsx&speaker=Patient_processed_transcripts_sid-01
+GET {{base}}/api/surveys/submissions?file=Input_Keystrokes REC 001 (SID 10).xlsx&speaker=Patient_Input_Keystrokes REC 001 (SID 10)
 Content-Type: application/json
 
 ### Filter by speaker
-GET {{base}}/api/surveys/submissions?speaker=Patient_processed_transcripts_sid-01
+GET {{base}}/api/surveys/submissions?speaker=Patient_Input_Keystrokes REC 001 (SID 10)
 Content-Type: application/json
 
 ### Filter by survey type
@@ -1341,7 +1346,7 @@ Content-Type: application/json
 ### ══════════════════════════════════════════════════════════════════════════════
 ### 18. Delete Record from REDCap by using the Record ID, which is the same as the speaker, which is patient ID.
 ### ══════════════════════════════════════════════════════════════════════════════
-DELETE {{base}}/api/surveys/redcap/records/Patient_processed_transcripts_sid-01	
+DELETE {{base}}/api/surveys/redcap/records/Patient_Input_Keystrokes REC 001 (SID 10)	
 Content-Type: application/json
 
 
@@ -1511,7 +1516,7 @@ Content-Type: application/json
 ### ══════════════════════════════════════════════════════════════════════════════
 
 ### 30. Delete TEST_SAMPLE_001
-DELETE {{base}}/api/surveys/redcap/records/Patient_processed_transcripts_sid-01
+DELETE {{base}}/api/surveys/redcap/records/Patient_Input_Keystrokes REC 001 (SID 10)
 Content-Type: application/json
 
 ### 31. Delete TEST001
@@ -2001,8 +2006,8 @@ Content-Type: application/json
 ### ══════════════════════════════════════════════════════════════════════════════
 
 # Test file path — change this to match your local file location
-@transcript_file = /Users/choih2/Documents/GitHub/Graciela_Lab_Collab/prostate_cancer_project/prostate_cancer_R01_NLP_classifiers_Michael/prediction_pipeline_and_results/processed_transcripts_sid-01.xlsx
-@transcript_file_2 = /Users/choih2/Documents/GitHub/Graciela_Lab_Collab/prostate_cancer_project/prostate_cancer_R01_NLP_classifiers_Michael/prediction_pipeline_and_results/processed_transcripts_sid-01-replica.xlsx
+@transcript_file = /Users/choih2/Documents/GitHub/Graciela_Lab_Collab/prostate_cancer_project/AI_physician_patient_communication/data/input/Input_Keystrokes REC 001 (SID 10).xlsx
+@transcript_file_2 = /Users/choih2/Documents/GitHub/Graciela_Lab_Collab/prostate_cancer_project/AI_physician_patient_communication/data/input/Input_Keystrokes REC001 (SID 14).xlsx
 
 
 ############################################################
@@ -2018,7 +2023,7 @@ Content-Type: application/json
 ###                    Example: context_window=3 gives 3 before + target + 3 after
 ###
 ### The patient_id is derived from the filename:
-###   "processed_transcripts_sid-01.xlsx" → patient_id = "sid-01"
+###   "Input_Keystrokes REC 001 (SID 10).xlsx" → patient_id = "SID_10"
 ###
 ### Response includes:
 ###   - patient_id, total_sentences, parameters used
@@ -2036,7 +2041,7 @@ X-API-Key: {{api_key}}
 Content-Type: multipart/form-data; boundary=transcript_boundary
 
 --transcript_boundary
-Content-Disposition: form-data; name="file"; filename="processed_transcripts_sid-01.xlsx"
+Content-Disposition: form-data; name="file"; filename="Input_Keystrokes REC 001 (SID 10).xlsx"
 Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
 
 < {{transcript_file}}
@@ -2063,7 +2068,7 @@ X-API-Key: {{api_key}}
 Content-Type: multipart/form-data; boundary=transcript_boundary_all
 
 --transcript_boundary_all
-Content-Disposition: form-data; name="file"; filename="processed_transcripts_sid-01.xlsx"
+Content-Disposition: form-data; name="file"; filename="Input_Keystrokes REC 001 (SID 10).xlsx"
 Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
 
 < {{transcript_file}}
@@ -2098,12 +2103,12 @@ X-API-Key: {{api_key}}
 Content-Type: multipart/form-data; boundary=batch_boundary
 
 --batch_boundary
-Content-Disposition: form-data; name="files"; filename="processed_transcripts_sid-01.xlsx"
+Content-Disposition: form-data; name="files"; filename="Input_Keystrokes REC 001 (SID 10).xlsx"
 Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
 
 < {{transcript_file}}
 --batch_boundary
-Content-Disposition: form-data; name="files"; filename="processed_transcripts_sid-01-replica.xlsx"
+Content-Disposition: form-data; name="files"; filename="Input_Keystrokes REC001 (SID 14).xlsx"
 Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
 
 < {{transcript_file_2}}
@@ -2131,7 +2136,7 @@ Content-Disposition: form-data; name="context_window"
 ###   2. DB fallback: reads xlsx_data from transcript_analysis_log
 ###      (useful if the container was restarted and disk files were lost)
 ############################################################
-GET {{base}}/api/transcript/download/sid-01
+GET {{base}}/api/transcript/download/SID_10
 X-API-Key: {{api_key}}
 
 
@@ -2146,7 +2151,7 @@ X-API-Key: {{api_key}}
 ###
 ### Falls back to DB if disk files are missing.
 ############################################################
-GET {{base}}/api/transcript/download-batch?patient_ids=sid-01,sid-01-replica
+GET {{base}}/api/transcript/download-batch?patient_ids=SID_10,SID_14
 X-API-Key: {{api_key}}
 
 
@@ -2156,7 +2161,7 @@ X-API-Key: {{api_key}}
 ### View all past analysis runs for a patient, sorted newest first.
 ###
 ### URL path parameter:
-###   patient_id — The patient to query (e.g., "sid-01")
+###   patient_id — The patient to query (e.g., "SID_10")
 ###
 ### Query parameters:
 ###   page — Page number, 1-based (default: 1)
@@ -2170,12 +2175,12 @@ X-API-Key: {{api_key}}
 ### Use the "id" field from history items as "analysis_id" in the
 ### predictions endpoint to query a specific analysis run.
 ############################################################
-GET {{base}}/api/transcript/history/sid-01
+GET {{base}}/api/transcript/history/SID_10
 X-API-Key: {{api_key}}
 
 ###
 # History with pagination (page 1, 5 items per page)
-GET {{base}}/api/transcript/history/sid-01?page=1&size=5
+GET {{base}}/api/transcript/history/SID_10?page=1&size=5
 X-API-Key: {{api_key}}
 
 
@@ -2187,7 +2192,7 @@ X-API-Key: {{api_key}}
 ### scored by one NLP model.
 ###
 ### URL path parameter:
-###   patient_id — The patient to query (e.g., "sid-01")
+###   patient_id — The patient to query (e.g., "SID_10")
 ###
 ### Query parameters (all optional):
 ###   model       — Filter by NLP model: cp, inc, ed, ius, or le
@@ -2220,43 +2225,43 @@ X-API-Key: {{api_key}}
 ############################################################
 
 ### 5a. All predictions from the latest analysis run (all models)
-GET {{base}}/api/transcript/predictions/sid-01
+GET {{base}}/api/transcript/predictions/SID_10
 X-API-Key: {{api_key}}
 
 ###
 ### 5b. Only the cp (cancer prognosis) model predictions
-GET {{base}}/api/transcript/predictions/sid-01?model=cp
+GET {{base}}/api/transcript/predictions/SID_10?model=cp
 X-API-Key: {{api_key}}
 
 ###
 ### 5c. Top 3 highest-scoring sentences per model, minimum score 0.8
-GET {{base}}/api/transcript/predictions/sid-01?top_n=3&min_score=0.8
+GET {{base}}/api/transcript/predictions/SID_10?top_n=3&min_score=0.8
 X-API-Key: {{api_key}}
 
 ###
 ### 5d. Specific analysis run (replace 1 with actual id from /history)
 ### Use TRANSCRIPT-4 (/history) first to find the analysis_id you want
-GET {{base}}/api/transcript/predictions/sid-01?analysis_id=1&model=ed
+GET {{base}}/api/transcript/predictions/SID_10?analysis_id=1&model=ed
 X-API-Key: {{api_key}}
 
 ###
 ### 5e. Only ed (erectile dysfunction) model, minimum score 0.5
-GET {{base}}/api/transcript/predictions/sid-01?model=ed&min_score=0.5
+GET {{base}}/api/transcript/predictions/SID_10?model=ed&min_score=0.5
 X-API-Key: {{api_key}}
 
 ###
 ### 5f. Top 10 inc (incontinence) model predictions
-GET {{base}}/api/transcript/predictions/sid-01?model=inc&top_n=10
+GET {{base}}/api/transcript/predictions/SID_10?model=inc&top_n=10
 X-API-Key: {{api_key}}
 
 ###
 ### 5g. All le (life expectancy) predictions from the latest run
-GET {{base}}/api/transcript/predictions/sid-01?model=le
+GET {{base}}/api/transcript/predictions/SID_10?model=le
 X-API-Key: {{api_key}}
 
 ###
 ### 5h. All ius (informed understanding/shared decision-making) predictions
-GET {{base}}/api/transcript/predictions/sid-01?model=ius
+GET {{base}}/api/transcript/predictions/SID_10?model=ius
 X-API-Key: {{api_key}}
 
 
@@ -2274,9 +2279,9 @@ Content-Type: {{json}}
 X-API-Key: {{api_key}}
 
 {
-  "session_id": "session_1710850000000_abc123def456",
-  "file": "processed_transcripts_sid-01.xlsx",
-  "speaker": "Patient_processed_transcripts_sid-01",
+  "session_id": "session_1776797012466_mbmbr475wxl",
+  "file": "Input_Keystrokes REC 001 (SID 10).xlsx",
+  "speaker": "Patient_Input_Keystrokes REC 001 (SID 10)",
   "device_type": "desktop",
   "events": [
     {
@@ -2342,17 +2347,17 @@ X-API-Key: {{api_key}}
 
 ###
 ### 6b. GET — Query all events for a specific patient
-GET {{base}}/api/tracking/events?file=processed_transcripts_sid-01.xlsx&speaker=Patient_processed_transcripts_sid-01
+GET {{base}}/api/tracking/events?file=Input_Keystrokes REC 001 (SID 10).xlsx&speaker=Patient_Input_Keystrokes REC 001 (SID 10)
 X-API-Key: {{api_key}}
 
 ###
 ### 6c. GET — Query events by session
-GET {{base}}/api/tracking/events?session_id=session_1710850000000_abc123def456
+GET {{base}}/api/tracking/events?session_id=session_1776797012466_mbmbr475wxl
 X-API-Key: {{api_key}}
 
 ###
 ### 6d. GET — Query only rating_click events
-GET {{base}}/api/tracking/events?file=processed_transcripts_sid-01.xlsx&event_type=rating_click
+GET {{base}}/api/tracking/events?file=Input_Keystrokes REC 001 (SID 10).xlsx&event_type=rating_click
 X-API-Key: {{api_key}}
 
 ###
@@ -2362,7 +2367,7 @@ X-API-Key: {{api_key}}
 
 ###
 ### 6f. GET — Query scroll_depth events for a specific patient
-GET {{base}}/api/tracking/events?file=processed_transcripts_sid-01.xlsx&event_type=scroll_depth&limit=50
+GET {{base}}/api/tracking/events?file=Input_Keystrokes REC 001 (SID 10).xlsx&event_type=scroll_depth&limit=50
 X-API-Key: {{api_key}}
 
 ###
@@ -2373,8 +2378,8 @@ X-API-Key: {{api_key}}
 
 {
   "session_id": "session_1710860000000_xyz789abc012",
-  "file": "processed_transcripts_sid-01.xlsx",
-  "speaker": "Patient_processed_transcripts_sid-01",
+  "file": "Input_Keystrokes REC 001 (SID 10).xlsx",
+  "speaker": "Patient_Input_Keystrokes REC 001 (SID 10)",
   "device_type": "mobile",
   "events": [
     {
@@ -2398,3 +2403,567 @@ X-API-Key: {{api_key}}
     }
   ]
 }
+
+
+############################################################
+### ADMIN) Tracking Dashboard - All endpoints used by AdminTrackingDashboard.tsx
+#
+# Source: app/Webapp/src/components/AdminTrackingDashboard.tsx
+# Backend: app/Backend/routes_tracking.py
+#
+# 9 endpoints total — POST + GET /events are above (subsections 6a-6g);
+# the 6 below cover the rest.
+############################################################
+
+
+###
+### ADMIN-1. GET — Tracking summary stats (header cards: total events, unique sessions, unique patients, by event_type)
+# Filters (all optional): role=patient|physician, visit_type=first|followup
+GET {{base}}/api/tracking/stats
+X-API-Key: {{api_key}}
+
+###
+### ADMIN-1a. GET — Stats filtered to PATIENT role only
+GET {{base}}/api/tracking/stats?role=patient
+X-API-Key: {{api_key}}
+
+###
+### ADMIN-1b. GET — Stats filtered to FIRST visit only
+GET {{base}}/api/tracking/stats?visit_type=first
+X-API-Key: {{api_key}}
+
+###
+### ADMIN-1c. GET — Stats filtered to PATIENT + FOLLOWUP
+GET {{base}}/api/tracking/stats?role=patient&visit_type=followup
+X-API-Key: {{api_key}}
+
+
+###
+### ADMIN-2. GET — Distinct patient files that have tracking events (patient picker dropdown)
+# Filters (all optional): role, visit_type
+GET {{base}}/api/tracking/patients
+X-API-Key: {{api_key}}
+
+###
+### ADMIN-2a. GET — Patients filtered to FIRST visit only
+GET {{base}}/api/tracking/patients?visit_type=first
+X-API-Key: {{api_key}}
+
+
+###
+### ADMIN-3. GET — Pre-aggregated analytics (timeline, hourly heatmap, event-type distribution, top elements)
+# Filters (all optional): role, visit_type
+GET {{base}}/api/tracking/analytics
+X-API-Key: {{api_key}}
+
+###
+### ADMIN-3a. GET — Analytics filtered to PATIENT role
+GET {{base}}/api/tracking/analytics?role=patient
+X-API-Key: {{api_key}}
+
+
+###
+### ADMIN-4. GET — Per-patient, per-domain behavior summary (PatientBehaviorSession[])
+# Returns: session_id, file, visit_type, total_events, last_event,
+# domains[Cancer Prognosis|...]{opened, closed, evidence_opened, rated, rating_value, dwell_time_ms, event_count},
+# survey_progress, page_dwell_ms.
+# Filters (all optional): file, visit_type, session_id
+GET {{base}}/api/tracking/patient-behavior
+X-API-Key: {{api_key}}
+
+###
+### ADMIN-4a. GET — Behavior for a specific patient file
+GET {{base}}/api/tracking/patient-behavior?file=Input_Keystrokes REC 001 (SID 10).xlsx
+X-API-Key: {{api_key}}
+
+###
+### ADMIN-4b. GET — Behavior for a specific session
+# Replace session_id with one from the patients/recordings list above
+GET {{base}}/api/tracking/patient-behavior?session_id=session_1776797012466_mbmbr475wxl
+X-API-Key: {{api_key}}
+
+###
+### ADMIN-4c. GET — Behavior for a patient + visit type combination
+GET {{base}}/api/tracking/patient-behavior?file=Input_Keystrokes REC 001 (SID 10).xlsx&visit_type=first
+X-API-Key: {{api_key}}
+
+
+###
+### ADMIN-5. POST — Store an rrweb session recording chunk (sent every 30s OR every 500 events from frontend)
+# Body schema (RecordingChunk):
+#   session_id: str (required)
+#   file:       str (default "")
+#   visit_type: "first" | "followup" | null
+#   events:     str — JSON-stringified array of rrweb events; gzipped server-side
+POST {{base}}/api/tracking/recordings
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "session_id": "rec_test_2026-04-23_001",
+  "file": "Input_Keystrokes REC 001 (SID 10).xlsx",
+  "visit_type": "first",
+  "events": "[{\"type\":4,\"data\":{\"href\":\"http://localhost:3001/?fileid=test&visit=first\",\"width\":1280,\"height\":800},\"timestamp\":1745420400000},{\"type\":2,\"data\":{\"node\":{\"type\":0,\"childNodes\":[],\"id\":1}},\"timestamp\":1745420400100}]"
+}
+
+
+###
+### ADMIN-6. GET — List available session recordings (recordings tab)
+# Returns: [{session_id, file, visit_type, chunk_count, total_events, created_at, last_chunk_at}]
+# Filters: file, visit_type, limit (1-100, default 20)
+GET {{base}}/api/tracking/recordings
+X-API-Key: {{api_key}}
+
+###
+### ADMIN-6a. GET — Recordings for a specific patient file
+GET {{base}}/api/tracking/recordings?file=Input_Keystrokes REC 001 (SID 10).xlsx
+X-API-Key: {{api_key}}
+
+###
+### ADMIN-6b. GET — Recordings filtered to FIRST visit, limit 5
+GET {{base}}/api/tracking/recordings?visit_type=first&limit=5
+X-API-Key: {{api_key}}
+
+
+###
+### ADMIN-7. GET — Replay payload for a specific session (rrweb-player feeds this into Replayer)
+# Returns: {session_id, file, visit_type, events: [...], chunk_count, total_events}
+# Replace session_id below with one returned by ADMIN-6.
+GET {{base}}/api/tracking/recordings/rec_test_2026-04-23_001
+X-API-Key: {{api_key}}
+
+
+############################################################
+### ADMIN END-TO-END SMOKE TEST
+# Quick happy-path sequence to verify the admin dashboard backend in one go.
+# Run in order; each request feeds the next.
+############################################################
+
+###
+### Step 1 — Confirm the dashboard has any data at all
+GET {{base}}/api/tracking/stats
+X-API-Key: {{api_key}}
+
+###
+### Step 2 — Confirm at least one patient file is tracked
+GET {{base}}/api/tracking/patients
+X-API-Key: {{api_key}}
+
+###
+### Step 3 — Pull behavior for the first patient (replace file with one from Step 2)
+GET {{base}}/api/tracking/patient-behavior?file=Input_Keystrokes REC 001 (SID 10).xlsx
+X-API-Key: {{api_key}}
+
+###
+### Step 4 — Confirm analytics charts have data
+GET {{base}}/api/tracking/analytics
+X-API-Key: {{api_key}}
+
+###
+### Step 5 — List recordings (will be empty if rrweb hasn't fired yet)
+GET {{base}}/api/tracking/recordings?limit=5
+X-API-Key: {{api_key}}
+
+###
+### Step 6 — Replay a specific session (replace session_id with one from Step 5)
+GET {{base}}/api/tracking/recordings/rec_1776797012563_gl80wf
+X-API-Key: {{api_key}}
+
+
+############################################################
+### USER-BEHAVIOR TEST SCENARIOS — POST simulated events, then GET to verify
+#
+# Each test case uses a unique session_id (prefix "tc<N>_") so it does not
+# collide with real user data and can be cleaned up later. All cases use the
+# real SID_10 patient file so they appear in the same patient-behavior bucket.
+#
+# Pattern per case:
+#   (a) POST a simulated event sequence
+#   (b) GET patient-behavior?session_id=tc<N>_... → check opened/closed/etc.
+#
+# Cleanup query at the bottom removes all tc*_ sessions.
+############################################################
+
+
+### ════════════════════════════════════════════════════════════════════
+### TC-1. Clean toggle (golden path) — open then close Cancer Prognosis
+### Expected: domains["Cancer Prognosis"].opened=true, .closed=true
+### ════════════════════════════════════════════════════════════════════
+
+###
+### TC-1a. POST — open + close Cancer Prognosis
+POST {{base}}/api/tracking/events
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "session_id": "tc1_clean_toggle",
+  "role": "patient",
+  "visit_type": "first",
+  "file": "Input_Keystrokes REC 001 (SID 10).xlsx",
+  "speaker": "Patient_Input_Keystrokes REC 001 (SID 10)",
+  "device_type": "desktop",
+  "events": [
+    {
+      "event_type": "topic_expand",
+      "element_id": "Topic_CancerPrognosis",
+      "timestamp": "2026-04-23T16:00:00.000Z",
+      "metadata": { "topic": "Cancer Prognosis" }
+    },
+    {
+      "event_type": "topic_collapse",
+      "element_id": "Topic_CancerPrognosis",
+      "timestamp": "2026-04-23T16:00:10.000Z",
+      "metadata": { "topic": "Cancer Prognosis" }
+    }
+  ]
+}
+
+###
+### TC-1b. GET — verify (should show Cancer Prognosis: opened=true, closed=true)
+GET {{base}}/api/tracking/patient-behavior?session_id=tc1_clean_toggle
+X-API-Key: {{api_key}}
+
+
+### ════════════════════════════════════════════════════════════════════
+### TC-2. Orphan open ("Still open" bug reproducer) — open IUS, never close
+### Expected: domains["Irritative Urinary Symptoms"].opened=true, .closed=false
+### → AdminTrackingDashboard renders "Still open"
+### ════════════════════════════════════════════════════════════════════
+
+###
+### TC-2a. POST — open IUS, no matching collapse
+POST {{base}}/api/tracking/events
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "session_id": "tc2_orphan_open",
+  "role": "patient",
+  "visit_type": "first",
+  "file": "Input_Keystrokes REC 001 (SID 10).xlsx",
+  "speaker": "Patient_Input_Keystrokes REC 001 (SID 10)",
+  "device_type": "desktop",
+  "events": [
+    {
+      "event_type": "topic_expand",
+      "element_id": "Topic_IrritativeUrinarySymptoms",
+      "timestamp": "2026-04-23T16:01:00.000Z",
+      "metadata": { "topic": "Irritative Urinary Symptoms" }
+    }
+  ]
+}
+
+###
+### TC-2b. GET — verify (should show IUS: opened=true, closed=false)
+GET {{base}}/api/tracking/patient-behavior?session_id=tc2_orphan_open
+X-API-Key: {{api_key}}
+
+
+### ════════════════════════════════════════════════════════════════════
+### TC-3. summary_toggle bidirectional bug — follow-up page emits the same
+### event for both open and close. Backend (routes_tracking.py:611) only
+### maps summary_toggle → opened=true, never closed=true.
+### Expected: opened=true, closed=false EVEN AFTER the user "closes" by clicking again.
+### ════════════════════════════════════════════════════════════════════
+
+###
+### TC-3a. POST — two summary_toggle events (simulate open then close from follow-up page)
+POST {{base}}/api/tracking/events
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "session_id": "tc3_summary_toggle",
+  "role": "patient",
+  "visit_type": "followup",
+  "file": "Input_Keystrokes REC 001 (SID 10).xlsx",
+  "speaker": "Patient_Input_Keystrokes REC 001 (SID 10)",
+  "device_type": "desktop",
+  "events": [
+    {
+      "event_type": "summary_toggle",
+      "element_id": "Topic_LifeExpectancy",
+      "timestamp": "2026-04-23T16:02:00.000Z",
+      "metadata": { "topic": "Life Expectancy", "expanded": true }
+    },
+    {
+      "event_type": "summary_toggle",
+      "element_id": "Topic_LifeExpectancy",
+      "timestamp": "2026-04-23T16:02:15.000Z",
+      "metadata": { "topic": "Life Expectancy", "expanded": false }
+    }
+  ]
+}
+
+###
+### TC-3b. GET — verify (BUG: should show closed=true if backend honored expanded:false,
+### but currently shows opened=true, closed=false — admin renders "Still open")
+GET {{base}}/api/tracking/patient-behavior?session_id=tc3_summary_toggle
+X-API-Key: {{api_key}}
+
+
+### ════════════════════════════════════════════════════════════════════
+### TC-4. Evidence sentence click ("View relevant sentences" toggle)
+### Expected: domains["Cancer Prognosis"].opened=true, .evidence_opened=true
+### ════════════════════════════════════════════════════════════════════
+
+###
+### TC-4a. POST — open topic, then expand its evidence
+POST {{base}}/api/tracking/events
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "session_id": "tc4_evidence",
+  "role": "patient",
+  "visit_type": "first",
+  "file": "Input_Keystrokes REC 001 (SID 10).xlsx",
+  "speaker": "Patient_Input_Keystrokes REC 001 (SID 10)",
+  "device_type": "desktop",
+  "events": [
+    {
+      "event_type": "topic_expand",
+      "element_id": "Topic_CancerPrognosis",
+      "timestamp": "2026-04-23T16:03:00.000Z",
+      "metadata": { "topic": "Cancer Prognosis" }
+    },
+    {
+      "event_type": "evidence_expand",
+      "element_id": "Evidence_CancerPrognosis",
+      "timestamp": "2026-04-23T16:03:05.000Z",
+      "metadata": { "topic": "Cancer Prognosis", "action": "expand" }
+    }
+  ]
+}
+
+###
+### TC-4b. GET — verify (CP: opened=true, evidence_opened=true)
+GET {{base}}/api/tracking/patient-behavior?session_id=tc4_evidence
+X-API-Key: {{api_key}}
+
+
+### ════════════════════════════════════════════════════════════════════
+### TC-5. Rating click — patient gives a rating
+### Expected: domains["Erectile Dysfunction"].rated=true, .rating_value=4
+### ════════════════════════════════════════════════════════════════════
+
+###
+### TC-5a. POST — patient clicks rating "Very helpful" (=4) on Erectile Dysfunction
+POST {{base}}/api/tracking/events
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "session_id": "tc5_rating",
+  "role": "patient",
+  "visit_type": "first",
+  "file": "Input_Keystrokes REC 001 (SID 10).xlsx",
+  "speaker": "Patient_Input_Keystrokes REC 001 (SID 10)",
+  "device_type": "desktop",
+  "events": [
+    {
+      "event_type": "topic_expand",
+      "element_id": "Topic_ErectileDysfunction",
+      "timestamp": "2026-04-23T16:04:00.000Z",
+      "metadata": { "topic": "Erectile Dysfunction" }
+    },
+    {
+      "event_type": "rating_click",
+      "element_id": "rating_Erectile_Dysfunction",
+      "timestamp": "2026-04-23T16:04:20.000Z",
+      "metadata": {
+        "topic": "Erectile Dysfunction",
+        "rating": 4,
+        "ratingMeaning": "Very helpful"
+      }
+    }
+  ]
+}
+
+###
+### TC-5b. GET — verify (ED: opened=true, rated=true, rating_value=4)
+GET {{base}}/api/tracking/patient-behavior?session_id=tc5_rating
+X-API-Key: {{api_key}}
+
+
+### ════════════════════════════════════════════════════════════════════
+### TC-6. Multiple topics expanded in one session
+### Expected: all 5 domains opened=true; only CP left "Still open" within this session.
+### ════════════════════════════════════════════════════════════════════
+
+###
+### TC-6a. POST — open all 5 topics, close 4 (CP stays open)
+POST {{base}}/api/tracking/events
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "session_id": "tc6_multi_topic",
+  "role": "patient",
+  "visit_type": "first",
+  "file": "Input_Keystrokes REC 001 (SID 10).xlsx",
+  "speaker": "Patient_Input_Keystrokes REC 001 (SID 10)",
+  "device_type": "desktop",
+  "events": [
+    { "event_type": "topic_expand",   "element_id": "Topic_CancerPrognosis",          "timestamp": "2026-04-23T16:05:00.000Z", "metadata": { "topic": "Cancer Prognosis" } },
+    { "event_type": "topic_expand",   "element_id": "Topic_LifeExpectancy",           "timestamp": "2026-04-23T16:05:10.000Z", "metadata": { "topic": "Life Expectancy" } },
+    { "event_type": "topic_expand",   "element_id": "Topic_ErectileDysfunction",      "timestamp": "2026-04-23T16:05:20.000Z", "metadata": { "topic": "Erectile Dysfunction" } },
+    { "event_type": "topic_expand",   "element_id": "Topic_UrinaryIncontinence",      "timestamp": "2026-04-23T16:05:30.000Z", "metadata": { "topic": "Urinary Incontinence" } },
+    { "event_type": "topic_expand",   "element_id": "Topic_IrritativeUrinarySymptoms","timestamp": "2026-04-23T16:05:40.000Z", "metadata": { "topic": "Irritative Urinary Symptoms" } },
+    { "event_type": "topic_collapse", "element_id": "Topic_LifeExpectancy",           "timestamp": "2026-04-23T16:05:50.000Z", "metadata": { "topic": "Life Expectancy" } },
+    { "event_type": "topic_collapse", "element_id": "Topic_ErectileDysfunction",      "timestamp": "2026-04-23T16:06:00.000Z", "metadata": { "topic": "Erectile Dysfunction" } },
+    { "event_type": "topic_collapse", "element_id": "Topic_UrinaryIncontinence",      "timestamp": "2026-04-23T16:06:10.000Z", "metadata": { "topic": "Urinary Incontinence" } },
+    { "event_type": "topic_collapse", "element_id": "Topic_IrritativeUrinarySymptoms","timestamp": "2026-04-23T16:06:20.000Z", "metadata": { "topic": "Irritative Urinary Symptoms" } }
+  ]
+}
+
+###
+### TC-6b. GET — verify (all 5 opened=true; 4 closed=true; only CP left "Still open")
+GET {{base}}/api/tracking/patient-behavior?session_id=tc6_multi_topic
+X-API-Key: {{api_key}}
+
+
+### ════════════════════════════════════════════════════════════════════
+### TC-7. Cursor proximity / dwell time — patient hovers near a card without clicking
+### Expected: dwell_time_ms ≈ 15000; opened stays false (no click)
+### ════════════════════════════════════════════════════════════════════
+
+###
+### TC-7a. POST — proximity enter then leave (15s hover) over Life Expectancy card
+POST {{base}}/api/tracking/events
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "session_id": "tc7_dwell",
+  "role": "patient",
+  "visit_type": "first",
+  "file": "Input_Keystrokes REC 001 (SID 10).xlsx",
+  "speaker": "Patient_Input_Keystrokes REC 001 (SID 10)",
+  "device_type": "desktop",
+  "events": [
+    {
+      "event_type": "cursor_proximity_enter",
+      "element_id": "TopicCard_LifeExpectancy",
+      "timestamp": "2026-04-23T16:07:00.000Z",
+      "metadata": { "topic": "Life Expectancy", "cursorX": 100, "cursorY": 200 }
+    },
+    {
+      "event_type": "cursor_proximity_leave",
+      "element_id": "TopicCard_LifeExpectancy",
+      "timestamp": "2026-04-23T16:07:15.000Z",
+      "metadata": { "topic": "Life Expectancy", "hoverDuration": 15000 }
+    },
+    {
+      "event_type": "dwell_time",
+      "element_id": "TopicCard_LifeExpectancy",
+      "timestamp": "2026-04-23T16:07:15.500Z",
+      "metadata": { "topic": "Life Expectancy", "duration": 15000 }
+    }
+  ]
+}
+
+###
+### TC-7b. GET — verify (LE: opened=false, dwell_time_ms ≈ 15000)
+GET {{base}}/api/tracking/patient-behavior?session_id=tc7_dwell
+X-API-Key: {{api_key}}
+
+
+### ════════════════════════════════════════════════════════════════════
+### TC-8. Cross-session OR-merge bug demonstration
+### Two separate sessions for the same file:
+###   Session A — opens IUS, never closes (orphan)
+###   Session B — opens + closes Life Expectancy cleanly
+### Then query without session_id → admin merges across both sessions.
+### Expected merged result for the patient:
+###   IUS opened=true, closed=false  → "Still open" forever
+###   LE  opened=true, closed=true   → "Yes / Yes"
+### ════════════════════════════════════════════════════════════════════
+
+###
+### TC-8a. POST — Session A: orphan-opens IUS
+POST {{base}}/api/tracking/events
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "session_id": "tc8a_session_A",
+  "role": "patient",
+  "visit_type": "first",
+  "file": "Input_Keystrokes REC 001 (SID 10).xlsx",
+  "speaker": "Patient_Input_Keystrokes REC 001 (SID 10)",
+  "device_type": "desktop",
+  "events": [
+    {
+      "event_type": "topic_expand",
+      "element_id": "Topic_IrritativeUrinarySymptoms",
+      "timestamp": "2026-04-23T16:08:00.000Z",
+      "metadata": { "topic": "Irritative Urinary Symptoms" }
+    }
+  ]
+}
+
+###
+### TC-8b. POST — Session B: cleanly toggles Life Expectancy
+POST {{base}}/api/tracking/events
+Content-Type: {{json}}
+X-API-Key: {{api_key}}
+
+{
+  "session_id": "tc8b_session_B",
+  "role": "patient",
+  "visit_type": "first",
+  "file": "Input_Keystrokes REC 001 (SID 10).xlsx",
+  "speaker": "Patient_Input_Keystrokes REC 001 (SID 10)",
+  "device_type": "desktop",
+  "events": [
+    {
+      "event_type": "topic_expand",
+      "element_id": "Topic_LifeExpectancy",
+      "timestamp": "2026-04-23T16:09:00.000Z",
+      "metadata": { "topic": "Life Expectancy" }
+    },
+    {
+      "event_type": "topic_collapse",
+      "element_id": "Topic_LifeExpectancy",
+      "timestamp": "2026-04-23T16:09:30.000Z",
+      "metadata": { "topic": "Life Expectancy" }
+    }
+  ]
+}
+
+###
+### TC-8c. GET — verify per session (each session shows its own state)
+GET {{base}}/api/tracking/patient-behavior?session_id=tc8a_session_A
+X-API-Key: {{api_key}}
+
+###
+GET {{base}}/api/tracking/patient-behavior?session_id=tc8b_session_B
+X-API-Key: {{api_key}}
+
+###
+### TC-8d. GET — verify the OR-merge bug (filter only by file, no session_id)
+### When the AdminTrackingDashboard.tsx OR-merges these two sessions:
+###   IUS: A.opened=true OR B.opened=false → opened=true
+###        A.closed=false OR B.closed=false → closed=false → "Still open" ★
+###   LE:  A.opened=false OR B.opened=true → opened=true
+###        A.closed=false OR B.closed=true → closed=true → "Yes / Yes"
+GET {{base}}/api/tracking/patient-behavior?file=Input_Keystrokes REC 001 (SID 10).xlsx
+X-API-Key: {{api_key}}
+
+
+############################################################
+### TC CLEANUP
+# Removes all rows created by TC-1..TC-8 from user_interaction_log so the
+# real admin dashboard data is not polluted. Run from psql, not REST Client.
+#
+#   docker exec -i prostatecancer-postgres psql -U $POSTGRES_USER -d $POSTGRES_DB <<'SQL'
+#     DELETE FROM user_interaction_log WHERE session_id LIKE 'tc%_%';
+#   SQL
+#
+# Sanity: count rows that would be deleted before running the DELETE
+#   docker exec -i prostatecancer-postgres psql -U $POSTGRES_USER -d $POSTGRES_DB \
+#     -c "SELECT session_id, COUNT(*) FROM user_interaction_log
+#         WHERE session_id LIKE 'tc%_%' GROUP BY session_id;"
+############################################################
