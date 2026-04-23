@@ -523,6 +523,27 @@ const HELPFULNESS_LABELS: Record<number, string> = {
   5: "Extremely helpful",
 };
 
+/**
+ * Per-domain helpfulness question.
+ * Each topic card asks the patient how helpful the AI summary was for that
+ * specific domain. Wording uses "How helpful was this information about ..."
+ * so the question is grammatically aligned with the helpfulness rating
+ * scale ("Not at all helpful" → "Extremely helpful"). Falls back to a
+ * generic phrasing if the topic name is not in the map.
+ */
+const TOPIC_QUESTIONS: Record<string, string> = {
+  "Cancer Prognosis":
+    "How helpful was this information about Cancer Prognosis?",
+  "Life Expectancy":
+    "How helpful was this information about Life Expectancy?",
+  "Erectile Dysfunction":
+    "How helpful was this information about Erectile Dysfunction?",
+  "Urinary Incontinence":
+    "How helpful was this information about Urinary Incontinence?",
+  "Irritative Urinary Symptoms":
+    "How helpful was this information about Irritative Urinary Symptoms?",
+};
+
 /* =============================================================================
    SECTION 4: UI COMPONENTS
 ============================================================================= */
@@ -928,6 +949,43 @@ const TopicCard: React.FC<TopicCardProps> = ({
             </p>
           </div>
 
+          {/* Helpfulness Rating — placed directly under the AI Summary so the
+              patient can rate as they read, before scrolling to evidence. */}
+          <div
+            className={cx(
+              "py-4 px-4 rounded-xl border mb-6",
+              isDark
+                ? "bg-slate-800/30 border-slate-700/30"
+                : "bg-gray-50/80 border-gray-200/30",
+            )}
+          >
+            <span
+              className={cx(
+                "text-sm font-medium block mb-3",
+                isDark ? "text-slate-400" : "text-gray-500",
+              )}
+            >
+              {TOPIC_QUESTIONS[topicName] ||
+                `How helpful was this information about ${topicName}?`}
+            </span>
+            <HelpfulnessRating
+              value={rating}
+              onChange={onRatingChange}
+              isDark={isDark}
+              trackingName={`TopicRating_${topicId}`}
+            />
+            {rating === 0 && (
+              <p
+                className={cx(
+                  "mt-2 text-xs italic",
+                  isDark ? "text-slate-500" : "text-gray-400",
+                )}
+              >
+                Please select one of the options above to rate this summary.
+              </p>
+            )}
+          </div>
+
           {/* [V33] Evidence Sentences — moved UP to where star rating used to be */}
           {/* Tim: "in the area where the star ratings is now" */}
           {/* Always show the toggle button, even when no sentences available yet */}
@@ -1073,40 +1131,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
             )}
           </div>
 
-          {/* [V35] Helpfulness Rating — NIH PROMIS unipolar scale */}
-          <div
-            className={cx(
-              "py-4 px-4 rounded-xl border",
-              isDark
-                ? "bg-slate-800/30 border-slate-700/30"
-                : "bg-gray-50/80 border-gray-200/30",
-            )}
-          >
-            <span
-              className={cx(
-                "text-sm font-medium block mb-3",
-                isDark ? "text-slate-400" : "text-gray-500",
-              )}
-            >
-              Does this information help you understand your treatment options?
-            </span>
-            <HelpfulnessRating
-              value={rating}
-              onChange={onRatingChange}
-              isDark={isDark}
-              trackingName={`TopicRating_${topicId}`}
-            />
-            {rating === 0 && (
-              <p
-                className={cx(
-                  "mt-2 text-xs italic",
-                  isDark ? "text-slate-500" : "text-gray-400",
-                )}
-              >
-                Please select one of the options above to rate this summary.
-              </p>
-            )}
-          </div>
+          {/* Helpfulness Rating — relocated above to sit right under AI Summary. */}
         </div>
       </div>
     </div>
