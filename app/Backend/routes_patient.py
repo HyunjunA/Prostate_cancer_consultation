@@ -396,7 +396,11 @@ async def get_patient_sentences_by_class(
     if not analysis_id:
         return {"file": file, "top_n": top_n, "by_class": {}}
 
-    # Get all predictions for this analysis, ordered by pred_score DESC per model
+    # Get all predictions for this analysis, ordered by pred_score DESC per model.
+    # `context` carries the surrounding ±N sentences with the focus sentence
+    # wrapped in <main>...</main>; the patient view renders that with bold +
+    # underline so the user can see which sentence is the focus inside the
+    # surrounding conversation.
     ranked = select(
         SentencePrediction.model,
         SentencePrediction.sentence_text,
@@ -404,6 +408,7 @@ async def get_patient_sentences_by_class(
         SentencePrediction.speaker,
         SentencePrediction.utterance_index,
         SentencePrediction.sentence_in_utterance,
+        SentencePrediction.context,
         func.row_number().over(
             partition_by=SentencePrediction.model,
             order_by=SentencePrediction.pred_score.desc()
@@ -419,6 +424,7 @@ async def get_patient_sentences_by_class(
         ranked.c.speaker,
         ranked.c.utterance_index,
         ranked.c.sentence_in_utterance,
+        ranked.c.context,
         ranked.c.rn,
     ).where(ranked.c.rn <= top_n).order_by(ranked.c.model, ranked.c.rn)
 
@@ -442,6 +448,7 @@ async def get_patient_sentences_by_class(
 
         by_class[model].append({
             "sentence": r.sentence_text,
+            "context": r.context,  # ±N surrounding sentences w/ <main>...</main>
             "pred_score": round(float(r.pred_score), 4),
             "score": ai_score_map.get(r.sentence_text),
             "speaker": r.speaker,
