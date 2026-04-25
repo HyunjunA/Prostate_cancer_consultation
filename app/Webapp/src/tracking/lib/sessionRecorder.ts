@@ -23,12 +23,14 @@ const MAX_EVENTS_PER_CHUNK = 500; // or when 500 events buffered
 
 // ── State ────────────────────────────────────────────────────────────────────
 
+type Area = "patient_first" | "patient_followup" | "doctor";
+
 let _events: eventWithTime[] = [];
 let _stopFn: (() => void) | null = null;
 let _flushTimer: ReturnType<typeof setInterval> | null = null;
 let _sessionId = "";
 let _file = "";
-let _visitType = "";
+let _area: Area | "" = "";
 let _isRecording = false;
 
 // ── PHI Masking selectors ────────────────────────────────────────────────────
@@ -82,20 +84,19 @@ const UNMASK_SELECTORS = [
 // ── Flush helper ─────────────────────────────────────────────────────────────
 
 async function flushEvents(useKeepalive: boolean = false): Promise<void> {
-  if (_events.length === 0 || !_sessionId) return;
+  if (_events.length === 0 || !_sessionId || !_area) return;
 
   const eventsToSend = [..._events];
   _events = [];
 
   const body = JSON.stringify({
     session_id: _sessionId,
-    file: _file,
-    visit_type: _visitType || null,
+    file: _file || null,
     events: JSON.stringify(eventsToSend),
   });
 
   try {
-    await fetch(`${API_BASE_URL}/api/backend/tracking/recordings`, {
+    await fetch(`${API_BASE_URL}/api/backend/track/recordings/${_area}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -113,17 +114,20 @@ async function flushEvents(useKeepalive: boolean = false): Promise<void> {
 
 /**
  * Start recording the session with PHI masking.
+ *
+ * Pattern A: each recording is tagged with an `area` so that the admin UI can
+ * filter rrweb captures by which interface produced them.
  */
 export function startRecording(
   sessionId: string,
-  file: string = "",
-  visitType: string = "",
+  file: string,
+  area: Area,
 ): void {
   if (_isRecording || typeof window === "undefined") return;
 
   _sessionId = sessionId;
   _file = file;
-  _visitType = visitType;
+  _area = area;
   _isRecording = true;
 
   _stopFn = record({
@@ -192,10 +196,8 @@ export function stopRecording(): void {
  */
 export function updateRecordingContext(
   file: string,
-  visitType: string,
 ): void {
   _file = file;
-  _visitType = visitType;
 }
 
 /**

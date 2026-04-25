@@ -599,6 +599,10 @@ interface SDMSurveyProps {
     elementId: string;
     metadata?: Record<string, any>;
   }) => void;
+  // Pattern A behavior tracking — fires whenever the visible question changes
+  // (initial mount + every Next/Prev navigation). The parent uses this to log
+  // a survey_step_view event with survey_type="sdm".
+  onQuestionView?: (questionId: string, index: number) => void;
 }
 
 export const SDMSurvey: React.FC<SDMSurveyProps> = ({
@@ -609,11 +613,16 @@ export const SDMSurvey: React.FC<SDMSurveyProps> = ({
   isDark = false,
   interventionName = "[intervention]",
   onTrackEvent,
+  onQuestionView,
 }) => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = React.useState(0);
 
   const totalQuestions = SDM_QUESTIONS.length;
   const currentQuestion = SDM_QUESTIONS[currentQuestionIndex];
+
+  React.useEffect(() => {
+    onQuestionView?.(currentQuestion.id, currentQuestionIndex);
+  }, [currentQuestionIndex, currentQuestion.id, onQuestionView]);
   const currentAnswer = answers[currentQuestion.id as keyof SDMAnswers];
   const isCurrentAnswered = currentAnswer !== null;
   const isLastQuestion = currentQuestionIndex === totalQuestions - 1;

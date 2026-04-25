@@ -67,6 +67,7 @@ import {
 
 import { submitSurvey, fetchSurveySubmissions } from "@/api/surveyApi";
 import { sendTrackingEvents } from "@/api/trackingApi";
+import { trackFollowup, startSession, endSession } from "@/tracking/track";
 import { getOrCreateSession } from "@/tracking/utils/session.utils";
 
 /* =============================================================================
@@ -866,6 +867,8 @@ interface RiskPerceptionWithSummaryProps {
   summaries: TopicSummaryMap;
   isDark?: boolean;
   onTrackEvent?: (event: any) => void;
+  // Pattern A behavior tracking — fires whenever the visible question changes.
+  onQuestionView?: (questionId: string, index: number) => void;
 }
 
 const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
@@ -877,8 +880,14 @@ const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
   summaries,
   isDark,
   onTrackEvent,
+  onQuestionView,
 }) => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = React.useState(0);
+
+  React.useEffect(() => {
+    const q = RISK_QUESTIONS[currentQuestionIndex];
+    if (q) onQuestionView?.(q.id, currentQuestionIndex);
+  }, [currentQuestionIndex, onQuestionView]);
   const [expandedSummaries, setExpandedSummaries] = React.useState<
     Record<string, boolean>
   >({});
@@ -1298,6 +1307,25 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
   const pageLoadTimeRef = useRef<number>(Date.now());
 
   useEffect(() => {
+    trackFollowup(currentFile, currentSpeaker, {
+      event_type: "page_view",
+      metadata: { page: "patient_followup_report" },
+    });
+    return () => {
+      trackFollowup(currentFile, currentSpeaker, {
+        event_type: "session_end",
+        metadata: { page: "patient_followup_report" },
+      });
+    };
+  }, [currentFile, currentSpeaker]);
+
+  // Pattern A: page-lifetime session — mount-only.
+  useEffect(() => {
+    startSession();
+    return () => endSession();
+  }, []);
+
+  useEffect(() => {
     const flushEvents = (useKeepalive: boolean = false) => {
       const events = trackingManager.getEvents();
       if (events.length === 0) return;
@@ -1405,6 +1433,18 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
   // 7.5 Navigation Handlers
   // ─────────────────────────────────────────────────────────────────────────
 
+  // Maps the outer wizard step name to the survey_type stored in the
+  // patient_followup_survey behavior table. welcome/complete have no
+  // associated survey, so they're sent with survey_type=null.
+  const STEP_TO_SURVEY_TYPE: Partial<
+    Record<SurveyStep, "sdm" | "dcs" | "risk_perception" | "satisfaction">
+  > = {
+    sdm: "sdm",
+    dcs: "dcs",
+    risk: "risk_perception",
+    satisfaction: "satisfaction",
+  };
+
   const goToStep = (step: SurveyStep) => {
     setCurrentStep(step);
     trackingManager.recordEvent({
@@ -1412,6 +1452,14 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
       elementId: `Step_${step}`,
       timestamp: new Date().toISOString(),
       metadata: { step },
+    });
+
+    const stepIndex = SURVEY_STEPS.indexOf(step) + 1;
+    trackFollowup(currentFile, currentSpeaker, {
+      event_type: "survey_step_view",
+      survey_type: STEP_TO_SURVEY_TYPE[step],
+      step_number: stepIndex,
+      metadata: { outer_step: step },
     });
   };
 
@@ -1439,7 +1487,11 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
     value: YesNoAnswer | ScaleAnswer,
   ) => {
     setSdmAnswers((prev) => ({ ...prev, [questionId]: value }));
-    // Tracking handled by SDMQuestions component via onTrackEvent
+    trackFollowup(currentFile, currentSpeaker, {
+      event_type: "survey_answer",
+      survey_type: "sdm",
+      question_id: String(questionId),
+    });
   };
 
   const handleDCSChange = (
@@ -1447,7 +1499,11 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
     value: LikertAnswer,
   ) => {
     setDcsAnswers((prev) => ({ ...prev, [questionId]: value }));
-    // Tracking handled by DecisionalConflictSurvey component via onTrackEvent
+    trackFollowup(currentFile, currentSpeaker, {
+      event_type: "survey_answer",
+      survey_type: "dcs",
+      question_id: String(questionId),
+    });
   };
 
   const handleRiskChange = (
@@ -1455,7 +1511,11 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
     value: string,
   ) => {
     setRiskAnswers((prev) => ({ ...prev, [questionId]: value }));
-    // Tracking handled by RiskPerceptionSurvey component via onTrackEvent
+    trackFollowup(currentFile, currentSpeaker, {
+      event_type: "survey_answer",
+      survey_type: "risk_perception",
+      question_id: String(questionId),
+    });
   };
 
   const handleSatisfactionChange = (
@@ -1463,7 +1523,11 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
     value: any,
   ) => {
     setSatisfactionAnswers((prev) => ({ ...prev, [field]: value }));
-    // Tracking handled by PatientSatisfactionSurvey component via onTrackEvent
+    trackFollowup(currentFile, currentSpeaker, {
+      event_type: "survey_answer",
+      survey_type: "satisfaction",
+      question_id: String(field),
+    });
   };
 
   const handleTrackEvent = (eventData: any) => {
@@ -1494,6 +1558,12 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
         metadata: { answers: sdmAnswers },
       });
 
+      trackFollowup(currentFile, currentSpeaker, {
+        event_type: "survey_complete",
+        survey_type: "sdm",
+        metadata: { answer_count: Object.keys(sdmAnswers).length },
+      });
+
       setSdmSubmitted(true);
     } catch (error) {
       console.error("SDM submission error:", error);
@@ -1518,6 +1588,12 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
         elementId: "DCS_Submit",
         timestamp: new Date().toISOString(),
         metadata: { answers: dcsAnswers },
+      });
+
+      trackFollowup(currentFile, currentSpeaker, {
+        event_type: "survey_complete",
+        survey_type: "dcs",
+        metadata: { answer_count: Object.keys(dcsAnswers).length },
       });
 
       setDcsSubmitted(true);
@@ -1546,6 +1622,12 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
         metadata: { answers: riskAnswers },
       });
 
+      trackFollowup(currentFile, currentSpeaker, {
+        event_type: "survey_complete",
+        survey_type: "risk_perception",
+        metadata: { answer_count: Object.keys(riskAnswers).length },
+      });
+
       setRiskSubmitted(true);
     } catch (error) {
       console.error("Risk submission error:", error);
@@ -1570,6 +1652,12 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
         elementId: "Satisfaction_Submit",
         timestamp: new Date().toISOString(),
         metadata: { answers: satisfactionAnswers },
+      });
+
+      trackFollowup(currentFile, currentSpeaker, {
+        event_type: "survey_complete",
+        survey_type: "satisfaction",
+        metadata: { answer_count: Object.keys(satisfactionAnswers).length },
       });
 
       setSatisfactionSubmitted(true);
@@ -1714,6 +1802,14 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
                   isDark={isDarkMode}
                   interventionName="treatment"
                   onTrackEvent={handleTrackEvent}
+                  onQuestionView={(qid, idx) =>
+                    trackFollowup(currentFile, currentSpeaker, {
+                      event_type: "survey_step_view",
+                      survey_type: "sdm",
+                      question_id: qid,
+                      step_number: idx + 1,
+                    })
+                  }
                 />
 
                 {sdmSubmitted && (
@@ -1763,6 +1859,14 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
                   onProgressSave={saveDCSProgress}
                   isDark={isDarkMode}
                   onTrackEvent={handleTrackEvent}
+                  onQuestionView={(qid, idx) =>
+                    trackFollowup(currentFile, currentSpeaker, {
+                      event_type: "survey_step_view",
+                      survey_type: "dcs",
+                      question_id: qid,
+                      step_number: idx + 1,
+                    })
+                  }
                 />
 
                 {dcsSubmitted && (
@@ -1832,6 +1936,14 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
                   summaries={topicSummaries}
                   isDark={isDarkMode}
                   onTrackEvent={handleTrackEvent}
+                  onQuestionView={(qid, idx) =>
+                    trackFollowup(currentFile, currentSpeaker, {
+                      event_type: "survey_step_view",
+                      survey_type: "risk_perception",
+                      question_id: qid,
+                      step_number: idx + 1,
+                    })
+                  }
                 />
 
                 {riskSubmitted && (

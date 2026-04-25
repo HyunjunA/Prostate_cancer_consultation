@@ -295,6 +295,8 @@ interface DecisionalConflictSurveyProps {
     elementId: string;
     metadata?: Record<string, any>;
   }) => void;
+  // Pattern A behavior tracking — fires whenever the visible question changes.
+  onQuestionView?: (questionId: string, index: number) => void;
 }
 
 export const DecisionalConflictSurvey: React.FC<
@@ -307,11 +309,16 @@ export const DecisionalConflictSurvey: React.FC<
   isDark = false,
   // physicianName removed — survey text now uses generic "your doctor" phrasing
   onTrackEvent,
+  onQuestionView,
 }) => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = React.useState(0);
 
   const totalQuestions = DCS_QUESTIONS.length;
   const currentQuestion = DCS_QUESTIONS[currentQuestionIndex];
+
+  React.useEffect(() => {
+    onQuestionView?.(currentQuestion.id, currentQuestionIndex);
+  }, [currentQuestionIndex, currentQuestion.id, onQuestionView]);
   const currentAnswer =
     answers[currentQuestion.id as keyof DecisionalConflictAnswers];
   const isCurrentAnswered = currentAnswer !== null;

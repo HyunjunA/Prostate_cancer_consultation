@@ -184,9 +184,12 @@ async def update_doctor_rewrite(
     """Insert new doctor rewrite log record with full data"""
     logger.debug("update_doctor_rewrite: file=%s, i=%d, i2=%d, class=%s", update_data.file, update_data.i, update_data.i2, update_data.class_)
 
-    # Check if file exists in sentence_prediction
-    file_exists_stmt = select(func.count()).select_from(SentencePrediction).where(
-        SentencePrediction.patient_id == update_data.file
+    # Check if the source filename has been analyzed. transcript_analysis_log
+    # stores the long source_filename that the frontend uses (e.g.
+    # "Input_Keystrokes REC 001 (SID 10).xlsx"); sentence_prediction.patient_id
+    # uses a short SID-form which does NOT match the file argument here.
+    file_exists_stmt = select(func.count()).select_from(TranscriptAnalysisLog).where(
+        TranscriptAnalysisLog.source_filename == update_data.file
     )
     file_exists = (await db.execute(file_exists_stmt)).scalar_one() > 0
 
