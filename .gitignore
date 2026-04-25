@@ -4,6 +4,7 @@ notused
 .env
 .env.*
 !.env.example
+!.env.*.example
 
 # Python
 __pycache__/
@@ -48,6 +49,10 @@ archive/
 
 # PDF build scratch dirs
 docs/architecture/_build_pdf/
+
+# Native deployment env files (host-local credentials, never committed)
+*.native
+.env.native
 
 # Claude Code evaluation harness (local-only test/eval tooling)
 .harness/
