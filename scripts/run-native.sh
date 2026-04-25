@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# ============================================================================
+#  run-native.sh — unified native-mode entry point (Phase 6)
+#
+#  Brings up the full native-mode stack:
+#    - Native postgres + redis (already running via brew services)
+#    - Docker NLP-classifiers + Docker webapp (docker-compose-minimal.yml)
+#    - Native Backend FastAPI (uvicorn, foreground)
+#
+#  Usage:
+#    bash scripts/run-native.sh                # foreground backend
+#    bash scripts/run-native.sh --reload       # dev hot-reload
+#    bash scripts/run-native.sh --skip-docker  # assume webapp+nlp already up
+#    bash scripts/run-native.sh --backend-only # skip docker entirely
+#
+#  Stop:
+#    Ctrl-C        # stops backend
+#    docker compose -f docker-compose-minimal.yml down   # stops webapp+nlp
+#
+#  Reference: dev_docs/DEPLOYMENT_NATIVE_PLAN.md (Phase 6)
+# ============================================================================
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+cd "$REPO_ROOT"
+
+GREEN="\033[92m"; YELLOW="\033[93m"; BOLD="\033[1m"; RESET="\033[0m"
+section() { echo ""; echo -e "${BOLD}${GREEN}=== $1 ===${RESET}"; }
+warn()    { echo -e "  ${YELLOW}⚠${RESET} $1"; }
+
+# ── Args ────────────────────────────────────────────────────────────────────
+SKIP_DOCKER=0
+BACKEND_ONLY=0
+BACKEND_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --skip-docker)  SKIP_DOCKER=1; shift ;;
+        --backend-only) BACKEND_ONLY=1; SKIP_DOCKER=1; shift ;;
+        --reload|--workers|--host|--port)
+            BACKEND_ARGS+=("$1")
+            if [[ -n "${2:-}" && "${2:0:2}" != "--" ]]; then
+                BACKEND_ARGS+=("$2"); shift 2
+            else
+                shift
+            fi ;;
+        -h|--help)
+            grep -E '^#( |$)' "$0" | sed 's/^# \?//'
+            exit 0 ;;
+        *)
+            echo "Unknown arg: $1" >&2; exit 2 ;;
+    esac
+done
+
+# ── 0. Sanity ──────────────────────────────────────────────────────────────
+if [[ ! -f app/Backend/.env.native ]]; then
+    echo "✗ app/Backend/.env.native missing — copy from .env.native.example" >&2
+    exit 1
+fi
+
+if [[ ! -f app/Webapp/.env.native && $BACKEND_ONLY -eq 0 ]]; then
+    warn "app/Webapp/.env.native missing — copying from .example"
+    cp app/Webapp/.env.native.example app/Webapp/.env.native
+fi
+
+# ── 1. Start NLP + webapp Docker (unless skipped) ──────────────────────────
+if [[ $SKIP_DOCKER -eq 0 ]]; then
+    section "Starting Docker (NLP + webapp only)"
+    docker compose -f docker-compose-minimal.yml up -d
+    echo "  Waiting for NLP healthcheck (up to 90s) ..."
+
+    DEADLINE=$((SECONDS + 120))
+    while [[ $SECONDS -lt $DEADLINE ]]; do
+        STATUS=$(docker inspect --format '{{.State.Health.Status}}' prostatecancer-nlp-native 2>/dev/null || echo "missing")
+        if [[ "$STATUS" == "healthy" ]]; then
+            echo "  ✓ NLP healthy"
+            break
+        fi
+        sleep 3
+    done
+
+    if [[ "$STATUS" != "healthy" ]]; then
+        warn "NLP not healthy yet — proceeding anyway. Check: docker logs prostatecancer-nlp-native"
+    fi
+else
+    section "Skipping Docker (--skip-docker)"
+fi
+
+# ── 2. Backend native (foreground) ──────────────────────────────────────────
+section "Starting native Backend"
+exec bash "$SCRIPT_DIR/run-backend-native.sh" "${BACKEND_ARGS[@]}"
