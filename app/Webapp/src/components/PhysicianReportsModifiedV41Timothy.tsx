@@ -12,6 +12,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { sendTrackingEvents } from "@/api/trackingApi";
+import { trackDoctor, startSession, endSession } from "@/tracking/track";
 import { getOrCreateSession } from "@/tracking/utils/session.utils";
 import { TrackingEventManager } from "@/tracking/lib/TrackingEventManager";
 import type { TrackingEvent } from "@/tracking/lib/TrackingEventManager";
@@ -2800,6 +2801,15 @@ const DetailView: React.FC<DetailViewProps> = ({
   const handleSaveRewrite = async () => {
     if (!newSentence.trim() || !currentSentence) return;
 
+    if (selectedSpeaker) {
+      trackDoctor(selectedSpeaker, selectedFile || null, {
+        event_type: "rewrite_apply",
+        target_type: "sentence",
+        target_id: String(currentSentence.i),
+        metadata: { topic: topicName, length: newSentence.length },
+      });
+    }
+
     setSaveStatus({ status: "saving", message: "Scoring..." });
     setRescoring(true);
 
@@ -3538,6 +3548,10 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   const physicianTrackingRef = useRef(new TrackingEventManager());
   const pageLoadTimeRef = useRef<number>(Date.now());
   const rewriteInputFiredRef = useRef(false);
+  // Pattern A: ensure page_view fires exactly once per session and view_change
+  // skips the initial render (which is page_view's territory).
+  const pageViewFiredRef = useRef(false);
+  const previousViewRef = useRef<string | null>(null);
 
   const trackEvent = useCallback((eventType: string, elementId: string, metadata?: Record<string, any>) => {
     physicianTrackingRef.current.recordEvent({
@@ -3546,7 +3560,47 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       timestamp: new Date().toISOString(),
       metadata,
     } as TrackingEvent);
-  }, []);
+
+    // Pattern A: route a few legacy event names to the new doctor_behavior table.
+    // Skip until selectedSpeaker is set so we never log "unknown" sessions.
+    if (!selectedSpeaker) return;
+    const speaker = selectedSpeaker;
+    const file = (metadata as any)?.fileId || selectedPatient?.fileName || null;
+    if (eventType === "patient_select") {
+      trackDoctor(speaker, file, {
+        event_type: "patient_select",
+        target_type: "patient",
+        target_id: file ?? undefined,
+        metadata: metadata ?? {},
+      });
+    } else if (eventType === "topic_select") {
+      const topicName = (metadata as any)?.topicName;
+      trackDoctor(speaker, file, {
+        event_type: "topic_select",
+        target_type: "topic",
+        target_id: topicName,
+        metadata: metadata ?? {},
+      });
+    } else if (eventType === "sentence_select") {
+      const idx = (metadata as any)?.sentenceIdx;
+      trackDoctor(speaker, file, {
+        event_type: "sentence_select",
+        target_type: "sentence",
+        target_id: idx != null ? String(idx) : undefined,
+        metadata: metadata ?? {},
+      });
+    } else if (eventType === "rubric_modal_open") {
+      trackDoctor(speaker, file, {
+        event_type: "rubric_open",
+        metadata: metadata ?? {},
+      });
+    } else if (eventType === "rubric_modal_close") {
+      trackDoctor(speaker, file, {
+        event_type: "rubric_close",
+        metadata: metadata ?? {},
+      });
+    }
+  }, [selectedSpeaker, selectedPatient]);
 
   // Flush events to backend
   useEffect(() => {
@@ -3585,9 +3639,46 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
     const handleBeforeUnload = () => {
       recordTimeSpent();
       flushEvents(true);
+      if (selectedSpeaker) {
+        trackDoctor(selectedSpeaker, selectedPatient?.fileName || null, {
+          event_type: "session_end",
+          metadata: { view: currentView },
+        });
+      }
     };
 
     trackEvent("page_enter", "physician_dashboard");
+
+    if (selectedSpeaker && !pageViewFiredRef.current) {
+      pageViewFiredRef.current = true;
+      trackDoctor(selectedSpeaker, selectedPatient?.fileName || null, {
+        event_type: "page_view",
+        metadata: { page: "physician_dashboard", view: currentView },
+      });
+    }
+
+    // Pattern A: OnboardingTour dispatches "tour-open" whenever the tour
+    // starts (auto on first visit OR via the Restart button) and "tour-end"
+    // when it finishes (completed all steps OR skipped early). The detail
+    // payload distinguishes the two cases.
+    const handleTourOpen = (e: Event) => {
+      if (!selectedSpeaker) return;
+      const detail = (e as CustomEvent).detail || {};
+      trackDoctor(selectedSpeaker, selectedPatient?.fileName || null, {
+        event_type: "tour_open",
+        metadata: { trigger: detail.trigger ?? "auto", view: detail.view ?? currentView },
+      });
+    };
+    const handleTourEnd = (e: Event) => {
+      if (!selectedSpeaker) return;
+      const detail = (e as CustomEvent).detail || {};
+      trackDoctor(selectedSpeaker, selectedPatient?.fileName || null, {
+        event_type: "tour_end",
+        metadata: { status: detail.status ?? "finished", view: detail.view ?? currentView },
+      });
+    };
+    window.addEventListener("tour-open", handleTourOpen);
+    window.addEventListener("tour-end", handleTourEnd);
 
     const periodicFlushTimer = setInterval(() => flushEvents(false), 10_000);
 
@@ -3600,17 +3691,46 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       flushEvents(true);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("tour-open", handleTourOpen);
+      window.removeEventListener("tour-end", handleTourEnd);
     };
-  }, [selectedSpeaker, selectedPatient?.fileName, trackEvent]);
+  }, [selectedSpeaker, selectedPatient?.fileName, trackEvent, currentView]);
 
-  // Track view changes
+  // Pattern A: page-lifetime session — mount-only so re-renders triggered by
+  // selectedPatient/currentView changes do not cause the session to restart.
   useEffect(() => {
+    startSession();
+    return () => endSession();
+  }, []);
+
+  // Track view changes — only on actual transitions (skip the initial render,
+  // which page_view already covers).
+  useEffect(() => {
+    const prev = previousViewRef.current;
+    previousViewRef.current = currentView;
+    if (prev === null || prev === currentView) {
+      // First render or no actual change — Pattern A view_change does NOT fire.
+      // Legacy trackEvent still fires for backward-compat with the in-memory buffer.
+      trackEvent("view_change", `${currentView}_view`, {
+        view: currentView,
+        ...(selectedPatient && { fileId: selectedPatient.fileName, overallScore: selectedPatient.overallScore }),
+        ...(selectedTopic && { topicName: selectedTopic.name }),
+      });
+      rewriteInputFiredRef.current = false;
+      return;
+    }
+    if (selectedSpeaker) {
+      trackDoctor(selectedSpeaker, selectedPatient?.fileName || null, {
+        event_type: "view_change",
+        metadata: { from: prev, to: currentView },
+      });
+    }
     trackEvent("view_change", `${currentView}_view`, {
       view: currentView,
       ...(selectedPatient && { fileId: selectedPatient.fileName, overallScore: selectedPatient.overallScore }),
-      ...(selectedTopic && { topicName: selectedTopic.topicName }),
+      ...(selectedTopic && { topicName: selectedTopic.name }),
     });
-    rewriteInputFiredRef.current = false; // reset rewrite input tracking on view change
+    rewriteInputFiredRef.current = false;
   }, [currentView, trackEvent]);
 
   // Track search (debounced) — moved after filteredPatients definition
@@ -4086,7 +4206,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           }}
           setSelectedPatient={setSelectedPatient}
           setSelectedTopic={(topic) => {
-            if (topic) trackEvent("topic_select", `grid_topic_${topic.topicName}`, { topicName: topic.topicName });
+            if (topic) trackEvent("topic_select", `grid_topic_${topic.name}`, { topicName: topic.name });
             setSelectedTopic(topic);
           }}
           setSelectedSuggestion={setSelectedSuggestion}
@@ -4110,7 +4230,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           topicsData={topicsData}
           selectedSentenceIdx={selectedSentenceIdx}
           setSelectedSentenceIdx={(idx) => {
-            trackEvent("sentence_select", `detail_sentence_${idx}`, { sentenceIdx: idx, topicName: selectedTopic.topicName });
+            trackEvent("sentence_select", `detail_sentence_${idx}`, { sentenceIdx: idx, topicName: selectedTopic.name });
             setSelectedSentenceIdx(idx);
           }}
           showRewrite={showRewrite}
@@ -4118,14 +4238,14 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           newSentence={newSentence}
           setNewSentence={(val) => {
             if (!rewriteInputFiredRef.current && val.length > 0) {
-              trackEvent("rewrite_input", "detail_rewrite_textarea", { topicName: selectedTopic.topicName });
+              trackEvent("rewrite_input", "detail_rewrite_textarea", { topicName: selectedTopic.name });
               rewriteInputFiredRef.current = true;
             }
             setNewSentence(val);
           }}
           selectedSuggestion={selectedSuggestion}
           setSelectedSuggestion={(suggestion) => {
-            if (suggestion) trackEvent("suggestion_click", `detail_suggestion_${suggestion.targetScore}`, { topicName: selectedTopic.topicName, targetScore: suggestion.targetScore });
+            if (suggestion) trackEvent("suggestion_click", `detail_suggestion_${suggestion.targetScore}`, { topicName: selectedTopic.name, targetScore: suggestion.targetScore });
             setSelectedSuggestion(suggestion);
           }}
           saveStatus={saveStatus}
@@ -4135,9 +4255,9 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           selectedFile={selectedFile}
           selectedSpeaker={selectedSpeaker}
           scoreSentence={async (...args) => {
-            trackEvent("rewrite_score_click", "detail_try_score", { topicName: selectedTopic.topicName });
+            trackEvent("rewrite_score_click", "detail_try_score", { topicName: selectedTopic.name });
             const result = await scoreSentence(...args);
-            if (result) trackEvent("rewrite_score_result", "detail_score_result", { topicName: selectedTopic.topicName, newScore: result });
+            if (result) trackEvent("rewrite_score_result", "detail_score_result", { topicName: selectedTopic.name, newScore: result });
             return result;
           }}
           saveRewriteWithTimestamp={saveRewriteWithTimestamp}
@@ -4145,7 +4265,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           fetchScoreSummary={fetchScoreSummary}
           setScoreSummaryLoading={setScoreSummaryLoading}
           setCurrentView={(view) => {
-            if (view === "grid") trackEvent("button_click", "detail_back_to_grid", { topicName: selectedTopic.topicName });
+            if (view === "grid") trackEvent("button_click", "detail_back_to_grid", { topicName: selectedTopic.name });
             setCurrentView(view);
           }}
           setSelectedTopic={setSelectedTopic}
@@ -4155,9 +4275,9 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           clearRewriteHistory={clearRewriteHistory}
           // NEW: AI Rewrite props
           generateAIRewrite={async (...args) => {
-            trackEvent("ai_rewrite_generate", "detail_ai_rewrite_generate", { topicName: selectedTopic.topicName });
+            trackEvent("ai_rewrite_generate", "detail_ai_rewrite_generate", { topicName: selectedTopic.name });
             const result = await generateAIRewrite(...args);
-            trackEvent("ai_rewrite_result", "detail_ai_rewrite_result", { topicName: selectedTopic.topicName, success: !!result });
+            trackEvent("ai_rewrite_result", "detail_ai_rewrite_result", { topicName: selectedTopic.name, success: !!result });
             return result;
           }}
           aiRewriteLoading={aiRewriteLoading}

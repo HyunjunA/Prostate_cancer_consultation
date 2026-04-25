@@ -274,6 +274,14 @@ const OnboardingTour: React.FC<OnboardingTourProps> = ({
 
       if (!completedViews[currentView]) {
         setRun(true);
+        // Pattern A: notify the parent so it can record a tour_open event
+        // (with metadata.trigger="auto" — the tour was not explicitly
+        // requested by the doctor, it auto-started on first visit).
+        window.dispatchEvent(
+          new CustomEvent("tour-open", {
+            detail: { trigger: "auto", view: currentView },
+          }),
+        );
       } else if (lastTourView !== currentView) {
         setRun(false);
       }
@@ -300,6 +308,14 @@ const OnboardingTour: React.FC<OnboardingTourProps> = ({
           TOUR_COMPLETED_KEY,
           JSON.stringify(completedViews),
         );
+        // Pattern A: notify parent so it can record a tour_end event with
+        // the actual end status (finished after all steps vs skipped early).
+        const endStatus = status === STATUS.FINISHED ? "finished" : "skipped";
+        window.dispatchEvent(
+          new CustomEvent("tour-end", {
+            detail: { status: endStatus, view: currentView },
+          }),
+        );
       }
 
       if (type === EVENTS.STEP_AFTER || type === EVENTS.TARGET_NOT_FOUND) {
@@ -309,15 +325,23 @@ const OnboardingTour: React.FC<OnboardingTourProps> = ({
     [currentView],
   );
 
-  // Public method to restart tour (exposed via custom event)
+  // Public method to restart tour (exposed via custom event). When the
+  // RestartTourButton dispatches "restart-tour", we both run the tour and
+  // emit a "tour-open" event with metadata.trigger="restart_button" so the
+  // parent can record a Pattern A tour_open behavior event.
   useEffect(() => {
     const handleRestart = () => {
       setStepIndex(0);
       setRun(true);
+      window.dispatchEvent(
+        new CustomEvent("tour-open", {
+          detail: { trigger: "restart_button", view: currentView },
+        }),
+      );
     };
     window.addEventListener("restart-tour", handleRestart);
     return () => window.removeEventListener("restart-tour", handleRestart);
-  }, []);
+  }, [currentView]);
 
   if (steps.length === 0) return null;
 

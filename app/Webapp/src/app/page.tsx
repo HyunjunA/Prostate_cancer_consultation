@@ -264,14 +264,19 @@ export default function Home() {
     visitType: currentView === "patient" ? visitType : "",
   });
 
-  // rrweb session recording with PHI masking
-  // Start new recording when patient or visit type changes
+  // rrweb session recording with PHI masking — Pattern A area-aware.
+  // Start a new capture whenever the visible view/file changes; tag it with
+  // the matching area so admin can filter recordings by interface.
   useEffect(() => {
-    if (currentView !== "selection" && fileId) {
-      stopRecording(); // stop previous recording if any
-      const sessionId = `rec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      startRecording(sessionId, fileId, currentView === "patient" ? visitType : "");
-    }
+    if (currentView === "selection" || !fileId) return;
+    let area: "patient_first" | "patient_followup" | "doctor" | null = null;
+    if (currentView === "doctor") area = "doctor";
+    else if (currentView === "patient" && visitType === "first") area = "patient_first";
+    else if (currentView === "patient" && visitType === "followup") area = "patient_followup";
+    if (!area) return;
+    stopRecording(); // stop previous recording if any
+    const sessionId = `rec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    startRecording(sessionId, fileId, area);
     return () => { stopRecording(); };
   }, [currentView, fileId, visitType]);
 

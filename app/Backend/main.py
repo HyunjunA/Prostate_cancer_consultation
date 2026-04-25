@@ -35,7 +35,10 @@ from routes_patient import router as patient_router
 from routes_surveys import router as surveys_router
 from routes_nlp import router as nlp_router
 from routes_transcript import router as transcript_router
-from routes_tracking import router as tracking_router
+from routes_track_patient_first import router as track_patient_first_router
+from routes_track_patient_followup import router as track_patient_followup_router
+from routes_track_doctor import router as track_doctor_router
+from routes_track_recordings import router as track_recordings_router
 from auth.admin_routes import router as auth_router
 from redis_client import init_redis, close_redis, get_redis
 from nlp_classifier_client import close_http_client, nlp_health_check
@@ -88,7 +91,10 @@ app.include_router(patient_router)
 app.include_router(surveys_router)
 app.include_router(nlp_router)
 app.include_router(transcript_router)
-app.include_router(tracking_router)
+app.include_router(track_patient_first_router)
+app.include_router(track_patient_followup_router)
+app.include_router(track_doctor_router)
+app.include_router(track_recordings_router)
 app.include_router(auth_router)
 
 # ──────────────────────────────────────────────────────────────────────────────

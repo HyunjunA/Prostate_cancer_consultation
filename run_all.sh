@@ -63,7 +63,7 @@ ok()      { echo "  ✓ $1"; }
 fail()    { echo "  ✗ $1"; exit 1; }
 
 # ============================================================================
-#  STEP 1 — Load NLP Classifier Docker Image
+#  STEP 1 — Load NLP Classifier Docker Image (from Michael's OCI archive)
 # ============================================================================
 section "Step 1: Load r01-nlp-classifiers Docker image"
 

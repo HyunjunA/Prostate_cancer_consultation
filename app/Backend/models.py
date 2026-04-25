@@ -188,31 +188,12 @@ class SentencePrediction(Base):
 
 
 # =====================================================
-# 6. User Interaction Tracking
+# 6. (removed) UserInteractionLog — replaced by Pattern A behavior tables
 # =====================================================
-
-class UserInteractionLog(Base):
-    """Tracks user interaction events from patient/physician UI."""
-    __tablename__ = 'user_interaction_log'
-    __table_args__ = (
-        Index('idx_uil_file_event_type', 'file', 'event_type'),
-    )
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    session_id = Column(String(100), nullable=False, index=True)
-    role = Column(String(20), nullable=False, server_default="patient")  # low cardinality, no index
-    visit_type = Column(String(20))  # "first" | "followup" | null (physician/legacy)
-    file = Column(String(255), nullable=False)  # covered by composite idx_uil_file_event_type
-    speaker = Column(String(100), nullable=False)  # rarely queried alone
-    event_type = Column(String(50), nullable=False, index=True)
-    element_id = Column(String(255))
-    event_data = Column(JSONB)
-    device_type = Column(String(20))
-    client_timestamp = Column(TIMESTAMP(timezone=True), index=True)
-    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-
-    def __repr__(self):
-        return f"<UserInteractionLog(id={self.id}, session_id={self.session_id}, event_type={self.event_type})>"
+# The legacy single user_interaction_log table has been split into
+# patient_first_behavior, patient_followup_survey, and doctor_behavior
+# (see section 7b below). The DROP TABLE migration is in Alembic
+# revision 003_drop_user_interaction_log.
 
 
 # =====================================================
@@ -231,9 +212,70 @@ class SessionRecording(Base):
     recording_data = Column(LargeBinary)  # gzipped rrweb events JSON
     event_count = Column(Integer, nullable=False, default=0)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    area = Column(String(20), nullable=False, server_default="unknown")  # patient_first | patient_followup | doctor | unknown
 
     def __repr__(self):
         return f"<SessionRecording(id={self.id}, session_id={self.session_id}, chunk={self.chunk_index})>"
+
+
+# =====================================================
+# 7b. Behavior Tracking (Pattern A — 3-area split)
+# =====================================================
+
+class PatientFirstBehavior(Base):
+    """Patient first-visit interaction events (Pattern A)."""
+    __tablename__ = 'patient_first_behavior'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(100), nullable=False)
+    file = Column(String(255), nullable=False)
+    speaker = Column(String(100), nullable=False)
+    event_type = Column(String(30), nullable=False)
+    domain = Column(String(50))
+    rating = Column(Integer)  # SMALLINT in DB; SQLAlchemy Integer is fine for read/write
+    event_metadata = Column('metadata', JSONB, nullable=False, server_default='{}')
+    device_type = Column(String(20))
+    client_timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+
+class PatientFollowupSurvey(Base):
+    """Patient follow-up survey behavior events (Pattern A).
+
+    Stores behavior metadata (timing, ordering, step navigation) only.
+    Canonical answer payloads live in survey_submission_log.
+    """
+    __tablename__ = 'patient_followup_survey'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(100), nullable=False)
+    file = Column(String(255), nullable=False)
+    speaker = Column(String(100), nullable=False)
+    event_type = Column(String(30), nullable=False)
+    survey_type = Column(String(30))
+    question_id = Column(String(50))
+    step_number = Column(Integer)  # SMALLINT in DB
+    event_metadata = Column('metadata', JSONB, nullable=False, server_default='{}')
+    device_type = Column(String(20))
+    client_timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+
+class DoctorBehavior(Base):
+    """Doctor consultation interaction events (Pattern A)."""
+    __tablename__ = 'doctor_behavior'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(100), nullable=False)
+    file = Column(String(255))  # nullable: doctor dashboard not tied to a specific patient file
+    speaker = Column(String(100), nullable=False)
+    event_type = Column(String(30), nullable=False)
+    target_type = Column(String(20))  # patient | topic | sentence
+    target_id = Column(String(255))
+    event_metadata = Column('metadata', JSONB, nullable=False, server_default='{}')
+    device_type = Column(String(20))
+    client_timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
 
 # =====================================================
@@ -274,3 +316,4 @@ class LLMDomainScoringAndSummary(Base):
 
     def __repr__(self):
         return f"<LLMDomainScoringAndSummary(id={self.id}, domain={self.domain}, ai_score={self.ai_score})>"
+

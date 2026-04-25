@@ -69,6 +69,16 @@ import { usePatientData } from "@/hooks/usePatientData";
 import { usePatientId } from "@/stores/usePatientId";
 import { useFileId } from "@/stores/useFileId";
 import { sendTrackingEvents } from "@/api/trackingApi";
+import { trackFirst, startSession, endSession, type Domain } from "@/tracking/track";
+
+// Display name → backend domain code (cp/le/ed/inc/ius)
+const TOPIC_TO_DOMAIN: Record<string, Domain> = {
+  "Cancer Prognosis": "cp",
+  "Life Expectancy": "le",
+  "Erectile Dysfunction": "ed",
+  "Urinary Incontinence": "inc",
+  "Irritative Urinary Symptoms": "ius",
+};
 import { getOrCreateSession } from "@/tracking/utils/session.utils";
 
 import {
@@ -462,12 +472,14 @@ const CLASS_TO_TOPIC_MAP: Record<string, string> = {
   "life_expectancy": "Life Expectancy",
 };
 
-const TOPIC_TO_CLASS_NUMBER: Record<string, 1 | 2 | 3 | 4 | 5> = {
-  "Cancer Prognosis": 1,
-  "Life Expectancy": 2,
-  "Erectile Dysfunction": 3,
-  "Urinary Incontinence": 4,
-  "Irritative Urinary Symptoms": 5,
+// Display name → backend `domain` value (matches patient_summary_domain.domain
+// strings written by the original R/AI pipeline). Used by /api/patient/scoring.
+const TOPIC_TO_BACKEND_DOMAIN: Record<string, string> = {
+  "Cancer Prognosis": "cancer_prognosis",
+  "Life Expectancy": "life_expectancy",
+  "Erectile Dysfunction": "erectile_dysfunction_potency",
+  "Urinary Incontinence": "continence",
+  "Irritative Urinary Symptoms": "irritative_urinary_symptoms_frequency_urgency_nocturnia",
 };
 
 const TOPIC_ORDER = [
@@ -582,6 +594,11 @@ interface HelpfulnessRatingProps {
   isDark?: boolean;
   trackingName?: string;
   disabled?: boolean;
+  // Pattern A behavior tracking — when all three are provided, a
+  // rating_click event is sent to /api/track/patient-first.
+  trackFile?: string;
+  trackSpeaker?: string;
+  trackDomain?: Domain;
 }
 
 const HelpfulnessRating: React.FC<HelpfulnessRatingProps> = React.memo(({
@@ -590,6 +607,9 @@ const HelpfulnessRating: React.FC<HelpfulnessRatingProps> = React.memo(({
   isDark,
   trackingName,
   disabled = false,
+  trackFile,
+  trackSpeaker,
+  trackDomain,
 }) => {
   return (
     // flex-nowrap forces all 5 buttons onto a single row; whitespace-nowrap on
@@ -617,6 +637,14 @@ const HelpfulnessRating: React.FC<HelpfulnessRatingProps> = React.memo(({
                     ratingMeaning: HELPFULNESS_LABELS[i],
                   },
                 });
+                if (trackFile && trackSpeaker && trackDomain) {
+                  trackFirst(trackFile, trackSpeaker, {
+                    event_type: "rating_click",
+                    domain: trackDomain,
+                    rating: i,
+                    metadata: { rating_meaning: HELPFULNESS_LABELS[i] },
+                  });
+                }
               }
             }}
             className={cx(
@@ -807,6 +835,9 @@ interface TopicCardProps {
   isDark?: boolean;
   patientId?: string;
   visitId?: string;
+  trackFile?: string;
+  trackSpeaker?: string;
+  trackDomain?: Domain;
 }
 
 const TopicCard: React.FC<TopicCardProps> = ({
@@ -825,6 +856,9 @@ const TopicCard: React.FC<TopicCardProps> = ({
   isDark,
   patientId,
   visitId,
+  trackFile,
+  trackSpeaker,
+  trackDomain,
 }) => {
   const topicId = topicName.replace(/\s+/g, "");
   const colors = TOPIC_COLORS[topicName] || TOPIC_COLORS["Cancer Prognosis"];
@@ -973,6 +1007,9 @@ const TopicCard: React.FC<TopicCardProps> = ({
               onChange={onRatingChange}
               isDark={isDark}
               trackingName={`TopicRating_${topicId}`}
+              trackFile={trackFile}
+              trackSpeaker={trackSpeaker}
+              trackDomain={trackDomain}
             />
             {rating === 0 && (
               <p
@@ -1156,6 +1193,12 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
     dwellTime: { minDwellTime: 2000, trackingInterval: 500 },
   });
 
+  // Pattern A: page-lifetime session — mount-only.
+  useEffect(() => {
+    startSession();
+    return () => endSession();
+  }, []);
+
   // [Feedback #9] Track total time spent on this report page
   useEffect(() => {
     const pageEnteredAt = Date.now();
@@ -1163,6 +1206,11 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
       eventType: "page_enter",
       elementId: "patient_report_page",
       metadata: { timestamp: new Date().toISOString() },
+    });
+
+    trackFirst(currentFile, currentSpeaker, {
+      event_type: "page_view",
+      metadata: { page: "patient_first_visit_report" },
     });
 
     const handleBeforeUnload = () => {
@@ -1175,6 +1223,11 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
           timeSpentSeconds: Math.round(timeSpentMs / 1000),
           timestamp: new Date().toISOString(),
         },
+      });
+
+      trackFirst(currentFile, currentSpeaker, {
+        event_type: "session_end",
+        metadata: { time_spent_seconds: Math.round(timeSpentMs / 1000) },
       });
     };
 
@@ -1382,14 +1435,14 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
   const handleRatingChange = async (topic: string, newRating: number) => {
     setRatings((prev) => ({ ...prev, [topic]: newRating }));
 
-    const classNumber = TOPIC_TO_CLASS_NUMBER[topic];
+    const backendDomain = TOPIC_TO_BACKEND_DOMAIN[topic];
 
-    if (classNumber) {
+    if (backendDomain) {
       try {
         await updateSingleClassScore(
           currentFile,
           currentSpeaker,
-          classNumber,
+          backendDomain,
           newRating,
         );
       } catch (err) {
@@ -1411,6 +1464,15 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
       dimensionType: topic,
       metadata: { topic },
     });
+
+    const domain = TOPIC_TO_DOMAIN[topic];
+    if (domain) {
+      trackFirst(currentFile, currentSpeaker, {
+        event_type: isCurrentlyExpanded ? "topic_close" : "topic_open",
+        domain,
+        metadata: { topic },
+      });
+    }
   };
 
   /**
@@ -1436,6 +1498,15 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
         summaryRatingAtExpand: ratings[topic] || null,
       },
     });
+
+    const domain = TOPIC_TO_DOMAIN[topic];
+    if (domain) {
+      trackFirst(currentFile, currentSpeaker, {
+        event_type: isCurrentlyShown ? "evidence_close" : "evidence_open",
+        domain,
+        metadata: { topic, summary_rating_at_expand: ratings[topic] || null },
+      });
+    }
   };
 
   // Rating Progress calculation
@@ -1797,6 +1868,9 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
                 isDark={isDarkMode}
                 patientId={currentSpeaker}
                 visitId={visitId}
+                trackFile={currentFile}
+                trackSpeaker={currentSpeaker}
+                trackDomain={TOPIC_TO_DOMAIN[topic]}
               />
             );
           })}
