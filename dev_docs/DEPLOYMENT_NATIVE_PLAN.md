@@ -298,14 +298,14 @@ Pipeline(native) ──localhost:8001─────────────→ 
 | R/stringi | Native install (accuracy-first, ~10 min compile) |
 | Frontend | Docker kept |
 
-### Still open (confirm before kicking off)
-| Item | Options |
-|---|---|
-| Target OS | A) Mac only, B) +Linux, C) both |
-| Nginx | A) Native install, B) skip (expose Backend directly) |
-| Webapp → native backend | A) `host.docker.internal:8000`, B) Webapp also native (`npm start`) |
-| Existing Docker DB data | A) start fresh on native DB, B) `pg_dump` → restore |
-| Multi-user | A) each engineer self-installs native, B) shared native postgres |
+### Locked decisions (2026-04-25)
+| Item | Decision | Impact |
+|---|---|---|
+| Target OS | **C) Mac + Linux** | Both `setup-native-mac.sh` and `setup-native-linux.sh` (+1h) |
+| Nginx | **B) skip** (Backend exposed directly) | No nginx install code; Backend listens on :8000 |
+| Webapp → native backend | **A) `host.docker.internal:8000`** | Webapp stays Docker; env file points to host URL |
+| Existing Docker DB data | **A) start fresh on native DB** | No `pg_dump` needed; standalone runner fills it |
+| Multi-user | **A) each engineer self-installs native** | No shared infra; setup script is the core |
 
 ---
 
