@@ -8,7 +8,7 @@ the existing backend modules.
 Usage (from the repo root):
 
     # 1. Make sure native postgres + Docker NLP are up:
-    brew services start postgresql@13 redis            # native
+    brew services start postgresql@16 redis            # native
     docker compose -f docker-compose-minimal.yml up -d # NLP + webapp
 
     # 2. Activate the venv and run:

@@ -38,7 +38,7 @@
 ### 1-2. Locked scope decisions
 | Component | Deployment | Reason |
 |---|---|---|
-| PostgreSQL | **Native** (`brew install postgresql@13`) | Manager request |
+| PostgreSQL | **Native** (`brew install postgresql@16`) | Manager request |
 | Redis | **Native** (`brew install redis`) or skip | Manager request |
 | Backend FastAPI | **Native** (`uvicorn` direct) | Manager request |
 | AI Pipeline | **Native** (Python direct) | Manager request (★ critical) |
@@ -159,7 +159,7 @@ Pipeline(native) ──localhost:8001─────────────→ 
 
 **Work**:
 1. `scripts/setup-native-mac.sh`
-   - brew packages: `postgresql@13`, `redis`, `r`, `python@3.10`, `nginx` (optional)
+   - brew packages: `postgresql@16`, `redis`, `r`, `python@3.10`, `nginx` (optional)
    - R stringi 1.8.4 source compile (~10 min)
    - Python venv + `pip install -r app/Backend/requirements.txt`
 2. `scripts/setup-native-linux.sh` (optional — only if requested)
@@ -318,7 +318,7 @@ Pipeline(native) ──localhost:8001─────────────→ 
 | Webapp ↔ native backend CORS | 🟡 frontend broken | Add `http://localhost:3001` to CORS_ORIGINS |
 | Migration order error | 🟡 schema corrupt | Verify with `alembic current` |
 | Native postgres ↔ Docker postgres port clash | 🟡 one fails to start | Disable Docker postgres or move ports |
-| brew/Python version drift across machines | 🟢 install fails | Pin versions (`python@3.10`, `postgresql@13`) |
+| brew/Python version drift across machines | 🟢 install fails | Pin versions (`python@3.10`, `postgresql@16`) |
 | Azure OpenAI key leak | 🔴 security | Placeholder in `.env.native.example`; real key in gitignored `.env.native` |
 
 ---
@@ -337,7 +337,7 @@ Pipeline(native) ──localhost:8001─────────────→ 
 ### 7-2. End-to-end demo (for the manager)
 ```bash
 # 1. Bring everything up
-brew services start postgresql@13 redis
+brew services start postgresql@16 redis
 docker compose -f docker-compose-minimal.yml up -d
 bash scripts/run-backend-native.sh &
 
@@ -411,7 +411,7 @@ The native conversion is almost entirely infrastructure / scripts / docs:
 
 ## Appendix B — Likely traps
 
-1. **PostgreSQL 13 vs 16**: brew's default drifts; pin `postgresql@13`.
+1. **PostgreSQL 16 vs 16**: brew's default drifts; pin `postgresql@16`.
 2. **R 4.x vs 3.x**: brew's `r` is 4.x — fine.
 3. **Apple Silicon vs Intel Mac**: brew prefix differs (`/opt/homebrew` vs `/usr/local`); auto-detect in scripts.
 4. **Docker Desktop must be running** for NLP/webapp; show a clear error message.

@@ -71,7 +71,7 @@ fi
 
 if ! pg_isready -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -q; then
     fail "postgres not listening on $POSTGRES_HOST:$POSTGRES_PORT
-       Start it:  brew services start postgresql@13   (macOS)
+       Start it:  brew services start postgresql@16   (macOS)
                   sudo systemctl start postgresql      (Linux)"
 fi
 ok "postgres listening on $POSTGRES_HOST:$POSTGRES_PORT"

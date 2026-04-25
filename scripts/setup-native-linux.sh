@@ -2,7 +2,7 @@
 # ============================================================================
 #  Native deployment setup — Linux (Ubuntu 20.04+ / Debian 11+)
 #
-#  Installs PostgreSQL 13, Redis, R 4.x with stringi 1.8.4 (ICU 74.1),
+#  Installs PostgreSQL 16, Redis, R 4.x with stringi 1.8.4 (ICU 74.1),
 #  Python 3.10, and creates a Python venv with backend dependencies.
 #
 #  Usage:
@@ -52,8 +52,8 @@ ok "apt-get present"
 # ── Step 1: apt packages ────────────────────────────────────────────────────
 section "Step 1: Install apt packages"
 
-# Add PostgreSQL APT repo for postgresql-13
-if ! apt-cache search ^postgresql-13$ >/dev/null 2>&1 || ! dpkg -l postgresql-13 >/dev/null 2>&1; then
+# Add PostgreSQL APT repo for postgresql-16
+if ! apt-cache search ^postgresql-16$ >/dev/null 2>&1 || ! dpkg -l postgresql-16 >/dev/null 2>&1; then
     info "Adding PostgreSQL APT repository ..."
     apt-get update -qq
     apt-get install -y -qq curl ca-certificates gnupg lsb-release
@@ -66,9 +66,9 @@ if ! apt-cache search ^postgresql-13$ >/dev/null 2>&1 || ! dpkg -l postgresql-13
     apt-get update -qq
 fi
 
-info "Installing postgresql-13 ..."
-apt-get install -y -qq postgresql-13 postgresql-contrib-13
-ok "postgresql-13 installed"
+info "Installing postgresql-16 ..."
+apt-get install -y -qq postgresql-16 postgresql-contrib-16
+ok "postgresql-16 installed"
 
 info "Installing redis-server ..."
 apt-get install -y -qq redis-server
@@ -168,7 +168,7 @@ section "Setup complete"
 cat <<EOF
 
   Native components installed:
-    postgresql-13   $(psql --version 2>/dev/null | head -1)
+    postgresql-16   $(psql --version 2>/dev/null | head -1)
     redis           $(redis-cli --version 2>/dev/null | head -1)
     R               $(R --version 2>/dev/null | head -1)
     stringi         $(R --no-save --quiet -e 'cat(as.character(packageVersion("stringi")))' 2>/dev/null | tail -1) (ICU $(R --no-save --quiet -e 'cat(stringi::stri_info()\$ICU.version)' 2>/dev/null | tail -1))
