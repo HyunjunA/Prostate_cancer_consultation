@@ -1,3 +1,0 @@
-# NLP classifiers OCI archive moved to AI_physician_patient_communication/nlp-classifiers/
-# (see run_all.sh + scripts/run-native.sh for the path).
-# LFS tracking now lives in that sibling repo's .gitattributes.
