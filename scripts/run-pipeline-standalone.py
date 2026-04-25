@@ -177,22 +177,70 @@ def print_delta(before: dict, after: dict) -> None:
         print(f"  {t:<{width}}  {b:>5} → {a:>5}   ({marker})")
 
 
+# ── Resolve a list of transcript paths from --file or --dir ─────────────────
+def _resolve_transcripts(args: argparse.Namespace) -> list[Path]:
+    """Return a sorted list of *.xlsx paths from --file or --dir."""
+    if args.file:
+        p = Path(args.file)
+        if not p.is_absolute():
+            p = (REPO_ROOT / p).resolve()
+        if not p.exists():
+            fail(f"Transcript not found: {p}")
+            sys.exit(1)
+        return [p]
+
+    # --dir mode
+    d = Path(args.dir)
+    if not d.is_absolute():
+        d = (REPO_ROOT / d).resolve()
+    if not d.is_dir():
+        fail(f"Directory not found: {d}")
+        sys.exit(1)
+    files = sorted(d.glob("*.xlsx")) + sorted(d.glob("*.csv"))
+    if not files:
+        fail(f"No .xlsx / .csv files in {d}")
+        sys.exit(1)
+    return files
+
+
+async def _process_one(transcript: Path, Session, cfg, models_mod, pipeline_runner_mod) -> dict | None:
+    """Run pipeline for a single file, return summary or None on failure."""
+    section(f"Pipeline run — {transcript.name}")
+    t0 = time.perf_counter()
+    result = await pipeline_runner_mod.process_single_file(str(transcript), Session, cfg)
+    elapsed = time.perf_counter() - t0
+
+    if not result:
+        fail(f"pipeline returned no result for {transcript.name} (already processed — see [NLP] logs)")
+        return None
+
+    # Find the analysis_id we just inserted
+    from sqlalchemy import select
+    async with Session() as db:
+        r = await db.execute(
+            select(models_mod.TranscriptAnalysisLog.id, models_mod.TranscriptAnalysisLog.ai_overall_score)
+            .where(models_mod.TranscriptAnalysisLog.source_filename == transcript.name)
+            .order_by(models_mod.TranscriptAnalysisLog.id.desc())
+            .limit(1)
+        )
+        row = r.first()
+    aid = row[0] if row else None
+    score = row[1] if row else None
+    print(f"  {GREEN}{BOLD}OK{RESET} — {transcript.name}: {result.get('total_sentences')} sentences in {elapsed:.1f}s   analysis_id={aid}  ai_overall_score={score}")
+    return {"file": transcript.name, "analysis_id": aid, "score": score, "elapsed": elapsed}
+
+
 # ── Main ────────────────────────────────────────────────────────────────────
 async def main(args: argparse.Namespace) -> int:
     configure_logging(args.quiet)
     check_env(skip_ai=args.skip_ai)
 
-    # Resolve transcript path
-    transcript = Path(args.file)
-    if not transcript.is_absolute():
-        transcript = (REPO_ROOT / args.file).resolve()
-    if not transcript.exists():
-        fail(f"Transcript not found: {transcript}")
-        return 1
+    transcripts = _resolve_transcripts(args)
 
-    section("Transcript")
-    print(f"  file: {transcript}")
-    print(f"  size: {transcript.stat().st_size:,} bytes")
+    section("Transcripts to process")
+    for t in transcripts:
+        print(f"  · {t}  ({t.stat().st_size:,} bytes)")
+    print(f"  total: {len(transcripts)} file(s)")
 
     # Build the cfg dict that pipeline_runner expects
     cfg = {
@@ -222,51 +270,45 @@ async def main(args: argparse.Namespace) -> int:
     engine = create_async_engine(db_url, pool_pre_ping=True)
     Session = async_sessionmaker(bind=engine, expire_on_commit=False)
 
-    # Snapshot
+    # Snapshot before any processing
     before = await snapshot_counts(Session)
 
-    # Run pipeline
-    section("Pipeline run")
-    t0 = time.perf_counter()
-    result = await pipeline_runner.process_single_file(str(transcript), Session, cfg)
-    elapsed = time.perf_counter() - t0
+    results: list[dict] = []
+    failures: list[str] = []
+    for transcript in transcripts:
+        try:
+            r = await _process_one(transcript, Session, cfg, models, pipeline_runner)
+            if r:
+                results.append(r)
+            else:
+                failures.append(transcript.name)
+        except Exception as e:
+            fail(f"{transcript.name}: {e}")
+            failures.append(transcript.name)
 
-    # Snapshot delta
+    # Snapshot delta after all processing
     after = await snapshot_counts(Session)
     print_delta(before, after)
 
     # Summary
-    section("Result")
-    if result:
-        print(f"  {GREEN}{BOLD}OK{RESET} — {result.get('file')}: {result.get('total_sentences')} sentences in {elapsed:.1f}s")
-        # Find the analysis_id we just inserted
-        from sqlalchemy import select
-        async with Session() as db:
-            r = await db.execute(
-                select(models.TranscriptAnalysisLog.id, models.TranscriptAnalysisLog.ai_overall_score)
-                .where(models.TranscriptAnalysisLog.source_filename == transcript.name)
-                .order_by(models.TranscriptAnalysisLog.id.desc())
-                .limit(1)
-            )
-            row = r.first()
-            if row:
-                aid, score = row
-                print(f"  analysis_id:       {aid}")
-                print(f"  ai_overall_score:  {score}")
-                print(f"\n  Verify:  python scripts/verify_db.py --analysis-id {aid}")
-                print(f"  Inspect: python scripts/show.py --analysis-id {aid}")
-    else:
-        fail(f"pipeline returned no result (likely already processed — see [NLP] logs)")
-        await engine.dispose()
-        return 1
+    section("Summary")
+    print(f"  Processed OK : {len(results)} / {len(transcripts)}")
+    if failures:
+        print(f"  Failed/skipped: {len(failures)}  ({', '.join(failures)})")
+    if results:
+        print(f"\n  Verify:  python scripts/verify_db.py")
+        for r in results:
+            print(f"           python scripts/verify_db.py --analysis-id {r['analysis_id']}")
 
     await engine.dispose()
-    return 0
+    return 0 if not failures else 1
 
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--file", required=True, help="Transcript .xlsx path (relative to repo root or absolute)")
+    src = p.add_mutually_exclusive_group(required=True)
+    src.add_argument("--file", help="Transcript .xlsx/.csv path (relative to repo root or absolute)")
+    src.add_argument("--dir", help="Directory: every .xlsx/.csv inside is processed in sorted order")
     p.add_argument("--top-n", type=int, default=10, help="Top-N sentences per NLP domain (default 10)")
     p.add_argument("--context-window", type=int, default=3, help="Context window size (default 3)")
     p.add_argument("--skip-ai", action="store_true", help="Skip the Azure OpenAI sub-pipeline (NLP-only run)")

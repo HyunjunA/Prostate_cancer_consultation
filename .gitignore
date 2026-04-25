@@ -57,9 +57,5 @@ docs/architecture/_build_pdf/
 # Claude Code evaluation harness (local-only test/eval tooling)
 .harness/
 
-# NLP classifiers — only Docker image needed for deployment
-nlp-classifiers/2026-02-17_michael_nlp_pilot_sid14/
-nlp-classifiers/2026-02-26/
-nlp-classifiers/Data_processing_script_for_NLP_input/
-nlp-classifiers/manual_scoring_ground_truth/
-nlp-classifiers/prediction_pipeline_and_results/
+# Native deployment Python venv
+.venv/
