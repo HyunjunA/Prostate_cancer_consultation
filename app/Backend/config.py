@@ -10,6 +10,7 @@ from typing import Any, Dict
 import yaml
 
 _CONFIG_PATH = Path(__file__).parent / "config.yaml"
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _config: Dict[str, Any] = {}
 
 
@@ -31,7 +32,21 @@ def load_config(path: str = None) -> Dict[str, Any]:
     _override("worker.scan_interval_seconds", "WORKER_SCAN_INTERVAL", int)
     _override("nlp.api_url", "NLP_API_URL", str)
 
+    _resolve_paths_against_repo_root()
+
     return _config
+
+
+def _resolve_paths_against_repo_root() -> None:
+    """Make every relative `paths.*` value absolute, anchored at REPO_ROOT.
+
+    Lets `.env.native` use portable relative paths like
+    `../AI_physician_patient_communication/data/output` regardless of CWD.
+    """
+    paths = _config.get("paths", {})
+    for k, v in list(paths.items()):
+        if isinstance(v, str) and v and not Path(v).is_absolute():
+            paths[k] = str((_REPO_ROOT / v).resolve())
 
 
 def get(key: str, default: Any = None) -> Any:
