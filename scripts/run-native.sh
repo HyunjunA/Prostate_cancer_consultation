@@ -119,4 +119,4 @@ fi
 
 # ── 2. Backend native (foreground) ──────────────────────────────────────────
 section "Starting native Backend"
-exec bash "$SCRIPT_DIR/run-backend-native.sh" "${BACKEND_ARGS[@]}"
+exec bash "$SCRIPT_DIR/run-backend-native.sh" ${BACKEND_ARGS[@]+"${BACKEND_ARGS[@]}"}
