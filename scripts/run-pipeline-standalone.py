@@ -243,6 +243,8 @@ async def main(args: argparse.Namespace) -> int:
     print(f"  total: {len(transcripts)} file(s)")
 
     # Build the cfg dict that pipeline_runner expects
+    _output_dir_raw = os.getenv("OUTPUT_DIR", "../AI_physician_patient_communication/data/output")
+    _output_dir = _output_dir_raw if Path(_output_dir_raw).is_absolute() else str((REPO_ROOT / _output_dir_raw).resolve())
     cfg = {
         "pipeline": {
             "top_n": args.top_n,
@@ -252,7 +254,7 @@ async def main(args: argparse.Namespace) -> int:
             "api_url": os.getenv("NLP_API_URL", "http://localhost:8001"),
         },
         "paths": {
-            "output_dir": os.getenv("OUTPUT_DIR", str(REPO_ROOT / "data" / "output")),
+            "output_dir": _output_dir,
         },
     }
 
