@@ -25,8 +25,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 COMPOSE_FILE="$SCRIPT_DIR/app/Backend/docker-compose.yml"
 ENV_FILE="$SCRIPT_DIR/app/Backend/.env"
 
-# NLP image: included in this repo (nlp-classifiers/), or override via NLP_IMAGE_DIR env var
-NLP_IMAGE_DIR="${NLP_IMAGE_DIR:-$SCRIPT_DIR/nlp-classifiers/r01-nlp-classifiers-docker-image}"
+# NLP image: lives in the AI_physician_patient_communication sibling repo
+# (it's an AI/NLP asset, not dashboard infra). Override via NLP_IMAGE_DIR env var.
+NLP_IMAGE_DIR="${NLP_IMAGE_DIR:-$SCRIPT_DIR/../AI_physician_patient_communication/nlp-classifiers/r01-nlp-classifiers-docker-image}"
 
 BASE_URL="http://localhost:8000"
 BACKEND_CONTAINER="prostatecancer-backend"
