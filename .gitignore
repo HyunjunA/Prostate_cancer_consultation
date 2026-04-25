@@ -41,8 +41,13 @@ archive/
 # Korean-only document versions (local only, not pushed)
 *_KR.md
 *_KR.pdf
+*_KR.sql
 *_kr.txt
+*_kr.sql
 *_kr_summary.txt
+
+# PDF build scratch dirs
+docs/architecture/_build_pdf/
 
 # Claude Code evaluation harness (local-only test/eval tooling)
 .harness/
