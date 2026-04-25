@@ -317,3 +317,83 @@ class LLMDomainScoringAndSummary(Base):
     def __repr__(self):
         return f"<LLMDomainScoringAndSummary(id={self.id}, domain={self.domain}, ai_score={self.ai_score})>"
 
+
+# =====================================================
+# 9. NLP Pipeline Intermediates (steps 0-4)
+# =====================================================
+# Persists every NLP intermediate alongside the existing top-N rows in
+# `sentence_prediction`. Step 3 (all sentences x 5 model scores) is
+# normalized for SQL queries; the lighter steps go into a JSONB blob.
+
+class NLPAllPredictions(Base):
+    """All NLP predictions (step 3) — every sentence x 5 model scores.
+
+    `sentence_prediction` already keeps the per-domain top-N. This table
+    keeps the FULL set so analysts can ask cross-domain questions like
+    "which sentences scored high on multiple domains?".
+    """
+    __tablename__ = 'nlp_all_predictions'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    analysis_id = Column(Integer, ForeignKey('transcript_analysis_log.id', ondelete='CASCADE'), nullable=False)
+    patient_id = Column(String(255), nullable=False)
+    sentence_index = Column(Integer, nullable=False)
+    utterance_index = Column(Integer, nullable=False)
+    sentence_in_utterance = Column(Integer, nullable=False)
+    speaker = Column(String(255))
+    sentence_text = Column(Text)
+    pred_cp = Column(Float)
+    pred_le = Column(Float)
+    pred_ed = Column(Float)
+    pred_inc = Column(Float)
+    pred_ius = Column(Float)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+
+class NLPPipelineIntermediate(Base):
+    """NLP pipeline intermediate snapshots for steps 0/1/2/4 as JSONB.
+
+    These steps are useful for traceability/debugging but rarely queried
+    row-by-row, so they are stored as compact JSON payloads (one row per
+    step per analysis = 4 rows total).
+    """
+    __tablename__ = 'nlp_pipeline_intermediate'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    analysis_id = Column(Integer, ForeignKey('transcript_analysis_log.id', ondelete='CASCADE'), nullable=False)
+    patient_id = Column(String(255), nullable=False)
+    step = Column(String(20), nullable=False)            # raw / filtered / sentences / top_by_model
+    payload = Column(JSONB, nullable=False)
+    row_count = Column(Integer)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+
+# =====================================================
+# 10. AI Pipeline Intermediates (Guillermo's sub-steps)
+# =====================================================
+
+class LLMPipelineIntermediate(Base):
+    """AI pipeline intermediate per-candidate-sentence rows.
+
+    Captures Guillermo's `df_extraction` (every candidate after scoring +
+    extraction) plus a `survived_filter` flag derived from `df_filtering`.
+    Lets analysts answer "what scores did the rejected sentences get?",
+    "estimate-missing rate per domain?", etc.
+    """
+    __tablename__ = 'llm_pipeline_intermediate'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    analysis_id = Column(Integer, ForeignKey('transcript_analysis_log.id', ondelete='CASCADE'), nullable=False)
+    patient_id = Column(String(255), nullable=False)
+    domain = Column(String(10), nullable=False)          # cp, le, ed, inc, ius
+    step = Column(String(20), nullable=False)            # 'extraction' (snapshot after scoring + extraction)
+    sentence_index = Column(Integer, nullable=False)
+    sentence_text = Column(Text)
+    context = Column(Text)
+    pred_score = Column(Float)                           # NLP .pred_1
+    ai_score = Column(Integer)                           # GPT-4o 0-5
+    score_explanation = Column(Text)
+    estimate = Column(String(255))
+    treatment = Column(String(255))
+    survived_filter = Column(Boolean, nullable=False, default=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())

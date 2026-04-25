@@ -128,12 +128,39 @@ async def run_ai_scoring_and_summary(
         return False
 
     # Save results to DB
-    from models import LLMDomainScoringAndSummary
+    from models import LLMDomainScoringAndSummary, LLMPipelineIntermediate
 
     try:
         async with Session() as db:
             rows_saved = 0
+            intermediate_saved = 0
             for domain, (result, df_extraction, df_filtering) in ai_results.items():
+                # ── Save AI intermediate (df_extraction + survived_filter from df_filtering)
+                #    Captures every candidate sentence after scoring + extraction
+                #    so analysts can see what was rejected and why.
+                try:
+                    surviving_indices = set(df_filtering.index.tolist()) if df_filtering is not None else set()
+                    if df_extraction is not None:
+                        for idx, row in df_extraction.iterrows():
+                            db.add(LLMPipelineIntermediate(
+                                analysis_id=analysis_id,
+                                patient_id=patient_id,
+                                domain=domain,
+                                step="extraction",
+                                sentence_index=int(idx),
+                                sentence_text=row.get("text") if "text" in row.index else None,
+                                context=row.get("context") if "context" in row.index else None,
+                                pred_score=float(row[".pred_1"]) if ".pred_1" in row.index and pd.notna(row[".pred_1"]) else None,
+                                ai_score=int(row["score"]) if "score" in row.index and pd.notna(row["score"]) else None,
+                                score_explanation=row.get("score_explanation") if "score_explanation" in row.index else None,
+                                estimate=str(row["estimate"]) if "estimate" in row.index and pd.notna(row["estimate"]) else None,
+                                treatment=str(row["treatment"]) if "treatment" in row.index and pd.notna(row["treatment"]) else None,
+                                survived_filter=(idx in surviving_indices),
+                            ))
+                            intermediate_saved += 1
+                except Exception as ie:
+                    logger.warning("intermediate save skipped for domain=%s: %s", domain, ie)
+
                 # Handle side-effect domains (list of selected rows)
                 if isinstance(result.get("selected"), list):
                     reformat = result.get("reformat", "")
@@ -200,7 +227,10 @@ async def run_ai_scoring_and_summary(
                 logger.info("AI pipeline: overall score = %.2f (%d domains), processed=True", overall, len(all_scores))
 
             await db.commit()
-            logger.info("AI pipeline: saved %d rows to llm_domain_scoring_and_summary", rows_saved)
+            logger.info(
+                "AI pipeline: saved %d final rows + %d intermediate rows",
+                rows_saved, intermediate_saved,
+            )
             return True
 
     except Exception as e:
