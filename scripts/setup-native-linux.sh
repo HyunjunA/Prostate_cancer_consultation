@@ -2,8 +2,13 @@
 # ============================================================================
 #  Native deployment setup — Linux (Ubuntu 20.04+ / Debian 11+)
 #
-#  Installs PostgreSQL 16, Redis, R 4.x with stringi 1.8.4 (ICU 74.1),
-#  Python 3.10, and creates a Python venv with backend dependencies.
+#  Installs PostgreSQL 16, Redis, Python 3.10, and creates a Python venv
+#  with the backend's requirements.
+#
+#  R is intentionally NOT installed here. The pipeline's only R use is
+#  sentence segmentation via stringi, which the segmentation.py library
+#  routes through ``docker exec`` against the NLP-classifiers container
+#  (R 4.5.1 + stringi 1.8.7 + ICU 74.2 — Michael's reference environment).
 #
 #  Usage:
 #    chmod +x scripts/setup-native-linux.sh
@@ -16,7 +21,6 @@
 # ============================================================================
 set -euo pipefail
 
-# ── Paths ───────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BACKEND_DIR="$REPO_ROOT/app/Backend"
@@ -27,6 +31,7 @@ cd "$REPO_ROOT"
 section() { echo ""; echo "==============================================================="; echo "  $1"; echo "==============================================================="; }
 info()    { echo "  ▸ $1"; }
 ok()      { echo "  ✓ $1"; }
+warn()    { echo "  ⚠ $1"; }
 fail()    { echo "  ✗ $1" >&2; exit 1; }
 
 # ── Step 0: Detect Linux distribution ───────────────────────────────────────
@@ -40,7 +45,6 @@ if ! command -v apt-get >/dev/null 2>&1; then
     fail "apt-get not found. This script supports Ubuntu/Debian only."
 fi
 
-# Need sudo for apt + systemctl
 if [[ $EUID -ne 0 ]]; then
     fail "Run with sudo: sudo bash scripts/setup-native-linux.sh"
 fi
@@ -48,6 +52,15 @@ fi
 . /etc/os-release
 info "Detected: $PRETTY_NAME"
 ok "apt-get present"
+
+if ! command -v docker >/dev/null 2>&1; then
+    fail "Docker not installed. https://docs.docker.com/engine/install/"
+fi
+if ! docker info >/dev/null 2>&1; then
+    warn "Docker daemon not running — start it before bringing up native mode (sudo systemctl start docker)"
+else
+    ok "Docker running"
+fi
 
 # ── Step 1: apt packages ────────────────────────────────────────────────────
 section "Step 1: Install apt packages"
@@ -78,10 +91,6 @@ info "Installing python3.10 + venv ..."
 apt-get install -y -qq python3.10 python3.10-venv python3.10-dev python3-pip
 ok "python3.10 installed"
 
-info "Installing R + build deps for stringi ..."
-apt-get install -y -qq r-base r-base-dev libicu-dev gcc g++ make
-ok "R + build deps installed"
-
 # ── Step 2: Start services ──────────────────────────────────────────────────
 section "Step 2: Start postgresql + redis services"
 
@@ -95,44 +104,9 @@ systemctl start redis-server
 sleep 1
 ok "redis-server started"
 
-# ── Step 3: R stringi 1.8.4 (ICU 74.1) ──────────────────────────────────────
-section "Step 3: R stringi 1.8.4 (ICU 74.1) — may take ~10 minutes"
+# ── Step 3: Python venv ─────────────────────────────────────────────────────
+section "Step 3: Python venv + backend requirements"
 
-ALREADY_HAS_STRINGI=$(R --no-save --quiet -e 'cat(as.character(packageVersion("stringi")))' 2>/dev/null | tail -1 || echo "")
-if [[ "$ALREADY_HAS_STRINGI" == "1.8.4" ]]; then
-    ICU_VERSION=$(R --no-save --quiet -e 'cat(stringi::stri_info()$ICU.version)' 2>/dev/null | tail -1)
-    if [[ "$ICU_VERSION" == "74.1" ]]; then
-        ok "stringi 1.8.4 with ICU 74.1 already installed — skipping compile"
-    else
-        info "stringi 1.8.4 found but ICU=$ICU_VERSION (need 74.1) — recompiling"
-        ALREADY_HAS_STRINGI=""
-    fi
-fi
-
-if [[ "$ALREADY_HAS_STRINGI" != "1.8.4" ]]; then
-    info "Compiling stringi 1.8.4 from source. Grab a coffee."
-    R --no-save --quiet <<'REOF'
-install.packages(
-    "https://cloud.r-project.org/src/contrib/Archive/stringi/stringi_1.8.4.tar.gz",
-    repos = NULL,
-    type = "source",
-    quiet = TRUE,
-    configure.args = "--disable-pkg-config --disable-cxx11"
-)
-REOF
-    ok "stringi 1.8.4 compiled"
-
-    ICU_VERSION=$(R --no-save --quiet -e 'cat(stringi::stri_info()$ICU.version)' 2>/dev/null | tail -1)
-    if [[ "$ICU_VERSION" != "74.1" ]]; then
-        fail "stringi compiled but ICU=$ICU_VERSION (expected 74.1). Pipeline tokenizer would diverge."
-    fi
-    ok "ICU 74.1 confirmed"
-fi
-
-# ── Step 4: Python venv ─────────────────────────────────────────────────────
-section "Step 4: Python venv + backend requirements"
-
-# Resolve to actual repo owner so the venv isn't owned by root
 REPO_OWNER=$(stat -c '%U' "$REPO_ROOT")
 
 run_as_owner() {
@@ -153,16 +127,9 @@ fi
 
 info "Installing backend requirements ..."
 run_as_owner "source '$VENV_DIR/bin/activate' && pip install --quiet --upgrade pip && pip install --quiet -r '$BACKEND_DIR/requirements.txt'"
-ok "Backend requirements installed"
+ok "Backend requirements installed (rpy2 NOT included — segmentation uses docker exec)"
 
-R_HOME_VALUE="$(R RHOME)"
-if ! run_as_owner "source '$VENV_DIR/bin/activate' && python -c 'import rpy2'" 2>/dev/null; then
-    info "Installing rpy2 with R_HOME=$R_HOME_VALUE"
-    run_as_owner "source '$VENV_DIR/bin/activate' && R_HOME='$R_HOME_VALUE' pip install --quiet 'rpy2==3.5.11'"
-fi
-ok "rpy2 available (R_HOME=$R_HOME_VALUE)"
-
-# ── Step 5: Final summary ───────────────────────────────────────────────────
+# ── Step 4: Final summary ───────────────────────────────────────────────────
 section "Setup complete"
 
 cat <<EOF
@@ -170,17 +137,18 @@ cat <<EOF
   Native components installed:
     postgresql-16   $(psql --version 2>/dev/null | head -1)
     redis           $(redis-cli --version 2>/dev/null | head -1)
-    R               $(R --version 2>/dev/null | head -1)
-    stringi         $(R --no-save --quiet -e 'cat(as.character(packageVersion("stringi")))' 2>/dev/null | tail -1) (ICU $(R --no-save --quiet -e 'cat(stringi::stri_info()\$ICU.version)' 2>/dev/null | tail -1))
     python          $(python3.10 --version 2>/dev/null)
     venv            $VENV_DIR  (owner: $REPO_OWNER)
 
+  R is NOT installed on the host. Sentence segmentation calls stringi
+  inside the NLP-classifiers Docker container via 'docker exec' —
+  100% identical to Michael's reference (R 4.5.1 + stringi 1.8.7 + ICU 74.2).
+
   Next steps:
-    1. Bootstrap the database:
-         bash scripts/init-db-native.sh
-    2. Start the backend:
-         bash scripts/run-backend-native.sh
-    3. Run the standalone pipeline:
-         python scripts/run-pipeline-standalone.py --file data/transcripts/SID_10.xlsx
+    1. cp app/Backend/.env.native.example app/Backend/.env.native
+       (then edit POSTGRES_PASSWORD, AZURE_OPENAI_*, API_KEY)
+    2. bash scripts/init-db-native.sh
+    3. bash scripts/run-native.sh
+    4. python scripts/run-pipeline-standalone.py --file ...
 
 EOF

@@ -4,12 +4,12 @@
 #
 #  Equivalent to prestart.sh but for the native deployment mode. Runs
 #  every time before launching the native backend / standalone pipeline.
-#  Skipped checks for the Docker-only steps.
 #
 #  Performs:
-#    1. R + stringi 1.8.4 + ICU 74.1 verification
-#    2. PostgreSQL reachability + auth
-#    3. Redis reachability (warning only — backend tolerates it down)
+#    1. PostgreSQL reachability + auth
+#    2. Redis reachability (warning only — backend tolerates it down)
+#    3. NLP-classifiers container reachability + docker exec stringi probe
+#       (segmentation uses this container for R/stringi, not the host)
 #    4. Alembic migration check (auto-runs `upgrade head` if behind)
 #
 #  Usage:
@@ -48,21 +48,7 @@ set +a
 : "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD not in env}"
 : "${POSTGRES_DB:?POSTGRES_DB not in env}"
 
-# ── Step 1: R + stringi + ICU ───────────────────────────────────────────────
-section "R + stringi 1.8.4 + ICU 74.1"
-
-if ! command -v R >/dev/null 2>&1; then
-    fail "R not on PATH — run setup-native-{mac,linux}.sh"
-fi
-
-ICU_VER=$(R --no-save --quiet -e 'cat(stringi::stri_info()$ICU.version)' 2>/dev/null | tail -1)
-if [[ "$ICU_VER" == "74.1" ]]; then
-    ok "ICU 74.1 confirmed (R stringi will match the reference pipeline)"
-else
-    fail "ICU mismatch: expected 74.1, got '$ICU_VER'. Recompile stringi via setup-native-*.sh"
-fi
-
-# ── Step 2: PostgreSQL ──────────────────────────────────────────────────────
+# ── Step 1: PostgreSQL ──────────────────────────────────────────────────────
 section "PostgreSQL reachability + auth"
 
 if ! command -v pg_isready >/dev/null 2>&1; then
@@ -81,7 +67,7 @@ if ! PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT
 fi
 ok "postgres auth OK ($POSTGRES_USER@$POSTGRES_DB)"
 
-# ── Step 3: Redis (soft) ────────────────────────────────────────────────────
+# ── Step 2: Redis (soft) ────────────────────────────────────────────────────
 section "Redis reachability"
 
 if command -v redis-cli >/dev/null 2>&1; then
@@ -93,6 +79,28 @@ if command -v redis-cli >/dev/null 2>&1; then
 else
     warn "redis-cli not on PATH — skipped"
 fi
+
+# ── Step 3: NLP-classifiers container + docker exec stringi probe ──────────
+section "NLP-classifiers container (provides R + stringi via docker exec)"
+
+NLP_CONTAINER="${STRINGI_DOCKER_CONTAINER:-prostatecancer-nlp-native}"
+
+if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$NLP_CONTAINER"; then
+    fail "NLP container '$NLP_CONTAINER' not running.
+       Start it:  docker compose -f docker-compose-minimal.yml up -d
+       (Or use bash scripts/run-native.sh which auto-loads + starts it.)"
+fi
+ok "container $NLP_CONTAINER running"
+
+# Probe stringi via docker exec — the same call segmentation.py will make
+PROBE=$(docker exec "$NLP_CONTAINER" Rscript -e \
+    'cat(sprintf("stringi=%s ICU=%s",
+                 packageVersion("stringi"),
+                 stringi::stri_info()$ICU.version))' 2>/dev/null || echo "")
+if [[ -z "$PROBE" ]]; then
+    fail "docker exec stringi probe failed — segmentation will not work"
+fi
+ok "docker exec stringi probe OK ($PROBE)"
 
 # ── Step 4: Alembic migration head ──────────────────────────────────────────
 section "Alembic migration check"

@@ -2,15 +2,15 @@
 # ============================================================================
 #  Native deployment — dependency checker (macOS + Linux)
 #
-#  Verifies every component installed by setup-native-{mac,linux}.sh.
-#  Exits 0 on full pass, 1 on any failure.
+#  Verifies every component installed by setup-native-{mac,linux}.sh and
+#  the NLP-classifiers Docker container that segmentation.py relies on.
 #
 #  Usage:
 #    bash scripts/check-deps.sh
 #
 #  Reference: dev_docs/DEPLOYMENT_NATIVE_PLAN.md (Phase 1 done-when criteria)
 # ============================================================================
-set -uo pipefail   # NOTE: no -e — we want to keep checking after a failure
+set -uo pipefail   # NOTE: no -e — keep checking after a failure
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -35,17 +35,15 @@ check_cmd() {
     fi
 }
 
-# ── Header ──────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${BOLD}=== Native deployment — dependency check ===${RESET}"
 echo ""
 
-# ── 1. Binaries ─────────────────────────────────────────────────────────────
-echo "─── 1. Binaries ────────────────────────────"
+# ── 1. Native binaries ──────────────────────────────────────────────────────
+echo "─── 1. Native binaries ────────────────────"
 check_cmd psql --version
 check_cmd redis-cli --version
 check_cmd redis-server --version
-check_cmd R --version
 check_cmd python3.10 --version
 echo ""
 
@@ -71,25 +69,8 @@ else
 fi
 echo ""
 
-# ── 4. R stringi 1.8.4 + ICU 74.1 ───────────────────────────────────────────
-echo "─── 4. R stringi 1.8.4 + ICU 74.1 ─────────"
-STRINGI_VER=$(R --no-save --quiet -e 'cat(as.character(packageVersion("stringi")))' 2>/dev/null | tail -1)
-if [[ "$STRINGI_VER" == "1.8.4" ]]; then
-    pass "stringi version: $STRINGI_VER"
-else
-    fail "stringi version: $STRINGI_VER (expected 1.8.4)"
-fi
-
-ICU_VER=$(R --no-save --quiet -e 'cat(stringi::stri_info()$ICU.version)' 2>/dev/null | tail -1)
-if [[ "$ICU_VER" == "74.1" ]]; then
-    pass "ICU version: $ICU_VER"
-else
-    fail "ICU version: $ICU_VER (expected 74.1) — sentence segmentation will diverge"
-fi
-echo ""
-
-# ── 5. Python venv + key libs ───────────────────────────────────────────────
-echo "─── 5. Python venv + key libs ─────────────"
+# ── 4. Python venv + key libs ───────────────────────────────────────────────
+echo "─── 4. Python venv + key libs ─────────────"
 if [[ -d "$VENV_DIR" ]]; then
     pass ".venv exists at $VENV_DIR"
 else
@@ -100,7 +81,8 @@ if [[ -x "$VENV_DIR/bin/python" ]]; then
     PY_VER=$("$VENV_DIR/bin/python" --version 2>&1)
     pass "venv python: $PY_VER"
 
-    for pkg in fastapi sqlalchemy asyncpg pandas openpyxl rpy2; do
+    # rpy2 is intentionally NOT required — segmentation uses docker exec
+    for pkg in fastapi sqlalchemy asyncpg pandas openpyxl; do
         if "$VENV_DIR/bin/python" -c "import $pkg" 2>/dev/null; then
             v=$("$VENV_DIR/bin/python" -c "import $pkg; print(getattr($pkg, '__version__', '?'))" 2>/dev/null)
             pass "venv has $pkg ($v)"
@@ -113,16 +95,35 @@ else
 fi
 echo ""
 
-# ── 6. Optional — Docker for NLP + webapp ───────────────────────────────────
-echo "─── 6. Optional: Docker (for NLP + webapp) ─"
+# ── 5. Docker + NLP container ───────────────────────────────────────────────
+echo "─── 5. Docker + NLP container ─────────────"
 if command -v docker >/dev/null 2>&1; then
     if docker info >/dev/null 2>&1; then
-        pass "Docker available + daemon running"
+        pass "Docker daemon running"
     else
-        warn "Docker installed but daemon not running (start Docker Desktop)"
+        fail "Docker installed but daemon not running (start Docker Desktop)"
+    fi
+
+    # NLP container — required for segmentation (docker exec → R + stringi)
+    NLP_CONTAINER="${STRINGI_DOCKER_CONTAINER:-prostatecancer-nlp-native}"
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$NLP_CONTAINER"; then
+        pass "NLP container '$NLP_CONTAINER' running"
+
+        # Probe stringi version via docker exec
+        STRINGI_INFO=$(docker exec "$NLP_CONTAINER" Rscript -e \
+            'cat(sprintf("stringi %s, ICU %s",
+                        packageVersion("stringi"),
+                        stringi::stri_info()$ICU.version))' 2>/dev/null || echo "")
+        if [[ -n "$STRINGI_INFO" ]]; then
+            pass "docker exec stringi probe: $STRINGI_INFO"
+        else
+            fail "docker exec stringi probe failed"
+        fi
+    else
+        warn "NLP container '$NLP_CONTAINER' not running — segmentation will fail until you start it (bash scripts/run-native.sh)"
     fi
 else
-    warn "Docker not installed — required only for NLP-classifiers + webapp containers"
+    fail "Docker not installed — required for NLP-classifiers + webapp containers"
 fi
 echo ""
 
@@ -133,7 +134,8 @@ if [[ "$FAIL_COUNT" -eq 0 ]]; then
     echo -e "  ${GREEN}${BOLD}PASS${RESET}  $PASS_COUNT/$TOTAL checks passed"
     echo ""
     echo "  Native environment is ready. Next:"
-    echo "    bash scripts/init-db-native.sh    # bootstrap database"
+    echo "    bash scripts/init-db-native.sh    # bootstrap database (if not done)"
+    echo "    bash scripts/run-native.sh        # start everything"
     exit 0
 else
     echo -e "  ${RED}${BOLD}FAIL${RESET}  $PASS_COUNT/$TOTAL passed, $FAIL_COUNT failed"
