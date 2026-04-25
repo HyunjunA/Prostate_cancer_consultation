@@ -7,6 +7,7 @@ python-multipart==0.0.22
 # ── Database ─────────────────────────────────────────────────────────────────
 sqlalchemy==2.0.48
 asyncpg==0.31.0
+greenlet==3.2.4                  # transitive dep for sqlalchemy async — pinned so a fresh venv has it
 psycopg2-binary==2.9.11          # sync driver for Alembic migrations
 alembic==1.18.4
 
