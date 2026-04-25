@@ -26,7 +26,7 @@ services:
     image: r01-nlp-classifiers:latest
     container_name: prostatecancer-nlp-native
     ports:
-      - "127.0.0.1:8001:8000"   # exposed to native backend on the host
+      - "127.0.0.1:8888:8000"   # exposed to native backend on the host (8001 conflicts with VS Code on some setups)
     deploy:
       resources:
         limits:
