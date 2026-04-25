@@ -213,6 +213,11 @@ async def process_single_file(
         domain_slot_map=_DOMAIN_SLOT_MAP,
         domain_short_map=_DOMAIN_SHORT_MAP,
         pipeline_started_at=pipeline_started_at,
+        df_raw=df_raw,
+        df_filtered=df_filtered,
+        df_sentences=df_sentences,
+        df_predicted=df_predicted,
+        top_by_model=top_by_model,
     )
 
     # ── Save output files (traceability) ─────────────────────────────────

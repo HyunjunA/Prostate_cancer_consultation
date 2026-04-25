@@ -62,7 +62,15 @@ from auth.access_control import check_patient_access
 from auth.base import AuthUser
 from db import get_db, AsyncSessionLocal
 from models import SentencePrediction, TranscriptAnalysisLog
-from pipeline_runner import OUTCOME_TO_SHEET, _read_transcript, _export_to_xlsx_bytes  # noqa: E402
+from pipeline_runner import (
+    OUTCOME_TO_SHEET,
+    _read_transcript,
+    _export_to_xlsx_bytes,
+    _DOMAIN_SLOT_MAP,
+    _DOMAIN_SHORT_MAP,
+)  # noqa: E402
+import persistence
+import ai_pipeline_service
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -159,12 +167,25 @@ async def analyze_transcript(
                 for _, row in df.iterrows()
             ]
 
+        # Determine speakers (same convention as pipeline_runner.run_one)
+        doctor_speaker = df_filtered["speaker"].iloc[0] if len(df_filtered) > 0 else "Unknown"
+        patient_speaker = f"Patient_{Path(filename).stem}"
+
         return {
             "patient_id": patient_id,
             "total_sentences": len(df_sentences),
             "models": response_models,
             "xlsx_bytes": xlsx_bytes,
             "final_results": final_results,
+            # Intermediate dataframes — needed by persistence.save_all to
+            # populate nlp_all_predictions + nlp_pipeline_intermediate.
+            "df_raw": df_raw,
+            "df_filtered": df_filtered,
+            "df_sentences": df_sentences,
+            "df_predicted": df_predicted,
+            "top_by_model": top_by_model,
+            "doctor_speaker": doctor_speaker,
+            "patient_speaker": patient_speaker,
         }
     finally:
         os.unlink(tmp_path)
@@ -233,16 +254,16 @@ async def analyze(
     # Save xlsx to disk (shared across gunicorn workers)
     _save_xlsx(result["patient_id"], result["xlsx_bytes"])
 
-    # Save to database (non-blocking — DB failure does not affect the response)
-    await _save_to_db(
-        db,
-        patient_id=result["patient_id"],
-        total_sentences=result["total_sentences"],
+    # Save to database via the unified persistence layer — populates
+    # transcript_analysis_log + sentence_prediction + nlp_all_predictions +
+    # nlp_pipeline_intermediate + patient_summary(_domain). Then run the AI
+    # pipeline (GPT-4o scoring + reformat) which fills llm_pipeline_intermediate
+    # + llm_domain_scoring_and_summary and updates ai_overall_score / processed.
+    await _persist_and_run_ai(
+        result=result,
+        filename=file.filename,
         top_n=top_n,
         context_window=context_window,
-        models=result["models"],
-        xlsx_bytes=result["xlsx_bytes"],
-        source_filename=file.filename,
     )
 
     return {
@@ -376,19 +397,13 @@ async def analyze_batch(
         # Save xlsx to disk
         _save_xlsx(result["patient_id"], result["xlsx_bytes"])
 
-        # Save to database — use independent session per file to isolate transactions.
-        # A rollback in one file must not affect the session state of subsequent files.
-        async with AsyncSessionLocal() as file_db:
-            await _save_to_db(
-                file_db,
-                patient_id=result["patient_id"],
-                total_sentences=result["total_sentences"],
-                top_n=top_n,
-                context_window=context_window,
-                models=result["models"],
-                xlsx_bytes=result["xlsx_bytes"],
-                source_filename=file.filename,
-            )
+        # Save full pipeline data to DB + run AI pipeline (per-file isolation).
+        await _persist_and_run_ai(
+            result=result,
+            filename=file.filename,
+            top_n=top_n,
+            context_window=context_window,
+        )
 
         successful += 1
         results.append({
@@ -550,76 +565,68 @@ def _get_xlsx_bytes(patient_id: str) -> Optional[bytes]:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# DB storage helper
+# DB storage + AI pipeline orchestration
 # ──────────────────────────────────────────────────────────────────────────────
 
-async def _save_to_db(
-    db: AsyncSession,
+async def _persist_and_run_ai(
     *,
-    patient_id: str,
-    total_sentences: int,
+    result: Dict[str, Any],
+    filename: str,
     top_n: int,
     context_window: int,
-    models: dict,
-    xlsx_bytes: bytes,
-    source_filename: Optional[str],
 ) -> None:
-    """Persist analysis results to transcript_analysis_log + sentence_prediction.
+    """Save full pipeline output via persistence.save_all + run AI pipeline.
 
-    Wrapped in try/except so a DB failure never blocks the primary response.
-    Each call inserts a new row (preserving analysis history for the same patient).
-
-    Note: model_results is no longer populated (set to None). All per-sentence
-    data is stored in the normalized sentence_prediction table. The column is
-    kept for backward compatibility with legacy rows that predate sentence_prediction.
+    Mirrors what `pipeline_runner.run_one` does for the CLI batch path. All
+    failures are logged but never propagate — a DB or AI failure must not
+    break the HTTP response.
     """
+    patient_id = result["patient_id"]
+
     try:
-        record = TranscriptAnalysisLog(
+        ok = await persistence.save_all(
+            AsyncSessionLocal,
+            filename=filename,
             patient_id=patient_id,
-            total_sentences=total_sentences,
+            doctor_speaker=result["doctor_speaker"],
+            patient_speaker=result["patient_speaker"],
+            total_sentences=result["total_sentences"],
             top_n=top_n,
             context_window=context_window,
-            model_results=None,  # deprecated: use sentence_prediction table instead
-            xlsx_data=xlsx_bytes,
-            source_filename=source_filename,
+            xlsx_bytes=result["xlsx_bytes"],
+            final_results=result["final_results"],
+            outcome_to_sheet=OUTCOME_TO_SHEET,
+            domain_slot_map=_DOMAIN_SLOT_MAP,
+            domain_short_map=_DOMAIN_SHORT_MAP,
+            df_raw=result["df_raw"],
+            df_filtered=result["df_filtered"],
+            df_sentences=result["df_sentences"],
+            df_predicted=result["df_predicted"],
+            top_by_model=result["top_by_model"],
         )
-        db.add(record)
-        await db.flush()  # populate record.id before inserting child rows
-
-        # Bulk-insert sentence-level predictions into sentence_prediction table.
-        # Each entry in models dict maps: model_key (cp/inc/ed/ius/le) → list of sentence dicts.
-        # Sentence dict keys map to DB columns as follows:
-        #   dict key    →  DB column               (xlsx column)
-        #   "index"     →  sentence_index           (index)
-        #   "i"         →  utterance_index           (i)
-        #   "i2"        →  sentence_in_utterance     (i2)
-        #   "speaker"   →  speaker                   (speaker)
-        #   "text"      →  sentence_text             (text)
-        #   "pred_1"    →  pred_score                (.pred_1)
-        #   "context"   →  context                   (context)
-        prediction_rows = []
-        for model_key, sentences in models.items():
-            for sent in sentences:
-                prediction_rows.append(SentencePrediction(
-                    analysis_id=record.id,
-                    patient_id=patient_id,
-                    model=model_key,              # xlsx sheet name
-                    sentence_index=sent["index"],  # xlsx 'index'
-                    utterance_index=sent["i"],     # xlsx 'i'
-                    sentence_in_utterance=sent["i2"],  # xlsx 'i2'
-                    speaker=sent["speaker"],       # xlsx 'speaker'
-                    sentence_text=sent["text"],    # xlsx 'text'
-                    pred_score=sent["pred_1"],     # xlsx '.pred_1'
-                    context=sent.get("context"),   # xlsx 'context'
-                ))
-        if prediction_rows:
-            db.add_all(prediction_rows)
-
-        await db.commit()
-        logger.info("Saved analysis + %d predictions to DB for patient %s", len(prediction_rows), patient_id)
     except Exception:
-        await db.rollback()
-        logger.warning("DB save failed for patient %s (non-fatal)", patient_id, exc_info=True)
+        logger.warning("persistence.save_all failed for %s (non-fatal)", patient_id, exc_info=True)
+        return
+
+    if not ok:
+        logger.warning("persistence.save_all returned False for %s — skipping AI pipeline", patient_id)
+        return
+
+    try:
+        analysis_id = await persistence.get_latest_analysis_id(AsyncSessionLocal, patient_id)
+        if analysis_id is None:
+            logger.warning("No analysis_id resolved for %s — skipping AI pipeline", patient_id)
+            return
+        await ai_pipeline_service.run_ai_scoring_and_summary(
+            AsyncSessionLocal,
+            analysis_id=analysis_id,
+            patient_id=patient_id,
+            source_filename=filename,
+            final_results=result["final_results"],
+            outcome_to_sheet=OUTCOME_TO_SHEET,
+        )
+    except Exception:
+        logger.warning("AI pipeline failed for %s (non-fatal)", patient_id, exc_info=True)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

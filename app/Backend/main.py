@@ -40,6 +40,7 @@ from routes_track_patient_followup import router as track_patient_followup_route
 from routes_track_doctor import router as track_doctor_router
 from routes_track_recordings import router as track_recordings_router
 from auth.admin_routes import router as auth_router
+from routes_admin_pipeline import router as admin_pipeline_router
 from redis_client import init_redis, close_redis, get_redis
 from nlp_classifier_client import close_http_client, nlp_health_check
 
@@ -96,6 +97,7 @@ app.include_router(track_patient_followup_router)
 app.include_router(track_doctor_router)
 app.include_router(track_recordings_router)
 app.include_router(auth_router)
+app.include_router(admin_pipeline_router)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Basic routes
