@@ -65,6 +65,17 @@ if [[ ! -f app/Webapp/.env.native && $BACKEND_ONLY -eq 0 ]]; then
     cp app/Webapp/.env.native.example app/Webapp/.env.native
 fi
 
+# Export the env vars docker-compose-minimal.yml interpolates (e.g. `${API_KEY}`).
+# Without this, compose substitutes empty strings — webapp boots without an
+# API key and every backend call fails (manifests in the UI as
+# "No patients found" / "Loading...").
+if [[ -f app/Backend/.env.native ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source app/Backend/.env.native
+    set +a
+fi
+
 # ── 1. Start NLP + webapp Docker (unless skipped) ──────────────────────────
 if [[ $SKIP_DOCKER -eq 0 ]]; then
     section "Starting Docker (NLP + webapp only)"

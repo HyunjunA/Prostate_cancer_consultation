@@ -71,10 +71,14 @@ ok "postgres auth OK ($POSTGRES_USER@$POSTGRES_DB)"
 section "Redis reachability"
 
 if command -v redis-cli >/dev/null 2>&1; then
-    if redis-cli -h "${REDIS_HOST:-localhost}" -p "${REDIS_PORT:-6379}" ping 2>/dev/null | grep -q PONG; then
+    # 3s shell-level timeout — some VS Code/Cursor processes squat on :6379
+    # accepting the connection but never replying, hanging redis-cli's own timer.
+    REDIS_REPLY=$(perl -e 'alarm 3; exec @ARGV' \
+        redis-cli -h "${REDIS_HOST:-localhost}" -p "${REDIS_PORT:-6379}" ping 2>/dev/null || echo "")
+    if echo "$REDIS_REPLY" | grep -q PONG; then
         ok "redis responds PONG"
     else
-        warn "redis NOT reachable. Backend will run with rate-limiting disabled."
+        warn "redis NOT reachable / timeout. Backend will run with rate-limiting disabled."
     fi
 else
     warn "redis-cli not on PATH — skipped"

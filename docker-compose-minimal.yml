@@ -44,9 +44,6 @@ services:
     build:
       context: app/Webapp
       dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_POSTHOG_KEY: ${POSTHOG_KEY:-}
-        NEXT_PUBLIC_POSTHOG_HOST: ${POSTHOG_HOST:-}
     container_name: prostatecancer-webapp-native
     env_file:
       - app/Webapp/.env.native       # NEXT_PUBLIC_API_URL=http://host.docker.internal:8000
@@ -56,8 +53,6 @@ services:
       # the native uvicorn backend on the Mac/Linux host).
       BACKEND_URL: http://host.docker.internal:8000
       API_KEY: ${API_KEY}
-      NEXT_PUBLIC_POSTHOG_KEY: ${POSTHOG_KEY:-}
-      NEXT_PUBLIC_POSTHOG_HOST: ${POSTHOG_HOST:-}
     extra_hosts:
       # Linux: docker doesn't auto-resolve host.docker.internal — declare it.
       - "host.docker.internal:host-gateway"
