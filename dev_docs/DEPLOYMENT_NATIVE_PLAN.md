@@ -341,8 +341,11 @@ brew services start postgresql@16 redis
 docker compose -f docker-compose-minimal.yml up -d
 bash scripts/run-backend-native.sh &
 
-# 2. Run the pipeline
-python scripts/run-pipeline-standalone.py --file data/transcripts/SID_10.xlsx
+# 2. Run the pipeline (single file, or --dir for whole folder)
+python scripts/run-pipeline-standalone.py \
+    --file "../AI_physician_patient_communication/data/input/Input_Keystrokes REC 001 (SID 10).xlsx"
+# or
+python scripts/run-pipeline-standalone.py --dir ../AI_physician_patient_communication/data/input
 
 # 3. Verify the DB
 python scripts/verify_db.py
