@@ -72,7 +72,9 @@ Five clinical domains are analyzed:
 
 ## Deployment
 
-See **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** for step-by-step instructions.
+Two supported modes:
+
+### Docker mode (everything containerised)
 
 ```bash
 git clone https://github.com/HyunjunA/Prostate_cancer_consultation.git
@@ -82,7 +84,23 @@ cp app/Backend/.env.example app/Backend/.env
 ./run_all.sh
 ```
 
-After deployment:
+See **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** for the full Docker walkthrough.
+
+### Native mode (only NLP + webapp in Docker, rest native)
+
+```bash
+bash scripts/setup-native-mac.sh                     # one-time native deps
+cp app/Backend/.env.native.example app/Backend/.env.native
+bash scripts/init-db-native.sh                       # one-time DB bootstrap
+bash scripts/run-native.sh                           # start everything
+```
+
+See **[dev_docs/DEPLOYMENT_NATIVE.md](dev_docs/DEPLOYMENT_NATIVE.md)** for the full
+native walkthrough including the standalone pipeline runner
+(`scripts/run-pipeline-standalone.py --file ... | --dir ...`) and
+DB verification helpers.
+
+After deployment (either mode):
 - Dashboard: http://localhost:3001
 - API Documentation: http://localhost:8000/docs
 
@@ -92,7 +110,8 @@ After deployment:
 
 | Document | Description |
 |----------|-------------|
-| [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) | How to deploy the system |
+| [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) | Docker mode deployment |
+| [dev_docs/DEPLOYMENT_NATIVE.md](dev_docs/DEPLOYMENT_NATIVE.md) | Native mode deployment (Docker for NLP + webapp only) |
 | [ERD v3](app/Backend/patient_doctor_interface_erd_v3_en.md) | Database schema with examples |
 | [docs/](docs/) | Architecture, security, and setup guides |
 
