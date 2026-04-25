@@ -238,6 +238,8 @@ mode at a time.
 | Backend starts but `/health` says nlp=unhealthy | NLP Docker not running | `docker compose -f docker-compose-minimal.yml up -d` |
 | Webapp loads but UI shows "No patients found" | webapp container booted with empty `API_KEY` (compose interpolated `${API_KEY}` to empty) | confirm `.env.native` is sourced before `docker compose up`; `run-native.sh` does this automatically |
 | Standalone script: `No module named 'greenlet'` | sqlalchemy async lazy-imports greenlet | `.venv/bin/pip install greenlet` (already pinned in requirements.txt as of `1e3de47`) |
+| Webapp UI shows "No patients found" AND `curl /health` returns 500 AND `curl /docs` returns 200 | uvicorn workers have a stale module cache — sqlalchemy registered `_not_implemented` for greenlet at module-load time (before `pip install greenlet`). The pip install only helps brand-new Python processes; running workers keep the failed resolution. | **Restart uvicorn** (Ctrl-C the foreground process, then `bash scripts/run-backend-native.sh` again). General rule: after **any** `pip install` / `pip upgrade` against a venv whose uvicorn is already running, restart all workers. Pinning deps in `requirements.txt` prevents this scenario for fresh setups. |
+| `kill <pid>` does not terminate a uvicorn process | The process is uninterruptible (stuck in a C extension or ignoring SIGTERM — observed for orphaned `--workers 1` instances) | `kill -9 <pid>` (SIGKILL). Confirm with `ps aux \| grep uvicorn` afterwards. |
 | Pipeline standalone: `pred_*` columns NULL | should be impossible after migration 006 + the persistence.py fix | open an issue with the offending analysis_id |
 
 ---
