@@ -130,7 +130,6 @@ async def save_all(
                         speaker=patient_speaker,
                         domain=domain_full,
                         display_order=order,
-                        summary_text="",  # populated by AI pipeline (reformat_sentence)
                     )
                     .on_conflict_do_update(
                         index_elements=["file", "speaker", "domain"],

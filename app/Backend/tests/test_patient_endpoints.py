@@ -48,12 +48,10 @@ class TestGetPatientSummaries:
         item = resp.json()["data"][0]
         assert "file" in item
         assert "speaker" in item
-        assert "entire_summary" in item
         assert "classes" in item
         assert len(item["classes"]) == 5
         for cls in item["classes"]:
             assert "class_name" in cls
-            assert "summary" in cls
 
     async def test_pagination_skip(self, client, api_headers, db):
         for i in range(5):
@@ -169,7 +167,6 @@ class TestGetPatientSummaryDetail:
         assert data["file"] == "f.xlsx"
         assert data["speaker"] == "P1"
         assert "summary" in data
-        assert data["summary"]["entire_summary"] == "Overall summary text."
         # Without scoring, all scores should be None
         for cls in data["summary"]["classes"]:
             assert cls["score"] is None
@@ -202,12 +199,10 @@ class TestGetPatientSummaryDetail:
         assert "file" in data
         assert "speaker" in data
         summary = data["summary"]
-        assert "entire_summary" in summary
         assert "classes" in summary
         assert len(summary["classes"]) == 5
         for cls in summary["classes"]:
             assert "class_name" in cls
-            assert "summary" in cls
             assert "score" in cls
 
     async def test_detail_class_names_match_factory(self, client, api_headers, db):
