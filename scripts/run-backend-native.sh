@@ -81,6 +81,16 @@ source "$VENV_DIR/bin/activate"
 # rpy2 needs R_HOME on macOS Apple Silicon
 export R_HOME="${R_HOME:-$(R RHOME 2>/dev/null || true)}"
 
+# ── PYTHONPATH: sibling AI repo so backend can import ai_pipeline.* ─────────
+# Used by:
+#   - routes_doctor.py (Try & Score: from ai_pipeline.llm import call_llm)
+#   - ai_pipeline_service.py (full AI sub-pipeline: from ai_pipeline.pipeline import run_ai_pipeline)
+# Without this, those imports fail at request time and the route returns 503.
+AI_REPO_DIR="$REPO_ROOT/../AI_physician_patient_communication"
+if [[ -d "$AI_REPO_DIR" ]]; then
+    export PYTHONPATH="$AI_REPO_DIR${PYTHONPATH:+:$PYTHONPATH}"
+fi
+
 # ── Preflight ───────────────────────────────────────────────────────────────
 bash "$SCRIPT_DIR/preflight-native.sh"
 
