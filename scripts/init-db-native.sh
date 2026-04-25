@@ -140,8 +140,27 @@ PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U 
     || fail "Could not connect as $POSTGRES_USER@$POSTGRES_DB. Check pg_hba.conf for password auth."
 ok "app credentials work"
 
-# ── Step 5: Run alembic migrations ──────────────────────────────────────────
-section "Step 5: alembic upgrade head"
+# ── Step 5a: Apply database_schema.sql (baseline schema) ────────────────────
+# In Docker the postgres entrypoint runs this on first init; for native we
+# apply it manually before alembic migrations.
+section "Step 5a: Apply database_schema.sql"
+
+SCHEMA_SQL="$BACKEND_DIR/database_schema.sql"
+if [[ ! -f "$SCHEMA_SQL" ]]; then
+    fail "$SCHEMA_SQL not found"
+fi
+
+# Skip if baseline tables already exist (idempotent re-run)
+if PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT 1 FROM information_schema.tables WHERE table_name='session_recording'" 2>/dev/null | grep -q 1; then
+    ok "database_schema.sql already applied (session_recording present)"
+else
+    info "Applying database_schema.sql ..."
+    PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f "$SCHEMA_SQL" -v ON_ERROR_STOP=1 >/dev/null
+    ok "database_schema.sql applied"
+fi
+
+# ── Step 5b: Run alembic migrations (stamps baseline if needed) ─────────────
+section "Step 5b: alembic upgrade head"
 
 # shellcheck disable=SC1091
 source "$VENV_DIR/bin/activate"
@@ -151,7 +170,12 @@ source "$VENV_DIR/bin/activate"
 export DATABASE_URL DATABASE_URL_SYNC
 
 cd "$BACKEND_DIR"
-info "Current alembic revision (before): $(alembic current 2>&1 | tail -1 || echo '(none)')"
+CURRENT=$(alembic current 2>/dev/null | tail -1 | awk '{print $1}')
+if [[ -z "$CURRENT" ]]; then
+    info "No alembic version yet — stamping 001_baseline (schema is in place)"
+    alembic stamp 001_baseline
+fi
+info "Current alembic revision (before): $(alembic current 2>&1 | tail -1)"
 alembic upgrade head
 ok "alembic upgrade head complete"
 info "Current alembic revision (after):  $(alembic current 2>&1 | tail -1)"
