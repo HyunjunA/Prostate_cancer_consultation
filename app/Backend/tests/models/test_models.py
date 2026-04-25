@@ -115,7 +115,7 @@ class TestPatientSummary:
             select(PatientSummary).where(PatientSummary.file == "ps-rt.xlsx")
         )
         row = result.scalar_one()
-        assert row.entire_summary == "Overall summary text."
+        assert row.file == "ps-rt.xlsx"
 
 
 # ── PatientSummaryScoring ─────────────────────────────────────────────────

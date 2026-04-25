@@ -96,12 +96,8 @@ async def get_patient_summaries(
             {
                 "file": r.file,
                 "speaker": r.speaker,
-                "entire_summary": r.entire_summary,
                 "classes": [
-                    {
-                        "class_name": d.domain,
-                        "summary": d.summary_text
-                    }
+                    {"class_name": d.domain}
                     for d in r.domains
                 ]
             }
@@ -139,11 +135,9 @@ async def get_patient_summary_detail(
         "file": file,
         "speaker": speaker,
         "summary": {
-            "entire_summary": summary.entire_summary,
             "classes": [
                 {
                     "class_name": d.domain,
-                    "summary": d.summary_text,
                     "score": d.patient_scoring
                 }
                 for d in summary.domains

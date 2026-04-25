@@ -42,7 +42,6 @@ class PatientSummary(Base):
 
     file = Column(String(255), primary_key=True, nullable=False)
     speaker = Column(String(100), primary_key=True, nullable=False)
-    entire_summary = Column(Text)
 
     domains = relationship("PatientSummaryDomain", back_populates="summary",
                            cascade="all, delete-orphan", order_by="PatientSummaryDomain.display_order")
@@ -61,7 +60,6 @@ class PatientSummaryDomain(Base):
                                   Initially NULL — populated when patient submits rating.
       - patient_response       → PATIENT page: free-text response entered by the patient.
                                   Saved via PUT /api/patient/responses.
-      - summary_text           → PATIENT page: domain summary text (populated by pipeline).
 
     NOTE: patient_scoring is NOT the same as llm_domain_scoring_and_summary.ai_score.
       - patient_scoring = patient's subjective rating of doctor communication (PATIENT page)
@@ -80,7 +78,6 @@ class PatientSummaryDomain(Base):
     speaker = Column(String(100), primary_key=True, nullable=False)
     domain = Column(String(100), primary_key=True, nullable=False)
     display_order = Column(Integer, nullable=False, default=0)
-    summary_text = Column(Text)
     patient_scoring = Column(Integer, CheckConstraint('patient_scoring BETWEEN 0 AND 10'))  # PATIENT enters this
     patient_response = Column(Text)  # PATIENT enters this
 

@@ -64,12 +64,10 @@ class TestDataFactory:
     def patient_summary(
         file: str = "test-file.xlsx",
         speaker: str = "Patient_1",
-        entire_summary: str = "Overall summary text.",
     ) -> PatientSummary:
         return PatientSummary(
             file=file,
             speaker=speaker,
-            entire_summary=entire_summary,
             class_1="Cancer Prognosis",
             summary_class_1="CP summary text.",
             class_2="Life Expectancy",
