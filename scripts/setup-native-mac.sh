@@ -2,7 +2,7 @@
 # ============================================================================
 #  Native deployment setup — macOS (Apple Silicon + Intel)
 #
-#  Installs PostgreSQL 13, Redis, R 4.x with stringi 1.8.4 (ICU 74.1),
+#  Installs PostgreSQL 16, Redis, R 4.x with stringi 1.8.4 (ICU 74.1),
 #  Python 3.10, and creates a Python venv with backend dependencies.
 #
 #  Usage:
@@ -64,24 +64,24 @@ brew_ensure() {
 # ── Step 1: brew packages ───────────────────────────────────────────────────
 section "Step 1: Install brew packages"
 
-brew_ensure postgresql@13
+brew_ensure postgresql@16
 brew_ensure redis
 brew_ensure r
 brew_ensure python@3.10
 
-# Add postgresql@13 to PATH for this script
-export PATH="$BREW_PREFIX/opt/postgresql@13/bin:$PATH"
+# Add postgresql@16 to PATH for this script
+export PATH="$BREW_PREFIX/opt/postgresql@16/bin:$PATH"
 
 # ── Step 2: Start postgres + redis services ─────────────────────────────────
-section "Step 2: Start postgresql@13 and redis services"
+section "Step 2: Start postgresql@16 and redis services"
 
-if brew services list | grep -E "^postgresql@13" | grep -q "started"; then
-    ok "postgresql@13 already running"
+if brew services list | grep -E "^postgresql@16" | grep -q "started"; then
+    ok "postgresql@16 already running"
 else
-    info "Starting postgresql@13 ..."
-    brew services start postgresql@13
+    info "Starting postgresql@16 ..."
+    brew services start postgresql@16
     sleep 3
-    ok "postgresql@13 started"
+    ok "postgresql@16 started"
 fi
 
 if brew services list | grep -E "^redis" | grep -q "started"; then
@@ -166,7 +166,7 @@ section "Setup complete"
 cat <<EOF
 
   Native components installed:
-    postgresql@13   $(psql --version 2>/dev/null | head -1)
+    postgresql@16   $(psql --version 2>/dev/null | head -1)
     redis           $(redis-cli --version 2>/dev/null | head -1)
     R               $(R --version 2>/dev/null | head -1)
     stringi         $(R --no-save --quiet -e 'cat(as.character(packageVersion("stringi")))' 2>/dev/null | tail -1) (ICU $(R --no-save --quiet -e 'cat(stringi::stri_info()\$ICU.version)' 2>/dev/null | tail -1))

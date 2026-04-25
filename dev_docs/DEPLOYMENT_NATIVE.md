@@ -39,7 +39,7 @@ sudo bash scripts/setup-native-linux.sh
 ```
 
 This installs and starts:
-- PostgreSQL 13 (port 5432)
+- PostgreSQL 16 (port 5432)
 - Redis (port 6379)
 - R 4.x with `stringi 1.8.4` compiled against ICU 74.1 (matches the
   reference pipeline exactly)
@@ -190,7 +190,7 @@ webapp, 6379 redis) collide — bring up only one mode at a time.
 
 ```
 [Native — Mac/Linux host]
-├─ postgresql@13     :5432
+├─ postgresql@16     :5432
 ├─ redis             :6379
 ├─ Backend FastAPI   :8000  (uvicorn via run-backend-native.sh)
 ├─ AI Pipeline       (CLI via run-pipeline-standalone.py)
