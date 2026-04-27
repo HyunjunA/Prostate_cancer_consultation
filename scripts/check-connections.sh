@@ -40,8 +40,8 @@ echo ""
 
 # ── 1. PostgreSQL ───────────────────────────────────────────────────────────
 echo "─── 1. PostgreSQL ─────────"
-if pg_isready -h "${POSTGRES_HOST:-localhost}" -p "${POSTGRES_PORT:-5432}" -q 2>/dev/null; then
-    if PGPASSWORD="${POSTGRES_PASSWORD:-}" psql -h "${POSTGRES_HOST:-localhost}" -p "${POSTGRES_PORT:-5432}" \
+if pg_isready -h "${POSTGRES_HOST:-localhost}" -p "${POSTGRES_PORT:-5433}" -q 2>/dev/null; then
+    if PGPASSWORD="${POSTGRES_PASSWORD:-}" psql -h "${POSTGRES_HOST:-localhost}" -p "${POSTGRES_PORT:-5433}" \
         -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-postgres}" -tAc "SELECT 1" >/dev/null 2>&1; then
         pass "postgres reachable + auth OK ($POSTGRES_HOST:$POSTGRES_PORT, db=$POSTGRES_DB)"
     else
