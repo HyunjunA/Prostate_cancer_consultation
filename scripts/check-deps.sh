@@ -15,6 +15,22 @@ set -uo pipefail   # NOTE: no -e — keep checking after a failure
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 VENV_DIR="$REPO_ROOT/.venv"
+ENV_FILE="$REPO_ROOT/app/Backend/.env.native"
+
+# Pull POSTGRES_HOST/PORT, REDIS_HOST/PORT from .env.native if present so the
+# checks below probe the same endpoints the actual stack uses (5433 / 6379 by
+# default — see .env.native.example). Falls back to project defaults when the
+# env file does not exist yet (e.g. running check-deps.sh before configure).
+if [[ -f "$ENV_FILE" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$ENV_FILE"
+    set +a
+fi
+PG_HOST="${POSTGRES_HOST:-localhost}"
+PG_PORT="${POSTGRES_PORT:-5433}"
+RD_HOST="${REDIS_HOST:-localhost}"
+RD_PORT="${REDIS_PORT:-6379}"
 
 # ── Pretty print ────────────────────────────────────────────────────────────
 GREEN="\033[92m"; RED="\033[91m"; YELLOW="\033[93m"; BOLD="\033[1m"; RESET="\033[0m"
@@ -50,10 +66,10 @@ echo ""
 # ── 2. Postgres reachability ────────────────────────────────────────────────
 echo "─── 2. PostgreSQL reachability ────────────"
 if command -v pg_isready >/dev/null 2>&1; then
-    if pg_isready -h localhost -p 5432 -q 2>/dev/null; then
-        pass "postgres listening on localhost:5432"
+    if pg_isready -h "$PG_HOST" -p "$PG_PORT" -q 2>/dev/null; then
+        pass "postgres listening on $PG_HOST:$PG_PORT"
     else
-        fail "postgres NOT reachable on localhost:5432 (is it running?)"
+        fail "postgres NOT reachable on $PG_HOST:$PG_PORT (is it running?)"
     fi
 else
     warn "pg_isready not on PATH — skipped"
@@ -62,10 +78,10 @@ echo ""
 
 # ── 3. Redis reachability ───────────────────────────────────────────────────
 echo "─── 3. Redis reachability ─────────────────"
-if redis-cli -h localhost -p 6379 ping 2>/dev/null | grep -q PONG; then
-    pass "redis responds PONG on localhost:6379"
+if redis-cli -h "$RD_HOST" -p "$RD_PORT" ping 2>/dev/null | grep -q PONG; then
+    pass "redis responds PONG on $RD_HOST:$RD_PORT"
 else
-    fail "redis NOT reachable on localhost:6379 (is it running?)"
+    fail "redis NOT reachable on $RD_HOST:$RD_PORT (is it running?)"
 fi
 echo ""
 
