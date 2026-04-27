@@ -122,8 +122,9 @@ sudo bash scripts/setup-native-linux.sh
 ```
 
 Installs and starts:
-- PostgreSQL 16 (default port 5432; this project uses **5433** to avoid
-  collisions with EDB-style installations)
+- PostgreSQL 16, configured to listen on **port 5433** (auto-set in
+  `postgresql.conf` — avoids collision with system EDB-style installs that
+  squat on 5432, and with our Docker mode which uses 5432)
 - Redis (port 6379)
 - Python 3.10 + `.venv/` with the backend's full requirements
 

@@ -85,6 +85,18 @@ brew_ensure python@3.10
 # Add postgresql@16 to PATH for this script
 export PATH="$BREW_PREFIX/opt/postgresql@16/bin:$PATH"
 
+# Pin postgres@16 to port 5433 to avoid the 5432 collision with system-wide
+# EDB-style installs (Postgres.app, /Library/PostgreSQL/*). Idempotent —
+# only appends `port = 5433` if the line is not already there. Matches the
+# default in app/Backend/.env.native.example so nothing else needs editing.
+PG_CONF="$BREW_PREFIX/var/postgresql@16/postgresql.conf"
+if [[ -f "$PG_CONF" ]] && ! grep -q "^port = 5433" "$PG_CONF"; then
+    echo "port = 5433" >> "$PG_CONF"
+    ok "set port = 5433 in postgresql.conf"
+else
+    ok "postgres port already configured (or conf not yet created)"
+fi
+
 # ── Step 2: Start postgres + redis services ─────────────────────────────────
 section "Step 2: Start postgresql@16 and redis services"
 
