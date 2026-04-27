@@ -207,6 +207,17 @@ API_KEY=<openssl rand -hex 32>
 # Required for the AI sub-pipeline (omit / use --skip-ai for NLP only):
 AZURE_OPENAI_ENDPOINT=https://YOUR-RESOURCE.openai.azure.com
 AZURE_OPENAI_KEY=<your key>
+# (AZURE_OPENAI_API_VERSION and AZURE_OPENAI_MODEL ship with working defaults
+#  in the template — change only if your Azure resource uses different values.)
+
+# Optional — REDCap iREDCap survey sync. With both URL and TOKEN set, every
+# patient survey submission also writes to iREDCap. Without them, submissions
+# save to local PostgreSQL only and the sync step is skipped silently.
+REDCAP_API_URL=https://iredcap.csmc.edu/api/
+REDCAP_API_TOKEN=<your project API token>
+
+# Redis (defaults to native brew redis on the host)
+REDIS_URL=redis://localhost:6379/0
 
 # Pipeline I/O — relative paths, resolved against this repo's root by
 # config.py. Defaults point to the sibling AI repo so a fresh clone
@@ -228,7 +239,7 @@ bash scripts/init-db-native.sh
 ```
 
 Creates the role + database, applies `app/Backend/database_schema.sql`,
-then runs `alembic upgrade head` (migrations 001–007). Verifies the 18
+then runs `alembic upgrade head` (migrations 001–008). Verifies the 18
 expected tables are present.
 
 ### 4. (Optional) Sanity check
@@ -258,8 +269,10 @@ This:
    present)
 2. Brings up `nlp-classifiers` + `webapp` via `docker-compose-minimal.yml`
 3. Waits for NLP healthcheck
-4. Runs the preflight (postgres auth, NLP container `docker exec`
-   stringi probe, alembic head, redis ping)
+4. Runs `scripts/preflight-native.sh` — verifies postgres auth, NLP
+   container `docker exec` stringi probe (must match Michael's reference
+   stringi 1.8.7 + ICU 74.2), alembic at head, redis ping. You can also
+   run it standalone any time with `bash scripts/preflight-native.sh`.
 5. Starts uvicorn against `main:app` on `0.0.0.0:8000` (foreground)
 
 Open:
