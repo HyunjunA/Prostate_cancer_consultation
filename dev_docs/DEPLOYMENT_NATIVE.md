@@ -34,6 +34,36 @@ unchanged — see [`DEPLOYMENT_MODES.md`](DEPLOYMENT_MODES.md).
 
 ## One-time setup
 
+### 0. Clone the two repos as siblings (~30 sec)
+
+```bash
+mkdir -p ~/your-workspace && cd ~/your-workspace
+
+git clone -b feat/native-deployment \
+    https://github.com/HyunjunA/Prostate_cancer_consultation.git \
+    Prostate_cancer_consultation_dashboard
+
+git clone -b feat/native-deploy-docker-exec-stringi \
+    https://github.com/jifa83/AI_physician_patient_communication.git \
+    AI_physician_patient_communication
+
+cd Prostate_cancer_consultation_dashboard
+```
+
+After this you should have:
+```
+~/your-workspace/
+├─ Prostate_cancer_consultation_dashboard/   (dashboard — backend + webapp + scripts)
+└─ AI_physician_patient_communication/       (AI repo — sentence_classification + ai_pipeline + data/)
+```
+
+The `feat/native-deploy-docker-exec-stringi` branch is currently
+the canonical native-mode branch on **both** the upstream
+(`jifa83`) and the development fork (`HyunjunA`). Cloning from
+`jifa83` is the recommended default; switch to `HyunjunA` only if
+you specifically need an in-flight branch that hasn't been pushed
+upstream yet.
+
 ### 1. Install native dependencies (~3 min)
 
 **macOS:**
