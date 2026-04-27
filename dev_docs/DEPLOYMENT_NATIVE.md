@@ -175,6 +175,33 @@ Open:
 Stop with `Ctrl-C` (backend) and `docker compose -f docker-compose-minimal.yml down`
 (containers).
 
+### Place input transcripts
+
+Drop the consultation `.xlsx` (or `.csv`) files into:
+
+```
+../AI_physician_patient_communication/data/input/
+```
+
+This directory is **gitignored** — it holds clinical data and must
+never be committed. Obtain the files via your team's secure delivery
+channel (encrypted drive, internal storage, etc.).
+
+Filename convention: the standalone runner extracts the patient ID
+from the filename. The reference layout used in development is
+`Input_Keystrokes REC<NNN> (SID <ID>).xlsx`, e.g.
+`Input_Keystrokes REC 001 (SID 10).xlsx`. Other names work too — the
+runner accepts any `.xlsx`/`.csv` and stores rows under
+`source_filename` in `transcript_analysis_log`.
+
+Quick check:
+
+```bash
+ls "../AI_physician_patient_communication/data/input/"
+```
+
+The next step (`run-pipeline-standalone.py`) reads from this folder.
+
 ### Run the standalone pipeline (★ manager's primary requirement)
 
 Single transcript:
