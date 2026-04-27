@@ -429,8 +429,6 @@ Pipeline(native) ──localhost:8888──────────────�
 Pipeline(native) ──docker exec────────────────→ NLP(Docker)  [stringi]
 ```
 
-See [`DEPLOYMENT_NATIVE_PLAN.md`](DEPLOYMENT_NATIVE_PLAN.md) for the
-phased plan, [`DEPLOYMENT_MODES.md`](DEPLOYMENT_MODES.md) for choosing
-between Docker and Native, and
-[`PIPELINE_DB_FLOW.md`](PIPELINE_DB_FLOW.md) for the per-stage data
-flow into PostgreSQL.
+See [`DEPLOYMENT_MODES.md`](DEPLOYMENT_MODES.md) for choosing between
+Docker and Native, and [`PIPELINE_DB_FLOW.md`](PIPELINE_DB_FLOW.md) for
+the per-stage data flow into PostgreSQL.
