@@ -46,6 +46,14 @@ ENV_FILE = BACKEND_DIR / ".env.native"
 # Make backend modules importable
 sys.path.insert(0, str(BACKEND_DIR))
 
+# Make sibling AI repo modules importable so persistence.py / pipeline_runner
+# can `from sentence_classification import ...` and `from ai_pipeline import ...`
+# without the operator having to set PYTHONPATH manually. Mirrors the
+# convention enforced by run-backend-native.sh for the uvicorn process.
+AI_REPO_DIR = REPO_ROOT.parent / "AI_physician_patient_communication"
+if AI_REPO_DIR.is_dir():
+    sys.path.insert(0, str(AI_REPO_DIR))
+
 # Load env BEFORE importing backend modules (they may read DATABASE_URL at import time)
 try:
     from dotenv import load_dotenv
