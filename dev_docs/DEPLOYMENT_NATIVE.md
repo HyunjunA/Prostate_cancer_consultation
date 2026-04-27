@@ -57,13 +57,6 @@ After this you should have:
 └─ AI_physician_patient_communication/       (AI repo — sentence_classification + ai_pipeline + data/)
 ```
 
-The `feat/native-deploy-docker-exec-stringi` branch is currently
-the canonical native-mode branch on **both** the upstream
-(`jifa83`) and the development fork (`HyunjunA`). Cloning from
-`jifa83` is the recommended default; switch to `HyunjunA` only if
-you specifically need an in-flight branch that hasn't been pushed
-upstream yet.
-
 ### 1. Install native dependencies (~3 min)
 
 **macOS:**
