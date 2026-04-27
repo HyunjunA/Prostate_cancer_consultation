@@ -46,6 +46,13 @@ if [ -z "$API_KEY" ] || [ "$API_KEY" = "CHANGE_ME_generate_a_random_key" ]; then
     exit 1
 fi
 
+# Postgres credentials for verification step (Step 3.5b)
+PG_USER=$(grep '^POSTGRES_USER=' "$ENV_FILE" | cut -d'=' -f2-)
+PG_DB=$(grep '^POSTGRES_DB=' "$ENV_FILE" | cut -d'=' -f2-)
+
+# Path to xlsx transcripts (for the analyze API loop in Step 3.5)
+TRANSCRIPT_DIR="$SCRIPT_DIR/../AI_physician_patient_communication/data/input"
+
 # ── Log file setup ───────────────────────────────────────────────────────────
 LOG_DIR="$SCRIPT_DIR/logs"
 mkdir -p "$LOG_DIR"
@@ -167,6 +174,79 @@ done
 
 echo ""
 ok "Core services healthy — ready for tests"
+
+# ============================================================================
+#  STEP 3.5 — Run /api/transcript/analyze for each xlsx (replicates native flow)
+#
+#  Why: prestart.sh's auto-pipeline runs under healthcheck time pressure and
+#  silently swallows AI pipeline failures (try/except in pipeline_runner.py).
+#  This step calls the same endpoint a developer would call manually in
+#  native mode, where AI rewriting (llm_domain_scoring_and_summary) actually
+#  populates. Mirrors what _persist_and_run_ai does — basic NLP + AI rewriting.
+# ============================================================================
+section "Step 3.5: Run /api/transcript/analyze (full NLP + AI pipeline)"
+
+if [ ! -d "$TRANSCRIPT_DIR" ]; then
+    info "No transcript directory at $TRANSCRIPT_DIR — skipping analyze step"
+else
+    found=0
+    for xlsx in "$TRANSCRIPT_DIR"/*.xlsx; do
+        [ -f "$xlsx" ] || continue
+        found=$((found + 1))
+        filename=$(basename "$xlsx")
+        info "Analyzing: $filename"
+
+        # POST file via /api/transcript/analyze — the same path used in native mode.
+        # _persist_and_run_ai runs save_all (NLP-level tables) then ai_pipeline_service
+        # (llm_domain_scoring_and_summary). Long timeout — AI pipeline ~3min/file.
+        analyze_response=$(curl -s --max-time 1800 -X POST \
+            "$BASE_URL/api/transcript/analyze" \
+            -H "X-API-Key: $API_KEY" \
+            -F "file=@$xlsx" \
+            -F "top_n=10" \
+            -F "context_window=2")
+
+        analyze_summary=$(echo "$analyze_response" | python3 -c "
+import sys, json
+try:
+    d = json.loads(sys.stdin.read())
+    pid = d.get('patient_id', '')
+    n = d.get('total_sentences', 0)
+    print(f'{pid} ({n} sentences)' if pid else f'(no patient_id) {d}')
+except Exception as e:
+    print(f'(parse error: {e})')
+" 2>/dev/null)
+
+        if echo "$analyze_summary" | grep -qE '^[A-Za-z0-9_]+ \([0-9]+ sentences\)$'; then
+            ok "Analyzed: $analyze_summary"
+        else
+            echo "  ⚠ Unexpected response: $analyze_summary"
+            echo "    Raw: $analyze_response" | head -c 500
+            echo ""
+        fi
+    done
+
+    if [ "$found" -eq 0 ]; then
+        info "No xlsx files found in $TRANSCRIPT_DIR — skipping"
+    fi
+fi
+
+# Verify llm_domain_scoring_and_summary populated — this is what makes the
+# patient page show real summaries instead of "Summary not available".
+echo ""
+info "Verifying AI pipeline output (llm_domain_scoring_and_summary)..."
+ai_count=$(docker exec prostatecancer-postgres psql \
+    -U "$PG_USER" -d "$PG_DB" \
+    -t -c "SELECT COUNT(*) FROM llm_domain_scoring_and_summary;" 2>/dev/null \
+    | tr -d ' \n')
+
+if [ -n "$ai_count" ] && [ "$ai_count" -gt 0 ]; then
+    ok "AI pipeline produced $ai_count rows in llm_domain_scoring_and_summary"
+else
+    echo "  ⚠ WARNING: llm_domain_scoring_and_summary is empty (count=$ai_count)"
+    echo "    Patient pages will show 'Summary not available'."
+    echo "    Inspect backend logs:  docker logs prostatecancer-backend 2>&1 | grep -iE 'ai|azure|openai'"
+fi
 
 # ============================================================================
 #  STEP 4 — Full 5-Model Transcript Analysis (Direct NLP Call)
