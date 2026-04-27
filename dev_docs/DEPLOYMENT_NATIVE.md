@@ -18,7 +18,7 @@ unchanged — see [`DEPLOYMENT_MODES.md`](DEPLOYMENT_MODES.md).
 | Homebrew (Mac) or apt (Linux) | https://brew.sh |
 | Docker Desktop | https://docker.com (only for NLP + webapp containers) |
 | Source code (this repo + sibling `AI_physician_patient_communication`) | `git clone` |
-| **NLP OCI archive** | from the external NLP team — `nlp-classifiers/r01-nlp-classifiers-docker-image/` (kept inside the AI repo, gitignored) |
+| **NLP OCI archive** (~632 MB) | obtained separately from your team's secure storage — see "0.5 Place the NLP OCI archive" below |
 | **Azure OpenAI key + endpoint** | your organisation's Azure account (skip with `--skip-ai` for NLP-only runs) |
 | 8 GB RAM, 15 GB disk | host hardware |
 
@@ -56,6 +56,58 @@ After this you should have:
 ├─ Prostate_cancer_consultation_dashboard/   (dashboard — backend + webapp + scripts)
 └─ AI_physician_patient_communication/       (AI repo — sentence_classification + ai_pipeline + data/)
 ```
+
+### 0.5 Place the NLP OCI archive (~1 min)
+
+The NLP-classifiers Docker container is loaded from a ~632 MB OCI
+image archive that is **not** committed to git (gitignored — too
+large for plain git, would require LFS). After cloning, you must
+obtain the archive separately and place it here:
+
+```
+AI_physician_patient_communication/nlp-classifiers/r01-nlp-classifiers-docker-image/
+```
+
+#### Expected layout
+
+```
+r01-nlp-classifiers-docker-image/
+├─ blobs/
+│  └─ sha256/
+│     ├─ 1cfbf41ca0...   (~293 MB — main model layer)
+│     ├─ 60037af943...   (~211 MB — second model layer)
+│     ├─ b755216fb0...   (~60 MB)
+│     └─ ... (15+ other smaller layer files)
+├─ index.json
+├─ manifest.json
+└─ oci-layout
+```
+
+#### How to obtain
+
+Get the archive from your team's secure storage location. The exact
+channel depends on your team's data-handling policy (encrypted shared
+drive, internal artifact storage, restricted file transfer, etc.) —
+coordinate with your team to find where the current copy is kept.
+
+#### Verify
+
+```bash
+ls AI_physician_patient_communication/nlp-classifiers/r01-nlp-classifiers-docker-image/
+# Should show: blobs  index.json  manifest.json  oci-layout
+```
+
+#### Alternative: archive lives elsewhere on disk
+
+If you keep the archive in a different location, point `run-native.sh`
+to it via env var:
+
+```bash
+export NLP_IMAGE_DIR=/abs/path/to/r01-nlp-classifiers-docker-image
+```
+
+`run-native.sh` will load the image from that path on first run, then
+the local Docker daemon caches it (subsequent runs skip the load).
 
 ### 1. Install native dependencies (~3 min)
 
