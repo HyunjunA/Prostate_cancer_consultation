@@ -125,7 +125,13 @@ OPTIONAL_CONTAINERS=(
     "prostatecancer-nginx"
 )
 
-MAX_WAIT=300  # seconds
+# Backend prestart.sh runs pipeline_runner.py (alembic migrations + full NLP +
+# AI pipeline) before gunicorn starts. With ~2 transcripts × 5 domains × ~30s
+# per domain (Azure OpenAI calls), backend can take 10–15 min before /health
+# responds. docker-compose's start_period is 2400s — match it here so we don't
+# fail before the container is genuinely ready.
+# Override via env: MAX_WAIT=600 ./run_all.sh
+MAX_WAIT="${MAX_WAIT:-1800}"  # seconds
 INTERVAL=5
 
 for container in "${REQUIRED_CONTAINERS[@]}"; do
