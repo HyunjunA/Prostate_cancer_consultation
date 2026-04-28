@@ -91,7 +91,7 @@ git clone -b feat/native-deployment \
     https://github.com/HyunjunA/Prostate_cancer_consultation.git \
     Prostate_cancer_consultation_dashboard
 
-git clone -b feat/native-deploy-docker-exec-stringi \
+git clone -b feat/native-deploy \
     https://github.com/jifa83/AI_physician_patient_communication.git \
     AI_physician_patient_communication
 
