@@ -132,7 +132,7 @@ async def process_single_file(
         export_intermediate_files as _ai_export_intermediate_files,
         export_final_csv as _ai_export_final_csv,
     )
-    # Stash on the module so _save_output_files can reach them after the shim is restored.
+    # Stash on the module so process_single_file can reach them after the shim is restored.
     sys.modules[__name__]._ai_export_intermediate_files = _ai_export_intermediate_files
     sys.modules[__name__]._ai_export_final_csv = _ai_export_final_csv
 
@@ -191,23 +191,54 @@ async def process_single_file(
     )
 
     # ── Step 6: Generate context ─────────────────────────────────────────
+    # final_results keeps the SHORT names (cp/le/ed/inc/ius) that
+    # sentence_classification produces — that's exactly what AI repo's
+    # export.py expects, so no mutation.
     final_results = add_context_all_outcomes(
         df_sentences, top_by_model, window=context_window,
     )
 
-    # ── Convert keys: sentence_classification uses short names (cp, le, ...)
-    #    but persistence.save_all expects full names (cancer_prognosis, ...)
-    _short_to_full = {v: k for k, v in OUTCOME_TO_SHEET.items()}
-    final_results = {_short_to_full.get(k, k): v for k, v in final_results.items()}
+    # ── Step 7: Save output via AI repo's export module (single source of truth) ──
+    # Calls sentence_classification.export directly — produces
+    # data/output/<file-stem>/{step2_segmentation, step3_classification,
+    # step4_selection, step5_context, final}/ exactly like data/output_test.
+    output_dir = cfg.get("paths", {}).get("output_dir")
+    _intermediate = globals().get("_ai_export_intermediate_files")
+    _final = globals().get("_ai_export_final_csv")
+    if output_dir and _intermediate and _final and df_sentences is not None and df_predicted is not None:
+        try:
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+            stem = Path(filename).stem
+            _intermediate(
+                segmented_df=df_sentences,
+                predictions_df=df_predicted,
+                top_dfs=final_results,
+                output_path=str(output_dir),
+                folder_name=stem,
+            )
+            _final(
+                top_dfs=final_results,
+                folder_name=stem,
+                output_path=str(output_dir),
+            )
+            logger.info("  Output saved: %s/%s/ (nested format, output_test compatible)", output_dir, stem)
+        except Exception as e:
+            logger.warning("  Output save failed (non-fatal): %s", e)
 
-    # ── Step 7: Export xlsx (in-memory bytes for DB) ─────────────────────
-    xlsx_bytes = _export_to_xlsx_bytes(final_results)
+    # ── Build LONG-keyed view for persistence.save_all ───────────────────
+    # persistence.save_all expects full names (cancer_prognosis, …);
+    # build a view here without mutating the original SHORT-keyed dict.
+    _short_to_full = {v: k for k, v in OUTCOME_TO_SHEET.items()}
+    final_results_long = {_short_to_full.get(k, k): v for k, v in final_results.items()}
+
+    # ── Step 8: Export xlsx (in-memory bytes for DB) ─────────────────────
+    xlsx_bytes = _export_to_xlsx_bytes(final_results_long)
 
     # ── Determine speakers ───────────────────────────────────────────────
     doctor_speaker = df_filtered["speaker"].iloc[0] if len(df_filtered) > 0 else "Unknown"
     patient_speaker = f"Patient_{Path(filename).stem}"
 
-    # ── Step 8: Save to DB (processed=False, AI pipeline not yet run) ───
+    # ── Step 9: Save to DB (processed=False, AI pipeline not yet run) ───
     success = await persistence.save_all(
         Session,
         filename=filename,
@@ -218,7 +249,7 @@ async def process_single_file(
         top_n=top_n,
         context_window=context_window,
         xlsx_bytes=xlsx_bytes,
-        final_results=final_results,
+        final_results=final_results_long,
         outcome_to_sheet=OUTCOME_TO_SHEET,
         domain_slot_map=_DOMAIN_SLOT_MAP,
         domain_short_map=_DOMAIN_SHORT_MAP,
@@ -228,17 +259,6 @@ async def process_single_file(
         df_sentences=df_sentences,
         df_predicted=df_predicted,
         top_by_model=top_by_model,
-    )
-
-    # ── Save output files (traceability) ─────────────────────────────────
-    _save_output_files(
-        cfg, filename, patient_id, xlsx_bytes,
-        df_raw=df_raw,
-        df_filtered=df_filtered,
-        df_sentences=df_sentences,
-        df_predicted=df_predicted,
-        top_by_model=top_by_model,
-        final_results=final_results,
     )
 
     # ── Step 9: AI pipeline — GPT-4o scoring + patient summary rewriting ──
@@ -289,60 +309,6 @@ _DOMAIN_SLOT_MAP = {
 }
 
 
-def _save_output_files(cfg, filename, patient_id, xlsx_bytes,
-                       df_raw=None, df_filtered=None, df_sentences=None,
-                       df_predicted=None, top_by_model=None, final_results=None):
-    """Save pipeline output in the AI repo's nested format.
-
-    Single source of truth — writes to ``OUTPUT_DIR`` using
-    ``sentence_classification.export`` so the result is byte-compatible
-    with ``data/output_test/`` for regression diff.
-
-    Layout (per file)::
-
-        OUTPUT_DIR/<file-stem>/
-          step2_segmentation/segmented_sentences.csv
-          step3_classification/predictions_long.csv
-          step4_selection/top10_by_outcome.xlsx
-          step5_context/top10_with_context.xlsx
-          final/<domain>.csv  (one per cp/le/ed/inc/ius)
-
-    If a flat-format view is ever needed for a Dashboard consumer, add an
-    on-demand adapter (e.g. ``scripts/nested_to_flat.py``); the pipeline
-    itself stays single-output.
-    """
-    output_dir = cfg.get("paths", {}).get("output_dir")
-    if not output_dir:
-        logger.debug("  No output_dir configured — skipping nested output")
-        return
-    stem = Path(filename).stem
-
-    _intermediate = globals().get("_ai_export_intermediate_files")
-    _final = globals().get("_ai_export_final_csv")
-    if not _intermediate or not _final:
-        logger.warning("  AI repo export functions not available — skipping nested output")
-        return
-    if df_sentences is None or df_predicted is None or final_results is None:
-        logger.debug("  Required dataframes missing — skipping nested output")
-        return
-
-    try:
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
-        _intermediate(
-            segmented_df=df_sentences,
-            predictions_df=df_predicted,
-            top_dfs=final_results,
-            output_path=str(output_dir),
-            folder_name=stem,
-        )
-        _final(
-            top_dfs=final_results,
-            folder_name=stem,
-            output_path=str(output_dir),
-        )
-        logger.info("  Output saved: %s/%s/ (nested format, output_test compatible)", output_dir, stem)
-    except Exception as e:
-        logger.warning("  Output save failed (non-fatal): %s", e)
 
 
 # ── Main: single run or worker/monitor ───────────────────────────────────────
