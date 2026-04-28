@@ -302,7 +302,7 @@ class LLMDomainScoringAndSummary(Base):
     ai_score = Column(Integer)                               # 0-5 GPT-4o score → DOCTOR page (quality metric)
     score_explanation = Column(Text)                         # GPT-4o reasoning for the ai_score (from ai_pipeline/scoring.py)
     extracted_estimate = Column(Text)                        # "24-25%", "13 years", "<missing>"
-    treatment = Column(String(50))                           # "surgery", "radiation", NULL
+    treatment = Column(Text)                                 # "surgery", "radiation", "surgery, radiation, ablation therapy", NULL — TEXT for safety vs LLM verbosity
     source_sentence = Column(Text)                           # original single sentence (input to reformat)
     source_context = Column(Text)                            # surrounding context sentences
     reformat_sentence = Column(Text)                         # patient-facing summary → PATIENT page
@@ -390,7 +390,7 @@ class LLMPipelineIntermediate(Base):
     pred_score = Column(Float)                           # NLP .pred_1
     ai_score = Column(Integer)                           # GPT-4o 0-5
     score_explanation = Column(Text)
-    estimate = Column(String(255))
-    treatment = Column(String(255))
+    estimate = Column(Text)                                  # LLM extracted estimate — verbose responses possible
+    treatment = Column(Text)                                 # LLM extracted treatment — verbose responses possible
     survived_filter = Column(Boolean, nullable=False, default=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
