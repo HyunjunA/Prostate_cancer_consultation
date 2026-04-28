@@ -292,84 +292,57 @@ _DOMAIN_SLOT_MAP = {
 def _save_output_files(cfg, filename, patient_id, xlsx_bytes,
                        df_raw=None, df_filtered=None, df_sentences=None,
                        df_predicted=None, top_by_model=None, final_results=None):
-    """Save output files to per-file subfolder (Ivan's traceability rule).
+    """Save pipeline output in the AI repo's nested format.
 
-    Saves all intermediate results for debugging and traceability:
-      - step0_raw.csv           (original input)
-      - step1_filtered.csv      (doctor utterances only)
-      - step2_sentences.csv     (sentence segmentation)
-      - step3_predictions.csv   (NLP 5-model scores)
-      - step4_top10.xlsx        (top-K per domain)
-      - step5_top10_context.xlsx (top-K + surrounding context)
-      - {patient_id}_predictions.xlsx (combined final xlsx)
+    Single source of truth — writes to ``OUTPUT_DIR`` using
+    ``sentence_classification.export`` so the result is byte-compatible
+    with ``data/output_test/`` for regression diff.
+
+    Layout (per file)::
+
+        OUTPUT_DIR/<file-stem>/
+          step2_segmentation/segmented_sentences.csv
+          step3_classification/predictions_long.csv
+          step4_selection/top10_by_outcome.xlsx
+          step5_context/top10_with_context.xlsx
+          final/<domain>.csv  (one per cp/le/ed/inc/ius)
+
+    If a flat-format view is ever needed for a Dashboard consumer, add an
+    on-demand adapter (e.g. ``scripts/nested_to_flat.py``); the pipeline
+    itself stays single-output.
     """
-    output_dir = cfg.get("paths", {}).get("output_dir", "/app/data/output")
+    output_dir = cfg.get("paths", {}).get("output_dir")
+    if not output_dir:
+        logger.debug("  No output_dir configured — skipping nested output")
+        return
     stem = Path(filename).stem
-    file_output_dir = Path(output_dir) / stem
 
-    try:
-        file_output_dir.mkdir(parents=True, exist_ok=True)
-
-        # Existing: combined xlsx
-        (file_output_dir / f"{patient_id}_predictions.xlsx").write_bytes(xlsx_bytes)
-
-        # Step 0: Raw input
-        if df_raw is not None:
-            df_raw.to_csv(file_output_dir / "step0_raw.csv", index=False)
-
-        # Step 1: Doctor-filtered utterances
-        if df_filtered is not None:
-            df_filtered.to_csv(file_output_dir / "step1_filtered.csv", index=False)
-
-        # Step 2: Segmented sentences
-        if df_sentences is not None:
-            df_sentences.to_csv(file_output_dir / "step2_sentences.csv", index=False)
-
-        # Step 3: NLP predictions (all 5 models)
-        if df_predicted is not None:
-            df_predicted.to_csv(file_output_dir / "step3_predictions.csv", index=False)
-
-        # Step 4: Top-K selection per domain
-        if top_by_model is not None:
-            with pd.ExcelWriter(file_output_dir / "step4_top10.xlsx") as w:
-                for domain, df in top_by_model.items():
-                    sheet = domain[:31]  # Excel sheet name max 31 chars
-                    df.to_excel(w, sheet_name=sheet, index=False)
-
-        # Step 5: Top-K with context
-        if final_results is not None:
-            with pd.ExcelWriter(file_output_dir / "step5_top10_context.xlsx") as w:
-                for domain, df in final_results.items():
-                    sheet = domain[:31]
-                    df.to_excel(w, sheet_name=sheet, index=False)
-
-        logger.info("  Output saved: %s/ (step0-step5 + xlsx)", file_output_dir)
-    except Exception as e:
-        logger.debug("  Output save skipped (non-fatal): %s", e)
-
-    # Also produce AI repo's nested format (output_test compatible) into a
-    # separate directory so the result can be diffed against output_test/.
-    nested_dir = cfg.get("paths", {}).get("nested_output_dir")
     _intermediate = globals().get("_ai_export_intermediate_files")
     _final = globals().get("_ai_export_final_csv")
-    if nested_dir and _intermediate and _final and df_sentences is not None and df_predicted is not None and final_results is not None:
-        try:
-            Path(nested_dir).mkdir(parents=True, exist_ok=True)
-            _intermediate(
-                segmented_df=df_sentences,
-                predictions_df=df_predicted,
-                top_dfs=final_results,
-                output_path=str(nested_dir),
-                folder_name=stem,
-            )
-            _final(
-                top_dfs=final_results,
-                folder_name=stem,
-                output_path=str(nested_dir),
-            )
-            logger.info("  Nested output saved: %s/%s/ (step2-5 + final/, output_test compatible)", nested_dir, stem)
-        except Exception as e:
-            logger.warning("  Nested output save skipped (non-fatal): %s", e)
+    if not _intermediate or not _final:
+        logger.warning("  AI repo export functions not available — skipping nested output")
+        return
+    if df_sentences is None or df_predicted is None or final_results is None:
+        logger.debug("  Required dataframes missing — skipping nested output")
+        return
+
+    try:
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        _intermediate(
+            segmented_df=df_sentences,
+            predictions_df=df_predicted,
+            top_dfs=final_results,
+            output_path=str(output_dir),
+            folder_name=stem,
+        )
+        _final(
+            top_dfs=final_results,
+            folder_name=stem,
+            output_path=str(output_dir),
+        )
+        logger.info("  Output saved: %s/%s/ (nested format, output_test compatible)", output_dir, stem)
+    except Exception as e:
+        logger.warning("  Output save failed (non-fatal): %s", e)
 
 
 # ── Main: single run or worker/monitor ───────────────────────────────────────
