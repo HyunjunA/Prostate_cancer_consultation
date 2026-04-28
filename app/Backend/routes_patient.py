@@ -17,6 +17,13 @@ Endpoint groups:
     /api/redcap/import            : push records into REDCap (config lives in
                                     redcap_config.py)
 
+Core data model:
+    PatientSummary           : (file, speaker) PK — one row per patient.
+    PatientSummaryDomain     : (file, speaker, domain) PK — five rows per
+                                patient, holds patient_scoring +
+                                patient_response per domain.
+    LLMDomainScoringAndSummary: GPT-4o output, one row per (analysis, domain).
+
 Related modules:
     models.py             : PatientSummary, PatientSummaryDomain, DoctorRewriteLog
     redcap_config.py      : REDCAP_API_URL / REDCAP_API_TOKEN single source
@@ -50,8 +57,16 @@ from models import (
 
 logger = logging.getLogger(__name__)
 
+# No prefix on this router — its endpoints have varied prefixes
+# (/api/patient, /api/stats, /api/redcap) so each is declared on the
+# decorator instead.
 router = APIRouter(tags=["Patient Interface"])
 
+
+# ── Pydantic request bodies ───────────────────────────────────────────────────
+# Tiny update DTOs for PUT endpoints. We carry the composite key (file,
+# speaker, domain) in the body rather than the URL so the frontend can
+# batch-style update without rewriting the path each time.
 
 class PatientDomainScoringUpdate(BaseModel):
     file: str
@@ -80,13 +95,22 @@ async def get_patient_summaries(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user)
 ):
-    """Get patient summaries with optional filters"""
+    """List patient summaries with optional file/speaker filters + pagination.
+
+    Returns:
+        {"total": int, "skip": int, "limit": int, "data": [...]}
+        where each `data` entry is a PatientSummary plus its per-domain
+        list (just domain names — no scoring data, kept light for the
+        list view).
+    """
     print("=" * 80)
     print("[DEBUG] [get_patient_summaries] - Input Parameters:")
     print(f"   file: {file}")
     print(f"   speaker: {speaker}")
     print(f"   skip: {skip}, limit: {limit}")
 
+    # selectinload eagerly fetches `domains` in one extra query so we
+    # do not N+1 inside the response comprehension below.
     stmt = select(PatientSummary).options(selectinload(PatientSummary.domains))
 
     if file:
@@ -94,7 +118,8 @@ async def get_patient_summaries(
     if speaker:
         stmt = stmt.where(PatientSummary.speaker == speaker)
 
-    # Get total count
+    # Total count (subquery so the WHERE is applied to the count too).
+    # The frontend uses `total` to render pagination controls.
     count_stmt = select(func.count()).select_from(
         select(PatientSummary.file, PatientSummary.speaker).where(
             *([PatientSummary.file == file] if file else []),
@@ -103,8 +128,10 @@ async def get_patient_summaries(
     )
     total = (await db.execute(count_stmt)).scalar_one()
 
-    # Get paginated results
+    # Get paginated results.
     stmt = stmt.offset(skip).limit(limit)
+    # `.unique()` deduplicates rows that selectinload may double-fetch
+    # for the JOIN-based eager load.
     results = (await db.execute(stmt)).scalars().unique().all()
 
     return {
@@ -131,7 +158,9 @@ async def get_patient_summary_detail(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user)
 ):
-    """Get detailed patient summary for specific file and speaker"""
+    """Get one patient summary with per-domain scoring (no responses)."""
+    # Per-patient access gate — non-superusers must have an explicit
+    # entry in patient_access for this file. Superusers bypass.
     await check_patient_access(file, user, db)
     print("=" * 80)
     print("[DEBUG] [get_patient_summary_detail] - Input Parameters:")
@@ -172,12 +201,19 @@ async def get_patient_scoring(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user)
 ):
-    """Get patient scoring data"""
+    """Get patient-submitted scores grouped by (file, speaker).
+
+    Returns one entry per patient with `scores` (domain → score) and an
+    `average` across non-null domains. Only rows where patient_scoring
+    is set are included.
+    """
     print("=" * 80)
     print("[DEBUG] [get_patient_scoring] - Input Parameters:")
     print(f"   file: {file}")
     print(f"   speaker: {speaker}")
 
+    # `.isnot(None)` filters out domains where the patient has not yet
+    # submitted a score — frontend would render those as blank rows.
     stmt = select(PatientSummaryDomain).where(
         PatientSummaryDomain.patient_scoring.isnot(None)
     ).order_by(
@@ -193,7 +229,9 @@ async def get_patient_scoring(
 
     results = (await db.execute(stmt)).scalars().all()
 
-    # Group by (file, speaker)
+    # Group by (file, speaker) in Python — SQL GROUP BY would lose the
+    # per-domain breakdown. The dataset is small enough (≤5 rows per
+    # patient) that a Python pass is faster than a window-function query.
     grouped: Dict[tuple, list] = defaultdict(list)
     for r in results:
         grouped[(r.file, r.speaker)].append(r)
@@ -221,7 +259,12 @@ async def update_patient_scoring(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user)
 ):
-    """Update or create patient scoring for a single domain"""
+    """Upsert one patient domain score and return the full updated set.
+
+    Returning the full per-patient score map (instead of just an OK)
+    lets the frontend re-render its score chart from the response
+    without an extra round-trip.
+    """
     print("=" * 80)
     print("[DEBUG] [update_patient_scoring] - Input Data:")
     print(f"   file: {update_data.file}")
@@ -229,7 +272,9 @@ async def update_patient_scoring(
     print(f"   domain: {update_data.domain}")
     print(f"   patient_scoring: {update_data.patient_scoring}")
 
-    # Find existing domain row
+    # Find existing domain row — UPSERT pattern: update if found, else
+    # create. We do NOT use ON CONFLICT here because the row may not
+    # exist yet for new patients.
     stmt = select(PatientSummaryDomain).where(
         PatientSummaryDomain.file == update_data.file,
         PatientSummaryDomain.speaker == update_data.speaker,
@@ -277,7 +322,11 @@ async def get_patient_responses(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user)
 ):
-    """Get patient question responses"""
+    """Get patient free-text responses grouped by (file, speaker).
+
+    Same shape as /scoring but for the free-text answers instead of
+    Likert scores. Domains with no response yet are excluded.
+    """
     print("=" * 80)
     print("[DEBUG] [get_patient_responses] - Input Parameters:")
     print(f"   file: {file}")
@@ -298,7 +347,7 @@ async def get_patient_responses(
 
     results = (await db.execute(stmt)).scalars().all()
 
-    # Group by (file, speaker)
+    # Group by (file, speaker) — same pattern as /scoring above.
     grouped: Dict[tuple, list] = defaultdict(list)
     for r in results:
         grouped[(r.file, r.speaker)].append(r)
@@ -323,15 +372,16 @@ async def update_patient_responses(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user)
 ):
-    """Update or create patient response for a single domain"""
+    """Upsert one patient domain free-text response and return all responses."""
     print("=" * 80)
     print("[DEBUG] [update_patient_responses] - Input Data:")
     print(f"   file: {update_data.file}")
     print(f"   speaker: {update_data.speaker}")
     print(f"   domain: {update_data.domain}")
+    # Truncated preview only — full responses can be hundreds of chars.
     print(f"   patient_response: {update_data.patient_response[:30] if update_data.patient_response else None}...")
 
-    # Find existing domain row
+    # Same UPSERT pattern as update_patient_scoring above.
     stmt = select(PatientSummaryDomain).where(
         PatientSummaryDomain.file == update_data.file,
         PatientSummaryDomain.speaker == update_data.speaker,
@@ -376,9 +426,13 @@ async def get_patient_files(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user)
 ):
-    """Get list of unique files in patient interface"""
+    """List distinct patient file identifiers (xlsx names) the user can see."""
+    # `.distinct()` collapses the (file, speaker) PK to file only —
+    # the frontend uses this for the patient picker dropdown.
     stmt = select(PatientSummary.file).distinct().order_by(PatientSummary.file).limit(limit)
     files_raw = (await db.execute(stmt)).scalars().all()
+    # Filter NULL files (legacy data may have them); a None entry would
+    # break the dropdown rendering on the frontend.
     files = [f for f in files_raw if f is not None]
     return {"files": files}
 
@@ -400,13 +454,16 @@ async def get_patient_sentences_by_class(
     """
     await check_patient_access(file, user, db)
 
-    # Find latest analysis for this file
+    # Find latest analysis for this file. Patients can be re-processed
+    # so we always show the freshest one.
     analysis_stmt = select(TranscriptAnalysisLog.id).where(
         TranscriptAnalysisLog.source_filename == file
     ).order_by(TranscriptAnalysisLog.analyzed_at.desc()).limit(1)
     analysis_id = (await db.execute(analysis_stmt)).scalar_one_or_none()
 
     if not analysis_id:
+        # Fresh patients with no analysis yet just see an empty payload
+        # rather than a 404 — keeps the frontend rendering simple.
         return {"file": file, "top_n": top_n, "by_class": {}}
 
     # Get all predictions for this analysis, ordered by pred_score DESC per model.
@@ -414,6 +471,10 @@ async def get_patient_sentences_by_class(
     # wrapped in <main>...</main>; the patient view renders that with bold +
     # underline so the user can see which sentence is the focus inside the
     # surrounding conversation.
+    #
+    # Window function pattern: row_number() OVER (PARTITION BY model
+    # ORDER BY pred_score DESC) gives each sentence a per-model rank;
+    # we then keep rn <= top_n for "top N per domain".
     ranked = select(
         SentencePrediction.model,
         SentencePrediction.sentence_text,
@@ -443,7 +504,9 @@ async def get_patient_sentences_by_class(
 
     results = (await db.execute(top_stmt)).all()
 
-    # Build ai_score lookup from llm_domain_scoring_and_summary
+    # Build ai_score lookup from llm_domain_scoring_and_summary so we
+    # can attach the GPT-4o score to each sentence. Map keys on
+    # `source_sentence` because that is what the LLM stage stored.
     ai_score_map: dict[str, int | None] = {}
     ai_stmt = select(
         LLMDomainScoringAndSummary.source_sentence,
@@ -467,6 +530,9 @@ async def get_patient_sentences_by_class(
             "speaker": r.speaker,
             "i": r.utterance_index,
             "i2": r.sentence_in_utterance,
+            # `is_in_summary=True` marks sentences that fed the AI summary,
+            # so the patient UI can visually distinguish them from
+            # "explorable extras".
             "is_in_summary": r.rn <= summary_top_n,
         })
 
@@ -487,11 +553,21 @@ async def get_dashboard_stats(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user)
 ):
-    """Get overall dashboard statistics"""
+    """Aggregate counts/scores rendered on the home dashboard.
+
+    Returns two sections:
+      - doctor_interface  : sentence count, rewrite count, file count
+      - patient_interface : summary count, file count, average per domain
+    """
     print("=" * 80)
     print("[DEBUG] [get_dashboard_stats] - Querying statistics")
 
-    # Doctor stats (from sentence_prediction, distinct sentences)
+    # ── Doctor stats ────────────────────────────────────────────────
+    # Distinct sentences across all analyses, identified by the
+    # composite (patient_id, utterance_index, sentence_in_utterance)
+    # key — using count(DISTINCT col) directly would not work because
+    # we need to compose the three columns into one identity per
+    # sentence. concat() with ':' separator gives a unique tag.
     print("   Querying doctor interface stats...")
     doctor_sentences_count = (await db.execute(
         select(func.count(func.distinct(
@@ -508,7 +584,7 @@ async def get_dashboard_stats(
         select(func.count(func.distinct(SentencePrediction.patient_id)))
     )).scalar_one()
 
-    # Patient stats
+    # ── Patient stats ───────────────────────────────────────────────
     patient_summaries_count = (await db.execute(
         select(func.count()).select_from(PatientSummary)
     )).scalar_one()
@@ -517,7 +593,8 @@ async def get_dashboard_stats(
         select(func.count(func.distinct(PatientSummary.file)))
     )).scalar_one()
 
-    # Average patient scoring per domain
+    # Average patient scoring per domain — group + avg, filter NULLs
+    # so blank scores do not drag the average down to zero.
     avg_scores_stmt = select(
         PatientSummaryDomain.domain,
         func.avg(PatientSummaryDomain.patient_scoring).label('avg_score')
@@ -584,7 +661,9 @@ async def get_ai_summary(
     results = (await db.execute(stmt)).scalars().all()
 
     if not results:
-        # Fallback: return existing patient_summary_domain data
+        # Fallback path — analysis exists but AI stage never ran (no
+        # Azure OpenAI creds, AI failed, etc.). Frontend reads `source`
+        # to decide whether to show the AI badge or the fallback notice.
         return {
             "file": file,
             "analysis_id": analysis_id,
@@ -593,7 +672,9 @@ async def get_ai_summary(
             "message": "AI summaries not available. Use /api/patient/summaries for existing summaries.",
         }
 
-    # Domain display name mapping
+    # Domain display name mapping. Lives HERE rather than in models.py
+    # because these are presentation strings (capitalised, human-readable).
+    # If we ever localise the patient UI, this is the table to translate.
     domain_names = {
         "cp": "Cancer Prognosis",
         "le": "Life Expectancy",
@@ -612,6 +693,9 @@ async def get_ai_summary(
             "extracted_estimate": r.extracted_estimate,
             "treatment": r.treatment,
             "source_sentence": r.source_sentence,
+            # getattr() with default because older rows (pre-migration
+            # 007) may not have source_context. Defensive read avoids
+            # an AttributeError on legacy data.
             "source_context": getattr(r, "source_context", None),
             "reformat_sentence": r.reformat_sentence,
         })
@@ -631,7 +715,10 @@ async def list_ai_summaries(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """List all patients that have AI-generated summaries."""
+    """List patients that have AI-generated summaries (admin index view)."""
+    # GROUP BY (file, patient_id) collapses the per-domain rows; one
+    # entry per (file, patient_id). Ordered by latest creation so the
+    # newest analyses surface first.
     stmt = (
         select(
             LLMDomainScoringAndSummary.source_filename,
@@ -668,7 +755,7 @@ async def list_ai_summaries(
 # ──────────────────────────────────────────────────────────────────────────────
 
 # REDCap config is now centralized in redcap_config.py
-from redcap_config import REDCAP_API_URL, REDCAP_API_TOKEN
+from redcap_config import REDCAP_API_URL, REDCAP_API_TOKEN  # noqa: E402
 
 class RedcapImportRequest(BaseModel):
     """Records to import into REDCap"""
@@ -681,7 +768,14 @@ async def import_to_redcap(
     request_data: RedcapImportRequest,
     user: AuthUser = Depends(get_current_user)
 ):
-    """Import records to REDCap project"""
+    """Push records into the REDCap project via its REST API.
+
+    Used by the export flow when the operator wants to ship locally
+    captured survey data to REDCap. We forward the body essentially
+    verbatim and surface REDCap's own status code on failure so the
+    caller can tell apart "your data was malformed" (4xx from REDCap)
+    from "REDCap is down" (5xx).
+    """
     print("=" * 80)
     print("[DEBUG] [import_to_redcap] - Input Data:")
     print(f"   Number of records: {len(request_data.records)}")
@@ -689,6 +783,9 @@ async def import_to_redcap(
     print(f"   return_content: {request_data.return_content}")
 
     if not REDCAP_API_URL or not REDCAP_API_TOKEN:
+        # Both env vars must be set; missing either means REDCap is
+        # intentionally disabled (or misconfigured) — fail loud so the
+        # operator notices instead of silently dropping the import.
         print("   [ERROR]: REDCap API configuration missing")
         print("=" * 80)
         raise HTTPException(
@@ -704,6 +801,9 @@ async def import_to_redcap(
         'overwriteBehavior': request_data.overwrite,
         'returnContent': request_data.return_content,
         'returnFormat': 'json',
+        # records are JSON-encoded as a string per REDCap's API contract.
+        # json.dumps here (not the import block above) so a Pydantic
+        # body with weird types still serialises predictably.
         'data': json.dumps(request_data.records)
     }
 
@@ -711,6 +811,9 @@ async def import_to_redcap(
         response = await client.post(REDCAP_API_URL, data=payload)
 
     if response.status_code != 200:
+        # Forward REDCap's status code as-is so the operator can debug
+        # auth issues (403), rate limits (429), bad data (400) without
+        # having to dig into the error body.
         raise HTTPException(
             status_code=response.status_code,
             detail=f"REDCap API error: {response.text}"
