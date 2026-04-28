@@ -1,5 +1,10 @@
 """Doctor-side API routes — endpoints used by the doctor dashboard.
 
+This is the largest router by endpoint count (~20+) because the
+doctor side has many different views: sentence inspection, rewrite
+audit trails, multiple score aggregations, class distributions,
+on-the-fly NLP scoring, AI-powered rewriting, and improvement tips.
+
 Authentication: every endpoint requires a valid auth header (X-API-Key
 by default; see auth/registry.py for AUTH_MODE switching). All endpoints
 are also subject to the per-user patient access rules in
@@ -16,10 +21,20 @@ Endpoint groups:
     /ai-rewrite                 : LLM-powered sentence revision suggestions
     /improvement-suggestions*   : pre-canned guidance per domain class
 
+Data sources:
+    DoctorRewriteLog       : audit log of every doctor sentence rewrite
+                             (composite PK includes `time` so all
+                             revisions are kept).
+    SentencePrediction     : top-N NLP-scored sentences per analysis.
+    TranscriptAnalysisLog  : analysis-run metadata + AI overall score.
+    PatientSummaryDomain   : patient-entered scores (separate from
+                             AI scores — see models.py docstring).
+
 Related modules:
     models.py        : DoctorRewriteLog, PatientSummary, PatientSummaryDomain
     routes_patient.py: patient-side equivalent
     persistence.py   : shared DB query helpers
+    nlp_classifier_client.py : on-the-fly /score-sentence path
 """
 
 import logging
