@@ -36,7 +36,7 @@ Why this lives in Backend (not inside ai_pipeline/):
 import logging
 import os
 import sys
-from typing import Dict, Optional
+from typing import Dict
 
 import pandas as pd
 
@@ -132,7 +132,6 @@ async def run_ai_scoring_and_summary(
     # when the volume is missing.
     try:
         from ai_pipeline.pipeline import run_ai_pipeline
-        from ai_pipeline.utils.prompts import load_domain_prompts
     except ImportError as e:
         logger.warning("ai_pipeline module not available: %s — skipping AI scoring", e)
         return False

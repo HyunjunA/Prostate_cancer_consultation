@@ -39,11 +39,11 @@ Related modules:
 
 import logging
 from datetime import datetime
-from typing import List, Optional, Dict
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_user
@@ -51,7 +51,6 @@ from auth.access_control import check_patient_access
 from auth.base import AuthUser
 from db import get_db
 from models import DoctorRewriteLog, SentencePrediction, TranscriptAnalysisLog
-from nlp_classifier_client import predict_single, CLASS_TO_MODEL, NLPServiceError
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +59,7 @@ router = APIRouter(prefix="/api/doctor", tags=["Doctor Interface"])
 
 class DoctorRewriteUpdateFull(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
-   
+
     file: str
     i: int
     i2: int
@@ -95,7 +94,6 @@ async def get_doctor_sentences(
         )
 
     # Get unique sentences from sentence_prediction (DISTINCT on i, i2)
-    from sqlalchemy.dialects.postgresql import aggregate_order_by
     distinct_stmt = (
         select(
             SentencePrediction.utterance_index.label('i'),
@@ -178,15 +176,15 @@ async def get_doctor_rewrites(
         stmt = stmt.where(DoctorRewriteLog.file == file)
     if speaker:
         stmt = stmt.where(DoctorRewriteLog.speaker == speaker)
-    
+
     # Get total count
     count_stmt = select(func.count()).select_from(stmt.subquery())
     total = (await db.execute(count_stmt)).scalar_one()
-    
+
     # Get paginated results
     stmt = stmt.order_by(DoctorRewriteLog.time.desc()).offset(skip).limit(limit)
     results = (await db.execute(stmt)).scalars().all()
-    
+
     return {
         "total": total,
         "skip": skip,
@@ -231,7 +229,7 @@ async def update_doctor_rewrite(
             status_code=404,
             detail="Specified file does not exist."
         )
-    
+
     # Create new record in DoctorRewriteLog
     new_record = DoctorRewriteLog(
         file=update_data.file,
@@ -244,11 +242,11 @@ async def update_doctor_rewrite(
         score=update_data.score,
         class_=update_data.class_
     )
-    
+
     db.add(new_record)
     await db.commit()
     await db.refresh(new_record)
-    
+
     return {
         "file": new_record.file,
         "i": new_record.i,
@@ -271,7 +269,7 @@ async def get_doctor_rewrite_history(
 ):
     """
     Get revision history for a specific sentence (file, i, i2)
-    
+
     Returns all revisions ordered by time (oldest to newest)
     Includes original_score from llm_domain_scoring_and_summary
     """
@@ -283,20 +281,20 @@ async def get_doctor_rewrite_history(
         DoctorRewriteLog.i == i,
         DoctorRewriteLog.i2 == i2
     ).order_by(DoctorRewriteLog.time.asc())
-    
+
     results = (await db.execute(stmt)).scalars().all()
-    
+
     if not results:
         raise HTTPException(
             status_code=404,
             detail=f"No rewrite history found for file='{file}', i={i}, i2={i2}"
         )
-    
+
     # Get original sentence info from first record
     original_sentence = results[0].original_sentence
     speaker = results[0].speaker
     class_ = results[0].class_
-    
+
     # Get original_score from llm_domain_scoring_and_summary via sentence_prediction
     original_score = None
     try:
@@ -324,10 +322,10 @@ async def get_doctor_rewrite_history(
                 original_score = (await db.execute(ai_stmt)).scalar_one_or_none()
     except Exception as e:
         logger.warning("Error fetching original score: %s", e)
-    
+
     print(f"   Found {len(results)} revisions")
     print("=" * 80)
-    
+
     return {
         "file": file,
         "i": i,
@@ -335,7 +333,7 @@ async def get_doctor_rewrite_history(
         "speaker": speaker,
         "class": class_,
         "original_sentence": original_sentence,
-        "original_score": original_score,  
+        "original_score": original_score,
         "total_revisions": len(results),
         "history": [
             {
@@ -360,7 +358,7 @@ async def get_doctor_rewrite_by_key(
     user: AuthUser = Depends(get_current_user)
 ):
     """Get specific doctor rewrite record by composite key (file, i, i2, class)"""
-    
+
     stmt = select(DoctorRewriteLog).where(
         (DoctorRewriteLog.file == file) &
         (DoctorRewriteLog.i == i) &
@@ -368,13 +366,13 @@ async def get_doctor_rewrite_by_key(
         (DoctorRewriteLog.class_ == class_)
     )
     result = (await db.execute(stmt)).scalars().first()
-    
+
     if not result:
         raise HTTPException(
             status_code=404,
             detail=f"Record not found for file='{file}', i={i}, i2={i2}, class='{class_}'"
         )
-    
+
     return {
         "file": result.file,
         "i": result.i,
@@ -611,7 +609,6 @@ async def get_doctor_score_summary_by_file_speaker(
         # Find matching (i, i2) and context with <main> tags from sentence_prediction
         i_val = None
         i2_val = None
-        context_with_tags = r.source_context  # fallback: without <main> tags
         if r.source_sentence:
             match_stmt = select(
                 SentencePrediction.utterance_index,
@@ -625,8 +622,6 @@ async def get_doctor_score_summary_by_file_speaker(
             if match_row:
                 i_val = match_row.utterance_index
                 i2_val = match_row.sentence_in_utterance
-                if match_row.context:
-                    context_with_tags = match_row.context
 
         by_class.append({
             "class": r.domain,
@@ -799,7 +794,8 @@ async def score_sentence(
 
     Uses AI pipeline for scoring via GPT-4o.
     """
-    import os, sys
+    import os
+    import sys
     if "/app" not in sys.path:
         sys.path.insert(0, "/app")
 
@@ -993,13 +989,13 @@ async def get_doctor_class_distribution_by_file(
 # ═══════════════════════════════════════════════════════════
 # import os
 # from openai import AzureOpenAI
-# 
+#
 # azure_client = AzureOpenAI(
 #     api_key=os.getenv("AZURE_OPENAI_API_KEY"),
 #     api_version="2024-02-15-preview",
 #     azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
 # )
-# 
+#
 # AZURE_DEPLOYMENT_NAME = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4")
 
 
@@ -1084,13 +1080,13 @@ async def generate_ai_rewrite(
 ):
     """
     Generate AI-powered rewrite of a sentence to improve communication quality.
-    
+
     Parameters:
     - sentence: Original sentence to rewrite
     - class_: Topic class (1-5)
     - target_score: Optional target score to aim for (1-5), defaults to 5
     - context: Optional full context for better rewriting
-    
+
     Returns:
     - original_sentence: The input sentence
     - rewritten_sentence: AI-generated improved sentence
@@ -1105,26 +1101,26 @@ async def generate_ai_rewrite(
     print(f"   class_: {request_data.class_}")
     print(f"   target_score: {request_data.target_score}")
     print(f"   context provided: {bool(request_data.context)}")
-    
+
     # Validate class
     if request_data.class_ not in IMPROVEMENT_SUGGESTIONS:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid class. Must be one of: {list(IMPROVEMENT_SUGGESTIONS.keys())}"
         )
-    
+
     # ═══════════════════════════════════════════════════════════
     # 1. Get improvement suggestion for target_score
     # ═══════════════════════════════════════════════════════════
     target_score = request_data.target_score if request_data.target_score else 5
     class_name = CLASS_NAMES.get(request_data.class_, "Unknown")
-    
+
     # Get the suggestion for the target score
     improvement_suggestion = IMPROVEMENT_SUGGESTIONS[request_data.class_].get(
         target_score,
         IMPROVEMENT_SUGGESTIONS[request_data.class_].get(5, "")
     )
-    
+
     # Get all suggestions for scores above current (for context)
     all_higher_suggestions = []
     for score in range(1, target_score + 1):
@@ -1132,11 +1128,11 @@ async def generate_ai_rewrite(
             all_higher_suggestions.append(
                 f"Score {score}: {IMPROVEMENT_SUGGESTIONS[request_data.class_][score]}"
             )
-    
+
     print(f"   class_name: {class_name}")
     print(f"   target_score: {target_score}")
     print(f"   improvement_suggestion: {improvement_suggestion[:80]}...")
-    
+
     # ═══════════════════════════════════════════════════════════
     # 2. Build LLM Prompt
     # ═══════════════════════════════════════════════════════════
@@ -1171,7 +1167,7 @@ Provide only the rewritten sentence without any explanation or additional text."
     print("   LLM Prompt constructed successfully")
     print(f"   System prompt length: {len(system_prompt)} chars")
     print(f"   User prompt length: {len(user_prompt)} chars")
-    
+
     # ═══════════════════════════════════════════════════════════
     # 3. Call Azure OpenAI API (COMMENTED OUT)
     # Uncomment when ready to integrate with actual LLM
@@ -1186,34 +1182,34 @@ Provide only the rewritten sentence without any explanation or additional text."
     #         temperature=0.7,
     #         max_tokens=500
     #     )
-    #     
+    #
     #     rewritten_sentence = response.choices[0].message.content.strip()
-    #     
+    #
     #     # Remove quotes if the model wrapped the response in quotes
     #     if rewritten_sentence.startswith('"') and rewritten_sentence.endswith('"'):
     #         rewritten_sentence = rewritten_sentence[1:-1]
-    #     
+    #
     #     print(f"   Azure OpenAI response received")
     #     print(f"   rewritten_sentence: {rewritten_sentence[:100]}...")
-    #     
+    #
     # except Exception as e:
     #     print(f"   ERROR calling Azure OpenAI: {str(e)}")
     #     raise HTTPException(
     #         status_code=500,
     #         detail=f"Failed to generate AI rewrite: {str(e)}"
     #     )
-    
+
     # ═══════════════════════════════════════════════════════════
     # 4. Placeholder Response (remove when LLM is integrated)
     # ═══════════════════════════════════════════════════════════
     rewritten_sentence = "rewritten sentence"
     new_score = float(target_score)
-    
-    print(f"   [PLACEHOLDER] Returning placeholder response")
+
+    print("   [PLACEHOLDER] Returning placeholder response")
     print(f"   rewritten_sentence: {rewritten_sentence}")
     print(f"   new_score: {new_score}")
     print("=" * 80)
-    
+
     return AIRewriteResponse(
         original_sentence=request_data.sentence,
         rewritten_sentence=rewritten_sentence,
@@ -1305,11 +1301,11 @@ async def get_improvement_suggestions_by_class(
 ):
     """
     Get improvement suggestions for a specific class (topic).
-    
+
     Parameters:
     - class_: Topic class ("1" to "5")
     - current_score: Optional current score. If provided, returns only suggestions for scores above this level.
-    
+
     Returns:
     - class_: The requested class
     - class_name: Human-readable class name
@@ -1321,20 +1317,20 @@ async def get_improvement_suggestions_by_class(
     print("[INFO] DEBUG [get_improvement_suggestions] - Input:")
     print(f"   class_: {class_}")
     print(f"   current_score: {current_score}")
-    
+
     # Validate class
     if class_ not in IMPROVEMENT_SUGGESTIONS:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid class. Must be one of: {list(IMPROVEMENT_SUGGESTIONS.keys())}"
         )
-    
+
     class_name = CLASS_NAMES.get(class_, "Unknown")
     all_levels = IMPROVEMENT_SUGGESTIONS[class_]
-    
+
     # Build suggestions list
     suggestions = []
-    
+
     if current_score is not None:
         # Filter: only suggestions for scores above current_score
         score_floor = int(current_score)
@@ -1352,11 +1348,11 @@ async def get_improvement_suggestions_by_class(
                     target_score=score,
                     suggestion=all_levels[score]
                 ))
-    
+
     print(f"   class_name: {class_name}")
     print(f"   suggestions count: {len(suggestions)}")
     print("=" * 80)
-    
+
     return ImprovementSuggestionsResponse(
         class_=class_,
         class_name=class_name,
@@ -1373,31 +1369,31 @@ async def get_improvement_suggestions(
 ):
     """
     Get improvement suggestions for a specific class (POST version).
-    
+
     Request body:
     - class_: Topic class ("1" to "5")
     - current_score: Optional current score. If provided, returns only suggestions for scores above this level.
-    
+
     Returns same as GET version.
     """
     print("=" * 80)
     print("[INFO] DEBUG [get_improvement_suggestions POST] - Input:")
     print(f"   class_: {request_data.class_}")
     print(f"   current_score: {request_data.current_score}")
-    
+
     # Validate class
     if request_data.class_ not in IMPROVEMENT_SUGGESTIONS:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid class. Must be one of: {list(IMPROVEMENT_SUGGESTIONS.keys())}"
         )
-    
+
     class_name = CLASS_NAMES.get(request_data.class_, "Unknown")
     all_levels = IMPROVEMENT_SUGGESTIONS[request_data.class_]
-    
+
     # Build suggestions list
     suggestions = []
-    
+
     if request_data.current_score is not None:
         # Filter: only suggestions for scores above current_score
         score_floor = int(request_data.current_score)
@@ -1415,11 +1411,11 @@ async def get_improvement_suggestions(
                     target_score=score,
                     suggestion=all_levels[score]
                 ))
-    
+
     print(f"   class_name: {class_name}")
     print(f"   suggestions count: {len(suggestions)}")
     print("=" * 80)
-    
+
     return ImprovementSuggestionsResponse(
         class_=request_data.class_,
         class_name=class_name,
@@ -1435,21 +1431,21 @@ async def get_all_improvement_suggestions(
 ):
     """
     Get all improvement suggestions for all classes.
-    
+
     Returns a dictionary of all classes with their suggestions.
     """
     print("=" * 80)
     print("[INFO] DEBUG [get_all_improvement_suggestions]")
     print("=" * 80)
-    
+
     result = {}
-    
+
     for class_ in IMPROVEMENT_SUGGESTIONS:
         result[class_] = {
             "class_name": CLASS_NAMES.get(class_, "Unknown"),
             "suggestions": IMPROVEMENT_SUGGESTIONS[class_]
         }
-    
+
     return {
         "total_classes": len(result),
         "data": result

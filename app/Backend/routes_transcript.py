@@ -60,7 +60,6 @@ Resilience patterns used throughout:
   caller is not blocked by an internal write issue.
 """
 
-import json
 import logging
 import os
 import re
@@ -833,7 +832,7 @@ async def get_predictions(
 
     # Apply top_n per model at DB level using window function
     if top_n is not None and rows:
-        from sqlalchemy import over, func as wfunc
+        from sqlalchemy import func as wfunc
         ranked = (
             select(
                 SentencePrediction,

@@ -21,7 +21,6 @@ only adds DB persistence.
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
 
 
 revision: str = "006_nlp_intermediates"

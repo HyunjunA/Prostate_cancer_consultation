@@ -14,7 +14,6 @@ to drop.
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
 
 
 revision: str = "003_drop_user_interaction_log"

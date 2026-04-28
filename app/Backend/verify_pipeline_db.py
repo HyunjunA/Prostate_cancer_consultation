@@ -42,7 +42,7 @@ import os
 import sys
 from typing import Any
 
-from sqlalchemy import select, func, text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import models as M

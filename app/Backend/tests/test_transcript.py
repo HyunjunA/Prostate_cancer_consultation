@@ -13,7 +13,6 @@ because it requires the r01-nlp-classifiers Docker container. Disk I/O
 (_save_xlsx) is also mocked to avoid writing to the real filesystem.
 """
 
-import json
 from typing import Optional
 
 from tests.factories import TestDataFactory

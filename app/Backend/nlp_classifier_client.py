@@ -57,7 +57,6 @@ Environment variables
 import asyncio
 import json
 import logging
-import os
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -72,7 +71,7 @@ logger = logging.getLogger(__name__)
 # Imported here (not at the top) because config.get() lazily loads the
 # YAML on first call; keeping the import next to the constants makes
 # the dependency obvious.
-import config as _cfg
+import config as _cfg  # noqa: E402  intentional: import next to constants for clarity
 NLP_API_URL: str = _cfg.get("nlp.api_url", "http://nlp-classifiers:8000")
 NLP_TIMEOUT: int = int(_cfg.get("nlp.timeout", 30))
 NLP_RETRIES: int = int(_cfg.get("nlp.retries", 3))

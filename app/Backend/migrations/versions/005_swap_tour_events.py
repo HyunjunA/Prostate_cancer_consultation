@@ -16,7 +16,6 @@ metadata.trigger="restart_button" so historical clicks remain attributable.
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
 
 
 revision: str = "005_swap_tour_events"
