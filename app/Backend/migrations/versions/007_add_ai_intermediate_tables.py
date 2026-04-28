@@ -21,7 +21,6 @@ filtered subset.
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
 
 
 revision: str = "007_ai_intermediates"

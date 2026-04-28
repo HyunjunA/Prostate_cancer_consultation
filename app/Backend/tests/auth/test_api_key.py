@@ -12,7 +12,6 @@ Endpoints used for testing:
   GET /api/stats/dashboard    (requires auth)
 """
 
-import pytest
 
 
 # ── Valid API Key ────────────────────────────────────────────────────────

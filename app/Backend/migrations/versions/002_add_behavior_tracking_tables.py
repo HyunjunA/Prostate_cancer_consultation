@@ -22,7 +22,6 @@ in a later migration once the frontend has migrated to the new endpoints.
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
 
 
 revision: str = "002_add_behavior_tracking_tables"

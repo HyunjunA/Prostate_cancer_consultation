@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 
 from fastapi import HTTPException, Request, status
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from auth.base import AuthBackend, AuthUser as AuthUserDTO

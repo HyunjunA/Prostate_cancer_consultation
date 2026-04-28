@@ -36,7 +36,7 @@ import asyncio
 from dotenv import load_dotenv
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine
 
 # `Base` carries the metadata registry that `create_all` walks. Importing
 # `models` is what registers every `class X(Base): __tablename__ = ...`
@@ -46,8 +46,8 @@ from models import Base
 # Auth tables are defined in a sibling module but share the same `Base`.
 # Importing them here (even though we never reference the classes by name
 # in this file) is what registers them with `Base.metadata` so create_all
-# picks them up. The `# noqa: F401` tells lint tools to leave the unused
-# imports alone — they exist for their side effects.
+# picks them up. The trailing noqa comment tells lint tools to leave the
+# unused imports alone — they exist for their side effects.
 from auth.models import AuthUser, AuthAPIKey, PatientAccess  # noqa: F401
 
 # Load .env so DATABASE_URL is set even when this script is run directly

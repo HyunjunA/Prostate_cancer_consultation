@@ -10,7 +10,6 @@ Endpoints tested:
   GET  /api/patient/files                  (distinct file names)
 """
 
-import pytest
 
 from tests.factories import TestDataFactory
 

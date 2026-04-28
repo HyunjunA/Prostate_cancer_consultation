@@ -10,7 +10,6 @@ Endpoints tested:
 """
 
 import pytest
-import pytest_asyncio
 
 
 # ── Shared mock helpers ──────────────────────────────────────────────────────

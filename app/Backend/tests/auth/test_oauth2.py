@@ -45,7 +45,6 @@ class TestOAuth2Init:
         monkeypatch.setenv("OAUTH2_CLIENT_ID", "test-client-id")
 
         # Need to reload the module to pick up new env vars
-        import importlib
         import auth.backends.oauth2 as oauth2_mod
         monkeypatch.setattr(oauth2_mod, "_ISSUER", "")
         monkeypatch.setattr(oauth2_mod, "_CLIENT_ID", "test-client-id")
@@ -173,7 +172,6 @@ class TestOAuth2KeyMatching:
 
     async def test_no_matching_kid_refreshes_jwks(self, monkeypatch):
         """If kid not found in cached JWKS, cache should be invalidated and refetched."""
-        from jose import jwt as jwt_mod
 
         import auth.backends.oauth2 as oauth2_mod
         monkeypatch.setattr(oauth2_mod, "_ISSUER", "https://issuer.test")

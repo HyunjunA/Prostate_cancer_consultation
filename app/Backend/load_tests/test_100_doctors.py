@@ -182,22 +182,22 @@ async def cleanup(session: aiohttp.ClientSession, speakers: List[str]) -> None:
     """Delete the test doctors' rows so admin DB stays clean."""
     # No DELETE endpoint exists for tracking; do it directly via psql in container.
     # (Caller should run docker exec ... DELETE FROM doctor_behavior WHERE ...)
-    print(f"\n  ▸ Cleanup: please run to remove test data:")
+    print("\n  ▸ Cleanup: please run to remove test data:")
     in_clause = ",".join(f"'{s}'" for s in speakers)
-    print(f"    docker exec prostatecancer-postgres psql -U prostatecancer_user -d prostatecancer_db \\")
+    print("    docker exec prostatecancer-postgres psql -U prostatecancer_user -d prostatecancer_db \\")
     print(f"      -c \"DELETE FROM doctor_behavior WHERE speaker IN ({in_clause});\"")
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 async def main() -> int:
-    print(f"╔══ 100-doctor load test ══════════════════════════════════╗")
+    print("╔══ 100-doctor load test ══════════════════════════════════╗")
     print(f"║  Doctors:      {NUM_DOCTORS}")
     print(f"║  Events/doc:   {EVENTS_PER_DOCTOR}  (total {NUM_DOCTORS * EVENTS_PER_DOCTOR})")
     print(f"║  Concurrency:  {CONCURRENCY}")
     print(f"║  Action gap:   {ACTION_GAP_MS}ms  ({'burst' if ACTION_GAP_MS == 0 else 'spread'})")
     print(f"║  Backend:      {BASE_URL}")
-    print(f"╚══════════════════════════════════════════════════════════╝")
+    print("╚══════════════════════════════════════════════════════════╝")
 
     sem = asyncio.Semaphore(CONCURRENCY)
     # force_close=True avoids the spurious ServerDisconnectedError that
@@ -219,10 +219,10 @@ async def main() -> int:
         # ── Stats from POST results ─────────────────────────────────────────
         total_requests = sum(len(r.statuses) for r in results)
         ok_count = sum(s == 200 for r in results for s in r.statuses)
-        all_latencies = [l for r in results for l in r.latencies_ms]
+        all_latencies = [latency for r in results for latency in r.latencies_ms]
         all_errors = [e for r in results for e in r.errors]
 
-        print(f"\n▸ POST stats:")
+        print("\n▸ POST stats:")
         print(f"    Total requests : {total_requests}")
         print(f"    Success (200)  : {ok_count}  ({ok_count/total_requests*100:.1f}%)")
         print(f"    Failures       : {total_requests - ok_count}")
@@ -239,7 +239,7 @@ async def main() -> int:
                 print(f"    - {e}")
 
         # ── Phase 2: verify via admin endpoints ─────────────────────────────
-        print(f"\n▸ Phase 2: verifying via admin endpoints …")
+        print("\n▸ Phase 2: verifying via admin endpoints …")
         speakers_map = await fetch_speakers(session)
 
         test_speakers = {r.speaker for r in results}
@@ -270,7 +270,7 @@ async def main() -> int:
                 deep_pass += 1
 
         # ── Final verdict ────────────────────────────────────────────────────
-        print(f"\n╔══ VERDICT ════════════════════════════════════════════════╗")
+        print("\n╔══ VERDICT ════════════════════════════════════════════════╗")
         ok_rate = ok_count / total_requests * 100 if total_requests else 0
         speakers_ok = len(found_speakers) == NUM_DOCTORS
         deep_ok = deep_pass == len(sample)
@@ -279,7 +279,7 @@ async def main() -> int:
         print(f"║  All speakers visible    : {len(found_speakers)}/{NUM_DOCTORS}  {'✓' if speakers_ok else '✗'}")
         print(f"║  Deep checks passed      : {deep_pass}/{len(sample)}    {'✓' if deep_ok else '✗'}")
         print(f"║  OVERALL                 : {verdict}")
-        print(f"╚═══════════════════════════════════════════════════════════╝")
+        print("╚═══════════════════════════════════════════════════════════╝")
 
         if CLEANUP_AFTER:
             await cleanup(session, [r.speaker for r in results])

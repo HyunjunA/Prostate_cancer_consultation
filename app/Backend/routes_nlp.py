@@ -33,7 +33,7 @@ Related modules:
 """
 
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -43,7 +43,6 @@ from auth.base import AuthUser
 from nlp_classifier_client import (
     ALL_MODELS,
     CLASS_TO_MODEL,
-    MODEL_TO_CLASS,
     NLPServiceError,
     nlp_health_check,
     predict_all_models,

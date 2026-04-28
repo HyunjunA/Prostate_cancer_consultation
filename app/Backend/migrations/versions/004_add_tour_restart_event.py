@@ -12,7 +12,6 @@ allow `tour_restart`.
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
 
 
 revision: str = "004_add_tour_restart_event"

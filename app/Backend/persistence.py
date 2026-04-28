@@ -30,11 +30,10 @@ Tables this module DOES NOT write to:
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 import pandas as pd
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 import models
 
@@ -105,8 +104,6 @@ async def save_all(
         rolled back). pipeline_runner uses the return value to decide
         whether to surface a per-file error to the operator.
     """
-    now = datetime.now(timezone.utc)
-
     # Single `async with Session()` opens ONE transaction for ALL writes
     # below. If anything raises, the except branch rolls everything back
     # — partial pipelines never end up in the DB.
@@ -174,7 +171,6 @@ async def save_all(
             # re-runs can change the domain ordering (e.g. if the
             # outcome list is reconfigured) without leaving stale rows.
             for order, (domain_full, slot) in enumerate(domain_slot_map.items(), start=1):
-                short = domain_short_map.get(domain_full, "")
                 await session.execute(
                     pg_insert(models.PatientSummaryDomain)
                     .values(

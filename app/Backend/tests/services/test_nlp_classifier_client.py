@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 from unittest.mock import AsyncMock
 
 import pytest

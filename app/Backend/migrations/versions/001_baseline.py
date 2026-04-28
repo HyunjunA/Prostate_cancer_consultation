@@ -10,8 +10,6 @@ current schema as the baseline.  Future migrations will build on this.
 """
 from typing import Sequence, Union
 
-from alembic import op
-import sqlalchemy as sa
 
 revision: str = "001_baseline"
 down_revision: Union[str, Sequence[str], None] = None
