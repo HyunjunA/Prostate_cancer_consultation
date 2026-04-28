@@ -2,13 +2,14 @@
 
 This module owns the single global asyncpg-backed engine that every
 request handler reuses. Connection pool size and timeout knobs all come
-from environment variables (DATABASE_POOL_*) so production can tune
-without code changes.
+from the typed Settings object (core/settings.py), which itself reads
+DATABASE_POOL_* env vars — so production can tune without code changes.
 
 Why asyncpg specifically:
     - FastAPI runs handlers on the asyncio event loop.
     - psycopg2 would block the loop and starve concurrent requests.
-    - We hard-fail at import time if DATABASE_URL does not say "+asyncpg".
+    - core.settings hard-fails at import time if DATABASE_URL does not
+      say "+asyncpg" (the validator is centralised there now).
 
 Public API used elsewhere:
     - get_db()          : FastAPI dependency, yields one session per request.
@@ -24,66 +25,26 @@ Connection pool model (high level):
     via pgbouncer idle timeout). Every checkout is `pool_pre_ping`-ed
     so a connection that died silently behind our back is detected
     and replaced before the request sees a stale-socket error.
+
+P1.S1 migration note (history):
+    Before P1.S1 this module read DATABASE_* env vars directly via
+    os.getenv. We now go through core.settings.get_settings() instead,
+    which:
+      - centralises the env-var schema (one file to audit),
+      - gives us type-safe access (`settings.database_pool_size: int`),
+      - moves the "+asyncpg" validator to one place (no more inline check).
+    The runtime behaviour is unchanged — same env vars, same defaults.
 """
 
-import os
-from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy import text
 
-# Load .env so DATABASE_URL is available even when this module is
-# imported by a CLI script (alembic, init_db.py, …) that does not boot
-# uvicorn first.
-load_dotenv()
+from core.settings import get_settings
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Connection string
-# ──────────────────────────────────────────────────────────────────────────────
-# Must use the SQLAlchemy `postgresql+asyncpg://` scheme. If someone
-# pastes a plain `postgresql://` DSN, SQLAlchemy will silently pick the
-# default psycopg2 driver, which is SYNCHRONOUS and will block the
-# asyncio event loop. We fail loudly at import time rather than letting
-# that misconfiguration ship to production unnoticed.
-DATABASE_URL = os.getenv("DATABASE_URL")  # must be postgresql+asyncpg://...
-if not DATABASE_URL or "+asyncpg" not in DATABASE_URL:
-    raise ValueError("DATABASE_URL must be postgresql+asyncpg://... and use asyncpg")
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Pool tuning knobs (all overridable via environment)
-# ──────────────────────────────────────────────────────────────────────────────
-# Size of the warm idle pool — connections kept open even when no
-# requests are in flight. 10 covers most dev/test loads cheaply.
-POOL_SIZE        = int(os.getenv("DATABASE_POOL_SIZE", 10))
-
-# Extra connections created during traffic spikes, on top of POOL_SIZE.
-# Hard cap on total concurrent connections is POOL_SIZE + MAX_OVERFLOW
-# (here: 10 + 20 = 30). Keep this comfortably under postgres'
-# max_connections (typically 100) to leave room for other clients.
-MAX_OVERFLOW     = int(os.getenv("DATABASE_MAX_OVERFLOW", 20))
-
-# Seconds a request waits for a free connection before raising
-# TimeoutError. Hitting this almost always means traffic exceeds your
-# pool capacity — increase POOL_SIZE/MAX_OVERFLOW or add an instance.
-POOL_TIMEOUT     = int(os.getenv("DATABASE_POOL_TIMEOUT", 30))
-
-# Recycle (close + recreate) connections older than this many seconds.
-# Defends against connections silently killed by load balancers /
-# pgbouncer / firewall idle timeouts. 1800 s = 30 min is a safe
-# default that comfortably beats the typical 60-min-or-shorter
-# infrastructure timeout.
-POOL_RECYCLE     = int(os.getenv("DATABASE_POOL_RECYCLE", 1800))
-
-# LIFO (last-in, first-out) checkout order. With LIFO the recently-
-# returned connection is reused first, so a small subset of
-# connections stays "hot" and the rest can age out — this plays
-# nicely with pool_recycle. FIFO would round-robin all connections,
-# keeping every one warm but also harder to recycle.
-POOL_USE_LIFO    = os.getenv("DATABASE_POOL_USE_LIFO", "true").lower() == "true"
-
-# When SQL_ECHO=true, SQLAlchemy logs every emitted SQL statement.
-# Useful for local debugging; NEVER enable in production — it both
-# floods logs and risks leaking sensitive data into them.
-ECHO_SQL         = os.getenv("SQL_ECHO", "false").lower() == "true"
+# Pull the singleton Settings once at import time. This is identical to
+# the previous behaviour (env vars were also read at import time) — we
+# just route through a typed object now.
+_settings = get_settings()
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Engine + session factory
@@ -93,16 +54,16 @@ ECHO_SQL         = os.getenv("SQL_ECHO", "false").lower() == "true"
 # via `get_db()`. Never call `await engine.dispose()` from request
 # code — that would tear down the pool for the whole process.
 engine = create_async_engine(
-    DATABASE_URL,
+    _settings.database_url,
     # Validate connections on every checkout. Cheap (`SELECT 1`) and
     # the ONLY reliable defence against "connection died while idle".
     pool_pre_ping=True,
-    pool_size=POOL_SIZE,
-    max_overflow=MAX_OVERFLOW,
-    pool_timeout=POOL_TIMEOUT,
-    pool_recycle=POOL_RECYCLE,
-    pool_use_lifo=POOL_USE_LIFO,
-    echo=ECHO_SQL,
+    pool_size=_settings.database_pool_size,
+    max_overflow=_settings.database_max_overflow,
+    pool_timeout=_settings.database_pool_timeout,
+    pool_recycle=_settings.database_pool_recycle,
+    pool_use_lifo=_settings.database_pool_use_lifo,
+    echo=_settings.sql_echo,
 )
 
 # Session factory. Each call (`AsyncSessionLocal()`) returns a brand-
