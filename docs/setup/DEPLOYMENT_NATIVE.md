@@ -178,8 +178,7 @@ Installs and starts:
 
 **Note:** R/`stringi` is **not** installed natively. Sentence segmentation
 calls `stringi` inside the NLP-classifiers Docker container via
-`docker exec`, which gives a 100% match with the reference pipeline
-(R 4.5.1 + stringi 1.8.7 + ICU 74.2).
+`docker exec`, which gives a 100% match with the reference pipeline.
 
 ### 2. Configure environment
 
@@ -270,9 +269,9 @@ This:
 2. Brings up `nlp-classifiers` + `webapp` via `docker-compose-minimal.yml`
 3. Waits for NLP healthcheck
 4. Runs `scripts/preflight-native.sh` — verifies postgres auth, NLP
-   container `docker exec` stringi probe (must match Michael's reference
-   stringi 1.8.7 + ICU 74.2), alembic at head, redis ping. You can also
-   run it standalone any time with `bash scripts/preflight-native.sh`.
+   container `docker exec` stringi probe, alembic at head, redis ping.
+   You can also run it standalone any time with
+   `bash scripts/preflight-native.sh`.
 5. Starts uvicorn against `main:app` on `0.0.0.0:8000` (foreground)
 
 Open:
