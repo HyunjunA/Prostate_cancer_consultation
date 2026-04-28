@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     database_pool_recycle: int = Field(1800, ge=60, le=86400)
     database_pool_use_lifo: bool = True
     sql_echo: bool = False
+    # Used only by wait_for_db.py at boot — how long to keep retrying
+    # the postgres TCP+auth handshake before giving up.
+    db_wait_timeout: int = Field(60, ge=1, le=600)
 
     @field_validator("database_url")
     @classmethod

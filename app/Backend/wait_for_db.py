@@ -30,21 +30,10 @@ Exit behaviour:
                      by the orchestrator (or fail loudly in CI).
 """
 
-import os
 import asyncio
 import asyncpg
 
-from dotenv import load_dotenv
-
-# Load .env so DATABASE_URL is available even when this script is run
-# outside of the FastAPI process (e.g. directly by the Docker entrypoint
-# before uvicorn boots).
-load_dotenv()
-
-# Upper bound on how long we'll keep retrying. 60 s is plenty for a
-# healthy postgres on a fresh boot; bump it via env when running on slow
-# CI hardware or against a cold cloud instance.
-TIMEOUT = int(os.getenv("DB_WAIT_TIMEOUT", "60"))
+from core.settings import get_settings
 
 
 async def wait_for_db():
@@ -54,29 +43,27 @@ async def wait_for_db():
         None on success.
 
     Raises:
-        RuntimeError: if DATABASE_URL is unset, or if the database
-            never becomes reachable within TIMEOUT seconds. The last
-            exception from asyncpg is included in the message so you
-            can tell apart "DNS unresolved" / "connection refused" /
-            "auth failed" / etc.
+        RuntimeError: if the database never becomes reachable within
+            the configured timeout. The last exception from asyncpg is
+            included in the message so you can tell apart "DNS
+            unresolved" / "connection refused" / "auth failed" / etc.
+        pydantic ValidationError: if DATABASE_URL is unset or invalid
+            (raised by core.settings at first access).
     """
-    dsn = os.getenv("DATABASE_URL")
-    if not dsn:
-        # Fail loud and immediate — there's no point sleeping in a loop
-        # when we know we can never succeed.
-        raise RuntimeError("DATABASE_URL is not set")
+    settings = get_settings()
 
     # SQLAlchemy DSNs use the "postgresql+asyncpg://..." scheme to pick
     # the driver, but the asyncpg library itself only understands the
     # plain "postgresql://" scheme. Strip the suffix so the same env
     # var works for both the SQLAlchemy engine and this raw probe.
-    dsn = dsn.replace("postgresql+asyncpg", "postgresql")
+    dsn = settings.database_url.replace("postgresql+asyncpg", "postgresql")
 
     # Convert "wait at most TIMEOUT seconds" into an absolute deadline
     # against the event loop clock. Using a deadline (instead of a
     # countdown) makes the loop drift-free even if individual attempts
     # take longer than expected.
-    deadline = asyncio.get_event_loop().time() + TIMEOUT
+    timeout = settings.db_wait_timeout
+    deadline = asyncio.get_event_loop().time() + timeout
     last_error = None
 
     while asyncio.get_event_loop().time() < deadline:
@@ -104,7 +91,7 @@ async def wait_for_db():
     # We exhausted the deadline. Surface the *last* asyncpg error so
     # the operator can see the real problem (e.g. wrong password) rather
     # than just "timed out".
-    raise RuntimeError(f"DB not ready within {TIMEOUT}s: {last_error}")
+    raise RuntimeError(f"DB not ready within {timeout}s: {last_error}")
 
 
 if __name__ == "__main__":
