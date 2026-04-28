@@ -84,7 +84,7 @@ cp app/Backend/.env.example app/Backend/.env
 ./run_all.sh
 ```
 
-See **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** for the full Docker walkthrough.
+See **[docs/setup/DEPLOYMENT_DOCKER.md](docs/setup/DEPLOYMENT_DOCKER.md)** for the full Docker walkthrough.
 
 ### Native mode (only NLP + webapp in Docker, rest native)
 
@@ -95,7 +95,7 @@ bash scripts/init-db-native.sh                       # one-time DB bootstrap
 bash scripts/run-native.sh                           # start everything
 ```
 
-See **[dev_docs/DEPLOYMENT_NATIVE.md](dev_docs/DEPLOYMENT_NATIVE.md)** for the full
+See **[docs/setup/DEPLOYMENT_NATIVE.md](docs/setup/DEPLOYMENT_NATIVE.md)** for the full
 native walkthrough including the standalone pipeline runner
 (`scripts/run-pipeline-standalone.py --file ... | --dir ...`) and
 DB verification helpers.
@@ -110,8 +110,8 @@ After deployment (either mode):
 
 | Document | Description |
 |----------|-------------|
-| [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) | Docker mode deployment |
-| [dev_docs/DEPLOYMENT_NATIVE.md](dev_docs/DEPLOYMENT_NATIVE.md) | Native mode deployment (Docker for NLP + webapp only) |
+| [docs/setup/DEPLOYMENT_DOCKER.md](docs/setup/DEPLOYMENT_DOCKER.md) | Docker mode deployment (full Docker stack) |
+| [docs/setup/DEPLOYMENT_NATIVE.md](docs/setup/DEPLOYMENT_NATIVE.md) | Native mode deployment (Docker for NLP + webapp only) |
 | [ERD v3](app/Backend/patient_doctor_interface_erd_v3_en.md) | Database schema with examples |
 | [docs/](docs/) | Architecture, security, and setup guides |
 
