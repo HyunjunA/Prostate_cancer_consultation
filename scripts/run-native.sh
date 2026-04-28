@@ -122,7 +122,9 @@ fi
 # xlsx in the transcript dir before the API is exposed. Failures are
 # non-fatal — the backend still starts so the dashboard is usable.
 INPUT_DIR="$REPO_ROOT/../AI_physician_patient_communication/data/input"
-if [[ -d "$INPUT_DIR" ]] && ls "$INPUT_DIR"/*.xlsx "$INPUT_DIR"/*.csv >/dev/null 2>&1; then
+# Use `find -print -quit` so a missing extension does not abort the test
+# the way `ls *.xlsx *.csv` would.
+if [[ -d "$INPUT_DIR" ]] && [[ -n "$(find "$INPUT_DIR" -maxdepth 1 \( -name '*.xlsx' -o -name '*.csv' \) -print -quit 2>/dev/null)" ]]; then
     section "Auto-running pipeline on transcripts in $INPUT_DIR"
     "$REPO_ROOT/.venv/bin/python" "$SCRIPT_DIR/run-pipeline-standalone.py" \
         --dir "$INPUT_DIR" \
