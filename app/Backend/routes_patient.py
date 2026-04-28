@@ -5,7 +5,6 @@ dashboard statistics, and REDCap integration.
 """
 
 import logging
-import os
 from typing import Optional, List, Dict, Any
 from collections import defaultdict
 
@@ -648,9 +647,8 @@ async def list_ai_summaries(
 # REDCap Integration
 # ──────────────────────────────────────────────────────────────────────────────
 
-# Load REDCap configuration from environment variables
-REDCAP_API_URL = os.getenv("REDCAP_API_URL")  # e.g., https://redcap.csmc.edu/api/
-REDCAP_API_TOKEN = os.getenv("REDCAP_API_TOKEN")  # 32-character token from REDCap
+# REDCap config is now centralized in redcap_config.py
+from redcap_config import REDCAP_API_URL, REDCAP_API_TOKEN
 
 class RedcapImportRequest(BaseModel):
     """Records to import into REDCap"""

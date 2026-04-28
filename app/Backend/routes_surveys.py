@@ -8,7 +8,6 @@ Survey API Routes - Flexible endpoint for receiving survey submissions
 from typing import Dict, Any, Optional, List
 from datetime import datetime, date
 import json
-import os
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -60,11 +59,9 @@ class SurveyResponse(BaseModel):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# REDCap Configuration
+# REDCap Configuration — single source in redcap_config.py
 # ──────────────────────────────────────────────────────────────────────────────
-REDCAP_API_URL = os.getenv("REDCAP_API_URL")
-REDCAP_API_TOKEN = os.getenv("REDCAP_API_TOKEN")
-REDCAP_ENABLED = bool(REDCAP_API_URL and REDCAP_API_TOKEN)
+from redcap_config import REDCAP_API_URL, REDCAP_API_TOKEN, REDCAP_ENABLED
 
 INSTRUMENT_MAP = {
     "baseline": "baseline_information",
