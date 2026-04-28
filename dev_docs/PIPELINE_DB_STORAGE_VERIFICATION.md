@@ -255,7 +255,7 @@ curl -s -H "X-API-Key: $API_KEY" http://localhost:8000/api/admin/pipeline-status
 |---|---|---|
 | 🟡 MEDIUM | `pipeline_runner.file_already_processed()` compares `filename` to `patient_id` → always returns false | Same files re-process on every restart (analyses 3, 4 above) |
 | 🟢 LOW | Add `pipeline_orchestrator()` async function to the Guille library | Removes the ~50-line orchestration duplication in Backend |
-| 🟢 LOW | Parallelize AI domains (currently sequential) | 4-minute AI step → ~1 minute |
+| 🟢 LOW | Parallelize AI domains (currently sequential) | Reduces serial AI step latency |
 | 🟢 LOW | Backfill script for pre-migration analyses | Migrations 006/007 leave older analyses with empty intermediate tables |
 
 ---
