@@ -1,0 +1,6293 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Prostate Cancer Doctor-Patient Conversation Archive API",
+    "description": "API for doctor-patient consultation interface data",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/doctor/sentences/{file}/{speaker}": {
+      "get": {
+        "tags": [
+          "Doctor Interface"
+        ],
+        "summary": "Get Doctor Sentences",
+        "description": "Get doctor sentence view data for specific file and speaker where class != -1",
+        "operationId": "get_doctor_sentences_api_doctor_sentences__file___speaker__get",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File"
+            }
+          },
+          {
+            "name": "speaker",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Speaker"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/doctor/rewrites": {
+      "get": {
+        "tags": [
+          "Doctor Interface"
+        ],
+        "summary": "Get Doctor Rewrites",
+        "description": "Get doctor rewrite history with optional filters",
+        "operationId": "get_doctor_rewrites_api_doctor_rewrites_get",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "File"
+            }
+          },
+          {
+            "name": "speaker",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Speaker"
+            }
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Doctor Interface"
+        ],
+        "summary": "Update Doctor Rewrite",
+        "description": "Insert new doctor rewrite log record with full data",
+        "operationId": "update_doctor_rewrite_api_doctor_rewrites_put",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DoctorRewriteUpdateFull"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/doctor/rewrites/{file}/{i}/{i2}/history": {
+      "get": {
+        "tags": [
+          "Doctor Interface"
+        ],
+        "summary": "Get Doctor Rewrite History",
+        "description": "Get revision history for a specific sentence (file, i, i2)\n\nReturns all revisions ordered by time (oldest to newest)\nIncludes original_score from llm_domain_scoring_and_summary",
+        "operationId": "get_doctor_rewrite_history_api_doctor_rewrites__file___i___i2__history_get",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File"
+            }
+          },
+          {
+            "name": "i",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "I"
+            }
+          },
+          {
+            "name": "i2",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "I2"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/doctor/rewrites/{file}/{i}/{i2}/{class_}": {
+      "get": {
+        "tags": [
+          "Doctor Interface"
+        ],
+        "summary": "Get Doctor Rewrite By Key",
+        "description": "Get specific doctor rewrite record by composite key (file, i, i2, class)",
+        "operationId": "get_doctor_rewrite_by_key_api_doctor_rewrites__file___i___i2___class___get",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File"
+            }
+          },
+          {
+            "name": "i",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "I"
+            }
+          },
+          {
+            "name": "i2",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "I2"
+            }
+          },
+          {
+            "name": "class_",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Class "
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/doctor/rewrites/stats": {
+      "get": {
+        "tags": [
+          "Doctor Interface"
+        ],
+        "summary": "Get Doctor Rewrite Stats",
+        "description": "Get rewrite usage statistics per speaker/file for analytics.\n\nReturns total rewrite attempts, unique sentences rewritten, and per-file breakdown.\nUsed to track physician engagement with the rewrite learning tool.",
+        "operationId": "get_doctor_rewrite_stats_api_doctor_rewrites_stats_get",
+        "parameters": [
+          {
+            "name": "speaker",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Speaker"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/doctor/files": {
+      "get": {
+        "tags": [
+          "Doctor Interface"
+        ],
+        "summary": "Get Doctor Files",
+        "description": "Get list of unique files with their doctor speaker label.\n\nReturns `file` as `source_filename` to align with /sentences/{file}/{speaker},\n/scores/average, /scores/summary/{file}, /scores/trajectory, and the patient\nview convention (frontend ?fileid=... also uses source_filename).",
+        "operationId": "get_doctor_files_api_doctor_files_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 5000,
+              "minimum": 1,
+              "description": "Max files to return",
+              "default": 500,
+              "title": "Limit"
+            },
+            "description": "Max files to return"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/doctor/scores/average": {
+      "get": {
+        "tags": [
+          "Doctor Interface"
+        ],
+        "summary": "Get Doctor Score Average",
+        "description": "Get average score grouped by file, speaker, class.\n\nUses GPT-4o ai_score from llm_domain_scoring_and_summary.\nFor the landing page Overall Score, uses ai_overall_score from transcript_analysis_log.",
+        "operationId": "get_doctor_score_average_api_doctor_scores_average_get",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "File"
+            }
+          },
+          {
+            "name": "speaker",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Speaker"
+            }
+          },
+          {
+            "name": "class",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Class"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/doctor/scores/summary/{file}": {
+      "get": {
+        "tags": [
+          "Doctor Interface"
+        ],
+        "summary": "Get Doctor Score Summary By File Speaker",
+        "description": "Get score summary for specific patient (all classes).\n\nUses Guille's GPT-4o ai_score (0-5) from llm_domain_scoring_and_summary.\nUses AI pipeline ai_score only.",
+        "operationId": "get_doctor_score_summary_by_file_speaker_api_doctor_scores_summary__file__get",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File"
+            }
+          },
+          {
+            "name": "speaker",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Speaker"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/doctor/scores/summary/{file}/{speaker}": {
+      "get": {
+        "tags": [
+          "Doctor Interface"
+        ],
+        "summary": "Get Doctor Score Summary By File Speaker",
+        "description": "Get score summary for specific patient (all classes).\n\nUses Guille's GPT-4o ai_score (0-5) from llm_domain_scoring_and_summary.\nUses AI pipeline ai_score only.",
+        "operationId": "get_doctor_score_summary_by_file_speaker_api_doctor_scores_summary__file___speaker__get",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File"
+            }
+          },
+          {
+            "name": "speaker",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Speaker"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/doctor/scores/trajectory": {
+      "get": {
+        "tags": [
+          "Doctor Interface"
+        ],
+        "summary": "Get Doctor Score Trajectory",
+        "description": "Get cumulative score trajectory over time (B-2 feedback).\n\nUses AI pipeline ai_score (0-5) from llm_domain_scoring_and_summary.\nEach data point = a consultation event (patient transcript analysis).\nY-value = cumulative average of all patients seen so far,\n          where each patient contributes per-domain ai_scores,\n          and the overall = average of domain scores.",
+        "operationId": "get_doctor_score_trajectory_api_doctor_scores_trajectory_get",
+        "parameters": [
+          {
+            "name": "speaker",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Speaker"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/doctor/score-sentence": {
+      "post": {
+        "tags": [
+          "Doctor Interface"
+        ],
+        "summary": "Score Sentence",
+        "description": "Score a sentence using Guille's AI pipeline (GPT-4o).\n\nUses Azure OpenAI GPT-4o to evaluate how specifically the doctor\ncommunicated clinical risk in this sentence. Returns 0-5 score\nwith chain-of-thought explanation.\n\nScore rubric:\n  0 = No mention of domain topic\n  1 = Mention but no risk description\n  2 = Qualitative description only\n  3 = Numeric estimate without timeline\n  4 = Numeric estimate with timeline\n  5 = Patient-specific estimate with timeline\n\nUses AI pipeline for scoring via GPT-4o.",
+        "operationId": "score_sentence_api_doctor_score_sentence_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SentenceScoringRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/doctor/class-distribution": {
+      "get": {
+        "tags": [
+          "Doctor Interface"
+        ],
+        "summary": "Get Doctor Class Distribution",
+        "description": "Get class (model/domain) distribution per file from sentence_prediction.\n\nEach sentence_prediction row has a model (cp, le, ed, inc, ius).\nReturns count of each model for each file.\n\nParameters:\n- file: Optional filter for specific file\n- include_invalid: kept for API compatibility (no-op, sentence_prediction has no invalid class)",
+        "operationId": "get_doctor_class_distribution_api_doctor_class_distribution_get",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "File"
+            }
+          },
+          {
+            "name": "include_invalid",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include class=-1 (invalid) in results",
+              "default": false,
+              "title": "Include Invalid"
+            },
+            "description": "Include class=-1 (invalid) in results"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/doctor/class-distribution/{file}": {
+      "get": {
+        "tags": [
+          "Doctor Interface"
+        ],
+        "summary": "Get Doctor Class Distribution By File",
+        "description": "Get detailed class (model/domain) distribution for a specific file.\n\nReturns:\n- Count of each model\n- Percentage of each model",
+        "operationId": "get_doctor_class_distribution_by_file_api_doctor_class_distribution__file__get",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File"
+            }
+          },
+          {
+            "name": "include_invalid",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include class=-1 (invalid) in results",
+              "default": false,
+              "title": "Include Invalid"
+            },
+            "description": "Include class=-1 (invalid) in results"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/doctor/ai-rewrite": {
+      "post": {
+        "tags": [
+          "Doctor Interface"
+        ],
+        "summary": "Generate Ai Rewrite",
+        "description": "Generate AI-powered rewrite of a sentence to improve communication quality.\n\nParameters:\n- sentence: Original sentence to rewrite\n- class_: Topic class (1-5)\n- target_score: Optional target score to aim for (1-5), defaults to 5\n- context: Optional full context for better rewriting\n\nReturns:\n- original_sentence: The input sentence\n- rewritten_sentence: AI-generated improved sentence\n- original_score: Score of original sentence (if available)\n- new_score: Expected score of rewritten sentence\n- class_: Topic class\n- improvement_applied: Description of improvements made",
+        "operationId": "generate_ai_rewrite_api_doctor_ai_rewrite_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIRewriteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIRewriteResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/doctor/improvement-suggestions/{class_}": {
+      "get": {
+        "tags": [
+          "Doctor Interface"
+        ],
+        "summary": "Get Improvement Suggestions By Class",
+        "description": "Get improvement suggestions for a specific class (topic).\n\nParameters:\n- class_: Topic class (\"1\" to \"5\")\n- current_score: Optional current score. If provided, returns only suggestions for scores above this level.\n\nReturns:\n- class_: The requested class\n- class_name: Human-readable class name\n- current_score: The provided current score (if any)\n- suggestions: List of applicable improvement suggestions\n- all_levels: All score level descriptions for reference",
+        "operationId": "get_improvement_suggestions_by_class_api_doctor_improvement_suggestions__class___get",
+        "parameters": [
+          {
+            "name": "class_",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Class "
+            }
+          },
+          {
+            "name": "current_score",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Current score to filter suggestions above this level",
+              "title": "Current Score"
+            },
+            "description": "Current score to filter suggestions above this level"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/doctor/improvement-suggestions": {
+      "get": {
+        "tags": [
+          "Doctor Interface"
+        ],
+        "summary": "Get All Improvement Suggestions",
+        "description": "Get all improvement suggestions for all classes.\n\nReturns a dictionary of all classes with their suggestions.",
+        "operationId": "get_all_improvement_suggestions_api_doctor_improvement_suggestions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Doctor Interface"
+        ],
+        "summary": "Get Improvement Suggestions",
+        "description": "Get improvement suggestions for a specific class (POST version).\n\nRequest body:\n- class_: Topic class (\"1\" to \"5\")\n- current_score: Optional current score. If provided, returns only suggestions for scores above this level.\n\nReturns same as GET version.",
+        "operationId": "get_improvement_suggestions_api_doctor_improvement_suggestions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImprovementSuggestionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patient/summaries": {
+      "get": {
+        "tags": [
+          "Patient Interface"
+        ],
+        "summary": "Get Patient Summaries",
+        "description": "Get patient summaries with optional filters",
+        "operationId": "get_patient_summaries_api_patient_summaries_get",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "File"
+            }
+          },
+          {
+            "name": "speaker",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Speaker"
+            }
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Skip"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patient/summaries/{file}/{speaker}": {
+      "get": {
+        "tags": [
+          "Patient Interface"
+        ],
+        "summary": "Get Patient Summary Detail",
+        "description": "Get detailed patient summary for specific file and speaker",
+        "operationId": "get_patient_summary_detail_api_patient_summaries__file___speaker__get",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File"
+            }
+          },
+          {
+            "name": "speaker",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Speaker"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patient/scoring": {
+      "get": {
+        "tags": [
+          "Patient Interface"
+        ],
+        "summary": "Get Patient Scoring",
+        "description": "Get patient scoring data",
+        "operationId": "get_patient_scoring_api_patient_scoring_get",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "File"
+            }
+          },
+          {
+            "name": "speaker",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Speaker"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Patient Interface"
+        ],
+        "summary": "Update Patient Scoring",
+        "description": "Update or create patient scoring for a single domain",
+        "operationId": "update_patient_scoring_api_patient_scoring_put",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatientDomainScoringUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patient/responses": {
+      "get": {
+        "tags": [
+          "Patient Interface"
+        ],
+        "summary": "Get Patient Responses",
+        "description": "Get patient question responses",
+        "operationId": "get_patient_responses_api_patient_responses_get",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "File"
+            }
+          },
+          {
+            "name": "speaker",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Speaker"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Patient Interface"
+        ],
+        "summary": "Update Patient Responses",
+        "description": "Update or create patient response for a single domain",
+        "operationId": "update_patient_responses_api_patient_responses_put",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatientDomainResponseUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patient/files": {
+      "get": {
+        "tags": [
+          "Patient Interface"
+        ],
+        "summary": "Get Patient Files",
+        "description": "Get list of unique files in patient interface",
+        "operationId": "get_patient_files_api_patient_files_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 5000,
+              "minimum": 1,
+              "description": "Max files to return",
+              "default": 500,
+              "title": "Limit"
+            },
+            "description": "Max files to return"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patient/sentences/{file}": {
+      "get": {
+        "tags": [
+          "Patient Interface"
+        ],
+        "summary": "Get Patient Sentences By Class",
+        "description": "Get top sentences by NLP pred_score per domain, with quality scores.\n\nReturns pred_score top-N sentences per domain for the patient\n\"View relevant sentences from your visit\" feature.\nSentences used in AI-GENERATED SUMMARY (top summary_top_n by pred_score)\nare marked with is_in_summary=true.",
+        "operationId": "get_patient_sentences_by_class_api_patient_sentences__file__get",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File"
+            }
+          },
+          {
+            "name": "top_n",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 10,
+              "title": "Top N"
+            }
+          },
+          {
+            "name": "summary_top_n",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 10,
+              "minimum": 1,
+              "default": 3,
+              "title": "Summary Top N"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stats/dashboard": {
+      "get": {
+        "tags": [
+          "Patient Interface"
+        ],
+        "summary": "Get Dashboard Stats",
+        "description": "Get overall dashboard statistics",
+        "operationId": "get_dashboard_stats_api_stats_dashboard_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patient/ai-summary/{file}": {
+      "get": {
+        "tags": [
+          "Patient Interface"
+        ],
+        "summary": "Get Ai Summary",
+        "description": "Get AI-generated patient-facing risk summaries per domain.\n\nReturns GPT-4o scored and reformatted sentences for each domain.\nFalls back to existing patient_summary_domain if AI results not available.",
+        "operationId": "get_ai_summary_api_patient_ai_summary__file__get",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patient/ai-summary": {
+      "get": {
+        "tags": [
+          "Patient Interface"
+        ],
+        "summary": "List Ai Summaries",
+        "description": "List all patients that have AI-generated summaries.",
+        "operationId": "list_ai_summaries_api_patient_ai_summary_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/redcap/import": {
+      "post": {
+        "tags": [
+          "Patient Interface"
+        ],
+        "summary": "Import To Redcap",
+        "description": "Import records to REDCap project",
+        "operationId": "import_to_redcap_api_redcap_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RedcapImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/surveys/submit": {
+      "post": {
+        "tags": [
+          "Surveys"
+        ],
+        "summary": "Submit Survey",
+        "description": "Submit a survey response\n- Saves to PostgreSQL\n- Optionally syncs to REDCap",
+        "operationId": "submit_survey_api_surveys_submit_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SurveySubmission"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/surveys/submissions": {
+      "get": {
+        "tags": [
+          "Surveys"
+        ],
+        "summary": "Get Submissions",
+        "description": "Get all survey submissions with optional filters and pagination",
+        "operationId": "get_submissions_api_surveys_submissions_get",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by file",
+              "title": "File"
+            },
+            "description": "Filter by file"
+          },
+          {
+            "name": "speaker",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by speaker",
+              "title": "Speaker"
+            },
+            "description": "Filter by speaker"
+          },
+          {
+            "name": "survey_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by survey type",
+              "title": "Survey Type"
+            },
+            "description": "Filter by survey type"
+          },
+          {
+            "name": "redcap_synced",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by REDCap sync status",
+              "title": "Redcap Synced"
+            },
+            "description": "Filter by REDCap sync status"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Page number",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "Page number"
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Page size",
+              "default": 20,
+              "title": "Size"
+            },
+            "description": "Page size"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/surveys/submissions/{submission_id}": {
+      "get": {
+        "tags": [
+          "Surveys"
+        ],
+        "summary": "Get Submission By Id",
+        "description": "Get a specific survey submission by ID",
+        "operationId": "get_submission_by_id_api_surveys_submissions__submission_id__get",
+        "parameters": [
+          {
+            "name": "submission_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Submission Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Surveys"
+        ],
+        "summary": "Delete Submission",
+        "description": "Delete a survey submission",
+        "operationId": "delete_submission_api_surveys_submissions__submission_id__delete",
+        "parameters": [
+          {
+            "name": "submission_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Submission Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/surveys/by-speaker/{speaker}": {
+      "get": {
+        "tags": [
+          "Surveys"
+        ],
+        "summary": "Get Submissions By Speaker",
+        "description": "Get all survey submissions for a specific speaker/patient",
+        "operationId": "get_submissions_by_speaker_api_surveys_by_speaker__speaker__get",
+        "parameters": [
+          {
+            "name": "speaker",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Speaker"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/surveys/by-file/{file}": {
+      "get": {
+        "tags": [
+          "Surveys"
+        ],
+        "summary": "Get Submissions By File",
+        "description": "Get all survey submissions for a specific file",
+        "operationId": "get_submissions_by_file_api_surveys_by_file__file__get",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/surveys/by-type/{survey_type}": {
+      "get": {
+        "tags": [
+          "Surveys"
+        ],
+        "summary": "Get Submissions By Type",
+        "description": "Get all submissions for a specific survey type",
+        "operationId": "get_submissions_by_type_api_surveys_by_type__survey_type__get",
+        "parameters": [
+          {
+            "name": "survey_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Survey Type"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/surveys/stats": {
+      "get": {
+        "tags": [
+          "Surveys"
+        ],
+        "summary": "Get Survey Stats",
+        "description": "Get survey submission statistics",
+        "operationId": "get_survey_stats_api_surveys_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/surveys/redcap/records": {
+      "get": {
+        "tags": [
+          "Surveys"
+        ],
+        "summary": "View Redcap Records",
+        "description": "Get all record IDs from REDCap project and check target instrument data status\n\nReturns:\n    - Project information\n    - All record IDs\n    - Data status for target instruments (DCS, SDM, Risk Perception, Satisfaction)",
+        "operationId": "view_redcap_records_api_surveys_redcap_records_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/surveys/redcap/records/{record_id}": {
+      "get": {
+        "tags": [
+          "Surveys"
+        ],
+        "summary": "View Redcap Record Detail",
+        "description": "Get detailed data for a specific record from REDCap\nShows all target instrument fields with their values",
+        "operationId": "view_redcap_record_detail_api_surveys_redcap_records__record_id__get",
+        "parameters": [
+          {
+            "name": "record_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Record Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Surveys"
+        ],
+        "summary": "Delete Redcap Record",
+        "description": "Delete a record from REDCap project\n\nWARNING: This permanently deletes the record from REDCap",
+        "operationId": "delete_redcap_record_api_surveys_redcap_records__record_id__delete",
+        "parameters": [
+          {
+            "name": "record_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Record Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/surveys/redcap/records/{record_id}/import": {
+      "post": {
+        "tags": [
+          "Surveys"
+        ],
+        "summary": "Import To Redcap Record",
+        "description": "Import survey data to REDCap for a specific record ID\n\nUses direct REDCap field names:\n- DCS: dcs1_v2 ~ dcs16_v2 (1=Strongly Agree, 2=Agree, 3=Neither, 4=Disagree, 5=Strongly Disagree)\n- SDM: sdmp_options, sdm_ptos, sdm_cons, sdm_pref\n- Risk: risk_percep_1_1, risk_percept2_2, risk_percept_3_3, risk_percept_4_4, risk_percep_5_5\n- Satisfaction: pt_satisfaction (free text)\n\nNEW: Automatically sets _complete fields to \"2\" (Complete/Green) for instruments with data",
+        "operationId": "import_to_redcap_record_api_surveys_redcap_records__record_id__import_post",
+        "parameters": [
+          {
+            "name": "record_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Record Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/REDCapImportData"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/surveys/redcap/import": {
+      "post": {
+        "tags": [
+          "Surveys"
+        ],
+        "summary": "Bulk Import To Redcap",
+        "description": "Bulk import survey data to REDCap\nAlternative endpoint that accepts record_id in request body",
+        "operationId": "bulk_import_to_redcap_api_surveys_redcap_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/REDCapBulkImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/surveys/redcap/records/{record_id}/import-sample": {
+      "post": {
+        "tags": [
+          "Surveys"
+        ],
+        "summary": "Import Sample Data",
+        "description": "Import sample/test data for all target instruments\nUseful for testing REDCap integration\n\nCreates complete sample responses for:\n- Decisional Conflict Survey (16 questions)\n- Shared Decision Making (4 questions)\n- Post Risk Perception (5 questions)\n- Patient Satisfaction (1 question)\n\nNEW: Also sets all _complete fields to \"2\" (Complete/Green)",
+        "operationId": "import_sample_data_api_surveys_redcap_records__record_id__import_sample_post",
+        "parameters": [
+          {
+            "name": "record_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Record Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/nlp/health": {
+      "get": {
+        "tags": [
+          "NLP Classifier"
+        ],
+        "summary": "Nlp Health",
+        "description": "Check if the NLP classifier service is reachable.",
+        "operationId": "nlp_health_api_nlp_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/nlp/predict": {
+      "post": {
+        "tags": [
+          "NLP Classifier"
+        ],
+        "summary": "Predict",
+        "description": "Classify a single sentence with a specified model.",
+        "operationId": "predict_api_nlp_predict_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NLPPredictRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NLPPredictResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/nlp/predict/batch": {
+      "post": {
+        "tags": [
+          "NLP Classifier"
+        ],
+        "summary": "Predict Batch Endpoint",
+        "description": "Classify multiple sentences (max 50) with a specified model.",
+        "operationId": "predict_batch_endpoint_api_nlp_predict_batch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NLPBatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NLPBatchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/nlp/predict/by-class": {
+      "post": {
+        "tags": [
+          "NLP Classifier"
+        ],
+        "summary": "Predict By Class",
+        "description": "Classify a sentence using a class number (1-5) instead of model name.",
+        "operationId": "predict_by_class_api_nlp_predict_by_class_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NLPByClassRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NLPPredictResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/nlp/predict/all": {
+      "post": {
+        "tags": [
+          "NLP Classifier"
+        ],
+        "summary": "Predict All",
+        "description": "Classify a single sentence against all 5 models concurrently.",
+        "operationId": "predict_all_api_nlp_predict_all_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NLPAllModelsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NLPAllModelsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/nlp/models": {
+      "get": {
+        "tags": [
+          "NLP Classifier"
+        ],
+        "summary": "List Models",
+        "description": "Return available NLP models and their class mappings.",
+        "operationId": "list_models_api_nlp_models_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcript/analyze": {
+      "post": {
+        "tags": [
+          "Transcript Analysis"
+        ],
+        "summary": "Analyze",
+        "description": "Upload a transcript xlsx and run the full analysis pipeline.\n\nSteps 1,2,3 (preprocessing) and 5,6,7 (postprocessing) run in Backend.\nStep 4 (NLP prediction) calls the r01-nlp-classifiers Docker container.\n\nReturns JSON with per-model top sentences, prediction scores, and context.\nThe xlsx file can be downloaded via /api/transcript/download.",
+        "operationId": "analyze_api_transcript_analyze_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_analyze_api_transcript_analyze_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcript/download/{patient_id}": {
+      "get": {
+        "tags": [
+          "Transcript Analysis"
+        ],
+        "summary": "Download",
+        "description": "Download the generated xlsx result file for a patient.\n\nTries the file system first; falls back to the database if the file is\nmissing (e.g. after a container restart).",
+        "operationId": "download_api_transcript_download__patient_id__get",
+        "parameters": [
+          {
+            "name": "patient_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Patient Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcript/analyze-batch": {
+      "post": {
+        "tags": [
+          "Transcript Analysis"
+        ],
+        "summary": "Analyze Batch",
+        "description": "Upload multiple transcript xlsx files and run the analysis pipeline on each.\n\nEach file is processed independently. If one file fails, the rest continue.\nResults are saved to disk and DB, and can be downloaded individually or via /download-batch.",
+        "operationId": "analyze_batch_api_transcript_analyze_batch_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_analyze_batch_api_transcript_analyze_batch_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcript/download-batch": {
+      "get": {
+        "tags": [
+          "Transcript Analysis"
+        ],
+        "summary": "Download Batch",
+        "description": "Download results for multiple patients as a single zip file.\n\nTries the file system first for each patient; falls back to the database\nif the file is missing (e.g. after a container restart).\n\nArgs:\n    patient_ids: Comma-separated list of patient IDs (e.g. \"sid-01,sid-02\").",
+        "operationId": "download_batch_api_transcript_download_batch_get",
+        "parameters": [
+          {
+            "name": "patient_ids",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Patient Ids"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcript/history/{patient_id}": {
+      "get": {
+        "tags": [
+          "Transcript Analysis"
+        ],
+        "summary": "History",
+        "description": "Retrieve analysis history for a patient from the database.\n\nReturns a paginated list of past analysis runs (newest first), including\nparameters used, timestamps, and source filenames.",
+        "operationId": "history_api_transcript_history__patient_id__get",
+        "parameters": [
+          {
+            "name": "patient_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Patient Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Page number",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "Page number"
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Page size",
+              "default": 20,
+              "title": "Size"
+            },
+            "description": "Page size"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transcript/predictions/{patient_id}": {
+      "get": {
+        "tags": [
+          "Transcript Analysis"
+        ],
+        "summary": "Get Predictions",
+        "description": "Query sentence-level NLP predictions for a patient.\n\nBy default returns all predictions from the most recent analysis run.\nUse query parameters to filter by model, score threshold, or specific run.",
+        "operationId": "get_predictions_api_transcript_predictions__patient_id__get",
+        "parameters": [
+          {
+            "name": "patient_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Patient Id"
+            }
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by model (cp, inc, ed, ius, le)",
+              "title": "Model"
+            },
+            "description": "Filter by model (cp, inc, ed, ius, le)"
+          },
+          {
+            "name": "top_n",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 10000,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Return top N per model by pred_score",
+              "title": "Top N"
+            },
+            "description": "Return top N per model by pred_score"
+          },
+          {
+            "name": "analysis_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Specific analysis run ID (default: latest)",
+              "title": "Analysis Id"
+            },
+            "description": "Specific analysis run ID (default: latest)"
+          },
+          {
+            "name": "min_score",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 1.0,
+                  "minimum": 0.0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Minimum pred_score filter",
+              "title": "Min Score"
+            },
+            "description": "Minimum pred_score filter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/track/patient-first": {
+      "post": {
+        "tags": [
+          "Track-PatientFirst"
+        ],
+        "summary": "Post Patient First Events",
+        "description": "Bulk-insert a batch of patient first-visit behavior events.",
+        "operationId": "post_patient_first_events_api_track_patient_first_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatientFirstBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/track/patient-first/sessions": {
+      "get": {
+        "tags": [
+          "Track-PatientFirst"
+        ],
+        "summary": "List Sessions",
+        "description": "Return one row per session with per-session counts and time range.",
+        "operationId": "list_sessions_api_track_patient_first_sessions_get",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by patient file",
+              "title": "File"
+            },
+            "description": "Filter by patient file"
+          },
+          {
+            "name": "speaker",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by speaker",
+              "title": "Speaker"
+            },
+            "description": "Filter by speaker"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/track/patient-first/session/{session_id}": {
+      "get": {
+        "tags": [
+          "Track-PatientFirst"
+        ],
+        "summary": "Get Session Events",
+        "description": "Return all events for a single session, ordered by client_timestamp.",
+        "operationId": "get_session_events_api_track_patient_first_session__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/track/patient-first/aggregate": {
+      "get": {
+        "tags": [
+          "Track-PatientFirst"
+        ],
+        "summary": "Aggregate By Session",
+        "description": "Per-session aggregation for one file.\n\nReturns one row per session with per-domain open/close counts, ratings,\nand event totals. Critically: NO OR-merge across sessions \u2014 each session\nis reported independently. (Fixes the legacy \"Still open\" bug.)",
+        "operationId": "aggregate_by_session_api_track_patient_first_aggregate_get",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Patient file (required)",
+              "title": "File"
+            },
+            "description": "Patient file (required)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/track/patient-followup": {
+      "post": {
+        "tags": [
+          "Track-PatientFollowup"
+        ],
+        "summary": "Post Patient Followup Events",
+        "operationId": "post_patient_followup_events_api_track_patient_followup_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatientFollowupBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/track/patient-followup/sessions": {
+      "get": {
+        "tags": [
+          "Track-PatientFollowup"
+        ],
+        "summary": "List Sessions",
+        "operationId": "list_sessions_api_track_patient_followup_sessions_get",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "File"
+            }
+          },
+          {
+            "name": "speaker",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Speaker"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/track/patient-followup/session/{session_id}": {
+      "get": {
+        "tags": [
+          "Track-PatientFollowup"
+        ],
+        "summary": "Get Session Events",
+        "operationId": "get_session_events_api_track_patient_followup_session__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/track/patient-followup/aggregate": {
+      "get": {
+        "tags": [
+          "Track-PatientFollowup"
+        ],
+        "summary": "Aggregate By Session",
+        "description": "Per-session survey progress and timing for one file.",
+        "operationId": "aggregate_by_session_api_track_patient_followup_aggregate_get",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Patient file (required)",
+              "title": "File"
+            },
+            "description": "Patient file (required)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/track/doctor": {
+      "post": {
+        "tags": [
+          "Track-Doctor"
+        ],
+        "summary": "Post Doctor Events",
+        "operationId": "post_doctor_events_api_track_doctor_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DoctorBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/track/doctor/sessions": {
+      "get": {
+        "tags": [
+          "Track-Doctor"
+        ],
+        "summary": "List Sessions",
+        "operationId": "list_sessions_api_track_doctor_sessions_get",
+        "parameters": [
+          {
+            "name": "speaker",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Speaker"
+            }
+          },
+          {
+            "name": "file",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "File"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/track/doctor/session/{session_id}": {
+      "get": {
+        "tags": [
+          "Track-Doctor"
+        ],
+        "summary": "Get Session Events",
+        "operationId": "get_session_events_api_track_doctor_session__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/track/doctor/speakers": {
+      "get": {
+        "tags": [
+          "Track-Doctor"
+        ],
+        "summary": "List Speakers",
+        "description": "Distinct doctor speakers seen in doctor_behavior, with event counts.",
+        "operationId": "list_speakers_api_track_doctor_speakers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/track/doctor/actions": {
+      "get": {
+        "tags": [
+          "Track-Doctor"
+        ],
+        "summary": "List Actions",
+        "description": "Flat chronological action log for a single doctor.\n\nReturns every event for the given speaker in time-ascending order,\nirrespective of session_id. Each event still carries its session_id\nso the admin UI can render subtle session boundaries between bursts\nof activity. (Sessions are kept in the data; the UI surfaces them\nonly as separators, not as the primary grouping.)",
+        "operationId": "list_actions_api_track_doctor_actions_get",
+        "parameters": [
+          {
+            "name": "speaker",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Doctor identifier (required)",
+              "title": "Speaker"
+            },
+            "description": "Doctor identifier (required)"
+          },
+          {
+            "name": "file",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "File"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 5000,
+              "minimum": 1,
+              "default": 500,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/track/doctor/aggregate": {
+      "get": {
+        "tags": [
+          "Track-Doctor"
+        ],
+        "summary": "Aggregate By Session",
+        "description": "Per-session activity counts for one doctor, grouped by event_type.",
+        "operationId": "aggregate_by_session_api_track_doctor_aggregate_get",
+        "parameters": [
+          {
+            "name": "speaker",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Doctor identifier (required)",
+              "title": "Speaker"
+            },
+            "description": "Doctor identifier (required)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/track/recordings/{area}": {
+      "post": {
+        "tags": [
+          "Track-Recordings"
+        ],
+        "summary": "Post Recording Chunk",
+        "description": "Store a gzip-compressed rrweb chunk under the given area.",
+        "operationId": "post_recording_chunk_api_track_recordings__area__post",
+        "parameters": [
+          {
+            "name": "area",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "patient_first",
+                "patient_followup",
+                "doctor"
+              ],
+              "type": "string",
+              "title": "Area"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordingChunk"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Track-Recordings"
+        ],
+        "summary": "List Recordings",
+        "description": "List recording sessions in this area (one row per session_id).",
+        "operationId": "list_recordings_api_track_recordings__area__get",
+        "parameters": [
+          {
+            "name": "area",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "patient_first",
+                "patient_followup",
+                "doctor"
+              ],
+              "type": "string",
+              "title": "Area"
+            }
+          },
+          {
+            "name": "file",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "File"
+            }
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/track/recordings/{area}/{session_id}": {
+      "get": {
+        "tags": [
+          "Track-Recordings"
+        ],
+        "summary": "Get Recording Payload",
+        "description": "Return all chunks for one session as a single decompressed event list,\nready for rrweb-player consumption.",
+        "operationId": "get_recording_payload_api_track_recordings__area___session_id__get",
+        "parameters": [
+          {
+            "name": "area",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "patient_first",
+                "patient_followup",
+                "doctor"
+              ],
+              "type": "string",
+              "title": "Area"
+            }
+          },
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/users": {
+      "get": {
+        "tags": [
+          "Auth Admin"
+        ],
+        "summary": "List Users",
+        "description": "List all users (admin only).",
+        "operationId": "list_users_api_auth_users_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserResponse"
+                  },
+                  "title": "Response List Users Api Auth Users Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Auth Admin"
+        ],
+        "summary": "Create User",
+        "description": "Create a new user (admin only).",
+        "operationId": "create_user_api_auth_users_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/users/{user_id}": {
+      "get": {
+        "tags": [
+          "Auth Admin"
+        ],
+        "summary": "Get User",
+        "description": "Get user by ID (admin only).",
+        "operationId": "get_user_api_auth_users__user_id__get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Auth Admin"
+        ],
+        "summary": "Update User",
+        "description": "Update user fields (admin only).",
+        "operationId": "update_user_api_auth_users__user_id__patch",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Auth Admin"
+        ],
+        "summary": "Delete User",
+        "description": "Delete a user (admin only). Cascades to keys and access records.",
+        "operationId": "delete_user_api_auth_users__user_id__delete",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/users/{user_id}/keys": {
+      "get": {
+        "tags": [
+          "Auth Admin"
+        ],
+        "summary": "List User Keys",
+        "description": "List API keys for a user (admin only). Raw keys are NOT returned.",
+        "operationId": "list_user_keys_api_auth_users__user_id__keys_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/APIKeyResponse"
+                  },
+                  "title": "Response List User Keys Api Auth Users  User Id  Keys Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Auth Admin"
+        ],
+        "summary": "Create Api Key",
+        "description": "Generate a new API key for a user.\n\nThe raw key is returned **only once** in the response.",
+        "operationId": "create_api_key_api_auth_users__user_id__keys_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/APIKeyCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIKeyCreated"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/users/{user_id}/keys/{key_id}": {
+      "delete": {
+        "tags": [
+          "Auth Admin"
+        ],
+        "summary": "Revoke Api Key",
+        "description": "Revoke (deactivate) an API key.",
+        "operationId": "revoke_api_key_api_auth_users__user_id__keys__key_id__delete",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "key_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Key Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/users/{user_id}/patients": {
+      "get": {
+        "tags": [
+          "Auth Admin"
+        ],
+        "summary": "List Patient Access",
+        "description": "List patient access records for a user (admin only).",
+        "operationId": "list_patient_access_api_auth_users__user_id__patients_get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PatientAccessResponse"
+                  },
+                  "title": "Response List Patient Access Api Auth Users  User Id  Patients Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Auth Admin"
+        ],
+        "summary": "Grant Patient Access",
+        "description": "Grant patient access to a user (admin only).",
+        "operationId": "grant_patient_access_api_auth_users__user_id__patients_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatientAccessGrant"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientAccessResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/users/{user_id}/patients/{patient_id}": {
+      "delete": {
+        "tags": [
+          "Auth Admin"
+        ],
+        "summary": "Revoke Patient Access",
+        "description": "Revoke patient access from a user (admin only).",
+        "operationId": "revoke_patient_access_api_auth_users__user_id__patients__patient_id__delete",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "patient_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Patient Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Auth Admin"
+        ],
+        "summary": "Login",
+        "description": "Authenticate with username + password and receive a JWT token.\n\nOnly functional when ``AUTH_MODE=jwt``.",
+        "operationId": "login_api_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": [
+          "Auth Admin"
+        ],
+        "summary": "Get Me",
+        "description": "Return the currently authenticated user's info.",
+        "operationId": "get_me_api_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/mode": {
+      "get": {
+        "tags": [
+          "Auth Admin"
+        ],
+        "summary": "Get Auth Mode",
+        "description": "Return the current AUTH_MODE (public, no auth required).",
+        "operationId": "get_auth_mode_api_auth_mode_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/pipeline-status": {
+      "get": {
+        "tags": [
+          "Admin Pipeline"
+        ],
+        "summary": "Pipeline Status",
+        "description": "Verify pipeline DB storage integrity.\n\nReturns 200 OK with detailed status if all checks pass, 503 if any\ncheck fails (so monitoring tools alert).",
+        "operationId": "pipeline_status_api_admin_pipeline_status_get",
+        "parameters": [
+          {
+            "name": "analysis_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Verify a single analysis_id (default: all)",
+              "title": "Analysis Id"
+            },
+            "description": "Verify a single analysis_id (default: all)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "summary": "Root",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health Check",
+        "description": "Health check endpoint - No API Key required. Checks DB, Redis, NLP.",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "summary": "Ready",
+        "description": "Readiness check endpoint - No API Key required",
+        "operationId": "ready_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AIRewriteRequest": {
+        "properties": {
+          "sentence": {
+            "type": "string",
+            "title": "Sentence"
+          },
+          "class_": {
+            "type": "string",
+            "title": "Class"
+          },
+          "target_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Score"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sentence",
+          "class_"
+        ],
+        "title": "AIRewriteRequest",
+        "description": "Request model for AI Rewrite"
+      },
+      "AIRewriteResponse": {
+        "properties": {
+          "original_sentence": {
+            "type": "string",
+            "title": "Original Sentence"
+          },
+          "rewritten_sentence": {
+            "type": "string",
+            "title": "Rewritten Sentence"
+          },
+          "original_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Score"
+          },
+          "new_score": {
+            "type": "number",
+            "title": "New Score"
+          },
+          "class_": {
+            "type": "string",
+            "title": "Class"
+          },
+          "improvement_applied": {
+            "type": "string",
+            "title": "Improvement Applied"
+          }
+        },
+        "type": "object",
+        "required": [
+          "original_sentence",
+          "rewritten_sentence",
+          "new_score",
+          "class_",
+          "improvement_applied"
+        ],
+        "title": "AIRewriteResponse",
+        "description": "Response model for AI Rewrite"
+      },
+      "APIKeyCreate": {
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "expires_in_days": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 3650.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires In Days"
+          }
+        },
+        "type": "object",
+        "title": "APIKeyCreate"
+      },
+      "APIKeyCreated": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "raw_key": {
+            "type": "string",
+            "title": "Raw Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "is_active",
+          "created_at",
+          "expires_at",
+          "last_used_at",
+          "raw_key"
+        ],
+        "title": "APIKeyCreated",
+        "description": "Returned only at creation time \u2014 includes the raw key."
+      },
+      "APIKeyResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "is_active",
+          "created_at",
+          "expires_at",
+          "last_used_at"
+        ],
+        "title": "APIKeyResponse"
+      },
+      "Body_analyze_api_transcript_analyze_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "xlsx file with [speaker, text] columns"
+          },
+          "top_n": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Top N",
+            "description": "Number of top sentences per model (0 = all)",
+            "default": 0
+          },
+          "context_window": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Context Window",
+            "description": "Number of surrounding sentences for context",
+            "default": 3
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_analyze_api_transcript_analyze_post"
+      },
+      "Body_analyze_batch_api_transcript_analyze_batch_post": {
+        "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "contentMediaType": "application/octet-stream"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "One or more xlsx files with [speaker, text] columns"
+          },
+          "top_n": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Top N",
+            "description": "Number of top sentences per model (0 = all)",
+            "default": 0
+          },
+          "context_window": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Context Window",
+            "description": "Number of surrounding sentences for context",
+            "default": 3
+          }
+        },
+        "type": "object",
+        "required": [
+          "files"
+        ],
+        "title": "Body_analyze_batch_api_transcript_analyze_batch_post"
+      },
+      "DoctorBatch": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Session Id"
+          },
+          "file": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File"
+          },
+          "speaker": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Speaker"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/DoctorEvent"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Events"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "speaker",
+          "events"
+        ],
+        "title": "DoctorBatch"
+      },
+      "DoctorEvent": {
+        "properties": {
+          "event_type": {
+            "type": "string",
+            "enum": [
+              "page_view",
+              "view_change",
+              "patient_select",
+              "topic_select",
+              "sentence_select",
+              "rewrite_open",
+              "rewrite_input",
+              "rewrite_apply",
+              "rubric_open",
+              "rubric_close",
+              "rubric_score_lock",
+              "tour_open",
+              "tour_end",
+              "session_end"
+            ],
+            "title": "Event Type"
+          },
+          "target_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "patient",
+                  "topic",
+                  "sentence"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Type"
+          },
+          "target_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata",
+            "default": {}
+          },
+          "device_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Type"
+          },
+          "client_timestamp": {
+            "type": "string",
+            "title": "Client Timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_type",
+          "client_timestamp"
+        ],
+        "title": "DoctorEvent"
+      },
+      "DoctorRewriteUpdateFull": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "title": "File"
+          },
+          "i": {
+            "type": "integer",
+            "title": "I"
+          },
+          "i2": {
+            "type": "integer",
+            "title": "I2"
+          },
+          "speaker": {
+            "type": "string",
+            "title": "Speaker"
+          },
+          "time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time"
+          },
+          "original_sentence": {
+            "type": "string",
+            "title": "Original Sentence"
+          },
+          "revised_sentence": {
+            "type": "string",
+            "title": "Revised Sentence"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "class_": {
+            "type": "string",
+            "title": "Class"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "i",
+          "i2",
+          "speaker",
+          "original_sentence",
+          "revised_sentence",
+          "class_"
+        ],
+        "title": "DoctorRewriteUpdateFull"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ImprovementSuggestionsRequest": {
+        "properties": {
+          "class_": {
+            "type": "string",
+            "title": "Class"
+          },
+          "current_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "class_"
+        ],
+        "title": "ImprovementSuggestionsRequest",
+        "description": "Request model for improvement suggestions"
+      },
+      "LoginRequest": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LoginRequest"
+      },
+      "NLPAllModelsRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Text",
+            "description": "Sentence to classify against all models"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "NLPAllModelsRequest"
+      },
+      "NLPAllModelsResponse": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "predictions": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Predictions"
+          },
+          "top_topic": {
+            "type": "string",
+            "title": "Top Topic"
+          },
+          "top_score": {
+            "type": "number",
+            "title": "Top Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "predictions",
+          "top_topic",
+          "top_score"
+        ],
+        "title": "NLPAllModelsResponse"
+      },
+      "NLPBatchRequest": {
+        "properties": {
+          "texts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Texts",
+            "description": "Sentences to classify"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model",
+            "description": "NLP model endpoint"
+          }
+        },
+        "type": "object",
+        "required": [
+          "texts",
+          "model"
+        ],
+        "title": "NLPBatchRequest"
+      },
+      "NLPBatchResponse": {
+        "properties": {
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "predictions": {
+            "items": {
+              "$ref": "#/components/schemas/NLPPredictResponse"
+            },
+            "type": "array",
+            "title": "Predictions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "model",
+          "count",
+          "predictions"
+        ],
+        "title": "NLPBatchResponse"
+      },
+      "NLPByClassRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Text"
+          },
+          "class": {
+            "type": "string",
+            "title": "Class",
+            "description": "Class number 1-5"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "class"
+        ],
+        "title": "NLPByClassRequest"
+      },
+      "NLPPredictRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Text",
+            "description": "Sentence to classify"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model",
+            "description": "NLP model endpoint (cp, le, ed, inc, ius)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "model"
+        ],
+        "title": "NLPPredictRequest"
+      },
+      "NLPPredictResponse": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "pred_1": {
+            "type": "number",
+            "title": "Pred 1"
+          },
+          "pred_0": {
+            "type": "number",
+            "title": "Pred 0"
+          },
+          "cached": {
+            "type": "boolean",
+            "title": "Cached"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "model",
+          "pred_1",
+          "pred_0",
+          "cached"
+        ],
+        "title": "NLPPredictResponse"
+      },
+      "PatientAccessGrant": {
+        "properties": {
+          "patient_id": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Patient Id"
+          },
+          "access_type": {
+            "type": "string",
+            "pattern": "^(read|write|admin)$",
+            "title": "Access Type",
+            "default": "read"
+          }
+        },
+        "type": "object",
+        "required": [
+          "patient_id"
+        ],
+        "title": "PatientAccessGrant"
+      },
+      "PatientAccessResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "patient_id": {
+            "type": "string",
+            "title": "Patient Id"
+          },
+          "access_type": {
+            "type": "string",
+            "title": "Access Type"
+          },
+          "granted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Granted At"
+          },
+          "granted_by": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Granted By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "patient_id",
+          "access_type",
+          "granted_at",
+          "granted_by"
+        ],
+        "title": "PatientAccessResponse"
+      },
+      "PatientDomainResponseUpdate": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "title": "File"
+          },
+          "speaker": {
+            "type": "string",
+            "title": "Speaker"
+          },
+          "domain": {
+            "type": "string",
+            "title": "Domain"
+          },
+          "patient_response": {
+            "type": "string",
+            "title": "Patient Response"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "speaker",
+          "domain",
+          "patient_response"
+        ],
+        "title": "PatientDomainResponseUpdate"
+      },
+      "PatientDomainScoringUpdate": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "title": "File"
+          },
+          "speaker": {
+            "type": "string",
+            "title": "Speaker"
+          },
+          "domain": {
+            "type": "string",
+            "title": "Domain"
+          },
+          "patient_scoring": {
+            "type": "integer",
+            "title": "Patient Scoring"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "speaker",
+          "domain",
+          "patient_scoring"
+        ],
+        "title": "PatientDomainScoringUpdate"
+      },
+      "PatientFirstBatch": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Session Id"
+          },
+          "file": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "File"
+          },
+          "speaker": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Speaker"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/PatientFirstEvent"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Events"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "file",
+          "speaker",
+          "events"
+        ],
+        "title": "PatientFirstBatch"
+      },
+      "PatientFirstEvent": {
+        "properties": {
+          "event_type": {
+            "type": "string",
+            "enum": [
+              "page_view",
+              "topic_open",
+              "topic_close",
+              "evidence_open",
+              "evidence_close",
+              "rating_click",
+              "session_end"
+            ],
+            "title": "Event Type"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "cp",
+                  "le",
+                  "ed",
+                  "inc",
+                  "ius"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 5.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata",
+            "default": {}
+          },
+          "device_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Type"
+          },
+          "client_timestamp": {
+            "type": "string",
+            "title": "Client Timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_type",
+          "client_timestamp"
+        ],
+        "title": "PatientFirstEvent"
+      },
+      "PatientFollowupBatch": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Session Id"
+          },
+          "file": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "File"
+          },
+          "speaker": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Speaker"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/PatientFollowupEvent"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Events"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "file",
+          "speaker",
+          "events"
+        ],
+        "title": "PatientFollowupBatch"
+      },
+      "PatientFollowupEvent": {
+        "properties": {
+          "event_type": {
+            "type": "string",
+            "enum": [
+              "page_view",
+              "survey_step_view",
+              "survey_answer",
+              "survey_complete",
+              "session_end"
+            ],
+            "title": "Event Type"
+          },
+          "survey_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "sdm",
+                  "dcs",
+                  "risk_perception",
+                  "satisfaction"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Survey Type"
+          },
+          "question_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 50
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Id"
+          },
+          "step_number": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step Number"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata",
+            "default": {}
+          },
+          "device_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Type"
+          },
+          "client_timestamp": {
+            "type": "string",
+            "title": "Client Timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_type",
+          "client_timestamp"
+        ],
+        "title": "PatientFollowupEvent"
+      },
+      "REDCapBulkImportRequest": {
+        "properties": {
+          "record_id": {
+            "type": "string",
+            "title": "Record Id"
+          },
+          "data": {
+            "$ref": "#/components/schemas/REDCapImportData"
+          },
+          "overwrite": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overwrite",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "record_id",
+          "data"
+        ],
+        "title": "REDCapBulkImportRequest",
+        "description": "Bulk import request with record_id"
+      },
+      "REDCapImportData": {
+        "properties": {
+          "decisional_conflict_survey_complete": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decisional Conflict Survey Complete"
+          },
+          "shared_decision_making_sdm_complete": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shared Decision Making Sdm Complete"
+          },
+          "risk_perception_complete": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Perception Complete"
+          },
+          "patient_satisfaction_complete": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Satisfaction Complete"
+          },
+          "dcs1_v2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dcs1 V2"
+          },
+          "dcs2_v2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dcs2 V2"
+          },
+          "dcs3_v2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dcs3 V2"
+          },
+          "dcs4_v2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dcs4 V2"
+          },
+          "dcs5_v2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dcs5 V2"
+          },
+          "dcs6_v2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dcs6 V2"
+          },
+          "dcs7_v2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dcs7 V2"
+          },
+          "dcs8_v2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dcs8 V2"
+          },
+          "dcs9_v2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dcs9 V2"
+          },
+          "dcs10_v2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dcs10 V2"
+          },
+          "dcs11_v2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dcs11 V2"
+          },
+          "dcs12_v2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dcs12 V2"
+          },
+          "dcs13_v2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dcs13 V2"
+          },
+          "dcs14_v2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dcs14 V2"
+          },
+          "dcs15_v2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dcs15 V2"
+          },
+          "dcs16_v2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dcs16 V2"
+          },
+          "sdmp_options": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sdmp Options"
+          },
+          "sdm_ptos": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sdm Ptos"
+          },
+          "sdm_cons": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sdm Cons"
+          },
+          "sdm_pref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sdm Pref"
+          },
+          "risk_percep_1_1": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Percep 1 1"
+          },
+          "risk_percept2_2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Percept2 2"
+          },
+          "risk_percept_3_3": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Percept 3 3"
+          },
+          "risk_percept_4_4": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Percept 4 4"
+          },
+          "risk_percep_5_5": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Percep 5 5"
+          },
+          "pt_satisfaction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pt Satisfaction"
+          }
+        },
+        "type": "object",
+        "title": "REDCapImportData",
+        "description": "REDCap import data model - direct field names"
+      },
+      "RecordingChunk": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Session Id"
+          },
+          "file": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File"
+          },
+          "events": {
+            "type": "string",
+            "title": "Events",
+            "description": "JSON-encoded array of rrweb eventWithTime objects"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "events"
+        ],
+        "title": "RecordingChunk"
+      },
+      "RecordingResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "chunk_id": {
+            "type": "integer",
+            "title": "Chunk Id"
+          },
+          "event_count": {
+            "type": "integer",
+            "title": "Event Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "chunk_id",
+          "event_count"
+        ],
+        "title": "RecordingResponse"
+      },
+      "RedcapImportRequest": {
+        "properties": {
+          "records": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Records"
+          },
+          "overwrite": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overwrite",
+            "default": "normal"
+          },
+          "return_content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return Content",
+            "default": "count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "records"
+        ],
+        "title": "RedcapImportRequest",
+        "description": "Records to import into REDCap"
+      },
+      "SentenceScoringRequest": {
+        "properties": {
+          "sentence": {
+            "type": "string",
+            "title": "Sentence"
+          },
+          "class_": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sentence"
+        ],
+        "title": "SentenceScoringRequest"
+      },
+      "SurveySubmission": {
+        "properties": {
+          "survey_type": {
+            "type": "string",
+            "title": "Survey Type"
+          },
+          "file": {
+            "type": "string",
+            "title": "File"
+          },
+          "speaker": {
+            "type": "string",
+            "title": "Speaker"
+          },
+          "answers": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Answers"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "survey_type",
+          "file",
+          "speaker",
+          "answers"
+        ],
+        "title": "SurveySubmission",
+        "description": "Survey submission request model"
+      },
+      "TokenResponse": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type",
+            "default": "bearer"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token",
+          "expires_in"
+        ],
+        "title": "TokenResponse"
+      },
+      "TrackResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "events_stored": {
+            "type": "integer",
+            "title": "Events Stored"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "events_stored",
+          "session_id"
+        ],
+        "title": "TrackResponse"
+      },
+      "UserCreate": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 150,
+            "minLength": 1,
+            "title": "Username"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 8
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          },
+          "role": {
+            "type": "string",
+            "pattern": "^(admin|user|readonly)$",
+            "title": "Role",
+            "default": "user"
+          },
+          "is_superuser": {
+            "type": "boolean",
+            "title": "Is Superuser",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "username"
+        ],
+        "title": "UserCreate"
+      },
+      "UserResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "is_superuser": {
+            "type": "boolean",
+            "title": "Is Superuser"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "auth_provider": {
+            "type": "string",
+            "title": "Auth Provider"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "username",
+          "email",
+          "role",
+          "is_superuser",
+          "is_active",
+          "auth_provider",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "UserResponse"
+      },
+      "UserUpdate": {
+        "properties": {
+          "username": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 150,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 8
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(admin|user|readonly)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "is_superuser": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Superuser"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "title": "UserUpdate"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
