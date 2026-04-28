@@ -239,7 +239,7 @@ bash scripts/init-db-native.sh
 ```
 
 Creates the role + database, applies `app/Backend/database_schema.sql`,
-then runs `alembic upgrade head` (migrations 001–008). Verifies the 18
+then runs `alembic upgrade head` (migrations 001–009). Verifies the 18
 expected tables are present.
 
 ### 4. (Optional) Sanity check
