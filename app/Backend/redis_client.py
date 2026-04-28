@@ -36,20 +36,21 @@ Why module-level state instead of a class:
 import hashlib
 import json
 import logging
-import os
 from typing import Optional
 
 from redis.asyncio import Redis
+
+from core.settings import get_settings
 
 # Per-module logger so log lines are tagged with the module name and
 # can be filtered separately from FastAPI / SQLAlchemy logs.
 logger = logging.getLogger(__name__)
 
-# Connection URL. Defaults to a local Redis on the standard port +
-# database 0 — convenient for development. Production overrides this
-# via the REDIS_URL env var (typically pointing at a managed Redis
-# like ElastiCache or Upstash).
-REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+# Connection URL. Defaults (in core.settings) to a local Redis on the
+# standard port + database 0 — convenient for development. Production
+# overrides this via the REDIS_URL env var (typically pointing at a
+# managed Redis like ElastiCache or Upstash).
+REDIS_URL: str = get_settings().redis_url
 
 # The single shared client. Starts as None; init_redis() populates it
 # at app startup. Stays None forever if Redis is unavailable.

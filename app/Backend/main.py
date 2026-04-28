@@ -32,17 +32,15 @@ Why a factory function instead of building `app` at module top-level:
       app larger than a toy script.
 """
 
-import json
 import logging
-import os
 
-from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # Lifespan = the async startup/shutdown context. Defined separately so
 # this file stays focused on routing.
 from app_lifespan import lifespan
+from core.settings import get_settings
 
 # Each routes_*.py module exposes a `router = APIRouter(...)`. We import
 # them as named aliases (`as <name>_router`) so the ROUTERS list below
@@ -59,12 +57,6 @@ from routes_track_patient_first import router as track_patient_first_router
 from routes_track_patient_followup import router as track_patient_followup_router
 from routes_track_recordings import router as track_recordings_router
 from routes_transcript import router as transcript_router
-
-# Load environment variables from .env so values like ENVIRONMENT and
-# CORS_ORIGINS are available below. This call is idempotent — if the
-# values are already in os.environ (as they are when uvicorn is launched
-# from a shell that sourced .env), load_dotenv is a no-op.
-load_dotenv()
 
 # Module-level logger so log lines are tagged "main" and can be filtered
 # separately from FastAPI / SQLAlchemy / Redis log output.
@@ -112,20 +104,9 @@ def create_app() -> FastAPI:
         A FastAPI app with lifespan, CORS middleware, and all routers
         from ROUTERS already registered.
     """
-    # "production" / "staging" hides docs; anything else (default
-    # "development") shows them. We default to development because
-    # safer-for-prod defaults make local setup harder.
-    environment = os.getenv("ENVIRONMENT", "development")
-
-    # CORS_ORIGINS is JSON in env so it can be a list — env vars are
-    # otherwise just plain strings and would not let us configure
-    # multiple allowed origins cleanly.
-    cors_origins = json.loads(
-        os.getenv(
-            "CORS_ORIGINS",
-            '["http://localhost:3000","http://localhost:5173","http://localhost:8080"]',
-        )
-    )
+    # All env-var knobs come through the typed Settings (core/settings.py).
+    # Pulling once here keeps create_app() pure-ish — easier to test.
+    settings = get_settings()
 
     app = FastAPI(
         title="Prostate Cancer Doctor-Patient Conversation Archive API",
@@ -134,8 +115,8 @@ def create_app() -> FastAPI:
         # docs_url=None disables /docs entirely (returns 404). Same for
         # redoc_url. We hide both in non-dev environments to avoid
         # surfacing the API schema to anonymous traffic in prod.
-        docs_url="/docs" if environment == "development" else None,
-        redoc_url="/redoc" if environment == "development" else None,
+        docs_url="/docs" if settings.environment == "development" else None,
+        redoc_url="/redoc" if settings.environment == "development" else None,
         # lifespan replaces the deprecated @app.on_event hooks. See
         # app_lifespan.py for what runs at startup vs shutdown.
         lifespan=lifespan,
@@ -147,7 +128,7 @@ def create_app() -> FastAPI:
     # send cookies / auth headers cross-origin.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=cors_origins,
+        allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
