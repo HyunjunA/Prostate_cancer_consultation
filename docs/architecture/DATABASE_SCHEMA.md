@@ -326,9 +326,9 @@ Every time the NLP pipeline processes a transcript file, it creates one row in t
 pipeline_started_at  →  analyzed_at  →  processed_at
      (start)           (NLP saved)     (AI completed)
      
-NLP time  = analyzed_at - pipeline_started_at     (~10-15 seconds)
-AI time   = processed_at - analyzed_at            (~3 minutes)
-Total     = processed_at - pipeline_started_at    (~3-4 minutes)
+NLP time  = analyzed_at - pipeline_started_at
+AI time   = processed_at - analyzed_at
+Total     = processed_at - pipeline_started_at
 ```
 
 ### Indexes

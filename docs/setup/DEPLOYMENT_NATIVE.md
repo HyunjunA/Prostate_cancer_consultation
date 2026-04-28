@@ -82,7 +82,7 @@ runs end-to-end without external lookups.
 
 ## One-time setup
 
-### 0. Clone the two repos as siblings (~30 sec)
+### 0. Clone the two repos as siblings
 
 ```bash
 mkdir -p ~/your-workspace && cd ~/your-workspace
@@ -105,7 +105,7 @@ After this you should have:
 └─ AI_physician_patient_communication/       (AI repo — sentence_classification + ai_pipeline + data/)
 ```
 
-### 0.5 Place the NLP OCI archive (~1 min)
+### 0.5 Place the NLP OCI archive
 
 The NLP-classifiers Docker container is loaded from a ~632 MB OCI
 image archive that is **not** committed to git (gitignored — too
@@ -157,7 +157,7 @@ export NLP_IMAGE_DIR=/abs/path/to/r01-nlp-classifiers-docker-image
 `run-native.sh` will load the image from that path on first run, then
 the local Docker daemon caches it (subsequent runs skip the load).
 
-### 1. Install native dependencies (~3 min)
+### 1. Install native dependencies
 
 **macOS:**
 ```bash
