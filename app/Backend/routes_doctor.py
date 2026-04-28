@@ -794,7 +794,6 @@ async def score_sentence(
 
     Uses AI pipeline for scoring via GPT-4o.
     """
-    import os
     import sys
     if "/app" not in sys.path:
         sys.path.insert(0, "/app")
@@ -804,19 +803,18 @@ async def score_sentence(
         from ai_pipeline.utils.prompts import load_prompt
         from openai import AzureOpenAI
 
-        endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-        key = os.getenv("AZURE_OPENAI_KEY")
-
-        if not endpoint or not key:
+        from core.settings import get_settings
+        settings = get_settings()
+        if not settings.azure_openai_endpoint or not settings.azure_openai_key:
             raise ValueError("Azure OpenAI not configured")
 
         client = AzureOpenAI(
-            azure_endpoint=endpoint,
-            api_key=key,
-            api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-08-01-preview"),
+            azure_endpoint=settings.azure_openai_endpoint,
+            api_key=settings.azure_openai_key,
+            api_version=settings.azure_openai_api_version,
         )
 
-        model = os.getenv("AZURE_OPENAI_MODEL", "gpt-4o")
+        model = settings.azure_openai_model
         params = {"max_tokens": 4096, "temperature": 0.3, "top_p": 0.4, "seed": 0}
 
         # Determine domain from class_ parameter
