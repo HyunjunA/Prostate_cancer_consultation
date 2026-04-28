@@ -117,6 +117,20 @@ else
     section "Skipping Docker (--skip-docker)"
 fi
 
-# ── 2. Backend native (foreground) ──────────────────────────────────────────
+# ── 2. Auto-run pipeline on input transcripts ──────────────────────────────
+# Mirrors the Docker-mode behaviour where prestart.sh auto-processes any
+# xlsx in the transcript dir before the API is exposed. Failures are
+# non-fatal — the backend still starts so the dashboard is usable.
+INPUT_DIR="$REPO_ROOT/../AI_physician_patient_communication/data/input"
+if [[ -d "$INPUT_DIR" ]] && ls "$INPUT_DIR"/*.xlsx "$INPUT_DIR"/*.csv >/dev/null 2>&1; then
+    section "Auto-running pipeline on transcripts in $INPUT_DIR"
+    "$REPO_ROOT/.venv/bin/python" "$SCRIPT_DIR/run-pipeline-standalone.py" \
+        --dir "$INPUT_DIR" \
+        || warn "pipeline returned non-zero — backend will still start"
+else
+    section "No transcripts in $INPUT_DIR — skipping auto-pipeline"
+fi
+
+# ── 3. Backend native (foreground) ──────────────────────────────────────────
 section "Starting native Backend"
 exec bash "$SCRIPT_DIR/run-backend-native.sh" ${BACKEND_ARGS[@]+"${BACKEND_ARGS[@]}"}
