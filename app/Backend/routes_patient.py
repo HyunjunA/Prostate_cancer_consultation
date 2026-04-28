@@ -4,6 +4,7 @@ Endpoints for patient summaries, scoring, responses,
 dashboard statistics, and REDCap integration.
 """
 
+import json
 import logging
 from typing import Optional, List, Dict, Any
 from collections import defaultdict
