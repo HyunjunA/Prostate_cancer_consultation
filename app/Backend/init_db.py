@@ -31,12 +31,12 @@ Usage:
     python init_db.py          # Create all tables
 """
 
-import os
 import asyncio
-from dotenv import load_dotenv
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
+
+from core.settings import get_settings
 
 # `Base` carries the metadata registry that `create_all` walks. Importing
 # `models` is what registers every `class X(Base): __tablename__ = ...`
@@ -50,10 +50,6 @@ from models import Base
 # unused imports alone — they exist for their side effects.
 from auth.models import AuthUser, AuthAPIKey, PatientAccess  # noqa: F401
 
-# Load .env so DATABASE_URL is set even when this script is run directly
-# from a CLI (e.g. `python init_db.py`) instead of the Docker entrypoint.
-load_dotenv()
-
 
 async def init_database():
     """Create async engine and ensure all tables exist.
@@ -63,20 +59,17 @@ async def init_database():
         responsible for `await engine.dispose()` so the connection
         pool does not outlive the script.
     """
-    # Read DSN HERE (rather than at module top) so a misconfigured env
-    # produces a clear error in the function we are actually running,
+    # Pull settings inside the function so a misconfigured env produces
+    # a clear ValidationError in the function we are actually running,
     # not at import time when the traceback is murkier.
-    DATABASE_URL = os.getenv("DATABASE_URL")
-    if not DATABASE_URL or "+asyncpg" not in DATABASE_URL:
-        # Same hard-fail as db.py — the SQLAlchemy default is psycopg2
-        # which would silently block the asyncio loop. Better to crash
-        # at boot than to ship a broken backend.
-        raise ValueError("DATABASE_URL must be postgresql+asyncpg://...")
+    # core.settings already enforces the "+asyncpg" rule via its
+    # _require_asyncpg validator.
+    settings = get_settings()
 
     # Print the URL with the password masked. Splitting on "@" yields
     # ["postgresql+asyncpg://user:pass", "host:port/db"]; we keep the
     # left half and replace the right half with ***.
-    print(f"Connecting to database: {DATABASE_URL.split('@')[0]}@***")
+    print(f"Connecting to database: {settings.database_url.split('@')[0]}@***")
 
     # Build a SHORT-LIVED engine just for this script. Pool tuning is
     # less important here than in the live backend (we run for seconds,
@@ -84,10 +77,10 @@ async def init_database():
     # postgres just finished booting and the first attempt would race
     # the listener.
     engine = create_async_engine(
-        DATABASE_URL,
+        settings.database_url,
         pool_pre_ping=True,
-        pool_size=int(os.getenv("DATABASE_POOL_SIZE", 10)),
-        max_overflow=int(os.getenv("DATABASE_MAX_OVERFLOW", 20)),
+        pool_size=settings.database_pool_size,
+        max_overflow=settings.database_max_overflow,
     )
 
     # ── Create all tables (idempotent — skips existing) ─────────────
