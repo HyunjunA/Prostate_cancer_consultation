@@ -1,7 +1,25 @@
-"""Doctor Interface API routes.
+"""Doctor-side API routes — endpoints used by the doctor dashboard.
 
-Endpoints for doctor sentence view, rewrite history, scoring,
-class distribution, AI rewrite, and improvement suggestions.
+Authentication: every endpoint requires a valid auth header (X-API-Key
+by default; see auth/registry.py for AUTH_MODE switching). All endpoints
+are also subject to the per-user patient access rules in
+auth/access_control.py.
+
+Endpoint groups:
+    /sentences/*                : per-file/speaker sentence + score view
+    /rewrites, /rewrites/*      : revision history (DoctorRewriteLog table)
+    /scores/*                   : averages, trajectories, per-patient summaries
+    /class-distribution*        : domain (cancer-prognosis / life-exp / ED /
+                                  incontinence / irritative-urinary) breakdown
+                                  for the dashboard charts
+    /score-sentence             : on-the-fly NLP scoring of a single sentence
+    /ai-rewrite                 : LLM-powered sentence revision suggestions
+    /improvement-suggestions*   : pre-canned guidance per domain class
+
+Related modules:
+    models.py        : DoctorRewriteLog, PatientSummary, PatientSummaryDomain
+    routes_patient.py: patient-side equivalent
+    persistence.py   : shared DB query helpers
 """
 
 import logging

@@ -1,5 +1,14 @@
 """Inspect every NLP + AI pipeline stage for a single transcript.
 
+Sister script to verify_pipeline_db.py. The verification script
+answers "did everything pass?" with a PASS/FAIL summary; this script
+answers "WHAT did each stage actually produce?" by dumping the rows
+that landed in every table the pipeline writes to.
+
+Use this when you have a specific transcript that produced unexpected
+output and need to walk the pipeline state stage-by-stage to find
+where things went wrong.
+
 Usage (inside the backend container):
     python inspect_pipeline_run.py <patient_id_or_analysis_id> [--full] [--export json]
 
@@ -37,15 +46,21 @@ import models as M
 
 
 # ── Plain-text formatting helpers ──────────────────────────────────────────
+# These render output that stays readable even when the script is
+# piped to a pager (less, more) or saved to a file. No ANSI colours
+# here on purpose — output is most often re-shared in tickets / Slack
+# threads where escape codes look like garbage.
 SEP = "=" * 78
 SUB = "-" * 78
 
 
 def _h(title: str) -> None:
+    """Print a top-level section header (double rule)."""
     print(f"\n{SEP}\n  {title}\n{SEP}")
 
 
 def _sub(title: str, count: int = None, note: str = "") -> None:
+    """Print a sub-section header with optional row count and note."""
     suffix = ""
     if count is not None:
         suffix = f"  [{count} row{'s' if count != 1 else ''}]"
@@ -55,6 +70,7 @@ def _sub(title: str, count: int = None, note: str = "") -> None:
 
 
 def _truncate(s, n: int = 80) -> str:
+    """Trim long strings + replace newlines for single-line table cells."""
     if s is None:
         return "—"
     s = str(s).replace("\n", " ").strip()
@@ -62,7 +78,12 @@ def _truncate(s, n: int = 80) -> str:
 
 
 def _kv(rows: list[dict], cols: list[str], limit: int = 5) -> None:
-    """Print first `limit` rows of `rows`, only the columns in `cols`."""
+    """Print first `limit` rows of `rows`, only the columns in `cols`.
+
+    Mini text-table renderer. Computes the per-column width from the
+    actual data so columns line up vertically without dragging in a
+    table library.
+    """
     if not rows:
         print("  (empty)")
         return
@@ -78,7 +99,12 @@ def _kv(rows: list[dict], cols: list[str], limit: int = 5) -> None:
 
 # ── Resolve analysis_id from CLI arg ───────────────────────────────────────
 async def _resolve_analysis_id(db, arg: str) -> int | None:
-    """Accept either a numeric analysis_id or a patient_id. Pick the most recent for the latter."""
+    """Accept either a numeric analysis_id or a patient_id.
+
+    For a patient_id we pick the MOST RECENT analysis (latest
+    analyzed_at) — almost always what the operator means when they
+    type a sid name.
+    """
     if arg.isdigit():
         result = await db.execute(
             select(M.TranscriptAnalysisLog).where(M.TranscriptAnalysisLog.id == int(arg))
@@ -97,6 +123,7 @@ async def _resolve_analysis_id(db, arg: str) -> int | None:
 
 # ── Per-stage dump functions ───────────────────────────────────────────────
 async def _dump_log_header(db, aid: int, full: bool) -> dict:
+    """Print the parent transcript_analysis_log row + return key facts."""
     row = (await db.execute(
         select(M.TranscriptAnalysisLog).where(M.TranscriptAnalysisLog.id == aid)
     )).scalar_one()
@@ -111,6 +138,8 @@ async def _dump_log_header(db, aid: int, full: bool) -> dict:
     print(f"  processed (AI)    : {row.processed}    processed_at: {row.processed_at}")
     print(f"  ai_overall_score  : {row.ai_overall_score}")
     print(f"  xlsx_data         : {len(row.xlsx_data) if row.xlsx_data else 0} bytes")
+    # The dict we return is what gets serialised by --export, so keep
+    # it compact (no DataFrames, no ORM objects).
     return {
         "analysis_id": aid,
         "patient_id": row.patient_id,
@@ -122,6 +151,12 @@ async def _dump_log_header(db, aid: int, full: bool) -> dict:
 
 
 async def _dump_nlp_jsonb(db, aid: int, step: str, full: bool) -> Any:
+    """Dump one JSONB step from nlp_pipeline_intermediate.
+
+    Steps 0/1/2/4 of the NLP pipeline land here as JSONB blobs (one
+    row per step). The blob is either a list (steps 0/1/2) or a dict-
+    of-lists keyed by domain (step 4).
+    """
     row = (await db.execute(
         select(M.NLPPipelineIntermediate)
         .where(M.NLPPipelineIntermediate.analysis_id == aid)
@@ -129,6 +164,9 @@ async def _dump_nlp_jsonb(db, aid: int, step: str, full: bool) -> Any:
     )).scalar_one_or_none()
 
     if row is None:
+        # Pre-migration analyses do not have these rows. Print a clear
+        # marker rather than crashing — operator can decide whether to
+        # backfill or just inspect later stages.
         _sub(f"NLP step='{step}' (JSONB)", 0, note="(MISSING — analysis ran before migration 006)")
         return None
 
@@ -136,12 +174,14 @@ async def _dump_nlp_jsonb(db, aid: int, step: str, full: bool) -> Any:
     n = len(payload) if isinstance(payload, list) else (sum(len(v) for v in payload.values()) if isinstance(payload, dict) else 0)
     _sub(f"NLP step='{step}' (JSONB)", n, note=f"row_count column = {row.row_count}")
     if isinstance(payload, list):
+        # Steps 0/1/2: flat list of row dicts.
         sample = payload[: (None if full else 3)]
         for i, p in enumerate(sample):
             print(f"  [{i}] " + ", ".join(f"{k}={_truncate(v, 30)}" for k, v in list(p.items())[:6]))
         if not full and len(payload) > 3:
             print(f"  ... ({len(payload) - 3} more rows; use --full to see all)")
     elif isinstance(payload, dict):
+        # Step 4: dict of lists, one entry per domain.
         for domain, rows in payload.items():
             print(f"  domain='{domain}': {len(rows)} rows")
             if full:
@@ -151,6 +191,7 @@ async def _dump_nlp_jsonb(db, aid: int, step: str, full: bool) -> Any:
 
 
 async def _dump_nlp_step3(db, aid: int, full: bool) -> dict:
+    """Dump nlp_all_predictions — every sentence × 5 model scores."""
     rows = (await db.execute(
         select(M.NLPAllPredictions)
         .where(M.NLPAllPredictions.analysis_id == aid)
@@ -173,6 +214,7 @@ async def _dump_nlp_step3(db, aid: int, full: bool) -> dict:
 
 
 async def _dump_nlp_step5(db, aid: int, full: bool) -> dict:
+    """Dump sentence_prediction — top-N per domain with context."""
     rows = (await db.execute(
         select(M.SentencePrediction)
         .where(M.SentencePrediction.analysis_id == aid)
@@ -180,6 +222,8 @@ async def _dump_nlp_step5(db, aid: int, full: bool) -> dict:
     )).scalars().all()
 
     _sub("NLP Step 5 — sentence_prediction (top-N + context)", len(rows))
+    # Group by model so the operator sees "for cp these 10 sentences,
+    # for le those 10, ..." rather than a flat 50-row list.
     by_domain: dict[str, list[dict]] = {}
     for r in rows:
         by_domain.setdefault(r.model, []).append({
@@ -193,6 +237,7 @@ async def _dump_nlp_step5(db, aid: int, full: bool) -> dict:
 
 
 async def _dump_ai_intermediate(db, aid: int, full: bool) -> dict:
+    """Dump llm_pipeline_intermediate — every LLM-scored candidate."""
     rows = (await db.execute(
         select(M.LLMPipelineIntermediate)
         .where(M.LLMPipelineIntermediate.analysis_id == aid)
@@ -209,6 +254,7 @@ async def _dump_ai_intermediate(db, aid: int, full: bool) -> dict:
         by_domain.setdefault(r.domain, []).append({
             "idx": r.sentence_index, "ai": r.ai_score, "pred": r.pred_score,
             "estimate": r.estimate, "treatment": r.treatment,
+            # Y/N is more readable than True/False in the table.
             "survived": "Y" if r.survived_filter else "N",
             "text": r.sentence_text,
         })
@@ -224,6 +270,7 @@ async def _dump_ai_intermediate(db, aid: int, full: bool) -> dict:
 
 
 async def _dump_ai_final(db, aid: int, full: bool) -> dict:
+    """Dump llm_domain_scoring_and_summary — final patient-visible rows."""
     rows = (await db.execute(
         select(M.LLMDomainScoringAndSummary)
         .where(M.LLMDomainScoringAndSummary.analysis_id == aid)
@@ -238,6 +285,9 @@ async def _dump_ai_final(db, aid: int, full: bool) -> dict:
         print(f"     source : {_truncate(r.source_sentence, 100)}")
         print(f"     reformat: {_truncate(r.reformat_sentence, 100)}")
         if full:
+            # --full prints the surrounding context + the LLM's
+            # explanation for the score — long fields, only worth
+            # showing when the operator explicitly asked.
             print(f"     context : {_truncate(r.source_context, 200)}")
             print(f"     why     : {_truncate(r.score_explanation, 200)}")
     return {"ai_final_rows": len(rows)}
@@ -250,6 +300,8 @@ async def main(arg: str, full: bool, export: str | None) -> int:
         print("ERROR: DATABASE_URL env var not set", file=sys.stderr)
         return 2
     if db_url.startswith("postgresql://"):
+        # Same DSN normalisation as verify_pipeline_db.py — accept
+        # either scheme so this works on dev / prod / CI.
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
     engine = create_async_engine(db_url, future=True)
@@ -261,6 +313,9 @@ async def main(arg: str, full: bool, export: str | None) -> int:
             print(f"ERROR: no analysis found for '{arg}' (try patient_id or numeric analysis_id)", file=sys.stderr)
             return 1
 
+        # Walk every stage of the pipeline in pipeline order so the
+        # output reads like a journey through the data: raw -> filtered
+        # -> scored -> selected -> rewritten.
         summary = await _dump_log_header(db, aid, full)
 
         _h("NLP PIPELINE — intermediate stages")
@@ -281,6 +336,9 @@ async def main(arg: str, full: bool, export: str | None) -> int:
         print(f"  AI overall score:  {summary['ai_overall_score']}    processed={summary['processed']}")
 
         if export:
+            # Roll the per-stage summary dicts into one JSON blob.
+            # default=str so datetimes/Decimals serialise without us
+            # needing custom encoders.
             full_dump = {**summary, **s_step3, **s_step5, **s_ai_int, **s_ai_fin,
                          "jsonb_steps_present": [s for s in [s_raw, s_filt, s_sent, s_top] if s]}
             with open(export, "w") as f:

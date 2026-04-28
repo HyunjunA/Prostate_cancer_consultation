@@ -1,13 +1,36 @@
-"""AI Pipeline Service — Integrates Guille's LLM scoring + patient summary rewriting.
+"""AI Pipeline Service — wraps the LLM scoring + patient-summary stage.
 
-Calls the ai_pipeline module (mounted via Docker volume from
-AI_physician_patient_communication/ai_pipeline/) to:
-  1. Score each sentence's clinical relevance (0-5) using GPT-4o
-  2. Extract risk estimates (e.g., "24-25%", "13 years")
-  3. Filter and select the best estimate per domain
-  4. Reformat into patient-facing plain language
+This module is the thin Backend wrapper around the heavier
+`ai_pipeline/` package (mounted into the Backend container as a Docker
+volume from `AI_physician_patient_communication/ai_pipeline/`).
 
-Results are stored in the llm_domain_scoring_and_summary DB table.
+What "the AI pipeline" actually does, per domain:
+    1. SCORING       — Ask GPT-4o to rate each candidate sentence's
+                       clinical relevance from 0 to 5.
+    2. EXTRACTION    — Pull structured estimates out of high-scoring
+                       sentences (e.g. "24-25%", "13 years", treatment
+                       name).
+    3. FILTERING     — Keep only the rows that pass the per-domain
+                       sanity rules.
+    4. SELECTION     — Pick the single best estimate for the domain
+                       (or several, for "side-effect" domains like ED).
+    5. REFORMAT      — Rewrite the chosen estimate as plain language
+                       the patient can read.
+
+Outputs land in two DB tables:
+    - llm_pipeline_intermediate     : every candidate after extraction,
+                                      with `survived_filter` set to
+                                      true/false. Lets analysts inspect
+                                      what got rejected.
+    - llm_domain_scoring_and_summary: the final per-domain rows the
+                                      patient dashboard renders.
+
+Why this lives in Backend (not inside ai_pipeline/):
+    `ai_pipeline/` is a pure-Python package — it knows nothing about
+    DB sessions, FastAPI, or our table schemas. Keeping the DB write
+    code over here lets us swap or upgrade the LLM module without
+    rewriting persistence logic, and follows the same separation of
+    concerns as `persistence.py` for the NLP half of the pipeline.
 """
 
 import logging
@@ -19,13 +42,23 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-# Add /app to sys.path so ai_pipeline/ (volume-mounted) can be imported
+# Ensure /app is on the import path so the volume-mounted ai_pipeline/
+# package can be `import`-ed below. /app is the Backend container's
+# working directory; in native mode the path is already on sys.path so
+# this is a no-op.
 if "/app" not in sys.path:
     sys.path.insert(0, "/app")
 
 
 def _create_client():
-    """Create Azure OpenAI client from environment variables."""
+    """Create Azure OpenAI client from environment variables.
+
+    Returns None (with a warning log) when:
+      - The `openai` package is not installed.
+      - AZURE_OPENAI_ENDPOINT or AZURE_OPENAI_KEY is missing.
+    Returning None lets the caller skip the LLM stage gracefully
+    instead of crashing the whole pipeline run.
+    """
     try:
         from openai import AzureOpenAI
 
@@ -40,7 +73,10 @@ def _create_client():
             azure_endpoint=endpoint,
             api_key=key,
             api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-08-01-preview"),
-            timeout=1800.0,  # 30 min — AI pipeline processes 5 domains × 5 steps sequentially
+            # 30-minute timeout because the AI pipeline runs sequentially
+            # over 5 domains × 5 steps each = 25 LLM calls per analysis.
+            # The default 10 min is not enough on slow OpenAI instances.
+            timeout=1800.0,
         )
     except ImportError:
         logger.warning("openai package not installed — AI pipeline disabled")
@@ -48,8 +84,14 @@ def _create_client():
 
 
 def _load_prompts():
-    """Load AI pipeline domain prompts configuration."""
-    # Default config matching ai_pipeline/config.yaml
+    """Load AI pipeline domain prompts configuration.
+
+    Returns the same shape ai_pipeline/config.yaml expects: a per-domain
+    dict of prompt-id mappings. Hardcoded here (rather than read from
+    yaml) because every domain currently uses prompt set "1" and the
+    redirection through yaml would just add a load step with no value.
+    Switch to yaml-based loading when prompts start diverging per domain.
+    """
     return {
         "le": {"prompts": {"scoring": "1", "extraction": "1", "selection": "1", "reformat": "1"}},
         "cp": {"prompts": {"scoring": "1", "extraction": "1", "selection": "1", "reformat": "1"}},
@@ -79,8 +121,15 @@ async def run_ai_scoring_and_summary(
         outcome_to_sheet: Maps outcome key → short domain name (e.g., "cp").
 
     Returns:
-        True if successful, False otherwise.
+        True if successful, False otherwise. False covers a wide range
+        of "skip the AI stage" reasons (no openai pkg, no creds, no
+        candidate sentences, LLM call failed, DB save failed). The
+        caller surfaces the result to the operator.
     """
+    # Lazy import: ai_pipeline lives in a volume mount that may not be
+    # present in every environment (e.g. standalone tests). Importing
+    # at function call time means the module load does not blow up
+    # when the volume is missing.
     try:
         from ai_pipeline.pipeline import run_ai_pipeline
         from ai_pipeline.utils.prompts import load_domain_prompts
@@ -92,6 +141,9 @@ async def run_ai_scoring_and_summary(
     if client is None:
         return False
 
+    # LLM call parameters. Low temperature + low top_p + fixed seed so
+    # the same input produces the same scoring across re-runs — important
+    # for reproducibility of clinical outputs.
     model = os.getenv("AZURE_OPENAI_MODEL", "gpt-4o")
     params = {
         "max_tokens": 4096,
@@ -101,14 +153,16 @@ async def run_ai_scoring_and_summary(
     }
     domains_cfg = _load_prompts()
 
-    # Convert final_results to DataFrames expected by ai_pipeline
-    # final_results: Dict[str, pd.DataFrame] — already DataFrames from transcript_service
+    # ── Reshape pipeline output into ai_pipeline's expected format ──
+    # final_results comes from the NLP stage as Dict[outcome_key, DataFrame].
+    # ai_pipeline expects Dict[short_domain_name, DataFrame] with at
+    # minimum the columns "text" + "context". We translate keys + drop
+    # any domain that has no usable rows.
     domain_dfs = {}
     for outcome_key, data in final_results.items():
         short_name = outcome_to_sheet.get(outcome_key, outcome_key)
         if short_name not in domains_cfg:
             continue
-        # data is already a DataFrame from generate_all_contexts()
         df = data if isinstance(data, pd.DataFrame) else pd.DataFrame(data)
         if df.empty:
             continue
@@ -121,13 +175,20 @@ async def run_ai_scoring_and_summary(
 
     logger.info("Running AI pipeline for %d domains: %s", len(domain_dfs), list(domain_dfs.keys()))
 
+    # The actual LLM work — this is the slow part (typically 1-5 min
+    # depending on candidate volume + Azure OpenAI latency).
     try:
         ai_results = run_ai_pipeline(client, model, params, domains_cfg, domain_dfs)
     except Exception as e:
+        # Broad except: anything from "OpenAI rate-limited us" to
+        # "extraction prompt returned malformed JSON". We log and
+        # bail rather than crashing the whole pipeline run.
         logger.error("AI pipeline failed: %s", e, exc_info=True)
         return False
 
-    # Save results to DB
+    # ── Save results to DB (intermediate + final tables) ──────────
+    # Lazy imports again — keeps the import block at the top focused
+    # on what is actually used at module load.
     from models import LLMDomainScoringAndSummary, LLMPipelineIntermediate
 
     try:
@@ -135,9 +196,11 @@ async def run_ai_scoring_and_summary(
             rows_saved = 0
             intermediate_saved = 0
             for domain, (result, df_extraction, df_filtering) in ai_results.items():
-                # ── Save AI intermediate (df_extraction + survived_filter from df_filtering)
-                #    Captures every candidate sentence after scoring + extraction
-                #    so analysts can see what was rejected and why.
+                # ── Save AI intermediate ────────────────────────────
+                # Captures every candidate after the EXTRACTION step,
+                # tagging which ones survived FILTERING. Lets analysts
+                # answer "why was THIS sentence rejected?" without
+                # re-running the LLM.
                 try:
                     surviving_indices = set(df_filtering.index.tolist()) if df_filtering is not None else set()
                     if df_extraction is not None:
@@ -159,9 +222,18 @@ async def run_ai_scoring_and_summary(
                             ))
                             intermediate_saved += 1
                 except Exception as ie:
+                    # Per-domain intermediate save is best-effort. If it
+                    # fails (e.g. a DataFrame has an unexpected shape),
+                    # log and continue so the FINAL row save below
+                    # still happens — losing the trace is OK, losing
+                    # the patient-visible result is not.
                     logger.warning("intermediate save skipped for domain=%s: %s", domain, ie)
 
-                # Handle side-effect domains (list of selected rows)
+                # ── Save final patient-visible rows ─────────────────
+                # Two cases per domain:
+                #   - "side-effect" domains (ED, INC, IUS) can emit
+                #     multiple selected rows.
+                #   - Other domains emit exactly one selected row.
                 if isinstance(result.get("selected"), list):
                     reformat = result.get("reformat", "")
                     for selected_row in result["selected"]:
@@ -198,7 +270,11 @@ async def run_ai_scoring_and_summary(
                     db.add(record)
                     rows_saved += 1
 
-            # Calculate and save overall score to transcript_analysis_log
+            # ── Roll up an overall score for the patient dashboard ──
+            # Average of every per-domain ai_score we just added. The
+            # `db.new` set contains the rows queued for INSERT but not
+            # yet committed; we walk it as a fast path and fall back
+            # to recomputing from `ai_results` if attribute access fails.
             all_scores = [r.ai_score for r in db.new if hasattr(r, 'ai_score') and r.ai_score is not None]
             if not all_scores:
                 # Re-collect from what we just added
@@ -213,6 +289,9 @@ async def run_ai_scoring_and_summary(
 
             if all_scores:
                 overall = round(sum(all_scores) / len(all_scores), 2)
+                # Patch the parent transcript_analysis_log row with
+                # the overall score AND flip processed=True so callers
+                # know the LLM half is done.
                 from sqlalchemy import update
                 from models import TranscriptAnalysisLog as TAL
                 from datetime import datetime, timezone
@@ -234,5 +313,8 @@ async def run_ai_scoring_and_summary(
             return True
 
     except Exception as e:
+        # Rollback would happen automatically when the `async with`
+        # exits with an exception, but logging here gives us a clear
+        # tracking message for ops dashboards.
         logger.error("Failed to save AI pipeline results to DB: %s", e, exc_info=True)
         return False

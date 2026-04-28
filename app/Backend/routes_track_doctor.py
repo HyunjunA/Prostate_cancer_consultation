@@ -1,11 +1,29 @@
-"""
-Doctor Consultation Behavior Tracking — POST/GET endpoints
+"""Doctor Consultation Behaviour Tracking — POST/GET endpoints.
 
-Receives strict, area-specific behavior events from the doctor consultation
-interface (PhysicianReports, ConsultationScoring, AI rewrite tools) and
-stores them in doctor_behavior.
+Receives strict, area-specific behaviour events from the doctor
+consultation interface (PhysicianReports, ConsultationScoring, AI
+rewrite tools, the rubric scorer) and stores them in `doctor_behavior`.
+
+What "doctor behaviour" covers vs. patient sides:
+    The doctor side has more interactive surface (multiple panels, AI
+    rewrite tools, rubric scoring) so the event vocabulary is wider:
+    select-actions, rewrite-flow events, rubric open/close/lock,
+    onboarding tour, view changes between panels. Each gets its own
+    Literal value so analytics queries do not have to fuzzy-match
+    free-text strings.
 
 Pattern A — area-specific schema, no event_type free-text, no OR-merge.
+Same pattern as routes_track_patient_first.py and
+routes_track_patient_followup.py — every tracking area has its own
+hard-typed schema instead of one shared event-bag.
+
+Endpoint shape (all under /api/track/doctor):
+    POST  /                  -> append a batch of events
+    GET   /sessions          -> list sessions (one row per session_id)
+    GET   /session/{sid}     -> all events for one session in time order
+    GET   /speakers          -> distinct doctor speakers + activity stats
+    GET   /actions?speaker=  -> flat chronological log for one doctor
+    GET   /aggregate?speaker -> per-session event_type rollup for one doctor
 """
 
 from typing import List, Literal, Optional
@@ -27,11 +45,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/api/track/doctor",
     tags=["Track-Doctor"],
+    # Router-level auth — every endpoint requires X-API-Key.
     dependencies=[Depends(get_current_user)],
 )
 
 
 # ── Pydantic models ──────────────────────────────────────────────────────────
+# Doctor side has 14 distinct event types — wider than patient sides
+# because the doctor UI has more interactive surface (rewrite, rubric,
+# tour). Hard-typing them as Literal stops free-text typos from
+# polluting analytics later.
 
 EventType = Literal[
     "page_view", "view_change",
@@ -45,22 +68,38 @@ TargetType = Literal["patient", "topic", "sentence"]
 
 
 class DoctorEvent(BaseModel):
+    """One behaviour event captured by the doctor UI."""
+
     event_type: EventType
     target_type: Optional[TargetType] = None
     target_id: Optional[str] = Field(None, max_length=255)
+    # Free-form metadata for fields that vary per event type. Stored
+    # verbatim into the JSONB column — we do NOT validate the inner
+    # shape because each event_type carries different keys.
     metadata: dict = {}
     device_type: Optional[str] = None
     client_timestamp: str
 
 
 class DoctorBatch(BaseModel):
+    """Batch upload — one HTTP call carries one batch."""
+
     session_id: str = Field(..., min_length=1, max_length=100)
-    file: Optional[str] = Field(None, max_length=255)  # nullable: dashboard not tied to a file
+    # `file` is nullable here — the doctor dashboard is not always
+    # tied to a single patient file (e.g. the home page or the all-
+    # patients overview). Patient-side tracking, by contrast, always
+    # has a file because the patient UI always shows one patient.
+    file: Optional[str] = Field(None, max_length=255)
     speaker: str = Field(..., min_length=1, max_length=100)
+    # 500-event cap per batch. The frontend flushes every few seconds
+    # so this is plenty of headroom; raising it just lets one bad
+    # client tie up DB writes.
     events: List[DoctorEvent] = Field(..., min_length=1, max_length=500)
 
 
 class TrackResponse(BaseModel):
+    """Acknowledgement returned to the frontend after a successful POST."""
+
     status: str
     events_stored: int
     session_id: str
@@ -73,8 +112,11 @@ async def post_doctor_events(
     batch: DoctorBatch,
     db: AsyncSession = Depends(get_db),
 ):
+    """Append a batch of doctor behaviour events under the given session."""
     rows = []
     for ev in batch.events:
+        # Parse the client's ISO-8601 timestamp. The "Z" suffix is the
+        # frontend's UTC marker; Python wants "+00:00" instead.
         try:
             client_ts = datetime.fromisoformat(ev.client_timestamp.replace("Z", "+00:00"))
         except (ValueError, AttributeError):
@@ -93,6 +135,8 @@ async def post_doctor_events(
         ))
 
     try:
+        # add_all + single commit = one transaction. Partial failures
+        # roll back the whole batch.
         db.add_all(rows)
         await db.commit()
     except Exception as e:
@@ -112,11 +156,12 @@ async def list_sessions(
     limit: int = Query(50, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
 ):
-    # Group by session_id only — both `speaker` and `file` can legitimately
+    """List sessions (one row per session_id) with aggregated speaker/file."""
+    # Group by session_id ONLY — both `speaker` and `file` can legitimately
     # change within a single doctor session (auto-detect → URL doctorid race
     # for speaker; null → patient.fileName after patient_select for file).
-    # Aggregate distinct values into comma lists so the admin sees one row
-    # per real session.
+    # If we grouped by (session_id, speaker, file) we would get multiple
+    # rows for the same session, which the admin UI cannot render cleanly.
     files_agg = func.string_agg(
         func.distinct(func.coalesce(DoctorBehavior.file, "")), ","
     ).label("files_csv")
@@ -142,6 +187,11 @@ async def list_sessions(
     res = await db.execute(stmt)
 
     def _csv_to_label(csv: Optional[str]) -> Optional[str]:
+        """Render a CSV of distinct values as 'first (+N more)'.
+
+        Keeps the session list readable when a session touched many
+        files or a speaker changed mid-session.
+        """
         if not csv:
             return None
         items = [f for f in csv.split(",") if f]  # drop empty strings (NULLs)
@@ -173,6 +223,12 @@ async def get_session_events(
     session_id: str,
     db: AsyncSession = Depends(get_db),
 ):
+    """Return all events for a single session, ordered by client_timestamp.
+
+    Time-ordered (not INSERT-ordered) so the consumer sees events in the
+    order they actually happened on the client; network buffering can
+    reorder rows on the way to the DB.
+    """
     stmt = select(DoctorBehavior).where(
         DoctorBehavior.session_id == session_id
     ).order_by(DoctorBehavior.client_timestamp.asc())
@@ -204,7 +260,12 @@ async def get_session_events(
 async def list_speakers(
     db: AsyncSession = Depends(get_db),
 ):
-    """Distinct doctor speakers seen in doctor_behavior, with event counts."""
+    """Distinct doctor speakers seen in doctor_behavior, with event counts.
+
+    Powers the "select a doctor" dropdown on the admin tracking UI.
+    Ordered by `last_seen` DESC so the most recently active doctor
+    appears first — usually the one the admin actually wants to look at.
+    """
     stmt = (
         select(
             DoctorBehavior.speaker,
@@ -236,8 +297,7 @@ async def list_actions(
     limit: int = Query(500, ge=1, le=5000),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Flat chronological action log for a single doctor.
+    """Flat chronological action log for a single doctor.
 
     Returns every event for the given speaker in time-ascending order,
     irrespective of session_id. Each event still carries its session_id
@@ -280,7 +340,12 @@ async def aggregate_by_session(
     speaker: str = Query(..., description="Doctor identifier (required)"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Per-session activity counts for one doctor, grouped by event_type."""
+    """Per-session activity counts for one doctor, grouped by event_type.
+
+    SQL does the heavy lifting here (GROUP BY session_id, event_type +
+    MIN/MAX timestamps); the Python loop just folds the rows into one
+    dict per session for a convenient response shape.
+    """
     stmt = select(
         DoctorBehavior.session_id,
         DoctorBehavior.event_type,
@@ -297,6 +362,8 @@ async def aggregate_by_session(
     res = await db.execute(stmt)
     sessions: dict = {}
     for r in res.all():
+        # setdefault initialises the per-session entry on first sight,
+        # then we keep folding rows into it.
         s = sessions.setdefault(r.session_id, {
             "session_id": r.session_id,
             "speaker": speaker,
@@ -307,6 +374,10 @@ async def aggregate_by_session(
         })
         s["by_event_type"][r.event_type] = r.count
         s["total_events"] += r.count
+        # SQL gave us per-(session,event_type) min/max; fold them into
+        # the per-session min/max here. We cannot rely on SQL alone
+        # because GROUP BY (session_id, event_type) gives N rows per
+        # session, each with its own min/max bounded to that event_type.
         if r.started_at and (s["started_at"] is None or r.started_at < s["started_at"]):
             s["started_at"] = r.started_at
         if r.ended_at and (s["ended_at"] is None or r.ended_at > s["ended_at"]):

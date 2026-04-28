@@ -1,7 +1,26 @@
-"""Patient Interface, Stats, and REDCap API routes.
+"""Patient-side API routes + dashboard stats + REDCap integration.
 
-Endpoints for patient summaries, scoring, responses,
-dashboard statistics, and REDCap integration.
+Authentication: every endpoint requires a valid auth header. Patient-
+specific endpoints additionally enforce per-user patient access via
+auth/access_control.check_patient_access() — non-superuser callers can
+only read patients explicitly granted to them in the patient_access
+table.
+
+Endpoint groups:
+    /api/patient/summaries*       : patient consultation summaries
+    /api/patient/scoring          : 1-5 scoring submitted by the patient
+    /api/patient/responses        : free-text responses (one per domain)
+    /api/patient/files            : list of patients the user can see
+    /api/patient/sentences/{file} : tokenised sentences for a file
+    /api/patient/ai-summary*      : LLM-generated per-domain summaries
+    /api/stats/dashboard          : aggregate counts/scores for the home view
+    /api/redcap/import            : push records into REDCap (config lives in
+                                    redcap_config.py)
+
+Related modules:
+    models.py             : PatientSummary, PatientSummaryDomain, DoctorRewriteLog
+    redcap_config.py      : REDCAP_API_URL / REDCAP_API_TOKEN single source
+    auth/access_control.py: enforces patient_id allow-list per user
 """
 
 import json

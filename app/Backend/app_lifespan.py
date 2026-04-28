@@ -3,6 +3,27 @@
 Extracted from main.py per CR #1 (Thin Main): main.py should orchestrate
 the app, not contain runtime logic. Init/teardown of Redis, the NLP
 HTTP client, and the rate limiter all live here.
+
+What "lifespan" means in FastAPI:
+    A lifespan is an async context manager that FastAPI runs once when
+    the app starts and once when it stops. Code BEFORE `yield` runs at
+    startup; code AFTER `yield` runs at shutdown. This is the modern
+    replacement for the deprecated `@app.on_event("startup")` /
+    `@app.on_event("shutdown")` decorators.
+
+Why each piece is here:
+    - Redis init     : we need one shared connection pool, not one per
+                       request. Created at startup so the very first
+                       request doesn't pay the connect cost.
+    - FastAPILimiter : its rate-limit counters live in Redis, so it
+                       must be initialised AFTER Redis is up. Wrapped
+                       in try/except because rate limiting is a "nice
+                       to have" — Redis being down should disable
+                       limiting, not crash the whole backend.
+    - close_http_client / close_redis : graceful shutdown so we don't
+                       leak sockets or leave Redis pools open when
+                       uvicorn is told to stop (e.g. SIGTERM during a
+                       deploy).
 """
 
 from contextlib import asynccontextmanager
@@ -15,13 +36,40 @@ from redis_client import close_redis, init_redis
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Async context manager wired into FastAPI(lifespan=...).
+
+    The `app` argument is required by the FastAPI lifespan protocol
+    even though we do not use it — FastAPI passes itself in so the
+    hook can attach state (e.g. `app.state.redis = redis`) if needed.
+    """
+    # ── Startup ─────────────────────────────────────────────────────
+    # init_redis() returns None when Redis is intentionally disabled
+    # (no REDIS_URL) or when the connect attempt fails. The backend is
+    # designed to keep working without Redis — caching is just absent.
     redis = await init_redis()
+
     if redis:
+        # Rate limiter is optional. We import lazily so the dependency
+        # is only required when Redis is actually present, and we
+        # swallow any init failure (e.g. wrong fastapi-limiter version)
+        # so a misconfiguration in this corner does not block boot.
         try:
             from fastapi_limiter import FastAPILimiter
+            # `prefix` namespaces our keys in Redis so multiple apps
+            # sharing the same Redis instance do not collide.
             await FastAPILimiter.init(redis, prefix="prostate:rl")
         except Exception:
             pass
+
+    # `yield` hands control back to FastAPI. The app serves traffic
+    # for as long as the process is alive. Anything below this line
+    # only runs when the app is shutting down.
     yield
+
+    # ── Shutdown ────────────────────────────────────────────────────
+    # Order matters: close the outbound HTTP client (to the NLP service)
+    # FIRST so any in-flight requests get a clean cancellation, then
+    # close the Redis pool. Both are no-ops if the resource was never
+    # initialised, so missing-init does not turn into a shutdown crash.
     await close_http_client()
     await close_redis()

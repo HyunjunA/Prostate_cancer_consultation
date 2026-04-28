@@ -1,8 +1,27 @@
-"""
-Survey API Routes - Flexible endpoint for receiving survey submissions
-- PostgreSQL DB storage
-- Optional REDCap integration
-- Comprehensive query/retrieval APIs
+"""Survey API routes — submissions + REDCap synchronisation.
+
+Patients fill out structured questionnaires (baseline, follow-up, etc.)
+in the web UI; this module persists each submission to PostgreSQL and,
+when REDCAP_ENABLED is true (see redcap_config.py), also pushes the
+record to the project's REDCap instance.
+
+Endpoint groups (all under the router prefix /api/surveys):
+    /submit                                : write a new survey response
+    /submissions, /submissions/{id}        : list / fetch / delete responses
+    /by-speaker/, /by-file/, /by-type/     : filtered lookups
+    /stats                                 : aggregate counts
+    /redcap/records, /redcap/records/{id}  : list / fetch / delete REDCap rows
+    /redcap/records/{id}/import            : push one record back into REDCap
+    /redcap/import                         : bulk import path
+    /redcap/records/{id}/import-sample     : test fixture for the import flow
+
+Authentication: every endpoint requires a valid auth header. REDCap
+endpoints additionally short-circuit to a clear error when
+REDCAP_ENABLED is false so the UI can hide the integration cleanly.
+
+Related modules:
+    models.py        : SurveySubmissionLog
+    redcap_config.py : REDCAP_API_URL / REDCAP_API_TOKEN / REDCAP_ENABLED
 """
 
 from typing import Dict, Any, Optional, List
