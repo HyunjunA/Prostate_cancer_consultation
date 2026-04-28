@@ -74,19 +74,7 @@ Five clinical domains are analyzed:
 
 Two supported modes:
 
-### Docker mode (everything containerised)
-
-```bash
-git clone https://github.com/HyunjunA/Prostate_cancer_consultation.git
-git clone -b dev/jun https://github.com/jifa83/AI_physician_patient_communication.git
-cd Prostate_cancer_consultation
-cp app/Backend/.env.example app/Backend/.env
-./run_all.sh
-```
-
-See **[docs/setup/DEPLOYMENT_DOCKER.md](docs/setup/DEPLOYMENT_DOCKER.md)** for the full Docker walkthrough.
-
-### Native mode (only NLP + webapp in Docker, rest native)
+### Native mode (recommended for development — only NLP + webapp in Docker, rest native)
 
 ```bash
 bash scripts/setup-native-mac.sh                     # one-time native deps
@@ -100,6 +88,18 @@ native walkthrough including the standalone pipeline runner
 (`scripts/run-pipeline-standalone.py --file ... | --dir ...`) and
 DB verification helpers.
 
+### Docker mode (everything containerised)
+
+```bash
+git clone https://github.com/HyunjunA/Prostate_cancer_consultation.git
+git clone -b dev/jun https://github.com/jifa83/AI_physician_patient_communication.git
+cd Prostate_cancer_consultation
+cp app/Backend/.env.example app/Backend/.env
+./run_all.sh
+```
+
+See **[docs/setup/DEPLOYMENT_DOCKER.md](docs/setup/DEPLOYMENT_DOCKER.md)** for the full Docker walkthrough.
+
 After deployment (either mode):
 - Dashboard: http://localhost:3001
 - API Documentation: http://localhost:8000/docs
@@ -110,9 +110,9 @@ After deployment (either mode):
 
 | Document | Description |
 |----------|-------------|
+| [docs/setup/DEPLOYMENT_NATIVE.md](docs/setup/DEPLOYMENT_NATIVE.md) | Native mode deployment (Docker for NLP + webapp only) — recommended for development |
 | [docs/setup/DEPLOYMENT_DOCKER.md](docs/setup/DEPLOYMENT_DOCKER.md) | Docker mode deployment (full Docker stack) |
-| [docs/setup/DEPLOYMENT_NATIVE.md](docs/setup/DEPLOYMENT_NATIVE.md) | Native mode deployment (Docker for NLP + webapp only) |
-| [ERD v3](app/Backend/patient_doctor_interface_erd_v3_en.md) | Database schema with examples |
+| [ERD v3](docs/architecture/patient_doctor_interface_erd_v3_en.md) | Database schema with examples |
 | [docs/](docs/) | Architecture, security, and setup guides |
 
 ---
