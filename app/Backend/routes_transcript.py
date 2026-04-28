@@ -1,9 +1,12 @@
-"""
-Transcript Analysis REST API — FastAPI router for the ML scoring pipeline.
+"""Transcript Analysis REST API — FastAPI router for the ML scoring pipeline.
 
-This module exposes HTTP endpoints that allow external clients (e.g. the React
-dashboard, R scripts, or cURL) to upload consultation transcript xlsx files,
-run the full 7-step analysis pipeline, and retrieve the scored results.
+HTTP front door to the same NLP+LLM pipeline that pipeline_runner.py
+executes from the CLI. The CLI runs the pipeline as a batch over a
+folder; this module runs it ad-hoc on whatever the React dashboard
+(or any cURL caller) uploads.
+
+Both paths share the same heavy lifting (sentence_classification +
+persistence + ai_pipeline_service) — only the entry point differs.
 
 Endpoints
 ---------
@@ -28,10 +31,17 @@ Endpoints
     Retrieve the analysis history for a patient from the database, including
     parameters used, timestamps, and per-model score summaries.
 
+``GET /api/transcript/predictions/{patient_id}``
+    Query the per-sentence prediction table for a specific analysis,
+    with optional model / score / top-N filters. Includes a backfill
+    path for legacy rows that pre-date the sentence_prediction table.
+
 Authentication
 --------------
 All endpoints require an ``X-API-Key`` header matching the ``API_KEY``
-environment variable (server refuses to start if not set).
+environment variable (server refuses to start if not set). Patient-
+specific endpoints additionally enforce per-user patient access via
+auth/access_control.check_patient_access().
 
 Storage
 -------
@@ -40,6 +50,14 @@ Storage
 * **Database**: each analysis run is logged to ``transcript_analysis_log`` with
   metadata, the full model results as JSON, and the xlsx binary. DB storage is
   wrapped in try/except so a DB failure never blocks the primary response.
+
+Resilience patterns used throughout:
+* **Disk + DB dual persistence** for downloads — disk is fast, DB is durable.
+* **Disk fallback rebuild** — if the file is missing but DB has the bytes,
+  we serve from DB AND re-save to disk so future requests skip the lookup.
+* **Per-file isolation** in batch — one bad file does not abort the others.
+* **Non-fatal DB/AI failures** — the response still goes out so the
+  caller is not blocked by an internal write issue.
 """
 
 import json
@@ -85,21 +103,36 @@ async def analyze_transcript(
     """Run transcript analysis using sentence_classification (R stringi).
 
     Replaces the old transcript_service.analyze_transcript to guarantee
-    identical sentence segmentation with the original R pipeline.
+    identical sentence segmentation with the original R pipeline. Mirrors
+    pipeline_runner.process_single_file's logic — same Steps 1-6 — but
+    operates on uploaded bytes instead of files on disk.
+
+    Returns:
+        Dict with `patient_id`, `total_sentences`, `models` (response
+        payload for the HTTP caller), `xlsx_bytes`, plus the
+        intermediate DataFrames the persistence layer needs
+        (df_raw, df_filtered, df_sentences, df_predicted, top_by_model).
     """
     import asyncio
     import sys
     import types
     import tempfile
 
-    # Write bytes to temp file for sentence_classification (expects file path)
+    # sentence_classification.read_input_file expects a real file path.
+    # Write the upload to a temp file, then delete it in `finally` below
+    # so we never leak temp files even on exceptions.
     suffix = ".csv" if filename.lower().endswith(".csv") else ".xlsx"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp.write(file_bytes)
         tmp_path = tmp.name
 
     try:
-        # Patch config module for sentence_classification imports
+        # ── sys.modules shim for sentence_classification's `from config import` ──
+        # Same trick as pipeline_runner.process_single_file: the package
+        # was written assuming `config` means a constants module, but in
+        # the Backend container `config` means our YAML loader. Swap a
+        # fake `config` into sys.modules just long enough to import the
+        # submodules, then restore the real one.
         _sc_config = types.ModuleType("sc_config")
         _sc_config.MODEL_TO_FULL = {v: k for k, v in OUTCOME_TO_SHEET.items()}
         _sc_config.MODEL_TO_SHEET = dict(OUTCOME_TO_SHEET)
@@ -283,18 +316,24 @@ async def download(
     """Download the generated xlsx result file for a patient.
 
     Tries the file system first; falls back to the database if the file is
-    missing (e.g. after a container restart).
+    missing (e.g. after a container restart that wiped /app/uploads).
+
+    The fallback also RE-SAVES to disk so future downloads of the same
+    patient skip the DB lookup — turns a one-time slow path into a
+    repeated fast path.
     """
     await check_patient_access(patient_id, user, db)
     filepath = _xlsx_path(patient_id)
     filename = f"{patient_id}_predictions.xlsx"
     media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-    # Primary: serve from disk
+    # Primary: serve from disk (cheap, just a sendfile syscall).
     if filepath.exists():
         return FileResponse(path=str(filepath), media_type=media_type, filename=filename)
 
-    # Fallback: serve from DB
+    # Fallback: serve from DB. Pull the LATEST row that has xlsx_data
+    # (xlsx_data may be NULL on legacy rows from before the binary
+    # storage migration).
     try:
         stmt = (
             select(TranscriptAnalysisLog.xlsx_data)
@@ -466,7 +505,9 @@ async def download_batch(
         else:
             db_needed.append(pid)
 
-    # Single DB query for all missing patients (instead of N individual queries)
+    # Single DB query for all missing patients (instead of N individual queries).
+    # DISTINCT ON (postgres-specific) returns one row per patient_id —
+    # the order_by determines WHICH row we get (latest analyzed_at).
     if db_needed:
         try:
             # Use DISTINCT ON to get the latest row per patient_id
@@ -532,7 +573,16 @@ _PATIENT_ID_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,254}$")
 
 
 def _validate_patient_id(patient_id: str) -> str:
-    """Validate patient_id to prevent path traversal attacks."""
+    """Validate patient_id to prevent path traversal attacks.
+
+    Two-layer defence:
+      1. Regex whitelist — only [a-zA-Z0-9_-], 1-255 chars, must start
+         with alphanumeric. Rejects "..", "/", "\\", null bytes, etc.
+      2. Resolved-path check — even if step 1 passed, ensure the
+         resulting absolute path stays inside UPLOAD_DIR. Defends
+         against weird unicode normalisation tricks the regex might
+         miss.
+    """
     if not _PATIENT_ID_PATTERN.match(patient_id):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -833,6 +883,12 @@ async def get_predictions(
 
 async def _backfill_predictions(db: AsyncSession, analysis_id: int) -> list:
     """Rebuild sentence_prediction rows from model_results JSON for a legacy analysis run.
+
+    Older analyses (pre-sentence_prediction table) only have the
+    aggregate JSON in `transcript_analysis_log.model_results`; this
+    helper unpacks that JSON into proper sentence_prediction rows on
+    first read so /predictions can serve them. After backfill the rows
+    persist, so subsequent calls hit the cheap query path.
 
     Returns the inserted SentencePrediction objects, or empty list on failure.
     """
