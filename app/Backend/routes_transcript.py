@@ -68,7 +68,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from dotenv import load_dotenv
+from core.settings import get_settings
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from sqlalchemy import func as sa_func, select
@@ -89,7 +89,8 @@ from pipeline_runner import (
 import persistence
 import ai_pipeline_service
 
-load_dotenv()
+# .env loading is centralised in core.settings now; no module-level
+# load_dotenv() needed here.
 logger = logging.getLogger(__name__)
 
 
@@ -162,7 +163,7 @@ async def analyze_transcript(
         df_sentences = segment_sentences(df_filtered, text_col="text")
 
         # Step 4: NLP classify
-        nlp_url = os.getenv("NLP_API_URL", "http://nlp-classifiers:8000")
+        nlp_url = get_settings().nlp_api_url
         outcomes = list(OUTCOME_TO_SHEET.values())
         df_predicted = await asyncio.to_thread(
             classify_all_models, df_sentences,
@@ -567,7 +568,7 @@ async def download_batch(
 # ──────────────────────────────────────────────────────────────────────────────
 # File-based xlsx storage (shared across gunicorn workers via disk)
 # ──────────────────────────────────────────────────────────────────────────────
-_UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
+_UPLOAD_DIR = Path(get_settings().upload_dir)
 _PATIENT_ID_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,254}$")
 
 
