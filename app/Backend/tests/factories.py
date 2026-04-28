@@ -11,8 +11,7 @@ from typing import Optional
 from models import (
     DoctorRewriteLog,
     PatientSummary,
-    PatientSummaryScoring,
-    PatientResponses,
+    PatientSummaryDomain,
     SurveySubmissionLog,
     TranscriptAnalysisLog,
     SentencePrediction,
@@ -65,49 +64,28 @@ class TestDataFactory:
         file: str = "test-file.xlsx",
         speaker: str = "Patient_1",
     ) -> PatientSummary:
-        return PatientSummary(
-            file=file,
-            speaker=speaker,
-            class_1="Cancer Prognosis",
-            summary_class_1="CP summary text.",
-            class_2="Life Expectancy",
-            summary_class_2="LE summary text.",
-            class_3="Erectile Dysfunction",
-            summary_class_3="ED summary text.",
-            class_4="Incontinence",
-            summary_class_4="INC summary text.",
-            class_5="Irritative Urinary Symptoms",
-            summary_class_5="IUS summary text.",
-        )
+        # Schema migrated 2026-04-25 (migration 008): the per-class fields
+        # (class_1/summary_class_1/...) and the entire_summary column were
+        # dropped. PatientSummary now only carries the (file, speaker) PK; the
+        # per-domain rows live in PatientSummaryDomain.
+        return PatientSummary(file=file, speaker=speaker)
 
     @staticmethod
-    def patient_scoring(
+    def patient_summary_domain(
         file: str = "test-file.xlsx",
         speaker: str = "Patient_1",
-    ) -> PatientSummaryScoring:
-        return PatientSummaryScoring(
+        domain: str = "cancer_prognosis",
+        display_order: int = 1,
+        patient_scoring: int = 5,
+        patient_response: str = "test response",
+    ) -> PatientSummaryDomain:
+        return PatientSummaryDomain(
             file=file,
             speaker=speaker,
-            class_1_patient_scoring=5,
-            class_2_patient_scoring=6,
-            class_3_patient_scoring=7,
-            class_4_patient_scoring=8,
-            class_5_patient_scoring=9,
-        )
-
-    @staticmethod
-    def patient_responses(
-        file: str = "test-file.xlsx",
-        speaker: str = "Patient_1",
-    ) -> PatientResponses:
-        return PatientResponses(
-            file=file,
-            speaker=speaker,
-            answer_1="Answer to question 1",
-            answer_2="Answer to question 2",
-            answer_3="Answer to question 3",
-            answer_4="Answer to question 4",
-            answer_5="Answer to question 5",
+            domain=domain,
+            display_order=display_order,
+            patient_scoring=patient_scoring,
+            patient_response=patient_response,
         )
 
     # ── Survey ────────────────────────────────────────────────────────
