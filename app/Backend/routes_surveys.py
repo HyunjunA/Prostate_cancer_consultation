@@ -1,9 +1,24 @@
 """Survey API routes — submissions + REDCap synchronisation.
 
+This is the largest router file in the codebase (1700+ lines, 14
+endpoints) because it owns BOTH directions of the REDCap integration:
+    - Local DB ← submission (POST /submit, READ /submissions*).
+    - Local DB → REDCap (push paths under /redcap/*).
+
 Patients fill out structured questionnaires (baseline, follow-up, etc.)
 in the web UI; this module persists each submission to PostgreSQL and,
 when REDCAP_ENABLED is true (see redcap_config.py), also pushes the
 record to the project's REDCap instance.
+
+Two storage layers:
+    1. survey_submission_log  : ALL submissions (canonical answer
+                                payload as JSONB). Append-only; this
+                                is the source of truth.
+    2. REDCap                  : remote project. Synced via the REST
+                                API in redcap_config.py. Sync state
+                                is tracked in survey_submission_log
+                                (redcap_synced / redcap_record_id /
+                                redcap_error).
 
 Endpoint groups (all under the router prefix /api/surveys):
     /submit                                : write a new survey response
@@ -15,6 +30,13 @@ Endpoint groups (all under the router prefix /api/surveys):
     /redcap/import                         : bulk import path
     /redcap/records/{id}/import-sample     : test fixture for the import flow
 
+Why such a large file:
+    REDCap is heavyweight: each push requires multiple round-trips
+    (project info, longitudinal events, field validation), and each
+    survey type has its own field-mapping table. The size reflects
+    that complexity rather than poor structure — endpoint splits
+    follow a clean pattern (one endpoint per HTTP verb + resource).
+
 Authentication: every endpoint requires a valid auth header. REDCap
 endpoints additionally short-circuit to a clear error when
 REDCAP_ENABLED is false so the UI can hide the integration cleanly.
@@ -22,6 +44,7 @@ REDCAP_ENABLED is false so the UI can hide the integration cleanly.
 Related modules:
     models.py        : SurveySubmissionLog
     redcap_config.py : REDCAP_API_URL / REDCAP_API_TOKEN / REDCAP_ENABLED
+    routes_patient.py: also has POST /api/redcap/import (alternate path)
 """
 
 from typing import Dict, Any, Optional, List
