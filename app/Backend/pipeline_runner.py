@@ -125,6 +125,16 @@ async def process_single_file(
     from sentence_classification.classification import classify_all_models
     from sentence_classification.selection import select_top_sentences_all_outcomes
     from sentence_classification.context import add_context_all_outcomes
+    # AI repo's export module — also writes nested output_test-compatible format
+    # into a separate directory (NESTED_OUTPUT_DIR, default = AI repo's data/output).
+    # Import inside the shim so its own `from config import ...` resolves correctly.
+    from sentence_classification.export import (
+        export_intermediate_files as _ai_export_intermediate_files,
+        export_final_csv as _ai_export_final_csv,
+    )
+    # Stash on the module so _save_output_files can reach them after the shim is restored.
+    sys.modules[__name__]._ai_export_intermediate_files = _ai_export_intermediate_files
+    sys.modules[__name__]._ai_export_final_csv = _ai_export_final_csv
 
     # Restore original config module
     if _orig_config is not None:
@@ -336,6 +346,30 @@ def _save_output_files(cfg, filename, patient_id, xlsx_bytes,
         logger.info("  Output saved: %s/ (step0-step5 + xlsx)", file_output_dir)
     except Exception as e:
         logger.debug("  Output save skipped (non-fatal): %s", e)
+
+    # Also produce AI repo's nested format (output_test compatible) into a
+    # separate directory so the result can be diffed against output_test/.
+    nested_dir = cfg.get("paths", {}).get("nested_output_dir")
+    _intermediate = globals().get("_ai_export_intermediate_files")
+    _final = globals().get("_ai_export_final_csv")
+    if nested_dir and _intermediate and _final and df_sentences is not None and df_predicted is not None and final_results is not None:
+        try:
+            Path(nested_dir).mkdir(parents=True, exist_ok=True)
+            _intermediate(
+                segmented_df=df_sentences,
+                predictions_df=df_predicted,
+                top_dfs=final_results,
+                output_path=str(nested_dir),
+                folder_name=stem,
+            )
+            _final(
+                top_dfs=final_results,
+                folder_name=stem,
+                output_path=str(nested_dir),
+            )
+            logger.info("  Nested output saved: %s/%s/ (step2-5 + final/, output_test compatible)", nested_dir, stem)
+        except Exception as e:
+            logger.warning("  Nested output save skipped (non-fatal): %s", e)
 
 
 # ── Main: single run or worker/monitor ───────────────────────────────────────
