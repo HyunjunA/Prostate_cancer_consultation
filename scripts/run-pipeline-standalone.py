@@ -251,8 +251,13 @@ async def main(args: argparse.Namespace) -> int:
     print(f"  total: {len(transcripts)} file(s)")
 
     # Build the cfg dict that pipeline_runner expects
-    _output_dir_raw = os.getenv("OUTPUT_DIR", "../AI_physician_patient_communication/data/output")
+    # Two output paths:
+    #   output_dir         → Dashboard's own flat format (step0~5 + SID_X.xlsx)
+    #   nested_output_dir  → AI repo's nested format via export.py (compares to output_test/)
+    _output_dir_raw = os.getenv("OUTPUT_DIR", "app/Backend/data/output")
     _output_dir = _output_dir_raw if Path(_output_dir_raw).is_absolute() else str((REPO_ROOT / _output_dir_raw).resolve())
+    _nested_output_dir_raw = os.getenv("NESTED_OUTPUT_DIR", "../AI_physician_patient_communication/data/output")
+    _nested_output_dir = _nested_output_dir_raw if Path(_nested_output_dir_raw).is_absolute() else str((REPO_ROOT / _nested_output_dir_raw).resolve())
     cfg = {
         "pipeline": {
             "top_n": args.top_n,
@@ -263,6 +268,7 @@ async def main(args: argparse.Namespace) -> int:
         },
         "paths": {
             "output_dir": _output_dir,
+            "nested_output_dir": _nested_output_dir,
         },
     }
 
