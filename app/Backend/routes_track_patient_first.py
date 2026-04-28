@@ -1,11 +1,31 @@
-"""
-Patient First-Visit Behavior Tracking — POST/GET endpoints
+"""Patient First-Visit Behaviour Tracking — POST/GET endpoints.
 
-Receives strict, area-specific behavior events from the patient first-visit
-page and stores them in patient_first_behavior. Provides per-session and
-per-file aggregations for the admin tracking UI.
+Receives strict, area-specific behaviour events from the patient first-
+visit page (the page where the patient explores their consultation
+results for the first time) and stores them in `patient_first_behavior`.
+
+What "first-visit" means here vs. follow-up:
+    - First-visit page : patient sees the AI-generated summary, opens
+                         topics/evidence, rates the helpfulness of each
+                         domain. Tracked in this module.
+    - Follow-up page   : patient fills out structured surveys (SDM, DCS,
+                         risk perception, satisfaction). Tracked in
+                         routes_track_patient_followup.py.
+    Each has its own table because the event vocabulary differs (topic
+    open/close vs. survey answer/step view) — see Pattern A below.
 
 Pattern A — area-specific schema, no event_type free-text, no OR-merge.
+The legacy design used one shared "patient_event" table with a free-
+text event_type column; that made queries error-prone and produced the
+"Still open" UI bug where a topic OR-merged across sessions stayed
+visually open forever. Each area now has its own table + its own
+narrow Literal of valid event types.
+
+Endpoint shape (all under /api/track/patient-first):
+    POST  /                  -> append a batch of events
+    GET   /sessions          -> list sessions (one row per session)
+    GET   /session/{sid}     -> all events in one session, in time order
+    GET   /aggregate?file=   -> per-session topic/evidence/rating rollup
 """
 
 from typing import List, Literal, Optional
@@ -27,11 +47,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/api/track/patient-first",
     tags=["Track-PatientFirst"],
+    # Router-level auth — every endpoint below requires X-API-Key.
     dependencies=[Depends(get_current_user)],
 )
 
 
 # ── Pydantic models ──────────────────────────────────────────────────────────
+# Hard-typed event_type and domain. Anything outside these values gets
+# rejected with 422 BEFORE reaching the handler — keeps free-text typos
+# from polluting the analytics later.
 
 EventType = Literal[
     "page_view", "topic_open", "topic_close",
@@ -42,15 +66,27 @@ Domain = Literal["cp", "le", "ed", "inc", "ius"]
 
 
 class PatientFirstEvent(BaseModel):
+    """One behaviour event captured by the first-visit page."""
+
     event_type: EventType
     domain: Optional[Domain] = None
+    # ge=1, le=5 enforces the 1-5 Likert range — invalid ratings are
+    # rejected at the API boundary instead of stored and filtered later.
     rating: Optional[int] = Field(None, ge=1, le=5)
+    # Free-form metadata (e.g. timing fields) — stored verbatim into
+    # the JSONB column; we do NOT validate the inner shape.
     metadata: dict = {}
     device_type: Optional[str] = None
     client_timestamp: str  # ISO 8601
 
     @model_validator(mode="after")
     def _validate_required_fields(self):
+        # Cross-field rules. Each event type implies a different
+        # required combination:
+        #   - rating_click  : both domain AND rating are mandatory
+        #     (otherwise we cannot tell what was rated, or to what).
+        #   - topic_*/evidence_*  : domain is mandatory
+        #     (an "open" with no domain is meaningless).
         if self.event_type == "rating_click":
             if self.domain is None or self.rating is None:
                 raise ValueError("rating_click requires both domain and rating")
@@ -61,13 +97,20 @@ class PatientFirstEvent(BaseModel):
 
 
 class PatientFirstBatch(BaseModel):
+    """Batch upload — one HTTP call carries one batch."""
+
     session_id: str = Field(..., min_length=1, max_length=100)
     file: str = Field(..., min_length=1, max_length=255)
     speaker: str = Field(..., min_length=1, max_length=100)
+    # 500-event cap: the frontend flushes every few seconds, so 500 is
+    # plenty of headroom; raising it any higher just lets one bad client
+    # tie up DB writes.
     events: List[PatientFirstEvent] = Field(..., min_length=1, max_length=500)
 
 
 class TrackResponse(BaseModel):
+    """Acknowledgement returned to the frontend after a successful POST."""
+
     status: str
     events_stored: int
     session_id: str
@@ -83,6 +126,10 @@ async def post_patient_first_events(
     """Bulk-insert a batch of patient first-visit behavior events."""
     rows = []
     for ev in batch.events:
+        # Parse the client's ISO-8601 timestamp. The "Z" suffix indicates
+        # UTC and Python's fromisoformat needs "+00:00" instead — substitute
+        # before parsing. Reject the whole batch with 422 if any timestamp
+        # is malformed (better than storing NULL and breaking aggregation).
         try:
             client_ts = datetime.fromisoformat(ev.client_timestamp.replace("Z", "+00:00"))
         except (ValueError, AttributeError):
@@ -101,6 +148,9 @@ async def post_patient_first_events(
         ))
 
     try:
+        # add_all + single commit = one transaction. If anything in the
+        # batch fails, the rollback in the except branch leaves the DB
+        # untouched — sessions never end up half-written.
         db.add_all(rows)
         await db.commit()
     except Exception as e:
@@ -121,6 +171,9 @@ async def list_sessions(
     db: AsyncSession = Depends(get_db),
 ):
     """Return one row per session with per-session counts and time range."""
+    # GROUP BY collapses raw events into one row per session_id. The
+    # admin UI uses this to render the session table without having to
+    # download every event in every session.
     stmt = select(
         PatientFirstBehavior.session_id,
         PatientFirstBehavior.file,
@@ -162,7 +215,12 @@ async def get_session_events(
     session_id: str,
     db: AsyncSession = Depends(get_db),
 ):
-    """Return all events for a single session, ordered by client_timestamp."""
+    """Return all events for a single session, ordered by client_timestamp.
+
+    Time-ordered (not INSERT-ordered) so the consumer sees events in the
+    order they actually happened on the client; network buffering can
+    reorder rows on the way to the DB.
+    """
     stmt = select(PatientFirstBehavior).where(
         PatientFirstBehavior.session_id == session_id
     ).order_by(PatientFirstBehavior.client_timestamp.asc())
@@ -194,12 +252,13 @@ async def aggregate_by_session(
     file: str = Query(..., description="Patient file (required)"),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Per-session aggregation for one file.
+    """Per-session aggregation for one file.
 
     Returns one row per session with per-domain open/close counts, ratings,
     and event totals. Critically: NO OR-merge across sessions — each session
-    is reported independently. (Fixes the legacy "Still open" bug.)
+    is reported independently. (Fixes the legacy "Still open" bug, where a
+    topic opened in session A would show as still-open while viewing
+    session B because the legacy aggregator OR-merged everything.)
     """
     stmt = select(PatientFirstBehavior).where(
         PatientFirstBehavior.file == file
@@ -209,6 +268,10 @@ async def aggregate_by_session(
 
     sessions: dict = {}
     for r in rows:
+        # setdefault initialises the session dict on first encounter,
+        # then re-uses it for every subsequent event in that session.
+        # Single O(events) pass — much simpler than the SQL window-
+        # function version that would also need per-domain rollups.
         s = sessions.setdefault(r.session_id, {
             "session_id": r.session_id,
             "file": r.file,
@@ -219,6 +282,8 @@ async def aggregate_by_session(
             "ratings": {},
             "total_events": 0,
         })
+        # Rows arrive in client_timestamp ASC order, so the LAST event
+        # we see for a session is also its end timestamp.
         s["ended_at"] = r.client_timestamp
         s["total_events"] += 1
 
@@ -234,7 +299,10 @@ async def aggregate_by_session(
                 d["evidence_close"] += 1
 
         if r.event_type == "rating_click" and r.domain and r.rating is not None:
-            s["ratings"][r.domain] = r.rating  # last rating per domain wins within a session
+            # Last-write-wins within a session: a patient might re-rate
+            # before submitting; we keep only the final value per domain
+            # so the admin UI shows what they actually settled on.
+            s["ratings"][r.domain] = r.rating
 
     return {
         "file": file,

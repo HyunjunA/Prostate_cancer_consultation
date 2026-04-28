@@ -8,6 +8,25 @@ Ivan's rules applied:
   - Worker/Monitor: optional continuous scanning mode
   - Output folder: per-file subfolder structure for traceability
 
+What this script orchestrates (high level):
+    transcript file (.xlsx / .csv)
+       │
+       ▼
+    Step 1: read file -> DataFrame + patient_id
+    Step 2: identify the doctor + filter to doctor utterances
+    Step 3: split utterances into sentences (R stringi via rpy2)
+    Step 4: classify every sentence with all 5 NLP models
+    Step 5: pick top-N sentences per domain
+    Step 6: attach surrounding context to each top sentence
+    Step 7: write per-file output folder (xlsx + intermediate csvs)
+    Step 8: build in-memory xlsx bytes for DB-side download
+    Step 9: persistence.save_all() -> 6 PostgreSQL tables
+    Step 9b: ai_pipeline_service.run_ai_scoring_and_summary() -> LLM stage
+
+Each Step is exactly ONE function call here; the heavy logic lives in
+sentence_classification/ (NLP), persistence.py (DB), and ai_pipeline_service.py
+(LLM). This file is the conductor.
+
 Usage:
   python pipeline_runner.py                          # Process all, then exit
   python pipeline_runner.py --dir /path/to/files     # Custom directory
@@ -34,6 +53,13 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 # ── Constants (matches R pipeline outcome names) ─────────────────────────────
+# These mappings translate between the two naming conventions used
+# upstream:
+#   - Long names ("cancer_prognosis", ...) come from the AI repo's
+#     classification module and feed persistence.save_all().
+#   - Short codes ("cp", ...) are what sentence_classification.export
+#     and the NLP container both use.
+# pipeline_runner is the seam — we accept both and translate as needed.
 
 OUTCOME_TO_SHEET = {
     "cancer_prognosis": "cp",
@@ -50,6 +76,11 @@ def _read_transcript(filepath: str, filename: str):
     Mirrors the exact logic of AI_physician_patient_communication/utils/file_manager.py
     read_input_file() — no column normalization, no text stripping — so that
     sentence segmentation via R stringi produces identical results.
+
+    Patient ID extraction order:
+      1. "processed_transcripts_<id>" pattern -> use the suffix.
+      2. "SID 14" / "SID14" pattern -> "SID_14".
+      3. Fallback: file stem with whitespace -> underscore.
     """
     import re
 
@@ -60,7 +91,9 @@ def _read_transcript(filepath: str, filename: str):
     else:
         df = pd.read_excel(path, engine="openpyxl")
 
-    # Validate required columns (same check as read_input_file)
+    # Validate required columns (same check as read_input_file).
+    # Failing here gives a clean per-file error instead of a cryptic
+    # KeyError several steps deeper.
     if "speaker" not in df.columns or "text" not in df.columns:
         raise ValueError(f"Missing 'speaker' or 'text' columns in {filename}")
 
@@ -80,10 +113,16 @@ def _read_transcript(filepath: str, filename: str):
 
 
 def _export_to_xlsx_bytes(final_results) -> bytes:
-    """Convert final_results dict to in-memory xlsx bytes for DB storage."""
+    """Convert final_results dict to in-memory xlsx bytes for DB storage.
+
+    We never touch the disk here — the bytes go directly into
+    transcript_analysis_log.xlsx_data so the backend can serve
+    "download original analysis" without a shared filesystem.
+    """
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         for outcome, df in final_results.items():
+            # Excel sheet names cap at 31 chars — slice defensively.
             sheet = OUTCOME_TO_SHEET.get(outcome, outcome)[:31]
             df.to_excel(writer, sheet_name=sheet, index=False)
     return output.getvalue()
@@ -101,9 +140,13 @@ async def process_single_file(
     import persistence
     import ai_pipeline_service
 
-    # Patch: sentence_classification modules import "from config import MODEL_TO_FULL"
-    # but Docker's /app/config.py is the Backend config, not the pipeline config.
-    # Inject a shim module so sentence_classification finds the right constants.
+    # ── sys.modules shim for sentence_classification's `from config import ...` ──
+    # sentence_classification was written as a standalone package and
+    # uses `from config import MODEL_TO_FULL` etc. Inside the Backend
+    # container, `config` already means our YAML loader, NOT the
+    # constants the package expects. We swap a fake `config` module
+    # into sys.modules just long enough to import the
+    # sentence_classification submodules, then restore the real one.
     import types
     _sc_config = types.ModuleType("sc_config")
     _sc_config.MODEL_TO_FULL = {
@@ -116,7 +159,7 @@ async def process_single_file(
     _sc_config.MODEL_TO_SHEET = {v: k for k, v in OUTCOME_TO_SHEET.items()}
     _sc_config.SHEET_ORDER = ["cp", "inc", "ed", "ius", "le"]
 
-    # Temporarily replace 'config' in sys.modules for sentence_classification imports
+    # Stash the real config so we can restore after the imports.
     _orig_config = sys.modules.get("config")
     sys.modules["config"] = _sc_config
 
@@ -132,7 +175,8 @@ async def process_single_file(
         export_intermediate_files as _ai_export_intermediate_files,
         export_final_csv as _ai_export_final_csv,
     )
-    # Stash on the module so process_single_file can reach them after the shim is restored.
+    # Stash the import-time-bound functions on this module so the
+    # restore-config block below doesn't break later access.
     sys.modules[__name__]._ai_export_intermediate_files = _ai_export_intermediate_files
     sys.modules[__name__]._ai_export_final_csv = _ai_export_final_csv
 
@@ -144,7 +188,8 @@ async def process_single_file(
 
     filename = os.path.basename(filepath)
 
-    # Skip if already processed
+    # Skip files we have already processed — saves time when --watch
+    # mode rescans a folder full of older transcripts.
     if await persistence.file_already_processed(Session, filename):
         logger.info("[SKIP] Skipping %s — already in DB", filename)
         return None
@@ -165,10 +210,14 @@ async def process_single_file(
     try:
         df_raw, patient_id = _read_transcript(filepath, filename)
     except Exception as e:
+        # Per-file error → log + return None. The outer loop continues
+        # with the next file rather than aborting the whole batch.
         logger.error("  Skipping %s — cannot read: %s", filename, e)
         return None
 
     # ── Step 2: Identify & filter doctor (sentence_classification) ───────
+    # `identify_doctor_speaker` uses heuristics on the speaker column
+    # to pick the doctor (longest speaker label, most utterances, etc.).
     doctor = identify_doctor_speaker(df_raw, "speaker", "text")
     df_filtered = filter_doctor_rows(df_raw, "speaker", "text", doctor=doctor)
     if len(df_filtered) == 0:
@@ -176,10 +225,16 @@ async def process_single_file(
         return None
 
     # ── Step 3: Sentence segmentation (R stringi via rpy2) ───────────────
+    # Run R's stringi tokenizer for byte-perfect parity with the
+    # original R pipeline (Python's nltk produces slightly different
+    # boundaries on edge cases).
     df_sentences = segment_sentences(df_filtered, text_col="text")
     logger.info("  %d sentences after segmentation (R stringi)", len(df_sentences))
 
     # ── Step 4: NLP prediction (5 models) ────────────────────────────────
+    # classify_all_models is sync (uses requests under the hood). Run
+    # it in a worker thread so the asyncio loop can keep handling the
+    # outer pipeline orchestration.
     df_predicted = await asyncio.to_thread(
         classify_all_models, df_sentences,
         outcomes=outcomes, base_url=nlp_url, text_col="text",
@@ -223,6 +278,7 @@ async def process_single_file(
             )
             logger.info("  Output saved: %s/%s/ (nested format, output_test compatible)", output_dir, stem)
         except Exception as e:
+            # Disk export is non-fatal — DB save below still happens.
             logger.warning("  Output save failed (non-fatal): %s", e)
 
     # ── Build LONG-keyed view for persistence.save_all ───────────────────
@@ -235,10 +291,17 @@ async def process_single_file(
     xlsx_bytes = _export_to_xlsx_bytes(final_results_long)
 
     # ── Determine speakers ───────────────────────────────────────────────
+    # `doctor_speaker`: read from the filtered df (the actual doctor
+    # label appearing in the transcript).
+    # `patient_speaker`: derived from filename — every patient's data
+    # uses one consistent speaker label across surveys, etc.
     doctor_speaker = df_filtered["speaker"].iloc[0] if len(df_filtered) > 0 else "Unknown"
     patient_speaker = f"Patient_{Path(filename).stem}"
 
     # ── Step 9: Save to DB (processed=False, AI pipeline not yet run) ───
+    # persistence.save_all owns the actual INSERT/UPSERT logic. It
+    # writes 6 tables in one transaction; returns False if anything
+    # failed (rollback already applied).
     success = await persistence.save_all(
         Session,
         filename=filename,
@@ -283,6 +346,8 @@ async def process_single_file(
                 else:
                     logger.info("  [SKIP] AI pipeline: not available or failed (non-blocking)")
         except Exception as e:
+            # AI stage failure does NOT roll back the NLP rows we
+            # already saved — those are still useful on their own.
             logger.warning("  [SKIP] AI pipeline error (non-blocking): %s", e)
 
     if success:
@@ -326,6 +391,9 @@ async def run_pipeline(cfg: Dict[str, Any], transcript_dir: str = None, single_f
     engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
     Session = async_sessionmaker(bind=engine, expire_on_commit=False)
 
+    # Idempotent: if tables already exist, create_all is a no-op.
+    # Lets pipeline_runner work against a fresh DB without first
+    # running init_db.py.
     async with engine.begin() as conn:
         await conn.run_sync(models.Base.metadata.create_all)
 
@@ -350,6 +418,9 @@ async def run_pipeline(cfg: Dict[str, Any], transcript_dir: str = None, single_f
 
     logger.info("Found %d transcript files to process", len(files))
 
+    # Sequential processing — predictable resource usage and easier
+    # log reading. For high-volume batches we could use asyncio.gather
+    # with a Semaphore later if throughput becomes the bottleneck.
     results = []
     for filepath in files:
         result = await process_single_file(filepath, Session, cfg)
@@ -378,6 +449,9 @@ async def run_worker(cfg: Dict[str, Any]):
 
     while True:
         await run_pipeline(cfg)
+        # Sleep BETWEEN scans rather than running tightly — gives the
+        # operator a window to land new files without us holding any
+        # DB connection.
         logger.info("Sleeping %d seconds until next scan...", interval)
         await asyncio.sleep(interval)
 
@@ -395,6 +469,8 @@ if __name__ == "__main__":
 
     cfg = config.load_config(args.config)
 
+    # --watch on the CLI OR worker.enabled in YAML triggers worker
+    # mode; either is enough so ops can flip the switch without code.
     if args.watch or cfg.get("worker", {}).get("enabled", False):
         asyncio.run(run_worker(cfg))
     else:

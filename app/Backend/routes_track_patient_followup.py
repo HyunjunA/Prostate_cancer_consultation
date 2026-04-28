@@ -1,12 +1,31 @@
-"""
-Patient Follow-up Survey Behavior Tracking — POST/GET endpoints
+"""Patient Follow-up Survey Behaviour Tracking — POST/GET endpoints.
 
-Receives strict, area-specific behavior events from the patient follow-up
-survey page and stores them in patient_followup_survey. This table tracks
-behavior metadata only (timing, ordering, step navigation). Canonical
-answer payloads continue to live in survey_submission_log.
+Receives strict, area-specific behaviour events from the patient
+follow-up survey page and stores them in `patient_followup_survey`.
+This table tracks **behaviour metadata only** (timing, ordering, step
+navigation, which question was answered when). The canonical answer
+payloads continue to live in `survey_submission_log`.
 
-Pattern A — area-specific schema, no event_type free-text, no OR-merge.
+Why split behaviour from answers:
+    - Behaviour events are dense (page_view, every step_view, every
+      answer event, etc.) — separating them keeps the answers table
+      small and easy to query.
+    - Behaviour rows are append-only and never edited; answer rows are
+      sometimes updated when REDCap sync corrections come back.
+    - The admin UI (which renders behaviour analytics) and the patient
+      UI (which reads back the answers) talk to different tables and
+      can scale independently.
+
+Pattern A — area-specific schema, no event_type free-text, no OR-merge
+(matches the same pattern used by routes_track_patient_first.py and
+routes_track_doctor.py — every tracking area has its own hard-typed
+schema instead of one shared event-bag).
+
+Endpoint shape (all under /api/track/patient-followup):
+    POST  /                  -> append a batch of events
+    GET   /sessions          -> list distinct sessions
+    GET   /session/{sid}     -> all events for one session in time order
+    GET   /aggregate         -> per-session survey progress for one file
 """
 
 from typing import List, Literal, Optional
@@ -25,6 +44,8 @@ from models import PatientFollowupSurvey
 logger = logging.getLogger(__name__)
 
 
+# Router-level auth saves us from putting `user: AuthUser = Depends(...)`
+# on every handler — and also stops anyone from forgetting it.
 router = APIRouter(
     prefix="/api/track/patient-followup",
     tags=["Track-PatientFollowup"],
@@ -33,6 +54,9 @@ router = APIRouter(
 
 
 # ── Pydantic models ──────────────────────────────────────────────────────────
+# Locking the allowed event_type / survey_type values to a Literal turns
+# any typo on the client side into a clean 422, instead of a polluted
+# DB row that we have to clean up later.
 
 EventType = Literal[
     "page_view", "survey_step_view",
@@ -43,16 +67,28 @@ SurveyType = Literal["sdm", "dcs", "risk_perception", "satisfaction"]
 
 
 class PatientFollowupEvent(BaseModel):
+    """One behaviour event captured by the survey UI."""
+
     event_type: EventType
     survey_type: Optional[SurveyType] = None
     question_id: Optional[str] = Field(None, max_length=50)
     step_number: Optional[int] = Field(None, ge=1)
+    # Free-form metadata for fields that vary per event type. We do NOT
+    # validate the inner shape — anything the frontend sends is stored
+    # verbatim into the JSONB column for later analysis.
     metadata: dict = {}
     device_type: Optional[str] = None
     client_timestamp: str
 
     @model_validator(mode="after")
     def _validate_required_fields(self):
+        # Cross-field rules. Pydantic's per-field validators cannot see
+        # other fields, so we run conditional requirements here:
+        #   - "survey_answer" needs both survey_type and question_id
+        #     (otherwise we cannot tell which question was answered).
+        #   - "survey_step_view" needs step_number (the whole point).
+        #   - step_number on any OTHER event type is suspicious — most
+        #     likely a frontend bug — reject it explicitly.
         if self.event_type == "survey_answer":
             if not self.survey_type or not self.question_id:
                 raise ValueError("survey_answer requires survey_type and question_id")
@@ -64,13 +100,20 @@ class PatientFollowupEvent(BaseModel):
 
 
 class PatientFollowupBatch(BaseModel):
+    """Batch upload from the frontend — one batch per HTTP call."""
+
     session_id: str = Field(..., min_length=1, max_length=100)
     file: str = Field(..., min_length=1, max_length=255)
     speaker: str = Field(..., min_length=1, max_length=100)
+    # 500-event cap so a single bad call cannot tie up the DB with a
+    # 50000-row INSERT. The frontend flushes every few seconds, so 500
+    # is more than enough headroom for normal pacing.
     events: List[PatientFollowupEvent] = Field(..., min_length=1, max_length=500)
 
 
 class TrackResponse(BaseModel):
+    """Acknowledgement returned to the frontend after a successful POST."""
+
     status: str
     events_stored: int
     session_id: str
@@ -83,8 +126,14 @@ async def post_patient_followup_events(
     batch: PatientFollowupBatch,
     db: AsyncSession = Depends(get_db),
 ):
+    """Append a batch of behaviour events under the given session."""
     rows = []
     for ev in batch.events:
+        # Parse ISO-8601 client timestamps. The "Z" suffix is the
+        # frontend's UTC indicator; Python's fromisoformat accepts
+        # "+00:00" so we substitute. If parsing fails we 422 — better
+        # to reject the batch than store a NULL timestamp that breaks
+        # session aggregation later.
         try:
             client_ts = datetime.fromisoformat(ev.client_timestamp.replace("Z", "+00:00"))
         except (ValueError, AttributeError):
@@ -104,6 +153,10 @@ async def post_patient_followup_events(
         ))
 
     try:
+        # add_all then commit = single INSERT batch + single transaction.
+        # Faster than per-row commits AND atomic — partial failures roll
+        # back the whole batch, so a session never ends up with a half-
+        # written event stream.
         db.add_all(rows)
         await db.commit()
     except Exception as e:
@@ -123,6 +176,10 @@ async def list_sessions(
     limit: int = Query(50, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
 ):
+    """List distinct sessions (one row per (session_id, file, speaker))."""
+    # GROUP BY collapses individual events into one row per session.
+    # Aggregates expose the metadata the admin UI cares about (start /
+    # end / event_count) without the cost of pulling every row.
     stmt = select(
         PatientFollowupSurvey.session_id,
         PatientFollowupSurvey.file,
@@ -164,6 +221,10 @@ async def get_session_events(
     session_id: str,
     db: AsyncSession = Depends(get_db),
 ):
+    """Return every event for one session, ordered by client_timestamp."""
+    # Time-ordered fetch so the consumer (admin UI / replay tool) can
+    # iterate the events in the order they actually happened on the
+    # client, not in INSERT order which can drift due to network buffering.
     stmt = select(PatientFollowupSurvey).where(
         PatientFollowupSurvey.session_id == session_id
     ).order_by(PatientFollowupSurvey.client_timestamp.asc())
@@ -196,7 +257,17 @@ async def aggregate_by_session(
     file: str = Query(..., description="Patient file (required)"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Per-session survey progress and timing for one file."""
+    """Per-session survey progress and timing for one file.
+
+    Returns one entry per session_id with:
+      - timing window (started_at / ended_at)
+      - per-survey-type progress (answered / step_views / completed)
+      - completed[] list for quick "did patient finish all surveys?" checks
+
+    Aggregation is done in Python (rather than via window functions)
+    because the per-survey-type rollup is shaped enough that a SQL
+    version would be harder to read than the small loop below.
+    """
     stmt = select(PatientFollowupSurvey).where(
         PatientFollowupSurvey.file == file
     ).order_by(PatientFollowupSurvey.client_timestamp.asc())
@@ -205,6 +276,10 @@ async def aggregate_by_session(
 
     sessions: dict = {}
     for r in rows:
+        # setdefault initialises the session dict on first encounter,
+        # then re-uses it for all subsequent events belonging to the
+        # same session_id. This is O(events) — single pass — vs. the
+        # O(sessions × events) we would get from a SQL JOIN per session.
         s = sessions.setdefault(r.session_id, {
             "session_id": r.session_id,
             "file": r.file,
@@ -215,10 +290,13 @@ async def aggregate_by_session(
             "completed": [],
             "total_events": 0,
         })
+        # Because rows arrive in client_timestamp ASC order, the LAST
+        # event we see for a session is also its end timestamp.
         s["ended_at"] = r.client_timestamp
         s["total_events"] += 1
 
         if r.survey_type:
+            # Per-survey-type rollup. Same setdefault trick as above.
             sv = s["by_survey"].setdefault(r.survey_type, {
                 "answered": 0, "step_views": 0, "completed": False
             })
