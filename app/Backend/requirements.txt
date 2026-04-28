@@ -25,6 +25,7 @@ pyyaml==6.0.3                    # config.yaml loader
 
 # ── Validation & Serialization ───────────────────────────────────────────────
 pydantic==2.12.5
+pydantic-settings==2.14.0        # required by app/Backend/core/settings.py (P1.S1)
 
 # ── Redis & Rate Limiting ────────────────────────────────────────────────────
 redis==7.3.0
