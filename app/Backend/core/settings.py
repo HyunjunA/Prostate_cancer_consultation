@@ -118,6 +118,10 @@ class Settings(BaseSettings):
 
     # ── App / runtime ────────────────────────────────────────────────
     environment: str = Field("development")
+    # Override with LOG_LEVEL=DEBUG / WARNING / ERROR. Default is None
+    # so configure_logging() can pick INFO in production and DEBUG in
+    # dev based on `environment` instead.
+    log_level: Optional[str] = None
     api_key: Optional[str] = None  # Server-side check happens in auth/backends/
     upload_dir: str = Field("/app/uploads")
     transcripts_dir: str = Field("data/transcripts")

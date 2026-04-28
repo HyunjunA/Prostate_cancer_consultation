@@ -40,6 +40,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # Lifespan = the async startup/shutdown context. Defined separately so
 # this file stays focused on routing.
 from app_lifespan import lifespan
+from core.logging import configure_logging
 from core.settings import get_settings
 
 # Each routes_*.py module exposes a `router = APIRouter(...)`. We import
@@ -57,6 +58,11 @@ from routes_track_patient_first import router as track_patient_first_router
 from routes_track_patient_followup import router as track_patient_followup_router
 from routes_track_recordings import router as track_recordings_router
 from routes_transcript import router as transcript_router
+
+# Apply the standard logging config (level + format) BEFORE create_app()
+# runs so the FastAPI startup banner and lifespan hooks get the same
+# format as request handlers. Idempotent — safe to call from tests too.
+configure_logging()
 
 # Module-level logger so log lines are tagged "main" and can be filtered
 # separately from FastAPI / SQLAlchemy / Redis log output.
