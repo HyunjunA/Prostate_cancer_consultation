@@ -1,0 +1,148 @@
+# System Architecture
+
+High-level architecture of the Prostate Cancer Consultation Dashboard. For pipeline-step detail see [`../ml-pipeline/ML_PIPELINE.md`](../ml-pipeline/ML_PIPELINE.md); for table-level detail see [`DATABASE_SCHEMA.md`](DATABASE_SCHEMA.md).
+
+---
+
+## Deployment topology (native, recommended)
+
+```
+[Native — host]                              [Docker — only 2 containers]
+├── PostgreSQL 16    :5433  ───────────┐     ├── prostatecancer-nlp-native    :8888
+├── Redis (brew)     :6379             │     │     (R + 5 RF classifiers, third-party image)
+├── Backend FastAPI  :8000             │     └── prostatecancer-webapp-native :3001
+│   (uvicorn, native Python venv)      │           (Next.js 13 webapp)
+└── Pipeline CLI                       │
+    (scripts/run-pipeline-standalone.py)
+                                       │
+Webapp (Docker)  ──host.docker.internal:8000──→  Backend (native)
+Backend (native) ──localhost:8888────────────→   NLP (Docker)
+Backend (native) ──localhost:5433────────────→   Postgres (native)
+Pipeline CLI     ──localhost:5433────────────→   Postgres (native)
+Pipeline CLI     ──localhost:8888 + docker exec→ NLP (Docker)
+```
+
+Three components are **independently restartable** (per the 2026-04-24 architecture review):
+- DB lives outside any compose project → `docker compose down` never wipes data.
+- Pipeline runs as CLI → does not need uvicorn.
+- Dashboard (uvicorn + webapp) runs without the pipeline → reads what is in DB.
+
+For the full Docker mode see [`../setup/DEPLOYMENT_DOCKER.md`](../setup/DEPLOYMENT_DOCKER.md) (legacy).
+
+---
+
+## Repo layout
+
+| Path | Contents |
+|---|---|
+| `app/Backend/` | FastAPI app, SQLAlchemy models, persistence modules, migrations |
+| `app/Webapp/` | Next.js 13 frontend (App Router) |
+| `scripts/` | `run-native.sh`, `init-db-native.sh`, `run-pipeline-standalone.py`, etc. |
+| `docs/` | This documentation |
+| `dev_docs/` | Internal development notes (mostly Korean) |
+| `meeting_notes/` | Meeting records (parent folder, project-wide) |
+| `../AI_physician_patient_communication/` | Sibling repo: NLP + AI pipeline modules + reference data |
+
+The Backend imports the AI repo via `sys.path` insertion — both repos must be cloned as siblings.
+
+---
+
+## Backend module map (`app/Backend/`)
+
+| Module | Role |
+|---|---|
+| `main.py` | FastAPI app, middleware, CORS, lifespan |
+| `db.py` | Async + sync engines, session factories |
+| `models.py` | SQLAlchemy ORM (17 tables) |
+| `pipeline_runner.py` | Orchestrates NLP 7-step (calls AI repo's `sentence_classification`) |
+| `persistence.py` | Persists NLP results to 6 tables |
+| `ai_pipeline_service.py` | Calls AI repo's `ai_pipeline.pipeline` + persists to 2 tables |
+| `nlp_classifier_client.py` | HTTP client for the NLP container's `/predict/{model}` endpoints |
+| `routes_*.py` | API routes — patient, doctor, surveys, transcript, NLP, admin, auth |
+| `auth/` | API-key auth backend, password hashing |
+| `core/` | Settings (typed env), structured logging |
+| `migrations/versions/` | Alembic 001–009 |
+
+---
+
+## Request flow (consultation → dashboard)
+
+```
+1. Transcript (.xlsx) drops into AI_repo/data/input/
+        │
+2. run-pipeline-standalone.py picks it up
+        │   → pipeline_runner.run_pipeline()
+        │       ├─ NLP 7-step  (sentence_classification + nlp container)
+        │       │      → persistence.save_all()  → 6 tables
+        │       └─ AI 5-step   (ai_pipeline.pipeline, Azure OpenAI)
+        │              → ai_pipeline_service.run_ai_scoring_and_summary()  → 2 tables
+        │              → UPDATE transcript_analysis_log.processed = true
+        │
+3. Webapp loads patient page
+        │   → Next.js calls Backend at /api/patient/files, /api/patient/ai-summary, …
+        │   → Backend reads from llm_domain_scoring_and_summary, patient_summary_domain
+        │   → JSON returned, rendered as the patient-facing summary
+        │
+4. Patient submits survey
+        │   → /api/surveys/* persists to survey_submission_log + behavior tables
+        │   → optional REDCap sync (if REDCAP_API_TOKEN configured)
+```
+
+Doctor dashboard follows the same shape — reads from `llm_domain_scoring_and_summary` + `nlp_all_predictions`, writes to `doctor_behavior` + `doctor_rewrite_log`.
+
+---
+
+## Five clinical domains
+
+| Code | Domain |
+|---|---|
+| `cp` | Cancer Prognosis |
+| `le` | Life Expectancy |
+| `ed` | Erectile Dysfunction / Potency |
+| `inc` | Urinary Incontinence |
+| `ius` | Irritative Urinary Symptoms / Frequency / Urgency / Nocturia |
+
+Each domain has its own RF classifier (in NLP container) and its own LLM extraction prompt (in `ai_pipeline`).
+
+---
+
+## Tech stack
+
+| Layer | Tech |
+|---|---|
+| Frontend | Next.js 13 App Router, React, TypeScript, Tailwind, shadcn/ui |
+| Backend | FastAPI, SQLAlchemy (async + sync), Alembic, httpx |
+| NLP | R `plumber` API, 5 Random Forest classifiers (third-party Docker image) |
+| Sentence segmentation | R `stringi` 1.8.7 + ICU 74.2 (called via `docker exec`) |
+| LLM | Azure OpenAI GPT-4o |
+| DB | PostgreSQL 16 (native :5433) / 13 (Docker :5432) |
+| Cache | Redis (rate limiting + caching, optional) |
+| Auth | API-key + per-patient ACL |
+
+---
+
+## Environment configuration
+
+All secrets in `app/Backend/.env.native` (or `.env` for Docker mode). Pipeline I/O paths default to the sibling AI repo:
+
+```
+DATABASE_URL=postgresql+asyncpg://prostatecancer_user:***@localhost:5433/prostatecancer_db_native
+NLP_API_URL=http://localhost:8888
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
+AZURE_OPENAI_KEY=...
+TRANSCRIPTS_DIR=../AI_physician_patient_communication/data/input
+OUTPUT_DIR=../AI_physician_patient_communication/data/output
+REDCAP_API_URL=https://iredcap.csmc.edu/api/   # optional
+REDCAP_API_TOKEN=...                           # optional
+```
+
+`.env.native.example` ships the full template.
+
+---
+
+## See Also
+
+- [`DATABASE_SCHEMA.md`](DATABASE_SCHEMA.md) — table-level detail
+- [`../ml-pipeline/ML_PIPELINE.md`](../ml-pipeline/ML_PIPELINE.md) — pipeline step detail
+- [`../setup/DEPLOYMENT_NATIVE.md`](../setup/DEPLOYMENT_NATIVE.md) — full deploy walkthrough
+- [`../security/SECURITY_AUDIT.md`](../security/SECURITY_AUDIT.md) — known security posture

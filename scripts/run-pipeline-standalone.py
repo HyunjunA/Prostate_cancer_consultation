@@ -144,6 +144,17 @@ def check_env(skip_ai: bool) -> None:
     nlp = os.getenv("NLP_API_URL", "http://localhost:8001")
     ok(f"NLP_API_URL:  {nlp}")
 
+    # Probe NLP up front — without this, failure only surfaces inside Step 2
+    # segmentation as a cryptic docker exec error.
+    try:
+        import httpx
+        httpx.get(f"{nlp}/ping", timeout=2.0).raise_for_status()
+        ok("NLP service reachable")
+    except Exception as e:
+        fail(f"NLP service not reachable at {nlp} ({e.__class__.__name__}: {e})")
+        print("       Start it: docker compose -f docker-compose-minimal.yml up -d", file=sys.stderr)
+        sys.exit(1)
+
     if not skip_ai:
         if os.getenv("AZURE_OPENAI_ENDPOINT") and os.getenv("AZURE_OPENAI_KEY"):
             ok("AZURE_OPENAI_*: configured")
