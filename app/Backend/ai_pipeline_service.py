@@ -34,11 +34,12 @@ Why this lives in Backend (not inside ai_pipeline/):
 """
 
 import logging
-import os
 import sys
 from typing import Dict
 
 import pandas as pd
+
+from core.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -62,17 +63,15 @@ def _create_client():
     try:
         from openai import AzureOpenAI
 
-        endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-        key = os.getenv("AZURE_OPENAI_KEY")
-
-        if not endpoint or not key:
+        settings = get_settings()
+        if not settings.azure_openai_endpoint or not settings.azure_openai_key:
             logger.warning("Azure OpenAI credentials not configured — AI pipeline disabled")
             return None
 
         return AzureOpenAI(
-            azure_endpoint=endpoint,
-            api_key=key,
-            api_version=os.getenv("AZURE_OPENAI_API_VERSION", "2024-08-01-preview"),
+            azure_endpoint=settings.azure_openai_endpoint,
+            api_key=settings.azure_openai_key,
+            api_version=settings.azure_openai_api_version,
             # 30-minute timeout because the AI pipeline runs sequentially
             # over 5 domains × 5 steps each = 25 LLM calls per analysis.
             # The default 10 min is not enough on slow OpenAI instances.
@@ -143,7 +142,7 @@ async def run_ai_scoring_and_summary(
     # LLM call parameters. Low temperature + low top_p + fixed seed so
     # the same input produces the same scoring across re-runs — important
     # for reproducibility of clinical outputs.
-    model = os.getenv("AZURE_OPENAI_MODEL", "gpt-4o")
+    model = get_settings().azure_openai_model
     params = {
         "max_tokens": 4096,
         "temperature": 0.3,

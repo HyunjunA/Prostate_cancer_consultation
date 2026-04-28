@@ -68,14 +68,18 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────────────
 # Configuration
 # ──────────────────────────────────────────────────────────────────────────────
-# Imported here (not at the top) because config.get() lazily loads the
-# YAML on first call; keeping the import next to the constants makes
-# the dependency obvious.
-import config as _cfg  # noqa: E402  intentional: import next to constants for clarity
-NLP_API_URL: str = _cfg.get("nlp.api_url", "http://nlp-classifiers:8000")
-NLP_TIMEOUT: int = int(_cfg.get("nlp.timeout", 30))
-NLP_RETRIES: int = int(_cfg.get("nlp.retries", 3))
-CACHE_TTL: int = int(_cfg.get("nlp.cache_ttl", 3600))  # 1 hour
+# Pull NLP_* env vars from the typed Settings singleton. Used to come
+# from the YAML loader in config.py with env override; P1.S3 routes
+# these straight through core.settings instead so all env-driven knobs
+# live in one place. Module-level capture means the values are read
+# once at import time — same behaviour as before.
+from core.settings import get_settings  # noqa: E402  intentional: import next to constants
+
+_settings = get_settings()
+NLP_API_URL: str = _settings.nlp_api_url
+NLP_TIMEOUT: int = _settings.nlp_timeout
+NLP_RETRIES: int = _settings.nlp_retries
+CACHE_TTL: int = _settings.nlp_cache_ttl
 
 # Class number → model endpoint mapping. The frontend uses the numeric
 # class names ("1".."5") for human-friendly labels; the NLP container
