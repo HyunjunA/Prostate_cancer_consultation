@@ -109,7 +109,9 @@ class TestSubmitSurvey:
         )
         row = result.scalar_one_or_none()
         assert row is not None
-        assert json.loads(row.answers) == {"color": "blue"}
+        # JSONB columns deserialise to Python dict at the ORM layer, so
+        # row.answers is already a dict here — no json.loads needed.
+        assert row.answers == {"color": "blue"}
 
     async def test_different_survey_types_accepted(self, client, api_headers):
         for st in ("sdm", "dcs", "risk_perception", "satisfaction"):
@@ -171,7 +173,8 @@ class TestSubmitSurvey:
             )
         )
         row = result.scalar_one()
-        assert json.loads(row.extra_data) == {"source": "mobile"}
+        # JSONB → dict at the ORM layer, no json.loads needed.
+        assert row.extra_data == {"source": "mobile"}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -186,14 +189,14 @@ class TestGetSubmissions:
         assert resp.status_code == 200
         data = resp.json()
         assert data["total"] == 0
-        assert data["submissions"] == []
+        assert data["data"] == []
 
     async def test_returns_seeded_submissions(self, client, api_headers, db):
         await _seed_submissions(db, count=3, file="same.xlsx")
         resp = await client.get("/api/surveys/submissions", headers=api_headers)
         data = resp.json()
         assert data["total"] == 3
-        assert len(data["submissions"]) == 3
+        assert len(data["data"]) == 3
 
     async def test_pagination_works(self, client, api_headers, db):
         await _seed_submissions(db, count=5)
@@ -206,7 +209,7 @@ class TestGetSubmissions:
         assert data["total"] == 5
         assert data["page"] == 2
         assert data["size"] == 2
-        assert len(data["submissions"]) == 2
+        assert len(data["data"]) == 2
 
     async def test_has_next_has_prev_logic(self, client, api_headers, db):
         await _seed_submissions(db, count=5)
@@ -251,7 +254,7 @@ class TestGetSubmissions:
         )
         data = resp.json()
         assert data["total"] == 1
-        assert data["submissions"][0]["file"] == "target.xlsx"
+        assert data["data"][0]["file"] == "target.xlsx"
 
     async def test_filter_by_survey_type(self, client, api_headers, db):
         await _seed_submissions(db, count=1, file="a.xlsx", survey_type="dcs")
@@ -263,7 +266,7 @@ class TestGetSubmissions:
         )
         data = resp.json()
         assert data["total"] == 1
-        assert data["submissions"][0]["survey_type"] == "dcs"
+        assert data["data"][0]["survey_type"] == "dcs"
 
     async def test_filter_by_speaker(self, client, api_headers, db):
         await _seed_submissions(db, count=1, file="a.xlsx", speaker="Alice")
@@ -275,7 +278,7 @@ class TestGetSubmissions:
         )
         data = resp.json()
         assert data["total"] == 1
-        assert data["submissions"][0]["speaker"] == "Alice"
+        assert data["data"][0]["speaker"] == "Alice"
 
     async def test_no_auth_returns_403(self, client):
         resp = await client.get("/api/surveys/submissions")
@@ -399,7 +402,7 @@ class TestGetByFile:
         )
         data = resp.json()
         assert data["total_submissions"] == 0
-        assert data["submissions"] == []
+        assert data["data"] == []
 
     async def test_response_shape(self, client, api_headers, db):
         await _seed_submissions(db, count=1, file="shape.xlsx")
@@ -407,9 +410,9 @@ class TestGetByFile:
             "/api/surveys/by-file/shape.xlsx", headers=api_headers
         )
         data = resp.json()
-        for key in ("file", "total_submissions", "submissions"):
+        for key in ("file", "total_submissions", "data"):
             assert key in data, f"Missing key: {key}"
-        sub = data["submissions"][0]
+        sub = data["data"][0]
         for key in ("id", "speaker", "survey_type", "answers", "submitted_at", "redcap_synced"):
             assert key in sub, f"Missing submission key: {key}"
 
@@ -434,7 +437,7 @@ class TestGetByType:
         data = resp.json()
         assert data["survey_type"] == "dcs"
         assert data["total"] == 2
-        assert len(data["submissions"]) == 2
+        assert len(data["data"]) == 2
 
     async def test_pagination(self, client, api_headers, db):
         for idx in range(5):
@@ -450,13 +453,13 @@ class TestGetByType:
         assert data["total"] == 5
         assert data["page"] == 2
         assert data["size"] == 2
-        assert len(data["submissions"]) == 2
+        assert len(data["data"]) == 2
 
     async def test_response_shape(self, client, api_headers, db):
         await _seed_submissions(db, count=1, survey_type="dcs")
         resp = await client.get("/api/surveys/by-type/dcs", headers=api_headers)
         data = resp.json()
-        for key in ("survey_type", "total", "page", "size", "submissions"):
+        for key in ("survey_type", "total", "page", "size", "data"):
             assert key in data, f"Missing key: {key}"
 
     async def test_no_auth_returns_403(self, client):

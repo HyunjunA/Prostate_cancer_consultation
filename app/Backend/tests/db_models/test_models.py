@@ -46,7 +46,7 @@ class TestDoctorRewriteLog:
         obj = TestDataFactory.doctor_rewrite()
         assert obj.original_sentence == "Original sentence."
         assert obj.revised_sentence == "Revised sentence."
-        assert obj.selected is False
+        assert obj.score == 0.45
 
     async def test_composite_pk_includes_time(self):
         """PK is (file, i, i2, time)."""
@@ -55,8 +55,12 @@ class TestDoctorRewriteLog:
         assert "time" in pk_cols
         assert len(pk_cols) == 4
 
-    async def test_default_selected_applied_on_persist(self, db):
-        """Column default=False is applied at INSERT time, not at __init__."""
+    async def test_minimal_pk_persist(self, db):
+        """A row with only PK fields persists cleanly — exercises the
+        composite (file, i, i2, time) PK without any optional payload.
+        Previously this asserted on a DoctorRewriteLog.selected default
+        column; that column was removed when the rewrite-selection
+        workflow moved out of this audit log."""
         obj = DoctorRewriteLog(
             file="sel.xlsx", i=1, i2=1,
             time=datetime.now(timezone.utc),
@@ -68,7 +72,8 @@ class TestDoctorRewriteLog:
             select(DoctorRewriteLog).where(DoctorRewriteLog.file == "sel.xlsx")
         )
         row = result.scalar_one()
-        assert row.selected is False
+        assert row.file == "sel.xlsx"
+        assert row.i == 1 and row.i2 == 1
 
     async def test_repr(self):
         obj = TestDataFactory.doctor_rewrite(file="rw.xlsx", i=2, i2=3)
@@ -96,11 +101,13 @@ class TestPatientSummary:
     """PatientSummary model — composite PK (file, speaker)."""
 
     async def test_instantiation(self):
+        # PatientSummary now carries only the (file, speaker) PK.
+        # Migration 008 split the per-domain payload (class_*/summary_*)
+        # off into PatientSummaryDomain — see the factory comment for
+        # the migration date and rationale.
         obj = TestDataFactory.patient_summary()
         assert obj.file == "test-file.xlsx"
         assert obj.speaker == "Patient_1"
-        assert obj.class_1 == "Cancer Prognosis"
-        assert obj.summary_class_5 == "IUS summary text."
 
     async def test_composite_pk(self):
         mapper = inspect(PatientSummary)
@@ -432,12 +439,16 @@ class TestSentencePrediction:
 
 
 class TestBaseMetadata:
-    """Verify all 8 models share the same Base and metadata."""
+    """Verify the registered models share the same Base + metadata."""
 
     async def test_all_models_share_same_base(self):
+        # PatientSummaryScoring / PatientResponses were merged into
+        # PatientSummaryDomain in migration 008; the surviving names
+        # are imported above.
+        from models import PatientSummaryDomain
         models = [
             DoctorRewriteLog,
-            PatientSummary, PatientSummaryScoring, PatientResponses,
+            PatientSummary, PatientSummaryDomain,
             SurveySubmissionLog,
             TranscriptAnalysisLog, SentencePrediction,
         ]
@@ -447,9 +458,9 @@ class TestBaseMetadata:
     async def test_all_table_names_in_metadata(self):
         expected = {
             "doctor_rewrite_log",
-            "patient_summary", "patient_summary_scoring", "patient_responses",
+            "patient_summary", "patient_summary_domain",
             "survey_submission_log",
             "transcript_analysis_log", "sentence_prediction",
         }
         actual = set(Base.metadata.tables.keys())
-        assert expected.issubset(actual)
+        assert expected.issubset(actual), f"missing: {expected - actual}"

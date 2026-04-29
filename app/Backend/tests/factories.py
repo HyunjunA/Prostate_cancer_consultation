@@ -177,3 +177,73 @@ class TestDataFactory:
             )
             for idx in range(1, count + 1)
         ]
+
+    # ── Legacy aliases ─────────────────────────────────────────────────
+    # The doctor-side endpoint tests still call these names, which were
+    # in the factory before two unrelated refactors:
+    #   * the SentencePrediction-on-DoctorSentence rename (a single
+    #     `sentence_prediction` row IS the doctor-side sentence record)
+    #   * migration 008, which folded PatientSummaryScoring and
+    #     PatientResponses into PatientSummaryDomain.
+    # Each alias just dispatches to the modern factory so the call sites
+    # keep working without rewriting every test.
+
+    @staticmethod
+    def _translate_doctor_sentence_kwargs(kwargs: dict) -> dict:
+        """Translate the legacy doctor_sentence kwargs (file/i/i2/class_/score)
+        into the SentencePrediction column names used by the new schema."""
+        if "file" in kwargs:
+            kwargs["patient_id"] = kwargs.pop("file")
+        if "i" in kwargs:
+            kwargs["utterance_index"] = kwargs.pop("i")
+        if "i2" in kwargs:
+            kwargs["sentence_in_utterance"] = kwargs.pop("i2")
+        if "class_" in kwargs:
+            kwargs["model"] = kwargs.pop("class_")
+        if "score" in kwargs:
+            kwargs["pred_score"] = kwargs.pop("score")
+        return kwargs
+
+    @classmethod
+    def doctor_sentence(cls, **kwargs):
+        return cls.sentence_prediction(**cls._translate_doctor_sentence_kwargs(kwargs))
+
+    @classmethod
+    def doctor_sentence_set(cls, analysis_id: int = 1, speaker: str = "Interviewer", **kwargs):
+        # `prediction_set` takes positional analysis_id; the legacy
+        # doctor_sentence_set was always called by keyword and didn't
+        # carry a speaker (the underlying SentencePrediction table does).
+        # Translate, default, and forward.
+        kwargs = cls._translate_doctor_sentence_kwargs(kwargs)
+        rows = cls.prediction_set(analysis_id=analysis_id, **kwargs)
+        for row in rows:
+            row.speaker = speaker
+        return rows
+
+    @classmethod
+    def patient_scoring(
+        cls,
+        file: str = "test-file.xlsx",
+        speaker: str = "Patient_1",
+        domain: str = "cancer_prognosis",
+        patient_scoring: int = 5,
+        **kwargs,
+    ) -> PatientSummaryDomain:
+        return cls.patient_summary_domain(
+            file=file, speaker=speaker, domain=domain,
+            patient_scoring=patient_scoring, **kwargs,
+        )
+
+    @classmethod
+    def patient_responses(
+        cls,
+        file: str = "test-file.xlsx",
+        speaker: str = "Patient_1",
+        domain: str = "cancer_prognosis",
+        patient_response: str = "test response",
+        **kwargs,
+    ) -> PatientSummaryDomain:
+        return cls.patient_summary_domain(
+            file=file, speaker=speaker, domain=domain,
+            patient_response=patient_response, **kwargs,
+        )
