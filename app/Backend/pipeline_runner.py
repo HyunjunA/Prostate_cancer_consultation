@@ -139,51 +139,20 @@ async def process_single_file(
     import persistence
     import ai_pipeline_service
 
-    # ── sys.modules shim for sentence_classification's `from config import ...` ──
-    # sentence_classification was written as a standalone package and
-    # uses `from config import MODEL_TO_FULL` etc. Inside the Backend
-    # container, `config` already means our YAML loader, NOT the
-    # constants the package expects. We swap a fake `config` module
-    # into sys.modules just long enough to import the
-    # sentence_classification submodules, then restore the real one.
-    import types
-    _sc_config = types.ModuleType("sc_config")
-    _sc_config.MODEL_TO_FULL = {
-        "cp": "cancer_prognosis",
-        "le": "life_expectancy",
-        "ed": "erectile_dysfunction_potency",
-        "inc": "continence",
-        "ius": "irritative_urinary_symptoms_frequency_urgency_nocturnia",
-    }
-    _sc_config.MODEL_TO_SHEET = {v: k for k, v in OUTCOME_TO_SHEET.items()}
-    _sc_config.SHEET_ORDER = ["cp", "inc", "ed", "ius", "le"]
-
-    # Stash the real config so we can restore after the imports.
-    _orig_config = sys.modules.get("config")
-    sys.modules["config"] = _sc_config
-
-    from sentence_classification.preprocessing import identify_doctor_speaker, filter_doctor_rows
-    from sentence_classification.segmentation import segment_sentences
-    from sentence_classification.classification import classify_all_models
-    from sentence_classification.selection import select_top_sentences_all_outcomes
-    from sentence_classification.context import add_context_all_outcomes
-    # AI repo's export module — also writes nested output_test-compatible format
-    # into a separate directory (NESTED_OUTPUT_DIR, default = AI repo's data/output).
-    # Import inside the shim so its own `from config import ...` resolves correctly.
-    from sentence_classification.export import (
-        export_intermediate_files as _ai_export_intermediate_files,
-        export_final_csv as _ai_export_final_csv,
+    # sentence_classification submodules are imported once at process startup
+    # by sentence_classification_loader, which handles the `config` name
+    # collision the upstream package introduces. See that module's docstring
+    # for the rationale and the previous race-prone behavior.
+    from sentence_classification_loader import (
+        identify_doctor_speaker,
+        filter_doctor_rows,
+        segment_sentences,
+        classify_all_models,
+        select_top_sentences_all_outcomes,
+        add_context_all_outcomes,
+        export_intermediate_files,
+        export_final_csv,
     )
-    # Stash the import-time-bound functions on this module so the
-    # restore-config block below doesn't break later access.
-    sys.modules[__name__]._ai_export_intermediate_files = _ai_export_intermediate_files
-    sys.modules[__name__]._ai_export_final_csv = _ai_export_final_csv
-
-    # Restore original config module
-    if _orig_config is not None:
-        sys.modules["config"] = _orig_config
-    else:
-        del sys.modules["config"]
 
     filename = os.path.basename(filepath)
 
@@ -257,20 +226,18 @@ async def process_single_file(
     # data/output/<file-stem>/{step2_segmentation, step3_classification,
     # step4_selection, step5_context, final}/ exactly like data/output_test.
     output_dir = cfg.get("paths", {}).get("output_dir")
-    _intermediate = globals().get("_ai_export_intermediate_files")
-    _final = globals().get("_ai_export_final_csv")
-    if output_dir and _intermediate and _final and df_sentences is not None and df_predicted is not None:
+    if output_dir and df_sentences is not None and df_predicted is not None:
         try:
             Path(output_dir).mkdir(parents=True, exist_ok=True)
             stem = Path(filename).stem
-            _intermediate(
+            export_intermediate_files(
                 segmented_df=df_sentences,
                 predictions_df=df_predicted,
                 top_dfs=final_results,
                 output_path=str(output_dir),
                 folder_name=stem,
             )
-            _final(
+            export_final_csv(
                 top_dfs=final_results,
                 folder_name=stem,
                 output_path=str(output_dir),
