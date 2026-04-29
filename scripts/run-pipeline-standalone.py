@@ -222,11 +222,11 @@ def _resolve_transcripts(args: argparse.Namespace) -> list[Path]:
     return files
 
 
-async def _process_one(transcript: Path, Session, cfg, models_mod, pipeline_runner_mod) -> dict | None:
+async def _process_one(transcript: Path, Session, models_mod, pipeline_runner_mod) -> dict | None:
     """Run pipeline for a single file, return summary or None on failure."""
     section(f"Pipeline run — {transcript.name}")
     t0 = time.perf_counter()
-    result = await pipeline_runner_mod.process_single_file(str(transcript), Session, cfg)
+    result = await pipeline_runner_mod.process_single_file(str(transcript), Session)
     elapsed = time.perf_counter() - t0
 
     if not result:
@@ -266,18 +266,15 @@ async def main(args: argparse.Namespace) -> int:
     # data/output_test/ works out of the box.
     _output_dir_raw = os.getenv("OUTPUT_DIR", "../AI_physician_patient_communication/data/output")
     _output_dir = _output_dir_raw if Path(_output_dir_raw).is_absolute() else str((REPO_ROOT / _output_dir_raw).resolve())
-    cfg = {
-        "pipeline": {
-            "top_n": args.top_n,
-            "context_window": args.context_window,
-        },
-        "nlp": {
-            "api_url": os.getenv("NLP_API_URL", "http://localhost:8001"),
-        },
-        "paths": {
-            "output_dir": _output_dir,
-        },
-    }
+
+    # Push CLI overrides into the environment BEFORE importing backend
+    # modules. pipeline_runner reads its tuning via core.settings (which
+    # is @lru_cache'd on first import), so this is the last moment we
+    # can influence top_n / context_window / output_dir without a cache
+    # bust. Same trick the underlying YAML loader used to do internally.
+    os.environ["PIPELINE_TOP_N"] = str(args.top_n)
+    os.environ["PIPELINE_CONTEXT_WINDOW"] = str(args.context_window)
+    os.environ["OUTPUT_DIR"] = _output_dir
 
     # Optional: skip the AI pipeline by short-circuiting the env var the
     # ai_pipeline_service uses to load credentials
@@ -288,8 +285,9 @@ async def main(args: argparse.Namespace) -> int:
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
     import models  # noqa: F401  (registers metadata)
     import pipeline_runner
+    from core.settings import get_settings
 
-    db_url = os.getenv("DATABASE_URL")
+    db_url = get_settings().database_url
     engine = create_async_engine(db_url, pool_pre_ping=True)
     Session = async_sessionmaker(bind=engine, expire_on_commit=False)
 
@@ -300,7 +298,7 @@ async def main(args: argparse.Namespace) -> int:
     failures: list[str] = []
     for transcript in transcripts:
         try:
-            r = await _process_one(transcript, Session, cfg, models, pipeline_runner)
+            r = await _process_one(transcript, Session, models, pipeline_runner)
             if r:
                 results.append(r)
             else:
