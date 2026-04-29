@@ -95,12 +95,19 @@ class TestMainEnvironment:
 
     async def test_returns_2_when_database_url_not_set(self):
         """main() must return exit code 2 when DATABASE_URL is not in the env."""
+        # core.settings.get_settings is @lru_cache'd; if a previous test
+        # already constructed Settings with a valid DATABASE_URL, the
+        # cache hides our cleared environment. Invalidate it so this
+        # test actually exercises the Settings-validation failure path.
+        from core.settings import get_settings
+        get_settings.cache_clear()
         with patch.dict("os.environ", {}, clear=True):
-            # Remove DATABASE_URL if present
             import os
             os.environ.pop("DATABASE_URL", None)
             from verify_pipeline_db import main
             code = await main(analysis_id=None, as_json=False)
+        # Restore the cache for the rest of the suite.
+        get_settings.cache_clear()
         assert code == 2
 
     async def test_returns_1_when_transcript_log_is_empty(self):
