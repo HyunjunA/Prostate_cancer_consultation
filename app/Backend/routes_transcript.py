@@ -114,9 +114,18 @@ async def analyze_transcript(
         (df_raw, df_filtered, df_sentences, df_predicted, top_by_model).
     """
     import asyncio
-    import sys
-    import types
     import tempfile
+
+    # sentence_classification submodules are pre-loaded at process startup;
+    # see sentence_classification_loader.py for why this isn't a direct import.
+    from sentence_classification_loader import (
+        identify_doctor_speaker,
+        filter_doctor_rows,
+        segment_sentences,
+        classify_all_models,
+        select_top_sentences_all_outcomes,
+        add_context_all_outcomes,
+    )
 
     # sentence_classification.read_input_file expects a real file path.
     # Write the upload to a temp file, then delete it in `finally` below
@@ -127,31 +136,6 @@ async def analyze_transcript(
         tmp_path = tmp.name
 
     try:
-        # ── sys.modules shim for sentence_classification's `from config import` ──
-        # Same trick as pipeline_runner.process_single_file: the package
-        # was written assuming `config` means a constants module, but in
-        # the Backend container `config` means our YAML loader. Swap a
-        # fake `config` into sys.modules just long enough to import the
-        # submodules, then restore the real one.
-        _sc_config = types.ModuleType("sc_config")
-        _sc_config.MODEL_TO_FULL = {v: k for k, v in OUTCOME_TO_SHEET.items()}
-        _sc_config.MODEL_TO_SHEET = dict(OUTCOME_TO_SHEET)
-        _sc_config.SHEET_ORDER = ["cp", "inc", "ed", "ius", "le"]
-
-        _orig_config = sys.modules.get("config")
-        sys.modules["config"] = _sc_config
-
-        from sentence_classification.preprocessing import identify_doctor_speaker, filter_doctor_rows
-        from sentence_classification.segmentation import segment_sentences
-        from sentence_classification.classification import classify_all_models
-        from sentence_classification.selection import select_top_sentences_all_outcomes
-        from sentence_classification.context import add_context_all_outcomes
-
-        if _orig_config is not None:
-            sys.modules["config"] = _orig_config
-        else:
-            sys.modules.pop("config", None)
-
         # Step 1: Read
         df_raw, patient_id = _read_transcript(tmp_path, filename)
 
