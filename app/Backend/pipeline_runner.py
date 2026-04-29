@@ -3,7 +3,8 @@
 
 Ivan's rules applied:
   - Thin main: each Step is ONE function call, no inline logic
-  - Config-driven: all parameters from config.yaml
+  - Config-driven: every parameter comes from core.settings (env vars
+    with typed defaults; previously these lived in config.yaml)
   - Pipeline ≠ DB: persistence is a separate module
   - Worker/Monitor: optional continuous scanning mode
   - Output folder: per-file subfolder structure for traceability
