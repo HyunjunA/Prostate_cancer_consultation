@@ -50,6 +50,9 @@ Related modules:
 from typing import Dict, Any, Optional
 from datetime import datetime
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -439,9 +442,14 @@ async def import_to_redcap(submission: SurveySubmission, timestamp: str) -> dict
         }
 
     except Exception as e:
-        print(f"[ERROR] [ERROR] Exception occurred: {type(e).__name__}")
-        print(f"[ERROR] Message: {str(e)}")
-        print("=" * 70 + "\n")
+        # CLAUDE.md forbids print() in production code; this used to dump
+        # the exception via print() and lost the traceback. logger.error
+        # with exc_info=True keeps the full stack and routes through the
+        # configured log level instead of polluting stdout.
+        logger.error(
+            "REDCap survey import failed (record_id=%s): %s",
+            record_id, e, exc_info=True,
+        )
         return {"success": False, "error": str(e), "record_id": record_id}
 
 # ══════════════════════════════════════════════════════════════════════════════

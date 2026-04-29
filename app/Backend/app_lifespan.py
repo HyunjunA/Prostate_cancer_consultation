@@ -26,12 +26,15 @@ Why each piece is here:
                        deploy).
 """
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
 from nlp_classifier_client import close_http_client
 from redis_client import close_redis, init_redis
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -58,8 +61,12 @@ async def lifespan(app: FastAPI):
             # `prefix` namespaces our keys in Redis so multiple apps
             # sharing the same Redis instance do not collide.
             await FastAPILimiter.init(redis, prefix="prostate:rl")
-        except Exception:
-            pass
+        except Exception as exc:
+            # Rate limiter init is non-fatal, but a silent swallow makes
+            # version-mismatch and Redis-shape problems invisible until
+            # someone wonders why /login isn't being throttled. Log so
+            # operators see the failure in startup logs.
+            logger.warning("FastAPILimiter init failed (rate limiting disabled): %s", exc)
 
     # `yield` hands control back to FastAPI. The app serves traffic
     # for as long as the process is alive. Anything below this line
