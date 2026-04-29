@@ -508,59 +508,146 @@ async def get_doctor_score_average(
     user: AuthUser = Depends(get_current_user)
 ):
     """
-    Get average score grouped by file, speaker, class.
+    Per-(patient, category) summary score, plus a per-patient overall.
 
-    Uses GPT-4o ai_score from llm_domain_scoring_and_summary.
-    For the landing page Overall Score, uses ai_overall_score from transcript_analysis_log.
+    Scoring rule:
+      * For each (file, category) pair, the displayed score is the
+        MAX(ai_score) across the evidence sentences within the latest
+        analysis run for that file. The pipeline can store multiple
+        evidence rows per category (one per top-N sentence that survived
+        GPT-4o filtering); a category is treated as "covered" as soon as
+        the doctor has at least one strong explanation, so taking MAX
+        avoids letting weaker repeated evidence drag down the score.
+      * The per-patient overall is AVG of the five per-category MAX
+        values. Categories with no evidence in the latest analysis
+        contribute 0 — every domain counts toward the denominator, so a
+        domain the doctor never addressed is a real penalty rather than a
+        neutral skip.
+
+    Multiple historical analyses are deliberately ignored: re-running a
+    transcript "replaces" prior assessments rather than averaging across
+    them. Same convention as /scores/summary/{file}.
+
+    Response shape is preserved for the dashboard hook
+    (`ScoreAverageItem` in useDoctorData.tsx): one row per (file, class)
+    with avg_score / min_score / max_score all carrying the MAX value,
+    and count = number of evidence rows the MAX was chosen from.
     """
     from models import LLMDomainScoringAndSummary
 
-    # Build query from llm_domain_scoring_and_summary
-    stmt = select(
-        LLMDomainScoringAndSummary.source_filename.label('file'),
-        LLMDomainScoringAndSummary.domain.label('class_'),
-        LLMDomainScoringAndSummary.ai_score.label('avg_score'),
-        LLMDomainScoringAndSummary.source_sentence.label('sentence'),
-        LLMDomainScoringAndSummary.treatment,
+    # ── Step 1: latest analysis_id per source_filename ──────────────
+    # We aggregate this once and then join below; cheaper and clearer
+    # than a correlated subquery per row.
+    latest_analysis = (
+        select(
+            TranscriptAnalysisLog.source_filename.label("file"),
+            func.max(TranscriptAnalysisLog.id).label("aid"),
+        )
+        .group_by(TranscriptAnalysisLog.source_filename)
+        .subquery()
     )
 
+    # ── Step 2: MAX(ai_score) + COUNT per (file, domain) within that
+    # latest analysis only. NULL ai_scores are excluded from the MAX
+    # but still counted as evidence rows so operators see "we had 3
+    # evidence sentences but no GPT-4o score" rather than silently
+    # dropping the row.
+    L = LLMDomainScoringAndSummary
+    stmt = (
+        select(
+            L.source_filename.label("file"),
+            L.domain.label("class_"),
+            func.max(L.ai_score).label("score"),
+            func.count(L.id).label("evidence_count"),
+        )
+        .join(
+            latest_analysis,
+            (L.source_filename == latest_analysis.c.file)
+            & (L.analysis_id == latest_analysis.c.aid),
+        )
+        .group_by(L.source_filename, L.domain)
+    )
     if file:
-        stmt = stmt.where(LLMDomainScoringAndSummary.source_filename == file)
+        stmt = stmt.where(L.source_filename == file)
     if class_:
-        stmt = stmt.where(LLMDomainScoringAndSummary.domain == class_)
+        stmt = stmt.where(L.domain == class_)
+    stmt = stmt.order_by(L.source_filename, L.domain)
+    rows = (await db.execute(stmt)).all()
 
-    stmt = stmt.order_by(LLMDomainScoringAndSummary.source_filename, LLMDomainScoringAndSummary.domain)
-    results = (await db.execute(stmt)).all()
-
-    # Get speaker from sentence_prediction
+    # ── Step 3: speaker resolution (unchanged from previous version) ─
     speaker_val = speaker
     if not speaker_val and file:
-        sp_stmt = select(SentencePrediction.speaker).where(
-            SentencePrediction.patient_id == file
-        ).distinct().limit(1)
+        sp_stmt = (
+            select(SentencePrediction.speaker)
+            .where(SentencePrediction.patient_id == file)
+            .distinct()
+            .limit(1)
+        )
         speaker_val = (await db.execute(sp_stmt)).scalar_one_or_none() or ""
 
-    return {
-        "total_groups": len(results),
-        "filters": {
-            "file": file,
-            "speaker": speaker_val,
-            "class": class_
-        },
-        "data": [
-            {
-                "file": r.file,
+    # ── Step 4: pad missing categories with score=0 ─────────────────
+    # Every analysed file should have exactly 5 rows in the response —
+    # one per category. A category the doctor never addressed shows up
+    # as score=0, evidence_count=0. Without this, the dashboard would
+    # see only the categories that have evidence and compute an
+    # inflated 5-domain average over a partial denominator.
+    ALL_CATEGORIES = ("cp", "le", "ed", "inc", "ius")
+    by_file: dict[str, dict[str, dict]] = {}
+    for r in rows:
+        by_file.setdefault(r.file, {})[r.class_] = {
+            "score": r.score,
+            "evidence_count": r.evidence_count,
+        }
+
+    # If the caller filtered by class_, only emit that class — don't
+    # invent rows the user explicitly excluded.
+    target_categories = (class_,) if class_ else ALL_CATEGORIES
+
+    data: list[dict] = []
+    for fname, by_class in by_file.items():
+        for cls in target_categories:
+            entry = by_class.get(cls, {"score": 0, "evidence_count": 0})
+            score = entry["score"] if entry["score"] is not None else 0
+            data.append({
+                "file": fname,
                 "speaker": speaker_val or "",
-                "class": r.class_,
-                "avg_score": r.avg_score,
-                "count": 1,
+                "class": cls,
+                # avg_score is kept for ScoreAverageItem schema compatibility,
+                # but it is now the MAX evidence score, not a true average.
+                "avg_score": score,
+                "count": entry["evidence_count"],
                 "rewritten_count": 0,
-                "original_count": 1,
-                "min_score": r.avg_score,
-                "max_score": r.avg_score,
-            }
-            for r in results
+                "original_count": entry["evidence_count"],
+                "min_score": score,
+                "max_score": score,
+            })
+
+    # ── Step 5: per-patient overall = AVG of 5 per-category MAXs ────
+    # Missing categories already padded to 0 above, so this is just a
+    # straight mean over the 5 entries (or len(target_categories) if
+    # the caller filtered to a single class).
+    patient_overall: dict[str, dict] = {}
+    n_categories = len(target_categories)
+    for fname, by_class in by_file.items():
+        scores = [
+            (by_class.get(cls, {}).get("score") or 0)
+            for cls in target_categories
         ]
+        patient_overall[fname] = {
+            "score": round(sum(scores) / n_categories, 2),
+            "categories_present": sum(1 for cls in target_categories if cls in by_class),
+            "categories_total": n_categories,
+        }
+
+    return {
+        "total_groups": len(data),
+        "filters": {"file": file, "speaker": speaker_val, "class": class_},
+        "data": data,
+        # patient_overall: keyed by source_filename. New field added on
+        # top of the existing schema — TS interface ignores unknown keys
+        # so the dashboard doesn't break, and a future migration can
+        # promote this into the typed response when convenient.
+        "patient_overall": patient_overall,
     }
 
 
