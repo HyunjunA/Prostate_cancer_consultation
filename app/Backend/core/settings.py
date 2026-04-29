@@ -98,6 +98,21 @@ class Settings(BaseSettings):
     nlp_retries: int = Field(3, ge=1, le=10)
     nlp_cache_ttl: int = Field(3600, ge=0)
 
+    # ── Pipeline tuning ──────────────────────────────────────────────
+    # Migrated here from config.py / config.yaml so the backend has a
+    # single typed source of truth. Defaults match the historical YAML
+    # values; env vars (PIPELINE_TOP_N, PIPELINE_CONTEXT_WINDOW,
+    # PIPELINE_BATCH_SIZE) override them per-environment.
+    pipeline_top_n: int = Field(10, ge=1, le=1000)
+    pipeline_context_window: int = Field(3, ge=0, le=20)
+    pipeline_batch_size: int = Field(50, ge=1, le=1000)
+
+    # ── Background worker (CLI watch mode) ───────────────────────────
+    # Used by pipeline_runner.py when run with --watch or when
+    # WORKER_ENABLED=true. The scan interval is in seconds.
+    worker_enabled: bool = Field(False)
+    worker_scan_interval: int = Field(3600, ge=1, le=86400)
+
     # ── Azure OpenAI ─────────────────────────────────────────────────
     # All optional — the AI pipeline degrades gracefully when these
     # are missing (see ai_pipeline_service._create_client).
