@@ -81,18 +81,20 @@ async def client(db, monkeypatch):
     monkeypatch.setattr(redis_client, "_redis", None)
 
     # Mock NLP health check to return healthy.
-    # Patch the source module unconditionally; also patch main's local
-    # reference if main still binds the symbol at module scope. Older
-    # versions did `from nlp_classifier_client import nlp_health_check`
-    # at the top of main.py; current versions call through the module
-    # so the local binding may not exist. raising=False lets that
-    # second patch no-op silently when the attribute isn't there.
+    # Patch the source module AND every consumer that imported the symbol
+    # at module scope. `from nlp_classifier_client import nlp_health_check`
+    # creates a local binding inside the consumer, which monkeypatching the
+    # source module does not retroactively rewrite — each binding is its
+    # own reference. raising=False is safe for consumers that may have
+    # since refactored to call through the module.
     import nlp_classifier_client
     import main as main_module
+    import routes_system
     async def _mock_nlp_health():
         return {"status": "healthy", "detail": "mocked"}
     monkeypatch.setattr(nlp_classifier_client, "nlp_health_check", _mock_nlp_health)
     monkeypatch.setattr(main_module, "nlp_health_check", _mock_nlp_health, raising=False)
+    monkeypatch.setattr(routes_system, "nlp_health_check", _mock_nlp_health, raising=False)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
