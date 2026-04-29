@@ -38,7 +38,6 @@ The script is read-only — it never writes to the DB.
 import argparse
 import asyncio
 import json
-import os
 import sys
 from typing import Any
 
@@ -46,6 +45,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import models as M
+from core.settings import get_settings
 
 
 # ── ANSI colors for terminal readability ─────────────────────────────────────
@@ -244,17 +244,16 @@ async def _check_analysis(db, analysis_id: int) -> list[CheckResult]:
 # ── Top-level run ────────────────────────────────────────────────────────────
 async def main(analysis_id: int | None, as_json: bool) -> int:
     """Entry point — connect, run checks, print, return exit code."""
-    db_url = os.getenv("DATABASE_URL")
-    if not db_url:
-        # Fail fast with a stderr message + non-zero exit so CI catches
-        # the misconfiguration.
-        print("ERROR: DATABASE_URL env var not set", file=sys.stderr)
+    # core.settings validates DATABASE_URL (must use the +asyncpg
+    # driver) and fails the Settings constructor when the env var is
+    # missing or malformed. Catch that here so the CLI keeps its
+    # int-exit-code contract instead of a bare stack trace; the message
+    # in the ValidationError already names the offending field.
+    try:
+        db_url = get_settings().database_url
+    except Exception as e:
+        print(f"ERROR: backend configuration invalid: {e}", file=sys.stderr)
         return 2
-    if db_url.startswith("postgresql://"):
-        # Backend env normally uses "postgresql+asyncpg://..." but some
-        # CI environments still ship the plain scheme. Normalise so the
-        # async engine never sees the wrong driver.
-        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
     # Build a short-lived engine just for this script; we tear it down
     # before exit so the script returns its connections cleanly.

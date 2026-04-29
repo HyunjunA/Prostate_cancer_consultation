@@ -35,7 +35,6 @@ Each stage prints a row count + sample rows. Use --full to dump every row.
 import argparse
 import asyncio
 import json
-import os
 import sys
 from typing import Any
 
@@ -43,6 +42,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 import models as M
+from core.settings import get_settings
 
 
 # ── Plain-text formatting helpers ──────────────────────────────────────────
@@ -295,14 +295,15 @@ async def _dump_ai_final(db, aid: int, full: bool) -> dict:
 
 # ── Main ───────────────────────────────────────────────────────────────────
 async def main(arg: str, full: bool, export: str | None) -> int:
-    db_url = os.getenv("DATABASE_URL")
-    if not db_url:
-        print("ERROR: DATABASE_URL env var not set", file=sys.stderr)
+    # core.settings validates DATABASE_URL (must use the +asyncpg
+    # driver) and fails the Settings constructor when the env var is
+    # missing or malformed. Catch that here so the CLI keeps its
+    # int-exit-code contract instead of a bare stack trace.
+    try:
+        db_url = get_settings().database_url
+    except Exception as e:
+        print(f"ERROR: backend configuration invalid: {e}", file=sys.stderr)
         return 2
-    if db_url.startswith("postgresql://"):
-        # Same DSN normalisation as verify_pipeline_db.py — accept
-        # either scheme so this works on dev / prod / CI.
-        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
     engine = create_async_engine(db_url, future=True)
     Session = async_sessionmaker(engine, expire_on_commit=False)
