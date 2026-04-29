@@ -32,11 +32,21 @@ Conventions used throughout:
 """
 
 from sqlalchemy import (
-    Column, ForeignKey, ForeignKeyConstraint, Index, LargeBinary, String, Integer, Float,
+    JSON, Column, ForeignKey, ForeignKeyConstraint, Index, LargeBinary, String, Integer, Float,
     Boolean, Text, TIMESTAMP, CheckConstraint, func
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship, declarative_base
+
+# JSONB type that transparently falls back to plain JSON when running
+# under SQLite. Production uses Postgres (full JSONB with binary storage
+# and GIN indexes); the unit-test fixtures in tests/conftest.py use an
+# in-memory SQLite engine, where JSONB does not exist. SQLite's JSON
+# preserves the dict shape the tests need; the binary/index features
+# don't matter for tests. This avoids the
+#     UnsupportedCompilationError: ... can't render element of type JSONB
+# error during Base.metadata.create_all() at test setup.
+JSONB_COMPAT = JSONB().with_variant(JSON(), "sqlite")
 
 # Single Base instance shared with auth/models.py so create_all() and
 # Alembic see every table from one metadata registry. DO NOT create a
@@ -182,8 +192,8 @@ class SurveySubmissionLog(Base):
     file = Column(String(255), nullable=False, index=True)
     speaker = Column(String(100), nullable=False, index=True)
     survey_type = Column(String(50), nullable=False, index=True)
-    answers = Column(JSONB, nullable=False)
-    extra_data = Column(JSONB)
+    answers = Column(JSONB_COMPAT, nullable=False)
+    extra_data = Column(JSONB_COMPAT)
     submitted_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
     redcap_synced = Column(Boolean, default=False)
@@ -220,7 +230,7 @@ class TranscriptAnalysisLog(Base):
     total_sentences = Column(Integer, nullable=False, default=0)
     top_n = Column(Integer, nullable=False, default=0)
     context_window = Column(Integer, nullable=False, default=3)
-    model_results = Column(JSONB)            # per-model scores (auto dict↔JSON)
+    model_results = Column(JSONB_COMPAT)     # per-model scores (auto dict↔JSON)
     xlsx_data = Column(LargeBinary)         # binary xlsx for DB-backed download
     source_filename = Column(String(500))
     pipeline_started_at = Column(TIMESTAMP(timezone=True))  # when processing began
@@ -328,7 +338,7 @@ class PatientFirstBehavior(Base):
     # `metadata` is reserved by SQLAlchemy on the Base class itself,
     # so we name the Python attribute `event_metadata` and tell it the
     # actual column name via Column('metadata', ...).
-    event_metadata = Column('metadata', JSONB, nullable=False, server_default='{}')
+    event_metadata = Column('metadata', JSONB_COMPAT, nullable=False, server_default='{}')
     device_type = Column(String(20))
     client_timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
@@ -350,7 +360,7 @@ class PatientFollowupSurvey(Base):
     survey_type = Column(String(30))
     question_id = Column(String(50))
     step_number = Column(Integer)  # SMALLINT in DB
-    event_metadata = Column('metadata', JSONB, nullable=False, server_default='{}')
+    event_metadata = Column('metadata', JSONB_COMPAT, nullable=False, server_default='{}')
     device_type = Column(String(20))
     client_timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
@@ -367,7 +377,7 @@ class DoctorBehavior(Base):
     event_type = Column(String(30), nullable=False)
     target_type = Column(String(20))  # patient | topic | sentence
     target_id = Column(String(255))
-    event_metadata = Column('metadata', JSONB, nullable=False, server_default='{}')
+    event_metadata = Column('metadata', JSONB_COMPAT, nullable=False, server_default='{}')
     device_type = Column(String(20))
     client_timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
@@ -460,7 +470,7 @@ class NLPPipelineIntermediate(Base):
     analysis_id = Column(Integer, ForeignKey('transcript_analysis_log.id', ondelete='CASCADE'), nullable=False)
     patient_id = Column(String(255), nullable=False)
     step = Column(String(20), nullable=False)            # raw / filtered / sentences / top_by_model
-    payload = Column(JSONB, nullable=False)
+    payload = Column(JSONB_COMPAT, nullable=False)
     row_count = Column(Integer)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
