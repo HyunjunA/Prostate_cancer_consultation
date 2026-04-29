@@ -47,6 +47,8 @@ import io
 
 import pandas as pd
 
+from core.settings import get_settings
+
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -128,7 +130,7 @@ def _export_to_xlsx_bytes(final_results) -> bytes:
 
 
 async def process_single_file(
-    filepath: str, Session, cfg: Dict[str, Any]
+    filepath: str, Session
 ) -> Optional[Dict[str, Any]]:
     """Process one transcript through Steps 1-9. Each Step = one call.
 
@@ -169,9 +171,10 @@ async def process_single_file(
     logger.info("Processing: %s", filename)
     logger.info("=" * 60)
 
-    top_n = cfg["pipeline"]["top_n"]
-    context_window = cfg["pipeline"]["context_window"]
-    nlp_url = cfg.get("nlp", {}).get("api_url", "http://nlp-classifiers:8000")
+    settings = get_settings()
+    top_n = settings.pipeline_top_n
+    context_window = settings.pipeline_context_window
+    nlp_url = settings.nlp_api_url
     outcomes = list(OUTCOME_TO_SHEET.values())  # ["cp", "inc", "ed", "ius", "le"]
 
     # ── Step 1: Read transcript (xlsx or csv) ────────────────────────────
@@ -225,7 +228,7 @@ async def process_single_file(
     # Calls sentence_classification.export directly — produces
     # data/output/<file-stem>/{step2_segmentation, step3_classification,
     # step4_selection, step5_context, final}/ exactly like data/output_test.
-    output_dir = cfg.get("paths", {}).get("output_dir")
+    output_dir = settings.output_dir
     if output_dir and df_sentences is not None and df_predicted is not None:
         try:
             Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -344,17 +347,13 @@ _DOMAIN_SLOT_MAP = {
 
 # ── Main: single run or worker/monitor ───────────────────────────────────────
 
-async def run_pipeline(cfg: Dict[str, Any], transcript_dir: str = None, single_file: str = None):
+async def run_pipeline(transcript_dir: str = None, single_file: str = None):
     """Run pipeline on all transcripts or a single file."""
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
     import models
 
-    DATABASE_URL = os.getenv("DATABASE_URL")
-    if not DATABASE_URL:
-        logger.error("DATABASE_URL not set")
-        sys.exit(1)
-
-    engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
+    settings = get_settings()
+    engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     Session = async_sessionmaker(bind=engine, expire_on_commit=False)
 
     # Idempotent: if tables already exist, create_all is a no-op.
@@ -366,7 +365,7 @@ async def run_pipeline(cfg: Dict[str, Any], transcript_dir: str = None, single_f
     if single_file:
         files = [single_file]
     else:
-        dir_path = transcript_dir or cfg.get("paths", {}).get("transcript_dir", "/app/data/transcripts")
+        dir_path = transcript_dir or settings.transcripts_dir
         if not os.path.isdir(dir_path):
             logger.warning("Transcript directory not found: %s", dir_path)
             await engine.dispose()
@@ -389,7 +388,7 @@ async def run_pipeline(cfg: Dict[str, Any], transcript_dir: str = None, single_f
     # with a Semaphore later if throughput becomes the bottleneck.
     results = []
     for filepath in files:
-        result = await process_single_file(filepath, Session, cfg)
+        result = await process_single_file(filepath, Session)
         if result:
             results.append(result)
 
@@ -405,16 +404,16 @@ async def run_pipeline(cfg: Dict[str, Any], transcript_dir: str = None, single_f
     logger.info("=" * 60)
 
 
-async def run_worker(cfg: Dict[str, Any]):
+async def run_worker():
     """Worker/Monitor mode — continuously scan for new transcripts.
 
     Ivan's rule: "continuously running, scanning folder, sleeping for an hour."
     """
-    interval = cfg.get("worker", {}).get("scan_interval_seconds", 3600)
+    interval = get_settings().worker_scan_interval
     logger.info("Worker mode: scanning every %d seconds", interval)
 
     while True:
-        await run_pipeline(cfg)
+        await run_pipeline()
         # Sleep BETWEEN scans rather than running tightly — gives the
         # operator a window to land new files without us holding any
         # DB connection.
@@ -424,20 +423,16 @@ async def run_worker(cfg: Dict[str, Any]):
 
 if __name__ == "__main__":
     import argparse
-    import config
 
     parser = argparse.ArgumentParser(description="Full transcript analysis pipeline")
     parser.add_argument("--dir", type=str, default=None, help="Transcript directory")
     parser.add_argument("--file", type=str, default=None, help="Single transcript file")
     parser.add_argument("--watch", action="store_true", help="Continuous monitoring mode")
-    parser.add_argument("--config", type=str, default=None, help="Config file path")
     args = parser.parse_args()
 
-    cfg = config.load_config(args.config)
-
-    # --watch on the CLI OR worker.enabled in YAML triggers worker
+    # --watch on the CLI OR WORKER_ENABLED=true in env triggers worker
     # mode; either is enough so ops can flip the switch without code.
-    if args.watch or cfg.get("worker", {}).get("enabled", False):
-        asyncio.run(run_worker(cfg))
+    if args.watch or get_settings().worker_enabled:
+        asyncio.run(run_worker())
     else:
-        asyncio.run(run_pipeline(cfg, transcript_dir=args.dir, single_file=args.file))
+        asyncio.run(run_pipeline(transcript_dir=args.dir, single_file=args.file))
