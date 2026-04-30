@@ -12,7 +12,6 @@ using monkeypatch on the routes_surveys module-level flags and httpx responses
 via the `respx` library.
 """
 
-import json
 
 import httpx
 import pytest

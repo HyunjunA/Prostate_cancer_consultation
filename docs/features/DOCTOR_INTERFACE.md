@@ -1,117 +1,83 @@
-# Patient Interface – Data Persistence & Validation Checklist
+# Doctor Interface – Data Persistence & Validation Checklist
 
-## Purpose
-
-This document provides a step-by-step checklist to validate that data generated from the Patient Interface
-(scoring results and survey submissions) is correctly stored in:
-
-1. The internal database, and
-2. The REDCap project.
+Step-by-step checklist to validate that data generated from the Doctor Interface (rewrites, scoring, behavior tracking) is correctly stored in the database.
 
 ---
 
-## 1. Patient Interface – Scoring Persistence Check
+## 1. Sentence Rewrite Persistence
 
-### URL
+URL example: `http://localhost:3001/doctor?fileid=quality-coded-nlp-pilot-sid-1.xlsx&speaker=Doctor`
 
-http://localhost:3000/?fileid=quality-coded-nlp-pilot-sid-1.xlsx&doctorid=Interviewer:
+After the doctor uses AI-assisted rewrite on a sentence, verify the rewrite is logged.
 
-### Description
+**Tables touched**: `doctor_rewrite_log`
 
-After each scoring is calculated in the Patient Interface, verify that the results are properly stored in the database.
+**Endpoints to verify**:
+- `GET /api/doctor/rewrites/{file}/{i}/{i2}/{class_}` — current rewrite
+- `GET /api/doctor/rewrites/{file}/{i}/{i2}/history` — rewrite history
+- `GET /api/doctor/rewrites/stats` — aggregate stats
 
-### Validation Method
-
-Run the following API in the `api_call_test.rest` file.
-
-### API Call
-
-```
-11) Patient Interface - Get Scoring
-# return all scoring from the patient_responses table
-```
-
-### Checklist
-
-- [ ] Scoring results exist in the `patient_responses` table
-- [ ] Scoring values are retrievable by patient ID
-- [ ] Stored scoring values match those calculated in the UI
+**Checklist**:
+- [ ] Each rewrite creates a row in `doctor_rewrite_log`
+- [ ] Original + revised sentences are both stored
+- [ ] Score and class are populated
+- [ ] History endpoint returns rewrites in chronological order
 
 ---
 
-## 2. Patient Interface – Survey Submission Persistence Check
+## 2. Score Trajectory & Distribution
 
-### Description
+After the doctor reviews scoring across patients, verify aggregate endpoints serve correct data.
 
-After a patient completes each survey in the web application, verify that the submission is properly stored
-in the database.
+**Tables read**: `llm_domain_scoring_and_summary`, `nlp_all_predictions`
 
-### Validation Method
+**Endpoints to verify**:
+- `GET /api/doctor/scores/average`
+- `GET /api/doctor/scores/trajectory`
+- `GET /api/doctor/scores/summary/{file}`
+- `GET /api/doctor/class-distribution/{file}`
 
-Run the following API in the `api_call_test.rest` file.
-
-### API Call
-
-```
-### 11. Get Submissions with Filters
-### API test to retrieve data stored in the survey_submission_log table
-### when a user with a specific patient ID submits survey results via the web app
-```
-
-### Checklist
-
-- [ ] Records exist in the `survey_submission_log` table
-- [ ] Submission history is retrievable by patient ID
-- [ ] Submission timestamps are correctly recorded
+**Checklist**:
+- [ ] Average scores match `AVG(ai_score)` in `llm_domain_scoring_and_summary`
+- [ ] Per-file summaries return all 5 domains (cp, le, ed, inc, ius)
+- [ ] Class distribution counts match raw NLP predictions
 
 ---
 
-## 3. REDCap Storage Verification (Manual)
+## 3. Behavior Tracking
 
-### Description
+Every UI interaction (page open, tour open/end, sentence click) should be logged.
 
-Verification that data has been successfully saved to REDCap must be performed directly
-within the REDCap project UI.
+**Tables touched**: `doctor_behavior`
 
-### Validation Method
+**Endpoint to verify**:
+- `POST /api/doctor/behavior` (or whatever the tracking endpoint is) — query rows directly via SQL afterwards
 
-- [ ] Navigate to the corresponding REDCap project
-- [ ] Confirm that a record exists for the given patient ID (record ID)
-- [ ] Verify that survey responses match the expected values
-
----
-
-## 4. REDCap Record Deletion (Cleanup / Testing)
-
-### Description
-
-For testing or cleanup purposes, delete a specific patient record from REDCap.
-The Record ID is the same as the speaker, which corresponds to the patient ID.
-
-### API Call
-
-```
-### 18. Delete Record from REDCap by using the Record ID,
-### which is the same as the speaker, which is patient ID.
-```
-
-### Checklist
-
-- [ ] The specified patient ID (record ID) is deleted from REDCap
-- [ ] The record is no longer retrievable after deletion
-- [ ] Deletion was performed only in the appropriate test environment
+**Checklist**:
+- [ ] One row per UI event in `doctor_behavior`
+- [ ] `event_type` matches the action (page_open, tour_open, tour_end, sentence_click, …)
+- [ ] `target_type` + `target_id` correctly identify the clicked element
+- [ ] `client_timestamp` and `created_at` are both populated
 
 ---
 
-## Validation Summary (Optional)
+## 4. AI-Assisted Rewrite Improvement Suggestions
 
-- Patient Interface Scoring Stored: ☐ Complete / ☐ Incomplete
-- Survey Submission Stored in DB: ☐ Complete / ☐ Incomplete
-- REDCap Storage Verified: ☐ Complete / ☐ Incomplete
-- REDCap Record Deletion Verified: ☐ Complete / ☐ Incomplete
+The "improvement suggestions" feature should return AI-generated rewrites without persisting until the doctor confirms.
+
+**Endpoints to verify**:
+- `POST /api/doctor/score-sentence` — returns AI score for a candidate sentence
+- `GET /api/doctor/improvement-suggestions/{class_}` — domain-level suggestions
+- `POST /api/doctor/ai-rewrite` — generate a rewrite candidate
+
+**Checklist**:
+- [ ] Score endpoint does **not** insert into `doctor_rewrite_log`
+- [ ] Only `POST /api/doctor/rewrites` (commit) creates a row
 
 ---
 
-## Change Log
+## See Also
 
-- YYYY-MM-DD: Initial version created
+- [`PATIENT_INTERFACE.md`](PATIENT_INTERFACE.md) — patient-side validation checklist
+- [`Query_string.md`](Query_string.md) — URL parameter routing
+- [`../architecture/DATABASE_SCHEMA.md`](../architecture/DATABASE_SCHEMA.md) — table-level reference

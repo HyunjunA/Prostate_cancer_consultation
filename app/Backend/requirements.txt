@@ -7,6 +7,7 @@ python-multipart==0.0.22
 # ── Database ─────────────────────────────────────────────────────────────────
 sqlalchemy==2.0.48
 asyncpg==0.31.0
+greenlet==3.2.4                  # transitive dep for sqlalchemy async — pinned so a fresh venv has it
 psycopg2-binary==2.9.11          # sync driver for Alembic migrations
 alembic==1.18.4
 
@@ -24,6 +25,7 @@ pyyaml==6.0.3                    # config.yaml loader
 
 # ── Validation & Serialization ───────────────────────────────────────────────
 pydantic==2.12.5
+pydantic-settings==2.14.0        # required by app/Backend/core/settings.py (P1.S1)
 
 # ── Redis & Rate Limiting ────────────────────────────────────────────────────
 redis==7.3.0

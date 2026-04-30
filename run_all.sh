@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-#  Prostate Cancer Consultation Dashboard — Full Startup & Test Script
+#  COMPASS — Full Startup & Test Script
 #
 #  This script:
 #    1. Loads the r01-nlp-classifiers Docker image (OCI archive)
@@ -25,8 +25,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 COMPOSE_FILE="$SCRIPT_DIR/app/Backend/docker-compose.yml"
 ENV_FILE="$SCRIPT_DIR/app/Backend/.env"
 
-# NLP image: included in this repo (nlp-classifiers/), or override via NLP_IMAGE_DIR env var
-NLP_IMAGE_DIR="${NLP_IMAGE_DIR:-$SCRIPT_DIR/nlp-classifiers/r01-nlp-classifiers-docker-image}"
+# NLP image: lives in the AI_physician_patient_communication sibling repo
+# (it's an AI/NLP asset, not dashboard infra). Override via NLP_IMAGE_DIR env var.
+NLP_IMAGE_DIR="${NLP_IMAGE_DIR:-$SCRIPT_DIR/../AI_physician_patient_communication/nlp-classifiers/r01-nlp-classifiers-docker-image}"
 
 BASE_URL="http://localhost:8000"
 BACKEND_CONTAINER="prostatecancer-backend"
@@ -44,6 +45,13 @@ if [ -z "$API_KEY" ] || [ "$API_KEY" = "CHANGE_ME_generate_a_random_key" ]; then
     echo "ERROR: API_KEY not configured in $ENV_FILE"
     exit 1
 fi
+
+# Postgres credentials for verification step (Step 3.5b)
+PG_USER=$(grep '^POSTGRES_USER=' "$ENV_FILE" | cut -d'=' -f2-)
+PG_DB=$(grep '^POSTGRES_DB=' "$ENV_FILE" | cut -d'=' -f2-)
+
+# Path to xlsx transcripts (for the analyze API loop in Step 3.5)
+TRANSCRIPT_DIR="$SCRIPT_DIR/../AI_physician_patient_communication/data/input"
 
 # ── Log file setup ───────────────────────────────────────────────────────────
 LOG_DIR="$SCRIPT_DIR/logs"
@@ -63,7 +71,7 @@ ok()      { echo "  ✓ $1"; }
 fail()    { echo "  ✗ $1"; exit 1; }
 
 # ============================================================================
-#  STEP 1 — Load NLP Classifier Docker Image
+#  STEP 1 — Load NLP Classifier Docker Image (from Michael's OCI archive)
 # ============================================================================
 section "Step 1: Load r01-nlp-classifiers Docker image"
 
@@ -117,7 +125,13 @@ OPTIONAL_CONTAINERS=(
     "prostatecancer-nginx"
 )
 
-MAX_WAIT=300  # seconds
+# Backend prestart.sh runs pipeline_runner.py (alembic migrations + full NLP +
+# AI pipeline) before gunicorn starts. With ~2 transcripts × 5 domains × ~30s
+# per domain (Azure OpenAI calls), backend can take 10–15 min before /health
+# responds. docker-compose's start_period is 2400s — match it here so we don't
+# fail before the container is genuinely ready.
+# Override via env: MAX_WAIT=600 ./run_all.sh
+MAX_WAIT="${MAX_WAIT:-1800}"  # seconds
 INTERVAL=5
 
 for container in "${REQUIRED_CONTAINERS[@]}"; do
@@ -166,6 +180,79 @@ done
 
 echo ""
 ok "Core services healthy — ready for tests"
+
+# ============================================================================
+#  STEP 3.5 — Run /api/transcript/analyze for each xlsx (replicates native flow)
+#
+#  Why: prestart.sh's auto-pipeline runs under healthcheck time pressure and
+#  silently swallows AI pipeline failures (try/except in pipeline_runner.py).
+#  This step calls the same endpoint a developer would call manually in
+#  native mode, where AI rewriting (llm_domain_scoring_and_summary) actually
+#  populates. Mirrors what _persist_and_run_ai does — basic NLP + AI rewriting.
+# ============================================================================
+section "Step 3.5: Run /api/transcript/analyze (full NLP + AI pipeline)"
+
+if [ ! -d "$TRANSCRIPT_DIR" ]; then
+    info "No transcript directory at $TRANSCRIPT_DIR — skipping analyze step"
+else
+    found=0
+    for xlsx in "$TRANSCRIPT_DIR"/*.xlsx; do
+        [ -f "$xlsx" ] || continue
+        found=$((found + 1))
+        filename=$(basename "$xlsx")
+        info "Analyzing: $filename"
+
+        # POST file via /api/transcript/analyze — the same path used in native mode.
+        # _persist_and_run_ai runs save_all (NLP-level tables) then ai_pipeline_service
+        # (llm_domain_scoring_and_summary). Long timeout — AI pipeline ~3min/file.
+        analyze_response=$(curl -s --max-time 1800 -X POST \
+            "$BASE_URL/api/transcript/analyze" \
+            -H "X-API-Key: $API_KEY" \
+            -F "file=@$xlsx" \
+            -F "top_n=10" \
+            -F "context_window=2")
+
+        analyze_summary=$(echo "$analyze_response" | python3 -c "
+import sys, json
+try:
+    d = json.loads(sys.stdin.read())
+    pid = d.get('patient_id', '')
+    n = d.get('total_sentences', 0)
+    print(f'{pid} ({n} sentences)' if pid else f'(no patient_id) {d}')
+except Exception as e:
+    print(f'(parse error: {e})')
+" 2>/dev/null)
+
+        if echo "$analyze_summary" | grep -qE '^[A-Za-z0-9_]+ \([0-9]+ sentences\)$'; then
+            ok "Analyzed: $analyze_summary"
+        else
+            echo "  ⚠ Unexpected response: $analyze_summary"
+            echo "    Raw: $analyze_response" | head -c 500
+            echo ""
+        fi
+    done
+
+    if [ "$found" -eq 0 ]; then
+        info "No xlsx files found in $TRANSCRIPT_DIR — skipping"
+    fi
+fi
+
+# Verify llm_domain_scoring_and_summary populated — this is what makes the
+# patient page show real summaries instead of "Summary not available".
+echo ""
+info "Verifying AI pipeline output (llm_domain_scoring_and_summary)..."
+ai_count=$(docker exec prostatecancer-postgres psql \
+    -U "$PG_USER" -d "$PG_DB" \
+    -t -c "SELECT COUNT(*) FROM llm_domain_scoring_and_summary;" 2>/dev/null \
+    | tr -d ' \n')
+
+if [ -n "$ai_count" ] && [ "$ai_count" -gt 0 ]; then
+    ok "AI pipeline produced $ai_count rows in llm_domain_scoring_and_summary"
+else
+    echo "  ⚠ WARNING: llm_domain_scoring_and_summary is empty (count=$ai_count)"
+    echo "    Patient pages will show 'Summary not available'."
+    echo "    Inspect backend logs:  docker logs prostatecancer-backend 2>&1 | grep -iE 'ai|azure|openai'"
+fi
 
 # ============================================================================
 #  STEP 4 — Full 5-Model Transcript Analysis (Direct NLP Call)

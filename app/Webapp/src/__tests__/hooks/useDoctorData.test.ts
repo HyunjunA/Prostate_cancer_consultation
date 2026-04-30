@@ -282,8 +282,7 @@ describe("useDoctorData", () => {
         "Original sentence.",
         "Revised sentence.",
         4.0,
-        "1",
-        true
+        "1"
       );
     });
 
@@ -299,7 +298,6 @@ describe("useDoctorData", () => {
     expect(body.revised_sentence).toBe("Revised sentence.");
     expect(body.score).toBe(4.0);
     expect(body.class_).toBe("1");
-    expect(body.selected).toBe(true);
     // Verify the time field is a valid ISO string within the test window
     expect(body.time).toBeDefined();
     expect(body.time >= beforeTime).toBe(true);

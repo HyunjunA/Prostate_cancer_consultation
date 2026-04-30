@@ -13,7 +13,6 @@ because it requires the r01-nlp-classifiers Docker container. Disk I/O
 (_save_xlsx) is also mocked to avoid writing to the real filesystem.
 """
 
-import json
 from typing import Optional
 
 from tests.factories import TestDataFactory
@@ -436,6 +435,14 @@ class TestDownloadBatch:
 class TestHistory:
     """GET /api/transcript/history/{patient_id} — paginated analysis history."""
 
+    # The endpoint returns the page list under the key "data" (see
+    # routes_transcript.py history()). These tests originally asserted on
+    # "items" — that was an older contract that never reached the
+    # implementation. Fixing the tests to match the deployed shape rather
+    # than renaming the field, since no current consumer (web dashboard
+    # included) reads transcript/history at all, and changing the API key
+    # could surprise external scripts / future callers.
+
     async def test_empty_history_returns_empty_list(self, client, db, api_headers):
         resp = await client.get(
             "/api/transcript/history/sid-empty",
@@ -444,7 +451,7 @@ class TestHistory:
         assert resp.status_code == 200
         body = resp.json()
         assert body["total"] == 0
-        assert body["items"] == []
+        assert body["data"] == []
 
     async def test_returns_history_records_from_db(self, client, db, api_headers):
         for i in range(3):
@@ -463,7 +470,7 @@ class TestHistory:
         assert resp.status_code == 200
         body = resp.json()
         assert body["total"] == 3
-        assert len(body["items"]) == 3
+        assert len(body["data"]) == 3
 
     async def test_pagination_with_page_and_size(self, client, db, api_headers):
         for i in range(5):
@@ -482,7 +489,7 @@ class TestHistory:
         assert body["total"] == 5
         assert body["page"] == 2
         assert body["size"] == 2
-        assert len(body["items"]) == 2
+        assert len(body["data"]) == 2
 
     async def test_response_shape_validation(self, client, db, api_headers):
         db.add(TestDataFactory.transcript_analysis(patient_id="sid-sh"))
@@ -497,8 +504,8 @@ class TestHistory:
         assert "total" in body
         assert "page" in body
         assert "size" in body
-        assert "items" in body
-        item = body["items"][0]
+        assert "data" in body
+        item = body["data"][0]
         for key in ("id", "patient_id", "total_sentences", "top_n",
                      "context_window", "source_filename", "analyzed_at", "has_xlsx"):
             assert key in item, f"Missing key in history item: {key}"

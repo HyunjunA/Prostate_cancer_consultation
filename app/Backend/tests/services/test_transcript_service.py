@@ -14,12 +14,24 @@ run_predictions (Step 4) is async and depends on the NLP Docker service;
 it is tested separately in integration tests.
 """
 
-from io import BytesIO
-
-import pandas as pd
 import pytest
 
-from transcript_service import (
+# `transcript_service` was retired from app/Backend/ during the pipeline
+# refactor — its responsibilities are now split across pipeline_runner.py
+# (orchestration) and the sentence_classification module from the AI repo.
+# The original module survives at app/Backend/archive/transcript_service.py
+# but is no longer importable from the main package. Skip the whole module
+# until it is rewritten against the new entry points.
+pytest.skip(
+    "transcript_service module retired — see pipeline_runner.py / sentence_classification",
+    allow_module_level=True,
+)
+
+from io import BytesIO  # noqa: E402
+
+import pandas as pd  # noqa: E402
+
+from transcript_service import (  # noqa: E402
     MODEL_TO_OUTCOME,
     OUTCOME_TO_SHEET,
     PHYSICIAN_IDS,

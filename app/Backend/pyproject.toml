@@ -1,0 +1,91 @@
+# Backend lint + type-check config — used by ruff, mypy, and the CI gate.
+# Lives next to the Backend code so editor tooling picks it up
+# automatically when the cursor is in this directory tree.
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+extend-exclude = [
+    ".venv",
+    "archive",
+    "migrations/versions",
+]
+
+[tool.ruff.lint]
+# Phase 1 (current): E + F + W — basic linting only.
+#
+# Active:
+#   E, W : pycodestyle errors + warnings
+#   F    : pyflakes (unused imports/vars, undefined names)
+#
+# Deferred (each requires its own cleanup PR):
+#   I    : import ordering — would touch every file (~50 files)
+#   B    : bugbear — surfaces ~100 likely bugs we want to triage carefully
+#   UP   : pyupgrade — modernises syntax across the whole codebase
+#   T201, T203 : print()/pprint() — blocked until P1.S8 migrates
+#                debug print() calls to logger
+select = ["E", "F", "W"]
+
+# Project-wide ignores (apply to every file).
+ignore = [
+    "E501",  # line-too-long — formatter handles this; we do not enforce strict 120
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests for tables that were removed in migration 008 — kept under
+# `@pytestmark_obsolete_schema = pytest.mark.skip(...)` so they never
+# actually run, but ruff cannot statically prove the skip mark hides
+# the references. Future cleanup: rewrite these tests for the new
+# PatientSummary schema and drop this ignore.
+"tests/db_models/test_models.py" = ["F821"]
+
+# Test fixtures manipulate sys.path before importing the modules
+# under test — that requires module-level imports AFTER the path
+# tweak, which E402 forbids.
+"tests/conftest.py" = ["E402"]
+
+# auth/backends/oauth2.py imports `jose.jwk` purely to detect whether
+# the optional `python-jose` package is installed at runtime. The
+# import has side effects on the env; we cannot replace it with
+# importlib.util.find_spec without changing semantics.
+"auth/backends/oauth2.py" = ["F401"]
+
+
+[tool.mypy]
+python_version = "3.10"
+# Loose initial config: do not block CI on type drift while the
+# codebase still has plenty of dynamic SQLAlchemy. Tighten over time.
+ignore_missing_imports = true
+follow_imports = "silent"
+check_untyped_defs = false
+disallow_untyped_defs = false
+warn_return_any = false
+warn_unused_ignores = true
+exclude = [
+    "^\\.venv/",
+    "^archive/",
+    "^migrations/versions/",
+    "^tests/",       # tests use fixtures + mocks heavily; type-check separately later
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+
+[tool.coverage.run]
+source = ["."]
+omit = [
+    ".venv/*",
+    "archive/*",
+    "migrations/versions/*",
+    "tests/*",
+    "load_tests/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]

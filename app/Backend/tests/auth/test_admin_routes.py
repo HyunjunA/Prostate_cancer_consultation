@@ -27,7 +27,7 @@ Test categories:
 
 import pytest
 
-from auth.models import AuthUser, AuthAPIKey, PatientAccess
+from auth.models import AuthUser
 
 
 # ── Helpers: Password hashing ─────────────────────────────────────────────

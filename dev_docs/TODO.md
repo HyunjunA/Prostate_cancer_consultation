@@ -153,7 +153,7 @@ Today the only safe workflow for "I edited a transcript, please re-process it" i
 5. `DELETE FROM patient_summary_domain WHERE file LIKE '%SID 10%';`
 6. `DELETE FROM patient_summary WHERE file LIKE '%SID 10%';`
 7. `docker restart prostatecancer-backend`
-8. Wait ~5 min for the AI pipeline to re-run
+8. Wait for the AI pipeline to re-run
 
 That is not a workflow we can hand to a non-engineer collaborator. It also blows up the rest of the unprocessed files in the same restart. Any clinician/researcher who maintains the transcript corpus needs a one-click "this file changed, re-process just this one" path.
 

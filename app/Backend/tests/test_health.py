@@ -7,7 +7,6 @@ Endpoints tested:
 """
 
 import pytest
-import pytest_asyncio
 
 
 # ── GET / (root) ──────────────────────────────────────────────────────────

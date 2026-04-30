@@ -100,8 +100,12 @@ services:
       # These replace transcript_service.py to guarantee identical sentence
       # segmentation with the original R pipeline. DO NOT remove these mounts.
       - ../../../AI_physician_patient_communication/sentence_classification:/app/sentence_classification:ro
-      - ../../../AI_physician_patient_communication/utils:/app/pipeline_utils:ro
-      - ../../../AI_physician_patient_communication/config.py:/app/pipeline_config.py:ro
+      # Mount under their original module names — sentence_classification
+      # imports them as `from utils.save_helpers import ...` and
+      # `from config import MODEL_TO_SHEET, ...`. Renaming to pipeline_utils /
+      # pipeline_config breaks those imports inside the container.
+      - ../../../AI_physician_patient_communication/utils:/app/utils:ro
+      - ../../../AI_physician_patient_communication/config.py:/app/config.py:ro
       # Guille's AI pipeline — LLM-powered scoring (0-5 clinical relevance)
       # and rewriting/reformatting system that generates patient-facing
       # risk summaries using Azure OpenAI GPT-4o

@@ -8,14 +8,45 @@ Skip in CI without Docker:
     pytest -m "not e2e"
 """
 
+import os
+from pathlib import Path
+
 import pytest
 import httpx
 
 # ---------------------------------------------------------------------------
+# Load secrets from app/Backend/.env.native
+# ---------------------------------------------------------------------------
+# The native deployment stores the real API_KEY (and Postgres credentials,
+# Azure OpenAI keys, etc.) in app/Backend/.env.native. Tests run in a
+# fresh subprocess where the shell that started pytest may or may not
+# have sourced that file, so do it here explicitly. dotenv.load_dotenv
+# does not overwrite values already set in os.environ, so a CI that
+# already exports API_KEY keeps its own value.
+try:
+    from dotenv import load_dotenv as _load_dotenv
+except ImportError:
+    _load_dotenv = None
+
+if _load_dotenv is not None:
+    # tests/e2e/test_full_flow.py -> app/Backend/.env.native: ../../.env.native
+    _ENV_NATIVE = Path(__file__).resolve().parent.parent.parent / ".env.native"
+    if _ENV_NATIVE.exists():
+        _load_dotenv(_ENV_NATIVE)
+
+
+# ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-BASE_URL = "http://localhost:8000"
-API_KEY = "<YOUR_API_KEY>"
+# These tests hit the live backend at BASE_URL. The previous version
+# hardcoded API_KEY = "<YOUR_API_KEY>" which always returned 403 — the
+# tests never actually exercised any authenticated path. Read the real
+# key from the environment (populated by .env.native above) instead.
+# The pre-existing skipif guard below already keeps us from running when
+# the backend is not up, so this just needs a sensible value when it IS
+# reachable.
+BASE_URL = os.environ.get("E2E_BASE_URL", "http://localhost:8000")
+API_KEY = os.environ.get("API_KEY", "")
 AUTH_HEADERS = {"X-API-Key": API_KEY}
 
 
@@ -253,12 +284,35 @@ async def test_patient_responses():
 # 5. Surveys
 # ===========================================================================
 
+async def _resolve_existing_patient() -> tuple[str, str] | None:
+    """Pick any (file, speaker) pair from /api/patient/summaries so survey
+    submit has a real patient_summary row to attach to. The previous
+    version hardcoded "e2e_test_file"/"e2e_test_speaker" which always
+    violated the survey_submission_log → patient_summary FK and 500'd
+    the request.
+
+    /api/patient/files returns just filename strings, no speakers — use
+    /summaries which returns (file, speaker) dicts."""
+    resp = await _get("/api/patient/summaries", headers=AUTH_HEADERS)
+    if resp.status_code != 200:
+        return None
+    rows = resp.json().get("data") or []
+    if not rows:
+        return None
+    row = rows[0]
+    return row["file"], row["speaker"]
+
+
 async def test_survey_submit():
     """POST /api/surveys/submit should accept and store a survey."""
+    pair = await _resolve_existing_patient()
+    if pair is None:
+        pytest.skip("No patient_summary row available — run the pipeline on at least one transcript first")
+    file_, speaker = pair
     payload = {
         "survey_type": "sdm",
-        "file": "e2e_test_file",
-        "speaker": "e2e_test_speaker",
+        "file": file_,
+        "speaker": speaker,
         "answers": {"sdm_q1": "1", "sdm_q2": "2"},
         "metadata": {"source": "e2e_test"},
     }
@@ -276,8 +330,10 @@ async def test_survey_submissions_list():
     assert resp.status_code == 200
     body = resp.json()
     assert "total" in body
-    assert "submissions" in body
-    assert isinstance(body["submissions"], list)
+    # Endpoint returns the page list under "data" (consistent with the
+    # rest of the paginated endpoints — transcript/history, etc.).
+    assert "data" in body
+    assert isinstance(body["data"], list)
 
 
 async def test_survey_stats():
@@ -310,11 +366,14 @@ async def test_redcap_import_sample():
 
 async def test_full_flow_submit_and_retrieve():
     """Submit a survey and verify it appears in the submissions list."""
-    unique_speaker = "e2e_full_flow_test_speaker"
+    pair = await _resolve_existing_patient()
+    if pair is None:
+        pytest.skip("No patient_summary row available — run the pipeline on at least one transcript first")
+    file_, speaker = pair
     payload = {
         "survey_type": "dcs",
-        "file": "e2e_flow_file",
-        "speaker": unique_speaker,
+        "file": file_,
+        "speaker": speaker,
         "answers": {"dcs_q1": "3", "dcs_q2": "4"},
     }
 
@@ -325,11 +384,11 @@ async def test_full_flow_submit_and_retrieve():
 
     # Step 2: Retrieve by speaker
     list_resp = await _get(
-        f"/api/surveys/by-speaker/{unique_speaker}",
+        f"/api/surveys/by-speaker/{speaker}",
         headers=AUTH_HEADERS,
     )
     assert list_resp.status_code == 200
     list_body = list_resp.json()
-    assert list_body["speaker"] == unique_speaker
+    assert list_body["speaker"] == speaker
     assert list_body["total_submissions"] >= 1
     assert "dcs" in list_body["survey_types"]

@@ -11,8 +11,7 @@ from typing import Optional
 from models import (
     DoctorRewriteLog,
     PatientSummary,
-    PatientSummaryScoring,
-    PatientResponses,
+    PatientSummaryDomain,
     SurveySubmissionLog,
     TranscriptAnalysisLog,
     SentencePrediction,
@@ -64,52 +63,29 @@ class TestDataFactory:
     def patient_summary(
         file: str = "test-file.xlsx",
         speaker: str = "Patient_1",
-        entire_summary: str = "Overall summary text.",
     ) -> PatientSummary:
-        return PatientSummary(
-            file=file,
-            speaker=speaker,
-            entire_summary=entire_summary,
-            class_1="Cancer Prognosis",
-            summary_class_1="CP summary text.",
-            class_2="Life Expectancy",
-            summary_class_2="LE summary text.",
-            class_3="Erectile Dysfunction",
-            summary_class_3="ED summary text.",
-            class_4="Incontinence",
-            summary_class_4="INC summary text.",
-            class_5="Irritative Urinary Symptoms",
-            summary_class_5="IUS summary text.",
-        )
+        # Schema migrated 2026-04-25 (migration 008): the per-class fields
+        # (class_1/summary_class_1/...) and the entire_summary column were
+        # dropped. PatientSummary now only carries the (file, speaker) PK; the
+        # per-domain rows live in PatientSummaryDomain.
+        return PatientSummary(file=file, speaker=speaker)
 
     @staticmethod
-    def patient_scoring(
+    def patient_summary_domain(
         file: str = "test-file.xlsx",
         speaker: str = "Patient_1",
-    ) -> PatientSummaryScoring:
-        return PatientSummaryScoring(
+        domain: str = "cancer_prognosis",
+        display_order: int = 1,
+        patient_scoring: int = 5,
+        patient_response: str = "test response",
+    ) -> PatientSummaryDomain:
+        return PatientSummaryDomain(
             file=file,
             speaker=speaker,
-            class_1_patient_scoring=5,
-            class_2_patient_scoring=6,
-            class_3_patient_scoring=7,
-            class_4_patient_scoring=8,
-            class_5_patient_scoring=9,
-        )
-
-    @staticmethod
-    def patient_responses(
-        file: str = "test-file.xlsx",
-        speaker: str = "Patient_1",
-    ) -> PatientResponses:
-        return PatientResponses(
-            file=file,
-            speaker=speaker,
-            answer_1="Answer to question 1",
-            answer_2="Answer to question 2",
-            answer_3="Answer to question 3",
-            answer_4="Answer to question 4",
-            answer_5="Answer to question 5",
+            domain=domain,
+            display_order=display_order,
+            patient_scoring=patient_scoring,
+            patient_response=patient_response,
         )
 
     # ── Survey ────────────────────────────────────────────────────────
@@ -201,3 +177,73 @@ class TestDataFactory:
             )
             for idx in range(1, count + 1)
         ]
+
+    # ── Legacy aliases ─────────────────────────────────────────────────
+    # The doctor-side endpoint tests still call these names, which were
+    # in the factory before two unrelated refactors:
+    #   * the SentencePrediction-on-DoctorSentence rename (a single
+    #     `sentence_prediction` row IS the doctor-side sentence record)
+    #   * migration 008, which folded PatientSummaryScoring and
+    #     PatientResponses into PatientSummaryDomain.
+    # Each alias just dispatches to the modern factory so the call sites
+    # keep working without rewriting every test.
+
+    @staticmethod
+    def _translate_doctor_sentence_kwargs(kwargs: dict) -> dict:
+        """Translate the legacy doctor_sentence kwargs (file/i/i2/class_/score)
+        into the SentencePrediction column names used by the new schema."""
+        if "file" in kwargs:
+            kwargs["patient_id"] = kwargs.pop("file")
+        if "i" in kwargs:
+            kwargs["utterance_index"] = kwargs.pop("i")
+        if "i2" in kwargs:
+            kwargs["sentence_in_utterance"] = kwargs.pop("i2")
+        if "class_" in kwargs:
+            kwargs["model"] = kwargs.pop("class_")
+        if "score" in kwargs:
+            kwargs["pred_score"] = kwargs.pop("score")
+        return kwargs
+
+    @classmethod
+    def doctor_sentence(cls, **kwargs):
+        return cls.sentence_prediction(**cls._translate_doctor_sentence_kwargs(kwargs))
+
+    @classmethod
+    def doctor_sentence_set(cls, analysis_id: int = 1, speaker: str = "Interviewer", **kwargs):
+        # `prediction_set` takes positional analysis_id; the legacy
+        # doctor_sentence_set was always called by keyword and didn't
+        # carry a speaker (the underlying SentencePrediction table does).
+        # Translate, default, and forward.
+        kwargs = cls._translate_doctor_sentence_kwargs(kwargs)
+        rows = cls.prediction_set(analysis_id=analysis_id, **kwargs)
+        for row in rows:
+            row.speaker = speaker
+        return rows
+
+    @classmethod
+    def patient_scoring(
+        cls,
+        file: str = "test-file.xlsx",
+        speaker: str = "Patient_1",
+        domain: str = "cancer_prognosis",
+        patient_scoring: int = 5,
+        **kwargs,
+    ) -> PatientSummaryDomain:
+        return cls.patient_summary_domain(
+            file=file, speaker=speaker, domain=domain,
+            patient_scoring=patient_scoring, **kwargs,
+        )
+
+    @classmethod
+    def patient_responses(
+        cls,
+        file: str = "test-file.xlsx",
+        speaker: str = "Patient_1",
+        domain: str = "cancer_prognosis",
+        patient_response: str = "test response",
+        **kwargs,
+    ) -> PatientSummaryDomain:
+        return cls.patient_summary_domain(
+            file=file, speaker=speaker, domain=domain,
+            patient_response=patient_response, **kwargs,
+        )

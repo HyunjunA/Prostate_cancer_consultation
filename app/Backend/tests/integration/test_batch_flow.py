@@ -167,6 +167,7 @@ class TestBatchAnalyzeFlow:
     async def test_analyze_batch_then_download(self, client, db, api_headers, monkeypatch):
         """analyze-batch creates records that download-batch can retrieve."""
         import routes_transcript
+        from models import TranscriptAnalysisLog
 
         call_count = 0
 
@@ -181,8 +182,36 @@ class TestBatchAnalyzeFlow:
                 "xlsx_bytes": f"xlsx-{pid}".encode(),
             }
 
+        async def _mock_persist(*, result, filename, top_n, context_window):
+            # routes_transcript._persist_and_run_ai normally calls
+            # persistence.save_all(AsyncSessionLocal, ...) — i.e. it bypasses
+            # the FastAPI dependency that the test fixture overrides and
+            # writes to the production DB factory. With AsyncSessionLocal
+            # pointing at a stub DSN the real call fails inside the
+            # `except Exception` non-fatal handler, so the analyze-batch
+            # response reports successful=2 but no row ever lands in the
+            # test SQLite DB — and the subsequent download-batch sees an
+            # empty table and returns 404.
+            #
+            # Mirror the minimum write the real persistence does: insert a
+            # TranscriptAnalysisLog row with the xlsx_bytes. That is all
+            # download-batch needs (it reads xlsx_data from this table).
+            # Skip the AI pipeline + intermediate tables entirely — the
+            # full pipeline persistence is exercised in the unit tests
+            # in test_persistence.py and integration/test_transcript_db.py.
+            db.add(TranscriptAnalysisLog(
+                patient_id=result["patient_id"],
+                source_filename=filename,
+                total_sentences=result["total_sentences"],
+                top_n=top_n,
+                context_window=context_window,
+                xlsx_data=result["xlsx_bytes"],
+            ))
+            await db.commit()
+
         monkeypatch.setattr(routes_transcript, "analyze_transcript", _mock_analyze)
         monkeypatch.setattr(routes_transcript, "_save_xlsx", lambda pid, data: None)
+        monkeypatch.setattr(routes_transcript, "_persist_and_run_ai", _mock_persist)
 
         # Step 1: Batch analyze
         resp = await client.post(
