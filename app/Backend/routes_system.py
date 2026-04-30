@@ -58,7 +58,7 @@ async def root(user: AuthUser = Depends(get_current_user)):
     using curl or HTTPie).
     """
     return {
-        "message": "Prostate Cancer Doctor-Patient Conversation Archive API",
+        "message": "COMPASS API",
         "version": "1.0.0",
         "docs": "/docs",
         "health": "/health",

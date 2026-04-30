@@ -1,4 +1,4 @@
-# Security Audit Report: Prostate Cancer Consultation Dashboard Backend
+# Security Audit Report: COMPASS Backend
 
 **Date**: 2026-02-12
 **Scope**: `Prostate_cancer_consultation_dashboard/app/Backend/`

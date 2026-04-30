@@ -4146,6 +4146,30 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
         isDarkMode ? "bg-slate-900" : "bg-slate-50",
       )}
     >
+      {/* COMPASS provider header */}
+      <div className="mb-6">
+        <h2
+          className={cx(
+            "text-lg font-semibold",
+            isDarkMode ? "text-slate-100" : "text-slate-900",
+          )}
+        >
+          COMPASS Provider Dashboard
+        </h2>
+        <p
+          className={cx(
+            "text-xs italic mt-0.5",
+            isDarkMode ? "text-slate-400" : "text-slate-500",
+          )}
+        >
+          <span className="font-semibold">COM</span>munication of{" "}
+          <span className="font-semibold">P</span>rostate c
+          <span className="font-semibold">A</span>ncer{" "}
+          <span className="font-semibold">S</span>hared deci
+          <span className="font-semibold">S</span>ions
+        </p>
+      </div>
+
       {/* Floating Rubric Guide — always visible */}
       <RubricFloatingButton
         isDarkMode={isDarkMode}

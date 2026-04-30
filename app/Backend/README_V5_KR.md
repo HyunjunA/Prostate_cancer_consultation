@@ -1,4 +1,4 @@
-# Prostate Cancer Dashboard 대시보드 — 개발자 README
+# COMPASS 대시보드 — 개발자 README
 
 전립선암 대시보드 데이터를 필터링하고 분석하기 위한 종합 웹 애플리케이션으로, **FastAPI** 백엔드, **PostgreSQL** 데이터베이스, **Redis** 응답 캐싱 및 요청 속도 제한 기능을 갖추고 있다.
 이 문서는 서비스를 **빌드, 실행, 확장, 운영**하는 개발자를 위한 것이다.
@@ -25,7 +25,7 @@ docker compose -f docker-compose.yml up --no-color 2>&1 | tee "logs/compose-$(da
 **시작 시 동작:**
 
 ```
-🚀 Starting Prostate Cancer Dashboard Dashboard Backend...
+🚀 Starting COMPASS Backend...
 🔄 Running prestart tasks...
 ⏳ Waiting for database...
 🗄️  Initializing database and loading CSV...
@@ -87,7 +87,7 @@ curl -X POST http://localhost:8000/api/studies/filter-options-dynamic \
 
 ## 개요
 
-Prostate Cancer Dashboard 대시보드는 큐레이션된 연구 메타데이터 데이터셋을 필터링, 집계, 분석하는 엔드포인트를 제공한다.
+COMPASS 대시보드는 큐레이션된 연구 메타데이터 데이터셋을 필터링, 집계, 분석하는 엔드포인트를 제공한다.
 PostgreSQL을 시스템 오브 레코드로, Redis를 짧은 TTL 캐싱 및 클라이언트별 속도 제한에 사용한다.
 
 ### 주요 특징
@@ -159,7 +159,7 @@ prostate_cancer_project/prostate_cancer_R01_NLP_classifiers_Michael/
 ## 프로젝트 구조
 
 ```
-Prostate Cancer Dashboard-dashboard/
+COMPASS-dashboard/
 ├── docker-compose.yml            # 메인 Compose 서비스 및 헬스체크
 ├── docker-compose.override.yml   # 개발 오버라이드 (자동 로드)
 ├── Dockerfile                    # 백엔드 컨테이너 이미지
@@ -231,7 +231,7 @@ docker compose logs -f backend
 **최초 실행** 시 자동 초기화를 볼 수 있다:
 
 ```
-🚀 Starting Prostate Cancer Dashboard Dashboard Backend...
+🚀 Starting COMPASS Backend...
 🔄 Running prestart tasks...
 ========================================
 ⏳ Waiting for database...

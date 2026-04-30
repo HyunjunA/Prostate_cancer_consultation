@@ -115,8 +115,12 @@ def create_app() -> FastAPI:
     settings = get_settings()
 
     app = FastAPI(
-        title="Prostate Cancer Doctor-Patient Conversation Archive API",
-        description="API for doctor-patient consultation interface data",
+        title="COMPASS API",
+        description=(
+            "API for the COMPASS research platform — "
+            "**COM**munication of **P**rostate c**A**ncer **S**hared deci**S**ions. "
+            "Backend for the doctor-patient consultation analysis dashboard."
+        ),
         version="1.0.0",
         # docs_url=None disables /docs entirely (returns 404). Same for
         # redoc_url. We hide both in non-dev environments to avoid

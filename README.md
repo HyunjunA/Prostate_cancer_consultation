@@ -1,4 +1,6 @@
-# Prostate Cancer Consultation Dashboard
+# COMPASS
+
+> **COM**munication of **P**rostate c**A**ncer **S**hared deci**S**ions
 
 A research platform that analyzes physician-patient prostate cancer consultations to improve risk communication and shared decision-making.
 
