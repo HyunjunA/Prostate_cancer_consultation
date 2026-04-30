@@ -493,7 +493,7 @@ It runs on every PR that touches `app/Backend/**`. The current (Phase 1) gate is
 1. `ruff check .` — must pass.
 2. `pytest --collect-only` — must pass. This proves every test file imports cleanly without actually executing the suite.
 
-Full test execution, mypy, and a coverage threshold are explicitly deferred to Phase 2 — see the comments at the top of the workflow file and `dev_docs/BACKEND_REFACTOR_PLAN_KR.md`.
+Full test execution, mypy, and a coverage threshold are explicitly deferred to Phase 2 — see the comments at the top of the workflow file. The blocker is that several SQLite-based test fixtures stub the Postgres-only JSONB columns; once those fixtures translate cleanly, full pytest can be enabled in CI.
 
 To reproduce the CI gate locally:
 
