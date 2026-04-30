@@ -31,19 +31,11 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}
       >
-        {/* Global brand header — visible on every page */}
-        <header className="border-b border-gray-200 bg-white px-6 py-3">
-          <h1 className="text-xl font-bold tracking-tight text-gray-900">
-            COMPASS
-          </h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            <span className="font-semibold">COM</span>munication of{" "}
-            <span className="font-semibold">P</span>rostate c
-            <span className="font-semibold">A</span>ncer{" "}
-            <span className="font-semibold">S</span>hared deci
-            <span className="font-semibold">S</span>ions
-          </p>
-        </header>
+        {/* COMPASS brand header is rendered inside `page.tsx` only when the
+            user is on the selection landing screen — Patient first /
+            Patient follow-up / Doctor views deliberately omit it for a
+            cleaner workspace. The footer stays global so the study
+            attribution is always visible. */}
 
         {/* <PostHogProvider>{children}</PostHogProvider> */}{/* PostHog disabled */}
         <main className="flex-1">{children}</main>
