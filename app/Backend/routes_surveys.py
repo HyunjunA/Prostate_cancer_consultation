@@ -52,8 +52,6 @@ from datetime import datetime
 import json
 import logging
 
-logger = logging.getLogger(__name__)
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -64,6 +62,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth import get_current_user
 from db import get_db
 from models import SurveySubmissionLog
+
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
