@@ -340,7 +340,7 @@ describe("usePatientData", () => {
       .mockResolvedValueOnce(okJson({ filtered: true }));
 
     await act(async () => {
-      await result.current.updateSingleClassScore("test.xlsx", "Doctor", 3, 4);
+      await result.current.updateSingleClassScore("test.xlsx", "Doctor", "class_3", 4);
     });
 
     const putCall = mockFetch.mock.calls[1];
@@ -348,12 +348,15 @@ describe("usePatientData", () => {
     expect(body).toEqual({
       file: "test.xlsx",
       speaker: "Doctor",
-      class_3_patient_scoring: 4,
+      domain: "class_3",
+      patient_scoring: 4,
     });
   });
 
-  // ── 14. updateAllClassScores — includes all 5 class scores ─────────────
-  test("updateAllClassScores includes all 5 class scores", async () => {
+  // ── 14. updateAllClassScores — sends one PUT per domain ────────────────
+  // The normalized schema stores each domain as a separate row, so the hook
+  // loops and issues 5 sequential PUTs (one per domain key).
+  test("updateAllClassScores sends one PUT per domain", async () => {
     mockMountFetch();
     const { result } = renderHook(() => usePatientData());
     await waitFor(() => expect(result.current.files).not.toBeNull());
@@ -365,9 +368,8 @@ describe("usePatientData", () => {
       average: 3,
     };
 
-    mockFetch
-      .mockResolvedValueOnce(okJson(scoringResult))
-      .mockResolvedValueOnce(okJson({ filtered: true }));
+    // Each domain triggers 1 PUT + 1 GET (refresh), so 5 domains => 10 fetches.
+    mockFetch.mockResolvedValue(okJson(scoringResult));
 
     await act(async () => {
       await result.current.updateAllClassScores("test.xlsx", "Doctor", {
@@ -379,16 +381,18 @@ describe("usePatientData", () => {
       });
     });
 
-    const putCall = mockFetch.mock.calls[1];
-    const body = JSON.parse(putCall[1].body);
-    expect(body).toEqual({
-      file: "test.xlsx",
-      speaker: "Doctor",
-      class_1_patient_scoring: 1,
-      class_2_patient_scoring: 2,
-      class_3_patient_scoring: 3,
-      class_4_patient_scoring: 4,
-      class_5_patient_scoring: 5,
+    const putCalls = mockFetch.mock.calls.filter(
+      (call) => (call[1] as RequestInit | undefined)?.method === "PUT"
+    );
+    expect(putCalls).toHaveLength(5);
+    putCalls.forEach((call, idx) => {
+      const body = JSON.parse((call[1] as RequestInit).body as string);
+      expect(body).toEqual({
+        file: "test.xlsx",
+        speaker: "Doctor",
+        domain: `class_${idx + 1}`,
+        patient_scoring: idx + 1,
+      });
     });
   });
 

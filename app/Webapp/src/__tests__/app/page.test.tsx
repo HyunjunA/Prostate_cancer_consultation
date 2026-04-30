@@ -28,13 +28,13 @@ jest.mock("next/navigation", () => ({
 }));
 
 // Mock heavy child components as stubs
-jest.mock("@/components/PhysicianReportsModifiedV39Timothy", () => {
+jest.mock("@/components/PhysicianReportsModifiedV41Timothy", () => {
   return function MockPhysicianReports() {
     return <div data-testid="doctor-view">Doctor View</div>;
   };
 });
 
-jest.mock("@/components/PatientInitialVisitReportV31", () => {
+jest.mock("@/components/PatientInitialVisitReportV35", () => {
   return function MockPatientFirstVisit() {
     return <div data-testid="patient-first">Patient First Visit</div>;
   };
@@ -167,7 +167,9 @@ describe("Home page — URL-based routing", () => {
     render(<Home />);
 
     expect(screen.getByText("Patient Consultation System")).toBeInTheDocument();
-    expect(screen.getByText(/Please access this page/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Select a patient to view their consultation report/)
+    ).toBeInTheDocument();
   });
 
   // ── 2. Patient first visit ─────────────────────────────────────────────
