@@ -1,6 +1,6 @@
 # System Architecture
 
-High-level architecture of the Prostate Cancer Consultation Dashboard. For pipeline-step detail see [`../ml-pipeline/ML_PIPELINE.md`](../ml-pipeline/ML_PIPELINE.md); for table-level detail see [`DATABASE_SCHEMA.md`](DATABASE_SCHEMA.md).
+High-level architecture of the COMPASS. For pipeline-step detail see [`../ml-pipeline/ML_PIPELINE.md`](../ml-pipeline/ML_PIPELINE.md); for table-level detail see [`DATABASE_SCHEMA.md`](DATABASE_SCHEMA.md).
 
 ---
 

@@ -1,6 +1,6 @@
-# Prostate Cancer Dashboard Dashboard — Developer README
+# COMPASS — Developer README
 
-A comprehensive web application for filtering and analyzing Prostate Cancer Dashboard data with a **FastAPI** backend, **PostgreSQL** database, and **Redis** for response caching and request rate limiting.  
+A comprehensive web application for filtering and analyzing COMPASS data with a **FastAPI** backend, **PostgreSQL** database, and **Redis** for response caching and request rate limiting.  
 This document is for developers who will **build, run, extend, and operate** the service.
 
 ---
@@ -25,7 +25,7 @@ docker compose -f docker-compose.yml up --no-color 2>&1 | tee "logs/compose-$(da
 **What happens on startup:**
 
 ```
-🚀 Starting Prostate Cancer Dashboard Dashboard Backend...
+🚀 Starting COMPASS Backend...
 🔄 Running prestart tasks...
 ⏳ Waiting for database...
 🗄️  Initializing database and loading CSV...
@@ -87,7 +87,7 @@ curl -X POST http://localhost:8000/api/studies/filter-options-dynamic \
 
 ## Overview
 
-The Prostate Cancer Dashboard Dashboard exposes endpoints to filter, aggregate, and analyze a curated dataset of study metadata.
+The COMPASS exposes endpoints to filter, aggregate, and analyze a curated dataset of study metadata.
 It uses PostgreSQL as the system of record and Redis for short-TTL caching and per-client rate limiting.
 
 ### Highlights
@@ -159,7 +159,7 @@ prostate_cancer_project/prostate_cancer_R01_NLP_classifiers_Michael/
 ## Project Structure
 
 ```
-Prostate Cancer Dashboard-dashboard/
+COMPASS-dashboard/
 ├── docker-compose.yml            # Main Compose services & healthchecks
 ├── docker-compose.override.yml   # Development overrides (auto-loaded)
 ├── Dockerfile                    # Backend container image
@@ -231,7 +231,7 @@ docker compose logs -f backend
 On the **first run**, you'll see automatic initialization:
 
 ```
-🚀 Starting Prostate Cancer Dashboard Dashboard Backend...
+🚀 Starting COMPASS Backend...
 🔄 Running prestart tasks...
 ========================================
 ⏳ Waiting for database...

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-#  Prostate Cancer Consultation Dashboard — Full Startup & Test Script
+#  COMPASS — Full Startup & Test Script
 #
 #  This script:
 #    1. Loads the r01-nlp-classifiers Docker image (OCI archive)

@@ -57,5 +57,9 @@ docs/architecture/_build_pdf/
 # Claude Code evaluation harness (local-only test/eval tooling)
 .harness/
 
+# Claude Code per-directory instruction files (local-only, machine-specific).
+# Path-agnostic rule covers root + app/Backend/ + app/Webapp/ in one go.
+CLAUDE.md
+
 # Native deployment Python venv
 .venv/

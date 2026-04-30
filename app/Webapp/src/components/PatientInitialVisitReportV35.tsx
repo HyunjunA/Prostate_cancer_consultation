@@ -1722,6 +1722,37 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
       )}
     >
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12" id="report-content">
+        {/* COMPASS branding card — first impression for patients arriving via SMS / email link */}
+        <div
+          className={cx(
+            "mb-6 rounded-2xl p-5 sm:p-6 border",
+            isDarkMode
+              ? "bg-violet-950/30 border-violet-800"
+              : "bg-violet-50/60 border-violet-200",
+          )}
+        >
+          <h2
+            className={cx(
+              "text-2xl sm:text-3xl font-bold tracking-tight",
+              isDarkMode ? "text-violet-100" : "text-violet-900",
+            )}
+          >
+            COMPASS
+          </h2>
+          <p
+            className={cx(
+              "text-xs sm:text-sm italic mt-1",
+              isDarkMode ? "text-violet-300" : "text-violet-700",
+            )}
+          >
+            <span className="font-semibold">COM</span>munication of{" "}
+            <span className="font-semibold">P</span>rostate c
+            <span className="font-semibold">A</span>ncer{" "}
+            <span className="font-semibold">S</span>hared deci
+            <span className="font-semibold">S</span>ions
+          </p>
+        </div>
+
         {/* Header */}
         <div className="text-center mb-6 sm:mb-8 lg:mb-12">
           <div className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 lg:w-20 lg:h-20 rounded-3xl mb-6 bg-gradient-to-br from-indigo-500 to-violet-600 shadow-2xl shadow-indigo-500/30">
