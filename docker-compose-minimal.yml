@@ -1,0 +1,66 @@
+# =============================================================================
+# Native deployment — minimal compose (Phase 6)
+#
+# Brings up only the two containers that cannot be replaced by native
+# processes:
+#   - nlp-classifiers : Michael's third-party OCI image (no source available)
+#   - webapp          : Next.js frontend (kept Docker per user decision)
+#
+# Everything else (postgres, redis, backend, nginx) runs natively. See:
+#   bash scripts/setup-native-mac.sh        # one-time native deps
+#   bash scripts/init-db-native.sh          # one-time DB bootstrap
+#   bash scripts/run-backend-native.sh      # native uvicorn
+#
+# Usage:
+#   docker compose -f docker-compose-minimal.yml up -d
+#   docker compose -f docker-compose-minimal.yml logs -f webapp
+#   docker compose -f docker-compose-minimal.yml down
+#
+# Reference: dev_docs/DEPLOYMENT_NATIVE_PLAN.md (Phase 6)
+# =============================================================================
+
+services:
+
+  # ── NLP classifiers (Michael's image, single replica is fine for native) ──
+  nlp-classifiers:
+    image: r01-nlp-classifiers:latest
+    container_name: prostatecancer-nlp-native
+    ports:
+      - "127.0.0.1:8888:8000"   # exposed to native backend on the host (8001 conflicts with VS Code on some setups)
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    healthcheck:
+      test: ["CMD-SHELL", "Rscript -e 'q(status=!grepl(\"online\",readLines(url(\"http://localhost:8000/ping\"))))'"]
+      interval: 15s
+      timeout: 15s
+      retries: 10
+      start_period: 90s
+    restart: unless-stopped
+
+  # ── Frontend webapp (talks to native backend via host.docker.internal) ───
+  webapp:
+    build:
+      context: app/Webapp
+      dockerfile: Dockerfile
+    container_name: prostatecancer-webapp-native
+    env_file:
+      - app/Webapp/.env.native       # NEXT_PUBLIC_API_URL=http://host.docker.internal:8000
+    environment:
+      NODE_ENV: production
+      # Server-only env vars (host.docker.internal lets the container reach
+      # the native uvicorn backend on the Mac/Linux host).
+      BACKEND_URL: http://host.docker.internal:8000
+      API_KEY: ${API_KEY}
+    extra_hosts:
+      # Linux: docker doesn't auto-resolve host.docker.internal — declare it.
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:3001:3000"        # webapp directly on 3001 (no nginx in native mode)
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped

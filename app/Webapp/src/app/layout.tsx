@@ -15,8 +15,10 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Prostate Cancer Consultation Dashboard",
-  description: "",
+  title: "COMPASS",
+  description:
+    "COMPASS — COMmunication of Prostate cAncer Shared deciSions. " +
+    "Research dashboard for analyzing physician-patient consultation transcripts.",
 };
 
 export default function RootLayout({
@@ -29,6 +31,10 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        {/* COMPASS brand header AND footer are rendered inside `page.tsx`
+            so they can react to the dark-mode toggle (the toggle's state
+            lives in page.tsx). Layout stays a plain server-component
+            shell. */}
         {/* <PostHogProvider>{children}</PostHogProvider> */}{/* PostHog disabled */}
         {children}
       </body>

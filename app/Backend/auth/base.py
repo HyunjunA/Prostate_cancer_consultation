@@ -1,7 +1,7 @@
 """Base types and protocol for all authentication backends."""
 
 from dataclasses import dataclass
-from typing import Protocol, Optional
+from typing import Protocol
 
 from fastapi import Request
 

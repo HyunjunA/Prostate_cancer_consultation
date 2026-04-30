@@ -6,11 +6,9 @@ the AUTH_MODE environment variable, handles caching, and rejects invalid modes.
 Key function under test: auth.registry._get_backend (lru_cache(maxsize=1))
 """
 
-import os
 
 import pytest
 
-from auth.base import AuthBackend
 from auth.registry import _get_backend, _VALID_MODES
 
 

@@ -15,7 +15,6 @@ Test categories:
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.access_control import check_patient_access, get_accessible_patient_ids

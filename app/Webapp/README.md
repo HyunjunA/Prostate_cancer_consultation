@@ -1,6 +1,6 @@
-# Prostate Cancer Consultation Dashboard — Webapp
+# COMPASS — Webapp
 
-> Next.js (React) frontend for the Prostate Cancer Consultation Dashboard.  
+> Next.js (React) frontend for the COMPASS.  
 > Displays physician feedback reports, patient-friendly summaries, and NLP analysis results.
 
 ## Key Features

@@ -52,8 +52,6 @@ import {
 import {
   ChevronRight,
   ChevronLeft,
-  ChevronDown,
-  ChevronUp,
   CheckCircle,
   FileText,
   Shield,
@@ -61,12 +59,15 @@ import {
   BarChart3,
   Smile,
   Check,
-  Sparkles,
-  MessageSquareText,
 } from "lucide-react";
+
+import RiskPerceptionWithSummary, {
+  type TopicSummaryMap,
+} from "@/components/RiskPerceptionWithSummary";
 
 import { submitSurvey, fetchSurveySubmissions } from "@/api/surveyApi";
 import { sendTrackingEvents } from "@/api/trackingApi";
+import { trackFollowup, startSession, endSession } from "@/tracking/track";
 import { getOrCreateSession } from "@/tracking/utils/session.utils";
 
 /* =============================================================================
@@ -222,81 +223,6 @@ const CLASS_TO_TOPIC_MAP: Record<string, string> = {
   "life_expectancy": "Life Expectancy",
 };
 
-// Topic Colors (from PatientFollowUpReport)
-const TOPIC_COLORS: Record<
-  string,
-  { gradient: string; iconBg: string; border: string; light: string }
-> = {
-  "Cancer Prognosis": {
-    gradient: "from-rose-500/10 via-pink-500/10 to-fuchsia-500/10",
-    iconBg: "from-rose-500 to-pink-500",
-    border: "border-rose-200/50 dark:border-rose-500/20",
-    light: "bg-rose-50 border-rose-200",
-  },
-  "Life Expectancy": {
-    gradient: "from-violet-500/10 via-purple-500/10 to-indigo-500/10",
-    iconBg: "from-violet-500 to-purple-500",
-    border: "border-violet-200/50 dark:border-violet-500/20",
-    light: "bg-violet-50 border-violet-200",
-  },
-  "Erectile Dysfunction": {
-    gradient: "from-sky-500/10 via-cyan-500/10 to-teal-500/10",
-    iconBg: "from-sky-500 to-cyan-500",
-    border: "border-sky-200/50 dark:border-sky-500/20",
-    light: "bg-sky-50 border-sky-200",
-  },
-  "Urinary Incontinence": {
-    gradient: "from-emerald-500/10 via-green-500/10 to-teal-500/10",
-    iconBg: "from-emerald-500 to-green-500",
-    border: "border-emerald-200/50 dark:border-emerald-500/20",
-    light: "bg-emerald-50 border-emerald-200",
-  },
-  "Irritative Urinary Symptoms": {
-    gradient: "from-amber-500/10 via-orange-500/10 to-yellow-500/10",
-    iconBg: "from-amber-500 to-orange-500",
-    border: "border-amber-200/50 dark:border-amber-500/20",
-    light: "bg-amber-50 border-amber-200",
-  },
-};
-
-// Risk Perception Questions (for reference display)
-const RISK_QUESTIONS = [
-  {
-    id: "q1",
-    text: "What is the chance that your cancer will spread or come back if you choose active surveillance?",
-    topic: "Cancer Prognosis",
-  },
-  {
-    id: "q2",
-    text: "What is the chance that your cancer will spread or come back if you choose treatment (surgery or radiation)?",
-    topic: "Cancer Prognosis",
-  },
-  {
-    id: "q3",
-    text: "What is the chance of having erectile dysfunction after treatment?",
-    topic: "Erectile Dysfunction",
-  },
-  {
-    id: "q4",
-    text: "What is the chance of having urinary incontinence after treatment?",
-    topic: "Urinary Incontinence",
-  },
-  {
-    id: "q5",
-    text: "What is the chance of having irritative urinary symptoms after treatment?",
-    topic: "Irritative Urinary Symptoms",
-  },
-];
-
-const RISK_ANSWER_OPTIONS = [
-  { value: "very_low", label: "Very Low (0-10%)" },
-  { value: "low", label: "Low (11-30%)" },
-  { value: "moderate", label: "Moderate (31-50%)" },
-  { value: "high", label: "High (51-70%)" },
-  { value: "very_high", label: "Very High (71-100%)" },
-  { value: "not_sure", label: "Not Sure" },
-];
-
 /* =============================================================================
    SECTION 3: UTILITY FUNCTIONS
 ============================================================================= */
@@ -304,170 +230,18 @@ const RISK_ANSWER_OPTIONS = [
 const cx = (...classes: (string | false | null | undefined)[]) =>
   classes.filter(Boolean).join(" ");
 
-// Type alias for summaries
-type TopicSummaryMap = Record<
-  string,
-  { aiSummary: string; extractedSentences: string[] }
->;
+// Risk Perception data, theme colours, and `TopicSummaryMap` type now live
+// in `@/components/RiskPerceptionWithSummary` — see the import block above.
 
 /* =============================================================================
    SECTION 4: REUSABLE COMPONENTS
 ============================================================================= */
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4.1 AI Summary Badge (from PatientFollowUpReport)
+// AISummaryBadge and CollapsibleSummary now live in
+// `@/components/RiskPerceptionWithSummary` (extracted alongside the Risk
+// Perception step that was their only consumer).
 // ─────────────────────────────────────────────────────────────────────────────
-
-interface AISummaryBadgeProps {
-  isDark?: boolean;
-}
-
-const AISummaryBadge: React.FC<AISummaryBadgeProps> = ({ isDark }) => {
-  return (
-    <span
-      className={cx(
-        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold",
-        "backdrop-blur-sm transition-all duration-200",
-        isDark
-          ? "bg-violet-500/20 text-violet-300 border border-violet-400/30"
-          : "bg-gradient-to-r from-violet-500/10 to-fuchsia-500/10 text-violet-600 border border-violet-300/50",
-      )}
-    >
-      <Sparkles size={10} />
-      AI-generated
-    </span>
-  );
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 4.2 Collapsible Summary (from PatientFollowUpReport)
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface CollapsibleSummaryProps {
-  topicName: string;
-  aiSummary: string;
-  extractedSentences?: string[];
-  isExpanded: boolean;
-  onToggle: () => void;
-  isDark?: boolean;
-}
-
-const CollapsibleSummary: React.FC<CollapsibleSummaryProps> = ({
-  topicName,
-  aiSummary,
-  extractedSentences = [],
-  isExpanded,
-  onToggle,
-  isDark,
-}) => {
-  const colors = TOPIC_COLORS[topicName] || TOPIC_COLORS["Cancer Prognosis"];
-
-  return (
-    <div className="mt-6">
-      {/* Toggle Button */}
-      <button
-        type="button"
-        onClick={onToggle}
-        className={cx(
-          "flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
-          isDark
-            ? "bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700"
-            : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200 shadow-sm hover:shadow",
-        )}
-      >
-        <MessageSquareText size={16} className="opacity-70" />
-        <span>
-          {isExpanded ? "Hide" : "View"} consultation summary for this topic
-        </span>
-        <AISummaryBadge isDark={isDark} />
-        {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-      </button>
-
-      {/* Collapsible Content */}
-      <div
-        className={cx(
-          "transition-all duration-300 ease-in-out overflow-hidden",
-          isExpanded ? "max-h-[1000px] opacity-100 mt-4" : "max-h-0 opacity-0",
-        )}
-      >
-        <div
-          className={cx(
-            "p-3 sm:p-4 lg:p-5 rounded-2xl border-l-4",
-            isDark
-              ? "bg-slate-800/60 border-l-indigo-500 border-y border-r border-slate-700/50"
-              : "bg-gradient-to-r border-l-indigo-500 border-y border-r border-gray-100 shadow-sm",
-            colors.gradient,
-          )}
-        >
-          {/* Topic Label */}
-          <div className="flex items-center gap-2 mb-3">
-            <div
-              className={cx(
-                "w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold",
-                "bg-gradient-to-br",
-                colors.iconBg,
-              )}
-            >
-              <FileText size={14} />
-            </div>
-            <span
-              className={cx(
-                "text-sm font-semibold",
-                isDark ? "text-slate-200" : "text-gray-800",
-              )}
-            >
-              {topicName}
-            </span>
-          </div>
-
-          {/* AI Summary Text */}
-          <p
-            className={cx(
-              "text-sm leading-relaxed",
-              isDark ? "text-slate-300" : "text-gray-600",
-            )}
-          >
-            {aiSummary}
-          </p>
-
-          {/* Extracted Sentences (if available) */}
-          {extractedSentences.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-slate-700/30">
-              <h5
-                className={cx(
-                  "text-xs font-bold uppercase tracking-wider mb-3",
-                  isDark ? "text-slate-500" : "text-gray-400",
-                )}
-              >
-                Relevant excerpts from your consultation
-              </h5>
-              <div className="space-y-2">
-                {extractedSentences.map((sentence, idx) => (
-                  <div
-                    key={idx}
-                    className={cx(
-                      "p-3 rounded-lg",
-                      isDark ? "bg-slate-900/50" : "bg-white/80",
-                    )}
-                  >
-                    <p
-                      className={cx(
-                        "text-xs leading-relaxed italic",
-                        isDark ? "text-slate-400" : "text-gray-500",
-                      )}
-                    >
-                      "{sentence}"
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 4.3 Progress Sidebar
@@ -854,294 +628,6 @@ const CompleteStep: React.FC<CompleteStepProps> = ({ isDark }) => {
 };
 
 /* =============================================================================
-   SECTION 6: RISK PERCEPTION WITH SUMMARY (ONE QUESTION AT A TIME)
-============================================================================= */
-
-interface RiskPerceptionWithSummaryProps {
-  answers: RiskPerceptionAnswers;
-  onChange: (questionId: keyof RiskPerceptionAnswers, value: string) => void;
-  onSubmit?: () => void;
-  onProgressSave?: () => void;
-  isSubmitting?: boolean;
-  summaries: TopicSummaryMap;
-  isDark?: boolean;
-  onTrackEvent?: (event: any) => void;
-}
-
-const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
-  answers,
-  onChange,
-  onSubmit,
-  onProgressSave,
-  isSubmitting = false,
-  summaries,
-  isDark,
-  onTrackEvent,
-}) => {
-  const [currentQuestionIndex, setCurrentQuestionIndex] = React.useState(0);
-  const [expandedSummaries, setExpandedSummaries] = React.useState<
-    Record<string, boolean>
-  >({});
-
-  const totalQuestions = RISK_QUESTIONS.length;
-  const currentQuestion = RISK_QUESTIONS[currentQuestionIndex];
-  const currentAnswer =
-    answers[currentQuestion.id as keyof RiskPerceptionAnswers];
-  const isCurrentAnswered = currentAnswer !== null;
-  const isLastQuestion = currentQuestionIndex === totalQuestions - 1;
-
-  const handleNext = () => {
-    if (currentQuestionIndex < totalQuestions - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
-      onProgressSave?.();
-    }
-  };
-
-  const handlePrev = () => {
-    if (currentQuestionIndex > 0) {
-      setCurrentQuestionIndex(currentQuestionIndex - 1);
-    }
-  };
-
-  const handleToggleSummary = (questionId: string, topic: string) => {
-    const isCurrentlyExpanded = expandedSummaries[questionId];
-    setExpandedSummaries((prev) => ({
-      ...prev,
-      [questionId]: !prev[questionId],
-    }));
-
-    trackingManager.recordEvent({
-      eventType: "summary_toggle",
-      elementId: `RiskSummary_${questionId}`,
-      timestamp: new Date().toISOString(),
-      metadata: {
-        questionId,
-        topic,
-        expanded: !isCurrentlyExpanded,
-      },
-    });
-  };
-
-  const summaryData = summaries[currentQuestion.topic];
-  const colors =
-    TOPIC_COLORS[currentQuestion.topic] || TOPIC_COLORS["Cancer Prognosis"];
-
-  return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      {/* Topic Badge */}
-      <div className="flex items-center gap-2">
-        <div
-          className={cx(
-            "w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold bg-gradient-to-br",
-            colors.iconBg,
-          )}
-        >
-          {currentQuestionIndex + 1}
-        </div>
-        <span
-          className={cx(
-            "text-xs font-medium px-2 py-1 rounded-full",
-            isDark
-              ? "bg-slate-800 text-slate-400"
-              : "bg-gray-100 text-gray-500",
-          )}
-        >
-          {currentQuestion.topic}
-        </span>
-      </div>
-
-      {/* Question Card */}
-      <div
-        className={cx(
-          "p-4 sm:p-5 lg:p-6 rounded-xl border",
-          isDark ? "bg-slate-800 border-slate-700" : "bg-white border-gray-200",
-        )}
-      >
-        <p
-          className={cx(
-            "text-base sm:text-lg font-semibold mb-4 sm:mb-6 leading-relaxed",
-            isDark ? "text-white" : "text-gray-900",
-          )}
-        >
-          {currentQuestion.text}
-        </p>
-
-        {/* Answer Options */}
-        <div className="space-y-3">
-          {RISK_ANSWER_OPTIONS.map((option) => (
-            <label
-              key={option.value}
-              className={cx(
-                "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors border-2",
-                currentAnswer === option.value
-                  ? isDark
-                    ? "bg-blue-900/30 border-blue-500"
-                    : "bg-blue-50 border-blue-400"
-                  : isDark
-                    ? "border-slate-700 hover:bg-slate-700"
-                    : "border-gray-200 hover:bg-gray-50",
-              )}
-            >
-              <input
-                type="radio"
-                name={currentQuestion.id}
-                value={option.value}
-                checked={currentAnswer === option.value}
-                onChange={() => {
-                  onChange(
-                    currentQuestion.id as keyof RiskPerceptionAnswers,
-                    option.value,
-                  );
-                  onTrackEvent?.({
-                    eventType: "survey_answer",
-                    elementId: `RiskPerception_${currentQuestion.id}`,
-                    metadata: {
-                      survey: "risk_perception",
-                      questionId: currentQuestion.id,
-                      answer: option.value,
-                      topic: currentQuestion.topic,
-                    },
-                  });
-                }}
-                className="sr-only"
-              />
-              <span
-                className={cx(
-                  "w-4 h-4 rounded-full border-2 flex items-center justify-center",
-                  currentAnswer === option.value
-                    ? "border-blue-500 bg-blue-500"
-                    : isDark
-                      ? "border-slate-500"
-                      : "border-gray-300",
-                )}
-              >
-                {currentAnswer === option.value && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-white" />
-                )}
-              </span>
-              <span
-                className={cx(
-                  "text-sm font-medium",
-                  isDark ? "text-slate-300" : "text-gray-700",
-                )}
-              >
-                {option.label}
-              </span>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      {/* Collapsible Summary */}
-      {summaryData && (
-        <CollapsibleSummary
-          topicName={currentQuestion.topic}
-          aiSummary={summaryData.aiSummary}
-          extractedSentences={summaryData.extractedSentences}
-          isExpanded={expandedSummaries[currentQuestion.id] || false}
-          onToggle={() =>
-            handleToggleSummary(currentQuestion.id, currentQuestion.topic)
-          }
-          isDark={isDark}
-        />
-      )}
-
-      {/* Progress Bar */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <span
-            className={cx(
-              "text-sm font-medium",
-              isDark ? "text-slate-300" : "text-gray-600",
-            )}
-          >
-            Question {currentQuestionIndex + 1} of {totalQuestions}
-          </span>
-          <span
-            className={cx(
-              "text-sm font-medium",
-              isDark ? "text-rose-400" : "text-rose-600",
-            )}
-          >
-            {Math.round(((currentQuestionIndex + 1) / totalQuestions) * 100)}%
-          </span>
-        </div>
-        <div
-          className={cx(
-            "w-full h-2 rounded-full",
-            isDark ? "bg-slate-700" : "bg-gray-200",
-          )}
-        >
-          <div
-            className="h-2 rounded-full bg-rose-500 transition-all duration-300"
-            style={{
-              width: `${((currentQuestionIndex + 1) / totalQuestions) * 100}%`,
-            }}
-          />
-        </div>
-      </div>
-
-      {/* Navigation Buttons */}
-      <div className="flex justify-between">
-        {currentQuestionIndex > 0 ? (
-          <button
-            onClick={handlePrev}
-            className={cx(
-              "flex items-center gap-1 px-6 py-3 rounded-lg text-sm font-semibold transition-all border",
-              isDark
-                ? "border-rose-700 text-rose-300 hover:bg-rose-900/30"
-                : "border-rose-300 text-rose-600 hover:bg-rose-50",
-            )}
-          >
-            Previous
-          </button>
-        ) : (
-          <div />
-        )}
-        {!isLastQuestion ? (
-          <button
-            onClick={handleNext}
-            disabled={!isCurrentAnswered}
-            className={cx(
-              "px-6 py-3 rounded-lg text-sm font-semibold transition-all",
-              isCurrentAnswered
-                ? isDark
-                  ? "bg-rose-700 text-rose-100 hover:bg-rose-600"
-                  : "bg-rose-600 text-white hover:bg-rose-700"
-                : isDark
-                  ? "bg-slate-700 text-slate-500 cursor-not-allowed"
-                  : "bg-gray-300 text-gray-500 cursor-not-allowed",
-            )}
-          >
-            Next
-          </button>
-        ) : (
-          onSubmit && (
-            <button
-              onClick={onSubmit}
-              disabled={!isCurrentAnswered || isSubmitting}
-              data-track-proximity="RiskPerception_Submit_Button"
-              className={cx(
-                "px-8 py-3 rounded-lg text-sm font-semibold transition-all shadow-lg",
-                isCurrentAnswered && !isSubmitting
-                  ? isDark
-                    ? "bg-rose-700 text-rose-100 hover:bg-rose-600 hover:shadow-xl"
-                    : "bg-rose-600 text-white hover:bg-rose-700 hover:shadow-xl"
-                  : isDark
-                    ? "bg-slate-700 text-slate-500 cursor-not-allowed"
-                    : "bg-gray-300 text-gray-500 cursor-not-allowed",
-              )}
-            >
-              {isSubmitting ? "Submitting..." : "Submit Responses"}
-            </button>
-          )
-        )}
-      </div>
-    </div>
-  );
-};
-
-/* =============================================================================
    SECTION 7: MAIN COMPONENT
 ============================================================================= */
 
@@ -1298,6 +784,25 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
   const pageLoadTimeRef = useRef<number>(Date.now());
 
   useEffect(() => {
+    trackFollowup(currentFile, currentSpeaker, {
+      event_type: "page_view",
+      metadata: { page: "patient_followup_report" },
+    });
+    return () => {
+      trackFollowup(currentFile, currentSpeaker, {
+        event_type: "session_end",
+        metadata: { page: "patient_followup_report" },
+      });
+    };
+  }, [currentFile, currentSpeaker]);
+
+  // Pattern A: page-lifetime session — mount-only.
+  useEffect(() => {
+    startSession();
+    return () => endSession();
+  }, []);
+
+  useEffect(() => {
     const flushEvents = (useKeepalive: boolean = false) => {
       const events = trackingManager.getEvents();
       if (events.length === 0) return;
@@ -1405,6 +910,18 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
   // 7.5 Navigation Handlers
   // ─────────────────────────────────────────────────────────────────────────
 
+  // Maps the outer wizard step name to the survey_type stored in the
+  // patient_followup_survey behavior table. welcome/complete have no
+  // associated survey, so they're sent with survey_type=null.
+  const STEP_TO_SURVEY_TYPE: Partial<
+    Record<SurveyStep, "sdm" | "dcs" | "risk_perception" | "satisfaction">
+  > = {
+    sdm: "sdm",
+    dcs: "dcs",
+    risk: "risk_perception",
+    satisfaction: "satisfaction",
+  };
+
   const goToStep = (step: SurveyStep) => {
     setCurrentStep(step);
     trackingManager.recordEvent({
@@ -1412,6 +929,14 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
       elementId: `Step_${step}`,
       timestamp: new Date().toISOString(),
       metadata: { step },
+    });
+
+    const stepIndex = SURVEY_STEPS.indexOf(step) + 1;
+    trackFollowup(currentFile, currentSpeaker, {
+      event_type: "survey_step_view",
+      survey_type: STEP_TO_SURVEY_TYPE[step],
+      step_number: stepIndex,
+      metadata: { outer_step: step },
     });
   };
 
@@ -1439,7 +964,11 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
     value: YesNoAnswer | ScaleAnswer,
   ) => {
     setSdmAnswers((prev) => ({ ...prev, [questionId]: value }));
-    // Tracking handled by SDMQuestions component via onTrackEvent
+    trackFollowup(currentFile, currentSpeaker, {
+      event_type: "survey_answer",
+      survey_type: "sdm",
+      question_id: String(questionId),
+    });
   };
 
   const handleDCSChange = (
@@ -1447,7 +976,11 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
     value: LikertAnswer,
   ) => {
     setDcsAnswers((prev) => ({ ...prev, [questionId]: value }));
-    // Tracking handled by DecisionalConflictSurvey component via onTrackEvent
+    trackFollowup(currentFile, currentSpeaker, {
+      event_type: "survey_answer",
+      survey_type: "dcs",
+      question_id: String(questionId),
+    });
   };
 
   const handleRiskChange = (
@@ -1455,7 +988,11 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
     value: string,
   ) => {
     setRiskAnswers((prev) => ({ ...prev, [questionId]: value }));
-    // Tracking handled by RiskPerceptionSurvey component via onTrackEvent
+    trackFollowup(currentFile, currentSpeaker, {
+      event_type: "survey_answer",
+      survey_type: "risk_perception",
+      question_id: String(questionId),
+    });
   };
 
   const handleSatisfactionChange = (
@@ -1463,7 +1000,11 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
     value: any,
   ) => {
     setSatisfactionAnswers((prev) => ({ ...prev, [field]: value }));
-    // Tracking handled by PatientSatisfactionSurvey component via onTrackEvent
+    trackFollowup(currentFile, currentSpeaker, {
+      event_type: "survey_answer",
+      survey_type: "satisfaction",
+      question_id: String(field),
+    });
   };
 
   const handleTrackEvent = (eventData: any) => {
@@ -1494,6 +1035,12 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
         metadata: { answers: sdmAnswers },
       });
 
+      trackFollowup(currentFile, currentSpeaker, {
+        event_type: "survey_complete",
+        survey_type: "sdm",
+        metadata: { answer_count: Object.keys(sdmAnswers).length },
+      });
+
       setSdmSubmitted(true);
     } catch (error) {
       console.error("SDM submission error:", error);
@@ -1518,6 +1065,12 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
         elementId: "DCS_Submit",
         timestamp: new Date().toISOString(),
         metadata: { answers: dcsAnswers },
+      });
+
+      trackFollowup(currentFile, currentSpeaker, {
+        event_type: "survey_complete",
+        survey_type: "dcs",
+        metadata: { answer_count: Object.keys(dcsAnswers).length },
       });
 
       setDcsSubmitted(true);
@@ -1546,6 +1099,12 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
         metadata: { answers: riskAnswers },
       });
 
+      trackFollowup(currentFile, currentSpeaker, {
+        event_type: "survey_complete",
+        survey_type: "risk_perception",
+        metadata: { answer_count: Object.keys(riskAnswers).length },
+      });
+
       setRiskSubmitted(true);
     } catch (error) {
       console.error("Risk submission error:", error);
@@ -1570,6 +1129,12 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
         elementId: "Satisfaction_Submit",
         timestamp: new Date().toISOString(),
         metadata: { answers: satisfactionAnswers },
+      });
+
+      trackFollowup(currentFile, currentSpeaker, {
+        event_type: "survey_complete",
+        survey_type: "satisfaction",
+        metadata: { answer_count: Object.keys(satisfactionAnswers).length },
       });
 
       setSatisfactionSubmitted(true);
@@ -1654,10 +1219,48 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
   return (
     <div
       className={cx(
-        "min-h-screen flex",
+        "min-h-screen flex flex-col",
         isDarkMode ? "bg-slate-950" : "bg-gray-50",
       )}
     >
+      {/* COMPASS header — brand name on top with the full mixed-case
+          expansion underneath, matching the Patient first-visit welcome
+          card so returning patients see consistent branding. */}
+      <div
+        className={cx(
+          "border-b px-4 py-3",
+          isDarkMode
+            ? "border-slate-800 bg-slate-950"
+            : "border-gray-100 bg-white",
+        )}
+      >
+        <h2
+          className={cx(
+            "text-base font-bold tracking-tight",
+            isDarkMode ? "text-slate-100" : "text-gray-900",
+          )}
+        >
+          COMPASS
+        </h2>
+        <p
+          className={cx(
+            "text-xs italic mt-0.5",
+            isDarkMode ? "text-slate-400" : "text-gray-500",
+          )}
+        >
+          <span className="font-semibold">COM</span>munication of{" "}
+          <span className="font-semibold">P</span>rostate c
+          <span className="font-semibold">A</span>ncer{" "}
+          <span className="font-semibold">S</span>hared deci
+          <span className="font-semibold">S</span>ions
+          <span className="not-italic mx-2">·</span>
+          <span className="not-italic uppercase tracking-wider">
+            Follow-up Survey
+          </span>
+        </p>
+      </div>
+
+      <div className="flex flex-1">
       {/* Sidebar */}
       <ProgressSidebar
         currentStep={currentStep}
@@ -1714,6 +1317,14 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
                   isDark={isDarkMode}
                   interventionName="treatment"
                   onTrackEvent={handleTrackEvent}
+                  onQuestionView={(qid, idx) =>
+                    trackFollowup(currentFile, currentSpeaker, {
+                      event_type: "survey_step_view",
+                      survey_type: "sdm",
+                      question_id: qid,
+                      step_number: idx + 1,
+                    })
+                  }
                 />
 
                 {sdmSubmitted && (
@@ -1763,6 +1374,14 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
                   onProgressSave={saveDCSProgress}
                   isDark={isDarkMode}
                   onTrackEvent={handleTrackEvent}
+                  onQuestionView={(qid, idx) =>
+                    trackFollowup(currentFile, currentSpeaker, {
+                      event_type: "survey_step_view",
+                      survey_type: "dcs",
+                      question_id: qid,
+                      step_number: idx + 1,
+                    })
+                  }
                 />
 
                 {dcsSubmitted && (
@@ -1831,7 +1450,16 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
                   isSubmitting={isSubmittingRisk}
                   summaries={topicSummaries}
                   isDark={isDarkMode}
+                  trackingManager={trackingManager}
                   onTrackEvent={handleTrackEvent}
+                  onQuestionView={(qid, idx) =>
+                    trackFollowup(currentFile, currentSpeaker, {
+                      event_type: "survey_step_view",
+                      survey_type: "risk_perception",
+                      question_id: qid,
+                      step_number: idx + 1,
+                    })
+                  }
                 />
 
                 {riskSubmitted && (
@@ -1930,6 +1558,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
             {currentStep === "complete" && <CompleteStep isDark={isDarkMode} />}
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

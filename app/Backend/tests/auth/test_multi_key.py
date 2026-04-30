@@ -541,7 +541,7 @@ class TestMultiKeyEdgeCases:
         mock_db.__aenter__ = AsyncMock(return_value=mock_db)
         mock_db.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("db.AsyncSessionLocal", return_value=mock_db) as mock_session:
+        with patch("db.AsyncSessionLocal", return_value=mock_db):
             with pytest.raises(HTTPException):
                 await backend.authenticate(request)
 

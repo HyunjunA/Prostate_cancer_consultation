@@ -1,574 +1,124 @@
-# Database Schema Guide — Prostate Cancer Consultation Dashboard
+# Database Schema
 
-> Updated: 2026-04-02 (DB optimization: TEXT→JSONB, index tuning, Alembic, model_results deprecation)
-> Database: PostgreSQL 13 (`prostatecancer_db`)
-> ORM: SQLAlchemy (Backend: async/asyncpg, Pipeline: sync/psycopg2)
-> Schema DDL: `Backend/database_schema.sql`
-> ORM Models: `Backend/models.py`
-> Migrations: Alembic (`Backend/migrations/`)
+PostgreSQL schema for the COMPASS. **17 application tables** in the `public` schema (plus `alembic_version` for migration tracking). Schema lives in `app/Backend/models.py` (SQLAlchemy ORM) and is bootstrapped via `app/Backend/database_schema.sql` + Alembic migrations 001–009.
+
+Native deployment uses port `:5433`; Docker mode uses `:5432`.
 
 ---
 
-## Overview
-
-This database serves two systems that share the same PostgreSQL instance:
-
-1. **NLP Pipeline** (`AI_physician_patient_communication/`) — writes analysis results
-2. **Dashboard Backend** (`Backend/`) — reads results for display, writes user interactions
-
-There are **11 tables** organized into 5 functional groups:
+## Table Groups
 
 | Group | Tables | Purpose |
-|-------|--------|---------|
-| Physician Interface | `doctor_rewrite_log` | Sentence rewrite practice history (queries `sentence_prediction` directly) |
-| Patient Interface | `patient_summary`, `patient_summary_scoring`, `patient_responses`* | AI summaries + patient feedback (*`patient_responses` not used in active UI) |
-| Survey System | `survey_submission_log` | SDM, DCS, Risk Perception, Satisfaction surveys |
-| ML Pipeline Results | `transcript_analysis_log`, `sentence_prediction` | Raw NLP pipeline output storage |
-| Infrastructure | `user_interaction_log`, `auth_user`, `auth_api_key`, `patient_access` | Behavior tracking + access control |
+|---|---|---|
+| Pipeline persistence | 8 | NLP + AI pipeline outputs |
+| Behavior tracking | 3 | Per-page user behavior (patient first/followup, doctor) |
+| Authentication | 3 | API key auth + per-patient access control |
+| Other | 3 | Audio recordings, REDCap submissions, doctor rewrite log |
 
 ---
 
-## App Screen → DB Table Guide
+## Pipeline Persistence (8 tables)
 
-> Which tables provide data for each screen the user sees.
+### `transcript_analysis_log` — pipeline run header
+| Column | Type | Notes |
+|---|---|---|
+| `id` | int (PK) | |
+| `patient_id` | varchar(255) | derived from filename, e.g. `SID_10` |
+| `source_filename` | varchar(500) | original transcript filename |
+| `total_sentences` | int | post-segmentation count |
+| `top_n` | int | sentences selected per domain |
+| `context_window` | int | ±N sentences for context |
+| `model_results` | jsonb | full step-3 prediction snapshot |
+| `xlsx_data` | bytea | exported xlsx (for download fallback) |
+| `pipeline_started_at` | timestamptz | |
+| `analyzed_at` | timestamptz | NLP stage finished |
+| `ai_overall_score` | float | AI-stage rollup |
+| `processed` | bool | true = AI stage complete |
+| `processed_at` | timestamptz | |
 
-###  Doctor Dashboard (`?doctorid=auto`)
+### `sentence_prediction` — top-N selected sentences (per analysis × model)
+PK `id`, FK `analysis_id → transcript_analysis_log.id`. One row per (analysis, model, selected sentence).
+Key columns: `model` (cp/le/ed/inc/ius), `sentence_index`, `pred_score`, `sentence_text`, `context`.
 
-| Screen Element | Data Source | Description |
-|---------------|-----------|-------------|
-| Patient list (left panel) | `sentence_prediction` | Distinct patient_id list |
-| Domain sentence cards | `sentence_prediction` | Each sentence's text, NLP pred_score (0.0-1.0), domain |
-| Domain average scores | `sentence_prediction` | Calculated from pred_score + `llm_domain_scoring_and_summary.ai_score` |
-| Score trend graph | `sentence_prediction` | Score changes over time per patient |
-| Sentence rewrite tool | `doctor_rewrite_log` | Doctor rewrites a sentence → stored here. Original score unchanged |
-| Rewrite history | `doctor_rewrite_log` | Previous rewrite attempts for same sentence |
+### `nlp_all_predictions` — every sentence × 5 model scores
+PK `id`, FK `analysis_id`. Single row per sentence carries `pred_cp`, `pred_le`, `pred_ed`, `pred_inc`, `pred_ius` columns.
 
-###  Patient First Visit (`?visit=first`)
+### `nlp_pipeline_intermediate` — step state snapshots (JSONB)
+PK `id`, FK `analysis_id`. One row per pipeline step (`step` ∈ raw / filtered / sentences / top_by_model). `payload` is jsonb.
 
-| Screen Element | Data Source | Description |
-|---------------|-----------|-------------|
-| 5 AI summary cards | `patient_summary` | Per-domain AI-generated summary text |
-| Evidence sentences below summary | `sentence_prediction` | Original sentences that the summary is based on |
-| Summary usefulness rating | `patient_summary_scoring` | Patient rates 1-5: "Was this information helpful?" |
-| ~~Free-text feedback~~ | `patient_responses` | **Not used in active UI.** Table/API exist but no active component calls them. Legacy only. |
+### `llm_pipeline_intermediate` — per-domain AI step state
+PK `id`, FK `analysis_id`. One row per (domain × step × sentence). `step` ∈ scoring / extraction / filtering / selection / reformat. Includes `survived_filter` boolean, `ai_score` (smallint 0-5), `estimate` (text — TEXT since migration 009), `treatment` (text — TEXT since 009).
 
-###  Patient Follow-up Visit (`?visit=followup`)
+### `llm_domain_scoring_and_summary` — final patient-visible AI output
+PK `id`, FK `analysis_id`. Final per-domain scoring + reformatted summary. Columns: `domain`, `ai_score`, `score_explanation`, `extracted_estimate`, `treatment`, `source_sentence`, `source_context`, `reformat_sentence` (the patient-facing summary).
 
-| Screen Element | Data Source | Description |
-|---------------|-----------|-------------|
-| Shared Decision Making survey (SDM) | `survey_submission_log` | "Did the doctor explain treatment options?" etc. |
-| Decisional Conflict Scale (DCS) | `survey_submission_log` | "Are you confident about your treatment decision?" etc. |
-| Risk Perception survey | `survey_submission_log` | Per-domain risk understanding assessment |
-| Patient Satisfaction survey | `survey_submission_log` | Overall consultation satisfaction |
+### `patient_summary` — parent for patient-side data
+PK `(file, speaker)`. No data columns — purely a parent row for `patient_summary_domain`.
 
-###  Admin Tracking Dashboard (`/admin/tracking`)
-
-| Screen Element | Data Source | Description |
-|---------------|-----------|-------------|
-| Timeline chart | `user_interaction_log` | Event count by time period |
-| Per-patient activity | `user_interaction_log` | Who viewed which patient data, how much |
-| Device distribution | `user_interaction_log` | desktop/tablet/mobile ratio |
-| Hourly heatmap | `user_interaction_log` | Peak usage hours |
-
-###  Background (not visible to users)
-
-| Role | Table | Description |
-|------|-------|-------------|
-| NLP pipeline run records | `transcript_analysis_log` | Parameters, timestamp, xlsx backup per analysis run |
-| NLP detailed predictions | `sentence_prediction` | Per-sentence per-domain probability (0.0-1.0). Primary source for physician and patient dashboards. |
-| User authentication | `auth_user`, `auth_api_key` | API key-based auth (currently simple mode) |
-| Patient access control | `patient_access` | Which user can access which patient data (not yet active) |
+### `patient_summary_domain` — patient-side scoring + free-response per domain
+PK `(file, speaker, domain)`, FK back to `patient_summary`. Columns: `display_order`, `patient_scoring` (int), `patient_response` (text). The patient's quality rating and free-text feedback per domain.
 
 ---
 
-## Table Relationship Diagram
+## Behavior Tracking (3 tables)
 
-```mermaid
-erDiagram
-    transcript_analysis_log ||--o{ sentence_prediction : "1:N CASCADE"
-    patient_summary ||--|| patient_summary_scoring : "1:1 CASCADE"
-    patient_summary ||--|| patient_responses : "1:1 CASCADE"
-    patient_summary ||--o{ survey_submission_log : "1:N CASCADE"
-    auth_user ||--o{ auth_api_key : "1:N CASCADE"
-    auth_user ||--o{ patient_access : "1:N CASCADE"
-```
+Three sibling tables sharing the columns `id, session_id, file, speaker, event_type, metadata (jsonb), device_type, client_timestamp, created_at` plus per-area extras:
+
+| Table | Extra columns | Used by |
+|---|---|---|
+| `patient_first_behavior` | `domain`, `rating` | First-visit page |
+| `patient_followup_survey` | `survey_type`, `question_id`, `step_number` | Follow-up surveys (DCS, SDM, Risk, Sat) |
+| `doctor_behavior` | `target_type`, `target_id` | Doctor dashboard |
 
 ---
 
-## 1. `doctor_rewrite_log` — Physician Rewrite Practice History
+## Authentication (3 tables)
 
-### Why this table exists
+### `auth_user`
+PK `id`. `username`, `email`, `password_hash`, `role`, `is_superuser`, `is_active`, `auth_provider`, `created_at`, `updated_at`.
 
-Physicians can practice improving low-scoring sentences by rewriting them and getting a new score. This table records every rewrite attempt. It serves two purposes:
-1. **Learning persistence**: When a physician refreshes the page, their latest rewrite is restored from this table.
-2. **Research data**: Researchers can analyze how physicians improve their communication over time.
+### `auth_api_key`
+PK `id`, FK `user_id`. Hashed API key (`key_hash`), `label`, `is_active`, `created_at`, `expires_at`, `last_used_at`. Checked with `hmac.compare_digest` (constant-time).
 
-**Important**: Rewrites are a learning tool only. They do NOT change the original NLP scores in `sentence_prediction`. This was explicitly decided on 2026-03-13 (Ivan) to prevent score gaming.
-
-### How data gets in
-
-- **Physician Dashboard**: `PUT /api/doctor/rewrites` — saves original sentence, revised sentence, both scores, and timestamp.
-- Each rewrite creates a new row (not an update), building a revision history.
-
-### Who reads it
-
-- **Physician Dashboard**: `GET /api/doctor/rewrites?file=...&speaker=...` — loads rewrites for a patient
-- **Physician Dashboard**: `GET /api/doctor/rewrites/{file}/{i}/{i2}/history` — full revision history for one sentence
-- **Physician Dashboard**: On page load, the most recent rewrite for the current sentence is loaded into the textarea.
-
-### Column details
-
-| Column | Type | PK | Description |
-|--------|------|:--:|-------------|
-| `file` | VARCHAR(255) | PK1 | Transcript filename (= `sentence_prediction.patient_id` mapped filename). Links to the patient transcript. |
-| `i` | INT | PK2 | Utterance index (= `sentence_prediction.utterance_index`). Identifies the original sentence. |
-| `i2` | INT | PK3 | Sentence-within-utterance index (= `sentence_prediction.sentence_in_utterance`). |
-| `time` | TIMESTAMP WITH TIME ZONE | PK4 | Timestamp of this rewrite attempt. Part of PK to allow multiple rewrites of the same sentence. |
-| `speaker` | VARCHAR(100) | | Doctor speaker label (same as in `sentence_prediction`). |
-| `original_sentence` | TEXT | | The original sentence text that was rewritten. Stored redundantly for self-contained history. |
-| `revised_sentence` | TEXT | | The physician's rewritten version of the sentence. |
-| `score` | FLOAT | | The NLP score of the rewritten sentence. **Currently hardcoded to 5** (temporary — will be replaced with actual NLP re-scoring). |
-| `class` | VARCHAR(100) | | Domain name (e.g., `cancer_prognosis`). Stored for filtering rewrites by domain. |
-
-### Foreign Key
-
-The FK to `doctor_sentence_view` was removed. `doctor_rewrite_log` now stands alone — rows reference sentences logically via `(file, i, i2)` which correspond to `(patient_id, utterance_index, sentence_in_utterance)` in `sentence_prediction`, but there is no enforced DB-level FK.
+### `patient_access`
+PK `id`. Maps `user_id` → `patient_id` with `access_type` (read/write). Used to scope which patients a non-superuser can see.
 
 ---
 
-## 3. `patient_summary` — Patient AI Summary Cards
+## Other (3 tables)
 
-### Why this table exists
+### `session_recording`
+PK `id`. Stores audio chunks (`recording_data` bytea) per session × file × area, with `event_count`. Used for raw consultation audio archive.
 
-When a patient opens their report page, they see **5 AI-generated summary cards** — one per clinical domain. The text for these cards comes from this table. It's the primary content that patients read.
+### `survey_submission_log`
+PK `id`. One row per survey submission. `survey_type`, `answers` (jsonb), `extra_data`, `submitted_at`, plus REDCap sync fields `redcap_synced` (bool), `redcap_record_id`, `redcap_error` (text — populated on failed sync).
 
-### How data gets in
-
-- **Current (temporary)**: `convert_output_to_csv.py` concatenates the top-3 highest-scoring sentences per domain and stores them as the "summary". This is a placeholder.
-- **Future (Step 9)**: Guillermo's AI Reformat sub-pipeline will generate patient-friendly summaries in plain language and save them via `persistence.save_patient_summary()`.
-
-### Who reads it
-
-- **Patient First Visit**: `GET /api/patient/summaries/{file}/{speaker}` — displays 5 summary cards
-- **Patient Follow-Up**: Same endpoint — shows summaries alongside survey questions (especially Risk Perception survey)
-
-### Column details
-
-| Column | Type | PK | Description |
-|--------|------|:--:|-------------|
-| `file` | VARCHAR(255) | PK1 | Transcript filename (same format as `sentence_prediction.patient_id` mapped filename). |
-| `speaker` | VARCHAR(100) | PK2 | Patient identifier label. Format: `Patient_{filename}`. |
-| `entire_summary` | TEXT | | Combined summary across all 5 domains. Currently NULL — reserved for future use. |
-| `class_1` | VARCHAR(100) | | Domain name for slot 1 (e.g., `cancer_prognosis`). |
-| `summary_class_1` | TEXT | | AI summary text for domain 1. **Currently temporary**: top-3 NLP sentences concatenated. |
-| `class_2` | VARCHAR(100) | | Domain name for slot 2 (e.g., `continence`). |
-| `summary_class_2` | TEXT | | AI summary text for domain 2. |
-| `class_3` | VARCHAR(100) | | Domain name for slot 3 (e.g., `erectile_dysfunction_potency`). |
-| `summary_class_3` | TEXT | | AI summary text for domain 3. |
-| `class_4` | VARCHAR(100) | | Domain name for slot 4 (e.g., `irritative_urinary_symptoms`). |
-| `summary_class_4` | TEXT | | AI summary text for domain 4. |
-| `class_5` | VARCHAR(100) | | Domain name for slot 5 (e.g., `life_expectancy`). |
-| `summary_class_5` | TEXT | | AI summary text for domain 5. |
-
-### Design note
-
-The `class_N` / `summary_class_N` pattern stores domain name and summary as paired columns. This is a denormalized design chosen for simplicity — the frontend reads all 5 summaries in a single row rather than joining 5 rows. The domain-to-slot mapping is fixed:
-
-| Slot | Domain | Pipeline abbreviation |
-|------|--------|-----------------------|
-| 1 | cancer_prognosis | cp |
-| 2 | continence | inc |
-| 3 | erectile_dysfunction_potency | ed |
-| 4 | irritative_urinary_symptoms | ius |
-| 5 | life_expectancy | le |
+### `doctor_rewrite_log`
+PK `(file, i, i2, speaker, time)`. Each row = one AI-assisted sentence rewrite (`original_sentence`, `revised_sentence`, `score`, `class`).
 
 ---
 
-## 4. `patient_summary_scoring` — Patient Helpfulness Ratings
+## Migrations
 
-### Why this table exists
+| Revision | Purpose |
+|---|---|
+| 001_baseline | initial schema (matches `database_schema.sql`) |
+| 002_add_behavior_tracking_tables | three behavior tables (Pattern A — area split) |
+| 003_drop_user_interaction_log | drop legacy unified tracking table |
+| 004_add_tour_restart_event | extend `doctor_behavior.event_type` enum |
+| 005_swap_tour_events | tour_restart → tour_open + tour_end |
+| 006_nlp_intermediates | add `nlp_all_predictions`, `nlp_pipeline_intermediate` |
+| 007_ai_intermediates | add `llm_pipeline_intermediate`, `llm_domain_scoring_and_summary` |
+| 008_drop_summary_cols | drop unused `patient_summary.entire_summary`, `patient_summary_domain.summary_text` |
+| 009_widen_llm_text_columns | widen `estimate`/`treatment` from VARCHAR to TEXT |
 
-After reading each AI summary card, patients rate how helpful the information was using a NIH PROMIS unipolar scale (1–5: "Not at all helpful" to "Extremely helpful"). These ratings are research data — they measure whether the AI-generated summaries are actually useful to patients.
-
-### How data gets in
-
-- **Patient First Visit**: `PUT /api/patient/scoring` — saves individual domain ratings as the patient clicks star ratings.
-- Initial row created by `init_db.py` with all scores NULL, then updated as the patient interacts.
-
-### Who reads it
-
-- **Patient First Visit**: `GET /api/patient/scoring` — restores previously saved ratings on page reload.
-- **Research Analysis**: Exported for measuring patient engagement and summary quality.
-
-### Column details
-
-| Column | Type | PK | Description |
-|--------|------|:--:|-------------|
-| `file` | VARCHAR(255) | PK1 | FK → `patient_summary.file`. |
-| `speaker` | VARCHAR(100) | PK2 | FK → `patient_summary.speaker`. |
-| `class_1_patient_scoring` | INT | | Rating for domain 1 (cancer prognosis). CHECK: 0–10. Frontend uses 1–5 scale. |
-| `class_2_patient_scoring` | INT | | Rating for domain 2 (continence). |
-| `class_3_patient_scoring` | INT | | Rating for domain 3 (erectile dysfunction). |
-| `class_4_patient_scoring` | INT | | Rating for domain 4 (irritative urinary). |
-| `class_5_patient_scoring` | INT | | Rating for domain 5 (life expectancy). |
-
-### Foreign Key
-
-```
-(file, speaker) → patient_summary(file, speaker) ON DELETE CASCADE
-```
+`alembic upgrade head` brings a fresh DB to revision **009**. `init-db-native.sh` does this end-to-end.
 
 ---
 
-## 5. `patient_responses` — Patient Free-Text Answers
-
-> ** NOT CURRENTLY USED IN ACTIVE UI.** The API endpoints (`GET/PUT /api/patient/responses`) and hook functions (`usePatientData.tsx`) exist, but no active frontend component (V33, V35, V31Re) calls them. Only legacy components (V2–V29, inactive) used this table. The pipeline creates empty rows (answer_1~5 = NULL) at startup, but no UI reads or writes to them. Infrastructure is ready for future use.
-
-### Why this table exists
-
-Originally designed for the Patient First Visit page where patients would provide free-text answers to open-ended questions about each domain. This would capture qualitative feedback that star ratings alone cannot convey.
-
-### Column details
-
-| Column | Type | PK | Description |
-|--------|------|:--:|-------------|
-| `file` | VARCHAR(255) | PK1 | FK → `patient_summary.file`. |
-| `speaker` | VARCHAR(100) | PK2 | FK → `patient_summary.speaker`. |
-| `answer_1` ~ `answer_5` | TEXT | | Free-text response per domain. Same slot mapping as `patient_summary`. |
-
----
-
-## 6. `survey_submission_log` — Survey Responses (SDM, DCS, Risk Perception, Satisfaction)
-
-### Why this table exists
-
-The Patient Follow-Up page presents 4 validated survey instruments. Each submission is stored as a separate row with the full answers in JSON format. This design supports:
-- Multiple submissions (e.g., partial saves on Next click, final save on Submit)
-- Different survey types with different question structures in a single table
-- REDCap synchronization for clinical research data management
-
-### How data gets in
-
-- **Patient Follow-Up**: `POST /api/surveys/submit` — called on Submit and on auto-save (Next click with `partial: true` in metadata).
-- Each submission creates a new INSERT (not an update), so the full history of partial + final saves is preserved.
-
-### Who reads it
-
-- **Patient Follow-Up**: `GET /api/surveys/by-speaker/{speaker}` — restores previous answers on page reload.
-- **REDCap Sync**: Backend can export survey data to REDCap via API integration.
-
-### Column details
-
-| Column | Type | PK | Description |
-|--------|------|:--:|-------------|
-| `id` | SERIAL | PK | Auto-increment primary key. |
-| `file` | VARCHAR(255) | | FK → `patient_summary.file`. Indexed for fast lookup. |
-| `speaker` | VARCHAR(100) | | FK → `patient_summary.speaker`. Indexed. |
-| `survey_type` | VARCHAR(50) | | One of: `sdm`, `dcs`, `risk_perception`, `satisfaction`, `baseline`, `questions`. Indexed. |
-| `answers` | JSONB | | JSON object containing all question-answer pairs. Structure varies by survey type. Example for SDM: `{"q1": "yes", "q2": 4, "q3": "no", ...}`. JSONB provides automatic validation and field-level queries. |
-| `extra_data` | JSONB | | JSON object for metadata. Contains `{ "partial": true }` for auto-saves, or additional context. |
-| `submitted_at` | TIMESTAMP | | When this submission was recorded. |
-| `redcap_synced` | BOOLEAN | | Whether this submission has been exported to REDCap. Default `FALSE`. |
-| `redcap_record_id` | VARCHAR(255) | | REDCap record ID after successful sync. NULL until synced. |
-| `redcap_error` | TEXT | | Error message if REDCap sync failed. NULL on success. |
-
-### Survey types
-
-| Type | Survey Instrument | Question Count | Scale |
-|------|-------------------|----------------|-------|
-| `sdm` | Shared Decision Making | ~10 | Yes/No + Likert |
-| `dcs` | Decisional Conflict Scale | ~16 | 5-point Likert |
-| `risk_perception` | Risk Perception | 5 (one per domain) | 6-point scale |
-| `satisfaction` | Patient Satisfaction | ~5 | Likert |
-
----
-
-## 7. `transcript_analysis_log` — Pipeline Analysis Run Records
-
-### Why this table exists
-
-Every time the NLP pipeline processes a transcript file, it creates one row in this table. This provides:
-- **Audit trail**: When was each file analyzed, with what parameters?
-- **Reproducibility**: The `top_n` and `context_window` settings used for each run are recorded.
-- **Download fallback**: The `xlsx_data` column stores the binary xlsx output, so results can be downloaded even if the file is deleted from disk.
-
-### How data gets in
-
-- **Pipeline Step 10**: `persistence.save_analysis_run()` — creates one row per pipeline execution.
-- **CSV seed**: `transcript_analysis_log.csv` → `init_db.py` for initial seeding.
-
-### Who reads it
-
-- **Backend API**: `GET /api/transcript/history/{patient_id}` — lists all analysis runs for a patient.
-- **Backend API**: `GET /api/transcript/download/{patient_id}` — falls back to `xlsx_data` if the file isn't on disk.
-
-### Column details
-
-| Column | Type | PK | Description |
-|--------|------|:--:|-------------|
-| `id` | SERIAL | PK | Auto-increment. Used as FK target by `sentence_prediction`. |
-| `patient_id` | VARCHAR(255) | | Patient identifier extracted from filename (e.g., `SID_14`). Indexed. |
-| `total_sentences` | INT | | Total number of sentences after Step 2 segmentation. Useful for understanding transcript size. |
-| `top_n` | INT | | The `top_k` parameter used for this run (default: 10). Records how many sentences were selected per domain. |
-| `context_window` | INT | | The `context_window` parameter used (default: 3). Records how many surrounding sentences were included. |
-| `model_results` | JSONB | | **Deprecated** — set to NULL for new analysis runs. Per-model result data is now stored exclusively in the `sentence_prediction` table. Kept for backward compatibility with legacy rows that predate the `sentence_prediction` feature; `_backfill_predictions()` reads this column to reconstruct old data. |
-| `xlsx_data` | BYTEA | | Binary xlsx file for DB-backed download. Allows result retrieval even after disk cleanup. Can be large (~50-200KB per file). |
-| `source_filename` | VARCHAR(500) | | Original input filename (e.g., `Input_Keystrokes REC001 (SID 14).xlsx`). |
-| `pipeline_started_at` | TIMESTAMP | | When `pipeline_runner.py` began processing this file. Used to calculate total pipeline duration. |
-| `analyzed_at` | TIMESTAMP | | When NLP results were saved to DB (Step 8). Indexed for chronological queries. |
-| `ai_overall_score` | FLOAT | | GPT-4o average ai_score across all domains (0-5). Set by `ai_pipeline_service.py` after Step 9 completes. Displayed on the DOCTOR page as overall consultation quality. |
-| `processed` | BOOLEAN | | `False` after NLP save (Step 8), `True` after AI pipeline completes (Step 9). Indicates whether the full pipeline (NLP + AI) has finished. Patients with `processed=False` can be re-processed for the AI step. |
-| `processed_at` | TIMESTAMP | | When the AI pipeline (Step 9) completed. `NULL` if `processed=False`. Together with `pipeline_started_at`, gives total end-to-end processing time. |
-
-### Pipeline timing
-
-```
-pipeline_started_at  →  analyzed_at  →  processed_at
-     (start)           (NLP saved)     (AI completed)
-     
-NLP time  = analyzed_at - pipeline_started_at     (~10-15 seconds)
-AI time   = processed_at - analyzed_at            (~3 minutes)
-Total     = processed_at - pipeline_started_at    (~3-4 minutes)
-```
-
-### Indexes
-
-| Index | Columns | Purpose |
-|-------|---------|---------|
-| `idx_transcript_log_analyzed_at` | `analyzed_at` | Chronological queries |
-| `idx_transcript_log_patient_analyzed` | `(patient_id, analyzed_at DESC)` | Composite — covers both patient lookup and "latest run" queries. Replaces former single-column `idx_transcript_log_patient_id`. |
-| `idx_transcript_log_patient_xlsx` | `(patient_id, analyzed_at DESC) WHERE xlsx_data IS NOT NULL` | Partial — download endpoint skips NULL xlsx rows |
-| `idx_transcript_log_history` | `(patient_id, analyzed_at DESC) INCLUDE (id, total_sentences, top_n, context_window, source_filename)` | Covering — history endpoint can answer from index alone (index-only scan) |
-
-### Relationship
-
-```
-transcript_analysis_log.id ←── sentence_prediction.analysis_id (1:N, CASCADE)
-```
-
-Deleting an analysis run cascades to delete all associated sentence predictions.
-
----
-
-## 8. `sentence_prediction` — Per-Sentence NLP Scores
-
-### Why this table exists
-
-This is the **most granular NLP output** — one row per sentence per domain. `sentence_prediction` stores **all 5 domain scores** for each of the top-K sentences and is the primary source for all dashboard queries. This enables:
-- Querying "show me all sentences scored > 0.8 for cancer prognosis"
-- Comparing how the same sentence scores across different domains
-- Full context preservation (the `context` column with ±3 surrounding sentences)
-
-### How data gets in
-
-- **Pipeline Step 10**: `persistence.save_sentence_predictions()` — bulk inserts all top-K sentences for all 5 domains.
-- **CSV seed**: `sentence_prediction.csv` → `init_db.py`.
-
-### Who reads it
-
-- **Backend API**: `GET /api/transcript/predictions/{patient_id}` — returns predictions with optional filters (`?model=cp&top_n=5&min_score=0.7`).
-
-### Column details
-
-| Column | Type | PK | Description |
-|--------|------|:--:|-------------|
-| `id` | SERIAL | PK | Auto-increment. |
-| `analysis_id` | INT | FK | → `transcript_analysis_log.id`. Links this prediction to a specific pipeline run. CASCADE on delete. Indexed. |
-| `patient_id` | VARCHAR(255) | | Patient identifier. Redundant with the analysis log but indexed for direct lookups without joining. |
-| `model` | VARCHAR(10) | | NLP domain abbreviation: `cp`, `le`, `ed`, `inc`, or `ius`. Combined with `patient_id` for indexed queries. |
-| `sentence_index` | INT | | Global sentence number (1-based) across the entire segmented transcript. Maps to `index` column in pipeline DataFrames. |
-| `utterance_index` | INT | | Original utterance row number from the transcript. Maps to `i` column. |
-| `sentence_in_utterance` | INT | | Position within the utterance (1-based). Maps to `i2` column. |
-| `speaker` | VARCHAR(100) | | Speaker label (always the doctor for current implementation). |
-| `sentence_text` | TEXT | | The sentence text (lowercased). |
-| `pred_score` | FLOAT | | NLP prediction probability (0.0–1.0). Maps to `.pred_1` from the NLP Docker response. Indexed DESC for "top scoring" queries. |
-| `context` | TEXT | | Surrounding sentences with `<main>target sentence</main>` tags. Window size determined by `context_window` in the analysis run. |
-
-### Indexes
-
-| Index | Columns | Purpose |
-|-------|---------|---------|
-| `idx_sp_analysis_model` | `(analysis_id, model)` | Composite — covers both join-to-run and filter-by-model. Replaces former `idx_sp_analysis_id` (redundant: first column covers single-column queries). |
-| `idx_sp_patient_model` | `(patient_id, model)` | Filter by patient + domain |
-| `idx_sp_pred_score` | `pred_score DESC` | "Top scoring sentences" queries |
-
-### Note on column mapping to `doctor_rewrite_log`
-
-`doctor_rewrite_log` references sentences via `(file, i, i2)` which correspond to `sentence_prediction` columns as follows:
-
-| `doctor_rewrite_log` | `sentence_prediction` |
-|----------------------|-----------------------|
-| `file` | `patient_id` (filename form) |
-| `i` | `utterance_index` |
-| `i2` | `sentence_in_utterance` |
-| `speaker` | `speaker` |
-| (no score column) | `pred_score` (NLP probability 0.0-1.0) |
-| `class` | `model` (abbreviated domain) |
-
----
-
-## 9. `user_interaction_log` — Behavior Tracking
-
-### Why this table exists
-
-Every click, page view, scroll, and interaction in the dashboard is tracked for **research purposes**. This data measures:
-- How much time patients spend reading each summary
-- Whether physicians actually use the rewrite tool
-- Which domains get the most attention
-- Device types and session patterns
-
-The frontend batches events and sends them via `POST /api/tracking/events`.
-
-### Column details
-
-| Column | Type | PK | Description |
-|--------|------|:--:|-------------|
-| `id` | SERIAL | PK | Auto-increment. |
-| `session_id` | VARCHAR(100) | | UUID generated per browser session. Indexed. Groups events from the same visit. |
-| `role` | VARCHAR(20) | | `patient` or `doctor`. Indexed. Determines which UI the user was on. |
-| `file` | VARCHAR(255) | | Which patient's data the user was viewing. Indexed. |
-| `speaker` | VARCHAR(100) | | Speaker identifier. Indexed. |
-| `event_type` | VARCHAR(50) | | Event category. Indexed. Examples: `page_view`, `click`, `summary_expand`, `rating_submit`, `survey_next`, `rewrite_save`. |
-| `element_id` | VARCHAR(255) | | DOM element identifier (e.g., `summary-card-cp`, `rewrite-button`). |
-| `event_data` | JSONB | | JSON object with event-specific data. Examples: `{"domain": "cp", "score": 4}`, `{"scroll_percent": 75}`. JSONB provides automatic validation. |
-| `device_type` | VARCHAR(20) | | `desktop`, `tablet`, or `mobile`. |
-| `client_timestamp` | TIMESTAMP | | When the event occurred on the user's device (may differ from server time). |
-| `created_at` | TIMESTAMP | | When the event was recorded on the server. |
-
----
-
-## 10. Authentication Tables
-
-### `auth_user` — User Accounts
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | SERIAL PK | |
-| `username` | VARCHAR(150) | Display name. Indexed for login/lookup queries. |
-| `email` | VARCHAR(255) UNIQUE | Login email. |
-| `password_hash` | VARCHAR(255) | Bcrypt hash. NULL for API-key-only users. |
-| `role` | VARCHAR(20) | `admin`, `user`, or `readonly`. CHECK constraint. |
-| `is_superuser` | BOOLEAN | Full system access. |
-| `is_active` | BOOLEAN | Can login. Set FALSE to disable without deleting. |
-| `auth_provider` | VARCHAR(50) | `local` (default), could be `oauth` etc. |
-
-### `auth_api_key` — API Keys
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | SERIAL PK | |
-| `user_id` | INT FK | → `auth_user.id`. CASCADE on delete. |
-| `key_hash` | VARCHAR(255) | SHA-256 hash of the API key. The plain key is never stored. Indexed. |
-| `label` | VARCHAR(100) | Human-readable label (e.g., "Jun's dev key"). |
-| `is_active` | BOOLEAN | Revoke without deleting. |
-| `expires_at` | TIMESTAMP | Optional expiration. NULL = never expires. |
-| `last_used_at` | TIMESTAMP | Updated on each authenticated request. |
-
-### `patient_access` — Patient-Level Access Control
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | SERIAL PK | |
-| `user_id` | INT FK | → `auth_user.id`. |
-| `patient_id` | VARCHAR(255) | Which patient this user can access. |
-| `access_type` | VARCHAR(20) | `read`, `write`, or `admin`. CHECK constraint. |
-| `granted_at` | TIMESTAMP | When access was granted. |
-| `granted_by` | INT FK | → `auth_user.id`. Who granted access. |
-| UNIQUE | `(user_id, patient_id)` | One access record per user-patient pair. |
-
-**Note**: These auth tables are defined in the schema but the current system uses a simple `X-API-Key` header for authentication (`AUTH_MODE=api_key` in `.env`). The full user/role system is available for future use when the system moves to production.
-
----
-
-## Data Flow Summary
-
-```
-Pipeline output
-    │
-    ├──→ transcript_analysis_log    (1 row per pipeline run)
-    ├──→ sentence_prediction        (N rows per run: 5 domains × top-K; primary source for dashboards)
-    └──→ patient_summary            (temporary summaries; future: AI-generated)
-              │
-              ├──→ patient_summary_scoring   (patient rates each summary)
-              ├──→ patient_responses          (patient free-text answers)
-              └──→ survey_submission_log      (SDM, DCS, Risk, Satisfaction)
-
-User interactions
-    └──→ user_interaction_log       (clicks, views, time tracking)
-
-Physician rewrites
-    └──→ doctor_rewrite_log         (practice history, does NOT change scores; no FK, references sentence_prediction logically)
-```
-
----
-
-## Current Data Volume (6 test patients)
-
-| Table | Row Count | Notes |
-|-------|-----------|-------|
-| `sentence_prediction` | 300 | 50 per patient (10 per domain × 5) |
-| `transcript_analysis_log` | 18 | Multiple runs during testing |
-| `patient_summary` | 6 | 1 per patient |
-| `patient_summary_scoring` | 6 | 1 per patient (initially NULL) |
-| `patient_responses` | 6 | 1 per patient (initially NULL) |
-| `survey_submission_log` | 0 | Populated when patients complete surveys |
-| `doctor_rewrite_log` | 0 | Populated when physicians practice rewrites |
-| `user_interaction_log` | ~20 | From development/testing |
-| `auth_user` | 0 | Not yet configured |
-| `auth_api_key` | 0 | Using env-based API key |
-| `patient_access` | 0 | Not yet configured |
-
----
-
-## Schema Migration (Alembic)
-
-Schema changes are managed by Alembic. The initial schema is created by `database_schema.sql` (Docker entrypoint), and subsequent changes are applied via Alembic migrations.
-
-**Files:**
-- `Backend/alembic.ini` — config (DB URL from `DATABASE_URL` env var)
-- `Backend/migrations/env.py` — runner (asyncpg→psycopg2 swap, models.Base metadata)
-- `Backend/migrations/versions/001_baseline.py` — baseline (marks existing schema as starting point)
-
-**Docker startup flow:**
-```
-PostgreSQL → database_schema.sql (create tables)
-Backend → wait_for_db → init_db (CSV seed) → alembic stamp head → alembic upgrade head
-```
-
-**Adding a new column:**
-```bash
-# 1. Edit models.py
-# 2. Generate migration
-docker exec prostatecancer-backend alembic revision --autogenerate -m "add column X"
-# 3. Apply
-docker exec prostatecancer-backend alembic upgrade head
-```
-
----
-
-## Additional Indexes (user_interaction_log)
-
-| Index | Columns | Purpose |
-|-------|---------|---------|
-| `idx_uil_session` | `session_id` | Session lookup |
-| `idx_uil_role` | `role` | Filter by patient/doctor |
-| `idx_uil_file` | `file` | Filter by patient file |
-| `idx_uil_speaker` | `speaker` | Filter by speaker |
-| `idx_uil_event_type` | `event_type` | Filter by event type |
-| `idx_uil_client_timestamp` | `client_timestamp` | Time-based queries |
-| `idx_uil_file_event_type` | `(file, event_type)` | Composite — by_patient analytics GROUP BY |
-| `idx_uil_client_ts_hour` | `date_trunc('hour', client_timestamp) WHERE client_timestamp IS NOT NULL` | Expression — analytics timeline GROUP BY |
-| `idx_uil_client_ts_hour_of_day` | `extract(hour FROM client_timestamp) WHERE client_timestamp IS NOT NULL` | Expression — hourly heatmap GROUP BY |
-
-## Additional Indexes (survey_submission_log)
-
-| Index | Columns | Purpose |
-|-------|---------|---------|
-| `idx_survey_submission_file` | `file` | Filter by patient |
-| `idx_survey_submission_speaker` | `speaker` | Filter by speaker |
-| `idx_survey_submission_type` | `survey_type` | Filter by survey type |
-| `idx_survey_speaker_submitted` | `(speaker, submitted_at DESC)` | by-speaker endpoint — WHERE + ORDER BY |
-| `idx_survey_file_submitted` | `(file, submitted_at DESC)` | by-file endpoint — WHERE + ORDER BY |
-| `idx_survey_redcap_pending` | `id WHERE redcap_synced = FALSE` | Partial — REDCap sync pending items only |
-
----
+## See Also
+
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — system-level overview, deployment, module layout
+- [`../ml-pipeline/ML_PIPELINE.md`](../ml-pipeline/ML_PIPELINE.md) — which tables each pipeline step writes to
+- `app/Backend/models.py` — canonical SQLAlchemy definitions
+- `app/Backend/migrations/versions/` — migration source

@@ -264,14 +264,19 @@ export default function Home() {
     visitType: currentView === "patient" ? visitType : "",
   });
 
-  // rrweb session recording with PHI masking
-  // Start new recording when patient or visit type changes
+  // rrweb session recording with PHI masking — Pattern A area-aware.
+  // Start a new capture whenever the visible view/file changes; tag it with
+  // the matching area so admin can filter recordings by interface.
   useEffect(() => {
-    if (currentView !== "selection" && fileId) {
-      stopRecording(); // stop previous recording if any
-      const sessionId = `rec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      startRecording(sessionId, fileId, currentView === "patient" ? visitType : "");
-    }
+    if (currentView === "selection" || !fileId) return;
+    let area: "patient_first" | "patient_followup" | "doctor" | null = null;
+    if (currentView === "doctor") area = "doctor";
+    else if (currentView === "patient" && visitType === "first") area = "patient_first";
+    else if (currentView === "patient" && visitType === "followup") area = "patient_followup";
+    if (!area) return;
+    stopRecording(); // stop previous recording if any
+    const sessionId = `rec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    startRecording(sessionId, fileId, area);
     return () => { stopRecording(); };
   }, [currentView, fileId, visitType]);
 
@@ -594,7 +599,40 @@ export default function Home() {
         )}
 
         {/* Selection Screen - No URL parameters */}
-        {currentView === "selection" && <SelectionScreen />}
+        {currentView === "selection" && (
+          <>
+            {/* COMPASS brand header — landing screen only.
+                Hidden on Patient first / Patient follow-up / Doctor views
+                so those workspaces stay focused. */}
+            <header
+              className={`border-b px-6 py-3 ${
+                isDarkMode
+                  ? "border-slate-800 bg-slate-900"
+                  : "border-gray-200 bg-white"
+              }`}
+            >
+              <h1
+                className={`text-xl font-bold tracking-tight ${
+                  isDarkMode ? "text-slate-100" : "text-gray-900"
+                }`}
+              >
+                COMPASS
+              </h1>
+              <p
+                className={`text-xs mt-0.5 ${
+                  isDarkMode ? "text-slate-400" : "text-gray-500"
+                }`}
+              >
+                <span className="font-semibold">COM</span>munication of{" "}
+                <span className="font-semibold">P</span>rostate c
+                <span className="font-semibold">A</span>ncer{" "}
+                <span className="font-semibold">S</span>hared deci
+                <span className="font-semibold">S</span>ions
+              </p>
+            </header>
+            <SelectionScreen />
+          </>
+        )}
 
         {/* ═══════════════════════════════════════════════════════════
             APITestDashboard - Only visible in Dev Mode

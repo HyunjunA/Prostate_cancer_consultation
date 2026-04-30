@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 
 from fastapi import HTTPException, Request, status
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from auth.base import AuthBackend, AuthUser as AuthUserDTO
@@ -67,12 +66,21 @@ class MultiKeyBackend(AuthBackend):
                     detail="API Key has expired",
                 )
 
-            # Update last_used_at (best-effort, non-blocking)
+            # Update last_used_at (best-effort, non-blocking).
+            # Failures are non-fatal — the auth check has already
+            # succeeded by this point — but a silent swallow makes a
+            # broken DB write invisible to operators. Log so the
+            # failure surfaces, then roll back to keep the session
+            # usable for whatever comes next.
             try:
                 key_row.last_used_at = datetime.now(timezone.utc)
                 await db.commit()
-            except Exception:
+            except Exception as exc:
                 await db.rollback()
+                logger.warning(
+                    "last_used_at update failed for api_key (auth still succeeded): %s",
+                    exc,
+                )
 
             user = key_row.user
             return AuthUserDTO(

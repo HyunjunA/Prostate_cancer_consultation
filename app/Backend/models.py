@@ -1,12 +1,57 @@
-"""models.py - SQLAlchemy ORM model definitions for the Backend."""
+"""SQLAlchemy ORM models for every Backend table.
+
+Tables are grouped by feature area:
+  1. Doctor interface       : DoctorRewriteLog
+  2. Patient interface      : PatientSummary, PatientSummaryDomain
+  3. Surveys                : SurveySubmissionLog
+  4. Transcript analysis    : TranscriptAnalysisLog, SentencePrediction
+  5. Behaviour tracking     : SessionRecording, PatientFirstBehavior,
+                              PatientFollowupSurvey, DoctorBehavior
+  6. AI pipeline outputs    : LLMDomainScoringAndSummary
+
+Auth tables (AuthUser, AuthAPIKey, PatientAccess) are defined in
+auth/models.py but reuse the same `Base` declared here so every table
+shares one metadata registry — required for create_all() and Alembic.
+
+Schema changes go through Alembic migrations in migrations/versions/;
+edits to this file alone do not migrate the live database.
+
+Conventions used throughout:
+    - Composite PKs are declared with multiple `primary_key=True` columns
+      (DoctorRewriteLog, PatientSummary, PatientSummaryDomain).
+    - `ondelete='CASCADE'` on FKs means "if the parent row goes, this
+      row goes too" — used on transcript_analysis_log children so a
+      manual analysis cleanup leaves no orphans.
+    - JSONB (PostgreSQL-specific) is used for variable-shape payloads
+      that we want to query (event_metadata, model_results) rather than
+      treat as opaque blobs.
+    - LargeBinary stores raw xlsx bytes directly in postgres so the
+      backend can serve downloads without depending on a filesystem.
+    - server_default=func.now() lets postgres set timestamps even if a
+      caller forgets — defence against missing-timestamp bugs.
+"""
 
 from sqlalchemy import (
-    Column, ForeignKey, ForeignKeyConstraint, Index, LargeBinary, String, Integer, Float,
+    JSON, Column, ForeignKey, ForeignKeyConstraint, Index, LargeBinary, String, Integer, Float,
     Boolean, Text, TIMESTAMP, CheckConstraint, func
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship, declarative_base
 
+# JSONB type that transparently falls back to plain JSON when running
+# under SQLite. Production uses Postgres (full JSONB with binary storage
+# and GIN indexes); the unit-test fixtures in tests/conftest.py use an
+# in-memory SQLite engine, where JSONB does not exist. SQLite's JSON
+# preserves the dict shape the tests need; the binary/index features
+# don't matter for tests. This avoids the
+#     UnsupportedCompilationError: ... can't render element of type JSONB
+# error during Base.metadata.create_all() at test setup.
+JSONB_COMPAT = JSONB().with_variant(JSON(), "sqlite")
+
+# Single Base instance shared with auth/models.py so create_all() and
+# Alembic see every table from one metadata registry. DO NOT create a
+# second Base elsewhere — it would silently make the auth tables
+# invisible to migrations.
 Base = declarative_base()
 
 
@@ -15,17 +60,26 @@ Base = declarative_base()
 # =====================================================
 
 class DoctorRewriteLog(Base):
-    """Doctor rewriting history - tracks AI-powered sentence revisions."""
+    """Doctor rewriting history - tracks AI-powered sentence revisions.
+
+    The composite PK includes `time` so multiple revisions of the same
+    sentence on the same day are kept as separate rows (audit trail);
+    a unique constraint on (file, i, i2) without `time` would force
+    UPSERT and lose the previous revision.
+    """
     __tablename__ = 'doctor_rewrite_log'
 
     file = Column(String(255), primary_key=True, nullable=False)
     i = Column(Integer, primary_key=True, nullable=False)
     i2 = Column(Integer, primary_key=True, nullable=False)
+    # `time` in the PK makes every revision a distinct row.
     time = Column(TIMESTAMP(timezone=True), primary_key=True, default=func.now())
     speaker = Column(String(100))
     original_sentence = Column(Text)
     revised_sentence = Column(Text)
     score = Column(Float)
+    # `class` is a Python keyword, so the attribute is `class_` and we
+    # tell SQLAlchemy the actual column name via Column('class', ...).
     class_ = Column('class', String(100))
 
     def __repr__(self):
@@ -37,13 +91,22 @@ class DoctorRewriteLog(Base):
 # =====================================================
 
 class PatientSummary(Base):
-    """Patient summary — one row per patient."""
+    """Patient summary — one row per patient.
+
+    Composite PK (file, speaker) pairs each xlsx with the patient
+    speaker label inside it. Survives re-processing of the same file
+    via UPSERT in persistence.save_all() so survey_submission_log
+    referrers stay valid.
+    """
     __tablename__ = 'patient_summary'
 
     file = Column(String(255), primary_key=True, nullable=False)
     speaker = Column(String(100), primary_key=True, nullable=False)
-    entire_summary = Column(Text)
 
+    # `cascade="all, delete-orphan"` means deleting a PatientSummary
+    # also deletes its child PatientSummaryDomain rows. Combined with
+    # the FK ondelete=CASCADE below, this works at both ORM and DB
+    # levels — belt + braces.
     domains = relationship("PatientSummaryDomain", back_populates="summary",
                            cascade="all, delete-orphan", order_by="PatientSummaryDomain.display_order")
 
@@ -61,7 +124,6 @@ class PatientSummaryDomain(Base):
                                   Initially NULL — populated when patient submits rating.
       - patient_response       → PATIENT page: free-text response entered by the patient.
                                   Saved via PUT /api/patient/responses.
-      - summary_text           → PATIENT page: domain summary text (populated by pipeline).
 
     NOTE: patient_scoring is NOT the same as llm_domain_scoring_and_summary.ai_score.
       - patient_scoring = patient's subjective rating of doctor communication (PATIENT page)
@@ -69,6 +131,10 @@ class PatientSummaryDomain(Base):
     """
     __tablename__ = 'patient_summary_domain'
     __table_args__ = (
+        # Composite FK back to PatientSummary's composite PK. ondelete
+        # CASCADE means deleting a PatientSummary tears down every
+        # domain row attached to it, in addition to the ORM-level
+        # cascade declared in PatientSummary above.
         ForeignKeyConstraint(
             ['file', 'speaker'],
             ['patient_summary.file', 'patient_summary.speaker'],
@@ -80,7 +146,8 @@ class PatientSummaryDomain(Base):
     speaker = Column(String(100), primary_key=True, nullable=False)
     domain = Column(String(100), primary_key=True, nullable=False)
     display_order = Column(Integer, nullable=False, default=0)
-    summary_text = Column(Text)
+    # CheckConstraint enforces the 0-10 Likert range at the DB level so
+    # an out-of-range value cannot land via direct SQL either.
     patient_scoring = Column(Integer, CheckConstraint('patient_scoring BETWEEN 0 AND 10'))  # PATIENT enters this
     patient_response = Column(Text)  # PATIENT enters this
 
@@ -95,9 +162,23 @@ class PatientSummaryDomain(Base):
 # =====================================================
 
 class SurveySubmissionLog(Base):
-    """Survey submission log - stores all survey responses."""
+    """Survey submission log - stores all survey responses.
+
+    The actual answer payload lives in `answers` (JSONB) — different
+    survey types ship different question shapes, so a fixed column
+    schema would be too rigid.
+
+    REDCap sync state is tracked inline:
+      - redcap_synced=True   means the row was successfully pushed.
+      - redcap_record_id     stores the REDCap-side row id for later
+                             delete/refresh operations.
+      - redcap_error         records the last failure reason (if any)
+                             so the admin UI can show "retry sync".
+    """
     __tablename__ = 'survey_submission_log'
     __table_args__ = (
+        # FK to the patient summary so deleting a patient also deletes
+        # their submitted surveys (no orphaned answer rows).
         ForeignKeyConstraint(
             ['file', 'speaker'],
             ['patient_summary.file', 'patient_summary.speaker'],
@@ -111,8 +192,8 @@ class SurveySubmissionLog(Base):
     file = Column(String(255), nullable=False, index=True)
     speaker = Column(String(100), nullable=False, index=True)
     survey_type = Column(String(50), nullable=False, index=True)
-    answers = Column(JSONB, nullable=False)
-    extra_data = Column(JSONB)
+    answers = Column(JSONB_COMPAT, nullable=False)
+    extra_data = Column(JSONB_COMPAT)
     submitted_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
     redcap_synced = Column(Boolean, default=False)
@@ -135,6 +216,12 @@ class TranscriptAnalysisLog(Base):
       - analyzed_at: when NLP results were saved to DB (Step 8)
       - processed_at: when AI pipeline (GPT-4o) completed (Step 9)
       - processed: True if full pipeline (NLP + AI) completed successfully
+
+    Why xlsx_data is stored in the row (LargeBinary):
+        Lets the backend serve "download original transcript" purely
+        from postgres, no shared filesystem required. Important for
+        horizontally scaled deploys where each replica has its own
+        ephemeral disk.
     """
     __tablename__ = 'transcript_analysis_log'
 
@@ -143,7 +230,7 @@ class TranscriptAnalysisLog(Base):
     total_sentences = Column(Integer, nullable=False, default=0)
     top_n = Column(Integer, nullable=False, default=0)
     context_window = Column(Integer, nullable=False, default=3)
-    model_results = Column(JSONB)            # per-model scores (auto dict↔JSON)
+    model_results = Column(JSONB_COMPAT)     # per-model scores (auto dict↔JSON)
     xlsx_data = Column(LargeBinary)         # binary xlsx for DB-backed download
     source_filename = Column(String(500))
     pipeline_started_at = Column(TIMESTAMP(timezone=True))  # when processing began
@@ -152,6 +239,9 @@ class TranscriptAnalysisLog(Base):
     processed = Column(Boolean, default=False)  # True when full pipeline (NLP + AI) completed
     processed_at = Column(TIMESTAMP(timezone=True))  # when AI pipeline completed
 
+    # back_populates pairs with SentencePrediction.analysis below.
+    # cascade="all, delete-orphan" so removing the parent log also
+    # removes every SentencePrediction row pointing at it.
     predictions = relationship("SentencePrediction", back_populates="analysis", cascade="all, delete-orphan")
 
     def __repr__(self):
@@ -166,6 +256,8 @@ class SentencePrediction(Base):
     """Individual sentence-level NLP prediction, linked to an analysis run."""
     __tablename__ = 'sentence_prediction'
     __table_args__ = (
+        # Composite index for the most common query path:
+        # "all sentences for analysis X under model Y, ordered by score".
         Index('idx_sp_analysis_model', 'analysis_id', 'model'),
     )
 
@@ -188,31 +280,12 @@ class SentencePrediction(Base):
 
 
 # =====================================================
-# 6. User Interaction Tracking
+# 6. (removed) UserInteractionLog — replaced by Pattern A behavior tables
 # =====================================================
-
-class UserInteractionLog(Base):
-    """Tracks user interaction events from patient/physician UI."""
-    __tablename__ = 'user_interaction_log'
-    __table_args__ = (
-        Index('idx_uil_file_event_type', 'file', 'event_type'),
-    )
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    session_id = Column(String(100), nullable=False, index=True)
-    role = Column(String(20), nullable=False, server_default="patient")  # low cardinality, no index
-    visit_type = Column(String(20))  # "first" | "followup" | null (physician/legacy)
-    file = Column(String(255), nullable=False)  # covered by composite idx_uil_file_event_type
-    speaker = Column(String(100), nullable=False)  # rarely queried alone
-    event_type = Column(String(50), nullable=False, index=True)
-    element_id = Column(String(255))
-    event_data = Column(JSONB)
-    device_type = Column(String(20))
-    client_timestamp = Column(TIMESTAMP(timezone=True), index=True)
-    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-
-    def __repr__(self):
-        return f"<UserInteractionLog(id={self.id}, session_id={self.session_id}, event_type={self.event_type})>"
+# The legacy single user_interaction_log table has been split into
+# patient_first_behavior, patient_followup_survey, and doctor_behavior
+# (see section 7b below). The DROP TABLE migration is in Alembic
+# revision 003_drop_user_interaction_log.
 
 
 # =====================================================
@@ -220,7 +293,13 @@ class UserInteractionLog(Base):
 # =====================================================
 
 class SessionRecording(Base):
-    """Stores rrweb session recording chunks for replay."""
+    """Stores rrweb session recording chunks for replay.
+
+    `recording_data` is gzipped JSON — see routes_track_recordings.py
+    for the compress/decompress logic. `area` (patient_first / followup
+    / doctor) lets the admin UI filter recordings by which interface
+    produced them.
+    """
     __tablename__ = 'session_recording'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -231,9 +310,77 @@ class SessionRecording(Base):
     recording_data = Column(LargeBinary)  # gzipped rrweb events JSON
     event_count = Column(Integer, nullable=False, default=0)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    area = Column(String(20), nullable=False, server_default="unknown")  # patient_first | patient_followup | doctor | unknown
 
     def __repr__(self):
         return f"<SessionRecording(id={self.id}, session_id={self.session_id}, chunk={self.chunk_index})>"
+
+
+# =====================================================
+# 7b. Behavior Tracking (Pattern A — 3-area split)
+# =====================================================
+# Pattern A: each tracking area (patient_first / patient_followup /
+# doctor) has its OWN table with its OWN narrow event_type vocabulary.
+# The legacy single-table design produced false-positive "still open"
+# bugs where events from one area leaked into another's aggregation.
+
+class PatientFirstBehavior(Base):
+    """Patient first-visit interaction events (Pattern A)."""
+    __tablename__ = 'patient_first_behavior'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(100), nullable=False)
+    file = Column(String(255), nullable=False)
+    speaker = Column(String(100), nullable=False)
+    event_type = Column(String(30), nullable=False)
+    domain = Column(String(50))
+    rating = Column(Integer)  # SMALLINT in DB; SQLAlchemy Integer is fine for read/write
+    # `metadata` is reserved by SQLAlchemy on the Base class itself,
+    # so we name the Python attribute `event_metadata` and tell it the
+    # actual column name via Column('metadata', ...).
+    event_metadata = Column('metadata', JSONB_COMPAT, nullable=False, server_default='{}')
+    device_type = Column(String(20))
+    client_timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+
+class PatientFollowupSurvey(Base):
+    """Patient follow-up survey behavior events (Pattern A).
+
+    Stores behavior metadata (timing, ordering, step navigation) only.
+    Canonical answer payloads live in survey_submission_log.
+    """
+    __tablename__ = 'patient_followup_survey'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(100), nullable=False)
+    file = Column(String(255), nullable=False)
+    speaker = Column(String(100), nullable=False)
+    event_type = Column(String(30), nullable=False)
+    survey_type = Column(String(30))
+    question_id = Column(String(50))
+    step_number = Column(Integer)  # SMALLINT in DB
+    event_metadata = Column('metadata', JSONB_COMPAT, nullable=False, server_default='{}')
+    device_type = Column(String(20))
+    client_timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+
+class DoctorBehavior(Base):
+    """Doctor consultation interaction events (Pattern A)."""
+    __tablename__ = 'doctor_behavior'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String(100), nullable=False)
+    file = Column(String(255))  # nullable: doctor dashboard not tied to a specific patient file
+    speaker = Column(String(100), nullable=False)
+    event_type = Column(String(30), nullable=False)
+    target_type = Column(String(20))  # patient | topic | sentence
+    target_id = Column(String(255))
+    event_metadata = Column('metadata', JSONB_COMPAT, nullable=False, server_default='{}')
+    device_type = Column(String(20))
+    client_timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
 
 # =====================================================
@@ -263,7 +410,7 @@ class LLMDomainScoringAndSummary(Base):
     ai_score = Column(Integer)                               # 0-5 GPT-4o score → DOCTOR page (quality metric)
     score_explanation = Column(Text)                         # GPT-4o reasoning for the ai_score (from ai_pipeline/scoring.py)
     extracted_estimate = Column(Text)                        # "24-25%", "13 years", "<missing>"
-    treatment = Column(String(50))                           # "surgery", "radiation", NULL
+    treatment = Column(Text)                                 # "surgery", "radiation", "surgery, radiation, ablation therapy", NULL — TEXT for safety vs LLM verbosity
     source_sentence = Column(Text)                           # original single sentence (input to reformat)
     source_context = Column(Text)                            # surrounding context sentences
     reformat_sentence = Column(Text)                         # patient-facing summary → PATIENT page
@@ -274,3 +421,86 @@ class LLMDomainScoringAndSummary(Base):
 
     def __repr__(self):
         return f"<LLMDomainScoringAndSummary(id={self.id}, domain={self.domain}, ai_score={self.ai_score})>"
+
+
+# =====================================================
+# 9. NLP Pipeline Intermediates (steps 0-4)
+# =====================================================
+# Persists every NLP intermediate alongside the existing top-N rows in
+# `sentence_prediction`. Step 3 (all sentences x 5 model scores) is
+# normalized for SQL queries; the lighter steps go into a JSONB blob.
+
+class NLPAllPredictions(Base):
+    """All NLP predictions (step 3) — every sentence x 5 model scores.
+
+    `sentence_prediction` already keeps the per-domain top-N. This table
+    keeps the FULL set so analysts can ask cross-domain questions like
+    "which sentences scored high on multiple domains?".
+    """
+    __tablename__ = 'nlp_all_predictions'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    analysis_id = Column(Integer, ForeignKey('transcript_analysis_log.id', ondelete='CASCADE'), nullable=False)
+    patient_id = Column(String(255), nullable=False)
+    sentence_index = Column(Integer, nullable=False)
+    utterance_index = Column(Integer, nullable=False)
+    sentence_in_utterance = Column(Integer, nullable=False)
+    speaker = Column(String(255))
+    sentence_text = Column(Text)
+    # Five separate score columns (vs. one JSONB column) so SQL can
+    # filter / sort / aggregate on a single domain's score directly.
+    pred_cp = Column(Float)
+    pred_le = Column(Float)
+    pred_ed = Column(Float)
+    pred_inc = Column(Float)
+    pred_ius = Column(Float)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+
+class NLPPipelineIntermediate(Base):
+    """NLP pipeline intermediate snapshots for steps 0/1/2/4 as JSONB.
+
+    These steps are useful for traceability/debugging but rarely queried
+    row-by-row, so they are stored as compact JSON payloads (one row per
+    step per analysis = 4 rows total).
+    """
+    __tablename__ = 'nlp_pipeline_intermediate'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    analysis_id = Column(Integer, ForeignKey('transcript_analysis_log.id', ondelete='CASCADE'), nullable=False)
+    patient_id = Column(String(255), nullable=False)
+    step = Column(String(20), nullable=False)            # raw / filtered / sentences / top_by_model
+    payload = Column(JSONB_COMPAT, nullable=False)
+    row_count = Column(Integer)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+
+# =====================================================
+# 10. AI Pipeline Intermediates (Guillermo's sub-steps)
+# =====================================================
+
+class LLMPipelineIntermediate(Base):
+    """AI pipeline intermediate per-candidate-sentence rows.
+
+    Captures Guillermo's `df_extraction` (every candidate after scoring +
+    extraction) plus a `survived_filter` flag derived from `df_filtering`.
+    Lets analysts answer "what scores did the rejected sentences get?",
+    "estimate-missing rate per domain?", etc.
+    """
+    __tablename__ = 'llm_pipeline_intermediate'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    analysis_id = Column(Integer, ForeignKey('transcript_analysis_log.id', ondelete='CASCADE'), nullable=False)
+    patient_id = Column(String(255), nullable=False)
+    domain = Column(String(10), nullable=False)          # cp, le, ed, inc, ius
+    step = Column(String(20), nullable=False)            # 'extraction' (snapshot after scoring + extraction)
+    sentence_index = Column(Integer, nullable=False)
+    sentence_text = Column(Text)
+    context = Column(Text)
+    pred_score = Column(Float)                           # NLP .pred_1
+    ai_score = Column(Integer)                           # GPT-4o 0-5
+    score_explanation = Column(Text)
+    estimate = Column(Text)                                  # LLM extracted estimate — verbose responses possible
+    treatment = Column(Text)                                 # LLM extracted treatment — verbose responses possible
+    survived_filter = Column(Boolean, nullable=False, default=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())

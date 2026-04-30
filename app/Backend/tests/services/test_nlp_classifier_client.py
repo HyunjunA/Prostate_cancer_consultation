@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 from unittest.mock import AsyncMock
 
 import pytest
@@ -37,7 +37,12 @@ from nlp_classifier_client import (
 )
 
 
-NLP_BASE = "http://nlp-classifiers:8000"
+# Match whatever the production module resolved at import time.
+# Hardcoding "http://nlp-classifiers:8000" (the docker-mode default) silently
+# breaks every test when the runtime config points elsewhere — e.g. native
+# mode sets NLP_API_URL=http://localhost:8888 in .env.native, and respx
+# then refuses every request because the mocked URL no longer matches.
+NLP_BASE = nlp_classifier_client.NLP_API_URL
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

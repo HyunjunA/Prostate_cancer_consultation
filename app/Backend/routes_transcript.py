@@ -1,9 +1,12 @@
-"""
-Transcript Analysis REST API — FastAPI router for the ML scoring pipeline.
+"""Transcript Analysis REST API — FastAPI router for the ML scoring pipeline.
 
-This module exposes HTTP endpoints that allow external clients (e.g. the React
-dashboard, R scripts, or cURL) to upload consultation transcript xlsx files,
-run the full 7-step analysis pipeline, and retrieve the scored results.
+HTTP front door to the same NLP+LLM pipeline that pipeline_runner.py
+executes from the CLI. The CLI runs the pipeline as a batch over a
+folder; this module runs it ad-hoc on whatever the React dashboard
+(or any cURL caller) uploads.
+
+Both paths share the same heavy lifting (sentence_classification +
+persistence + ai_pipeline_service) — only the entry point differs.
 
 Endpoints
 ---------
@@ -28,10 +31,17 @@ Endpoints
     Retrieve the analysis history for a patient from the database, including
     parameters used, timestamps, and per-model score summaries.
 
+``GET /api/transcript/predictions/{patient_id}``
+    Query the per-sentence prediction table for a specific analysis,
+    with optional model / score / top-N filters. Includes a backfill
+    path for legacy rows that pre-date the sentence_prediction table.
+
 Authentication
 --------------
 All endpoints require an ``X-API-Key`` header matching the ``API_KEY``
-environment variable (server refuses to start if not set).
+environment variable (server refuses to start if not set). Patient-
+specific endpoints additionally enforce per-user patient access via
+auth/access_control.check_patient_access().
 
 Storage
 -------
@@ -40,9 +50,16 @@ Storage
 * **Database**: each analysis run is logged to ``transcript_analysis_log`` with
   metadata, the full model results as JSON, and the xlsx binary. DB storage is
   wrapped in try/except so a DB failure never blocks the primary response.
+
+Resilience patterns used throughout:
+* **Disk + DB dual persistence** for downloads — disk is fast, DB is durable.
+* **Disk fallback rebuild** — if the file is missing but DB has the bytes,
+  we serve from DB AND re-save to disk so future requests skip the lookup.
+* **Per-file isolation** in batch — one bad file does not abort the others.
+* **Non-fatal DB/AI failures** — the response still goes out so the
+  caller is not blocked by an internal write issue.
 """
 
-import json
 import logging
 import os
 import re
@@ -51,7 +68,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from dotenv import load_dotenv
+from core.settings import get_settings
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from sqlalchemy import func as sa_func, select
@@ -62,9 +79,18 @@ from auth.access_control import check_patient_access
 from auth.base import AuthUser
 from db import get_db, AsyncSessionLocal
 from models import SentencePrediction, TranscriptAnalysisLog
-from pipeline_runner import OUTCOME_TO_SHEET, _read_transcript, _export_to_xlsx_bytes  # noqa: E402
+from pipeline_runner import (
+    OUTCOME_TO_SHEET,
+    _read_transcript,
+    _export_to_xlsx_bytes,
+    _DOMAIN_SLOT_MAP,
+    _DOMAIN_SHORT_MAP,
+)  # noqa: E402
+import persistence
+import ai_pipeline_service
 
-load_dotenv()
+# .env loading is centralised in core.settings now; no module-level
+# load_dotenv() needed here.
 logger = logging.getLogger(__name__)
 
 
@@ -77,40 +103,39 @@ async def analyze_transcript(
     """Run transcript analysis using sentence_classification (R stringi).
 
     Replaces the old transcript_service.analyze_transcript to guarantee
-    identical sentence segmentation with the original R pipeline.
+    identical sentence segmentation with the original R pipeline. Mirrors
+    pipeline_runner.process_single_file's logic — same Steps 1-6 — but
+    operates on uploaded bytes instead of files on disk.
+
+    Returns:
+        Dict with `patient_id`, `total_sentences`, `models` (response
+        payload for the HTTP caller), `xlsx_bytes`, plus the
+        intermediate DataFrames the persistence layer needs
+        (df_raw, df_filtered, df_sentences, df_predicted, top_by_model).
     """
     import asyncio
-    import sys
-    import types
     import tempfile
 
-    # Write bytes to temp file for sentence_classification (expects file path)
+    # sentence_classification submodules are pre-loaded at process startup;
+    # see sentence_classification_loader.py for why this isn't a direct import.
+    from sentence_classification_loader import (
+        identify_doctor_speaker,
+        filter_doctor_rows,
+        segment_sentences,
+        classify_all_models,
+        select_top_sentences_all_outcomes,
+        add_context_all_outcomes,
+    )
+
+    # sentence_classification.read_input_file expects a real file path.
+    # Write the upload to a temp file, then delete it in `finally` below
+    # so we never leak temp files even on exceptions.
     suffix = ".csv" if filename.lower().endswith(".csv") else ".xlsx"
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         tmp.write(file_bytes)
         tmp_path = tmp.name
 
     try:
-        # Patch config module for sentence_classification imports
-        _sc_config = types.ModuleType("sc_config")
-        _sc_config.MODEL_TO_FULL = {v: k for k, v in OUTCOME_TO_SHEET.items()}
-        _sc_config.MODEL_TO_SHEET = dict(OUTCOME_TO_SHEET)
-        _sc_config.SHEET_ORDER = ["cp", "inc", "ed", "ius", "le"]
-
-        _orig_config = sys.modules.get("config")
-        sys.modules["config"] = _sc_config
-
-        from sentence_classification.preprocessing import identify_doctor_speaker, filter_doctor_rows
-        from sentence_classification.segmentation import segment_sentences
-        from sentence_classification.classification import classify_all_models
-        from sentence_classification.selection import select_top_sentences_all_outcomes
-        from sentence_classification.context import add_context_all_outcomes
-
-        if _orig_config is not None:
-            sys.modules["config"] = _orig_config
-        else:
-            sys.modules.pop("config", None)
-
         # Step 1: Read
         df_raw, patient_id = _read_transcript(tmp_path, filename)
 
@@ -122,7 +147,7 @@ async def analyze_transcript(
         df_sentences = segment_sentences(df_filtered, text_col="text")
 
         # Step 4: NLP classify
-        nlp_url = os.getenv("NLP_API_URL", "http://nlp-classifiers:8000")
+        nlp_url = get_settings().nlp_api_url
         outcomes = list(OUTCOME_TO_SHEET.values())
         df_predicted = await asyncio.to_thread(
             classify_all_models, df_sentences,
@@ -159,12 +184,25 @@ async def analyze_transcript(
                 for _, row in df.iterrows()
             ]
 
+        # Determine speakers (same convention as pipeline_runner.run_one)
+        doctor_speaker = df_filtered["speaker"].iloc[0] if len(df_filtered) > 0 else "Unknown"
+        patient_speaker = f"Patient_{Path(filename).stem}"
+
         return {
             "patient_id": patient_id,
             "total_sentences": len(df_sentences),
             "models": response_models,
             "xlsx_bytes": xlsx_bytes,
             "final_results": final_results,
+            # Intermediate dataframes — needed by persistence.save_all to
+            # populate nlp_all_predictions + nlp_pipeline_intermediate.
+            "df_raw": df_raw,
+            "df_filtered": df_filtered,
+            "df_sentences": df_sentences,
+            "df_predicted": df_predicted,
+            "top_by_model": top_by_model,
+            "doctor_speaker": doctor_speaker,
+            "patient_speaker": patient_speaker,
         }
     finally:
         os.unlink(tmp_path)
@@ -233,16 +271,16 @@ async def analyze(
     # Save xlsx to disk (shared across gunicorn workers)
     _save_xlsx(result["patient_id"], result["xlsx_bytes"])
 
-    # Save to database (non-blocking — DB failure does not affect the response)
-    await _save_to_db(
-        db,
-        patient_id=result["patient_id"],
-        total_sentences=result["total_sentences"],
+    # Save to database via the unified persistence layer — populates
+    # transcript_analysis_log + sentence_prediction + nlp_all_predictions +
+    # nlp_pipeline_intermediate + patient_summary(_domain). Then run the AI
+    # pipeline (GPT-4o scoring + reformat) which fills llm_pipeline_intermediate
+    # + llm_domain_scoring_and_summary and updates ai_overall_score / processed.
+    await _persist_and_run_ai(
+        result=result,
+        filename=file.filename,
         top_n=top_n,
         context_window=context_window,
-        models=result["models"],
-        xlsx_bytes=result["xlsx_bytes"],
-        source_filename=file.filename,
     )
 
     return {
@@ -262,18 +300,24 @@ async def download(
     """Download the generated xlsx result file for a patient.
 
     Tries the file system first; falls back to the database if the file is
-    missing (e.g. after a container restart).
+    missing (e.g. after a container restart that wiped /app/uploads).
+
+    The fallback also RE-SAVES to disk so future downloads of the same
+    patient skip the DB lookup — turns a one-time slow path into a
+    repeated fast path.
     """
     await check_patient_access(patient_id, user, db)
     filepath = _xlsx_path(patient_id)
     filename = f"{patient_id}_predictions.xlsx"
     media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-    # Primary: serve from disk
+    # Primary: serve from disk (cheap, just a sendfile syscall).
     if filepath.exists():
         return FileResponse(path=str(filepath), media_type=media_type, filename=filename)
 
-    # Fallback: serve from DB
+    # Fallback: serve from DB. Pull the LATEST row that has xlsx_data
+    # (xlsx_data may be NULL on legacy rows from before the binary
+    # storage migration).
     try:
         stmt = (
             select(TranscriptAnalysisLog.xlsx_data)
@@ -376,19 +420,13 @@ async def analyze_batch(
         # Save xlsx to disk
         _save_xlsx(result["patient_id"], result["xlsx_bytes"])
 
-        # Save to database — use independent session per file to isolate transactions.
-        # A rollback in one file must not affect the session state of subsequent files.
-        async with AsyncSessionLocal() as file_db:
-            await _save_to_db(
-                file_db,
-                patient_id=result["patient_id"],
-                total_sentences=result["total_sentences"],
-                top_n=top_n,
-                context_window=context_window,
-                models=result["models"],
-                xlsx_bytes=result["xlsx_bytes"],
-                source_filename=file.filename,
-            )
+        # Save full pipeline data to DB + run AI pipeline (per-file isolation).
+        await _persist_and_run_ai(
+            result=result,
+            filename=file.filename,
+            top_n=top_n,
+            context_window=context_window,
+        )
 
         successful += 1
         results.append({
@@ -451,7 +489,9 @@ async def download_batch(
         else:
             db_needed.append(pid)
 
-    # Single DB query for all missing patients (instead of N individual queries)
+    # Single DB query for all missing patients (instead of N individual queries).
+    # DISTINCT ON (postgres-specific) returns one row per patient_id —
+    # the order_by determines WHICH row we get (latest analyzed_at).
     if db_needed:
         try:
             # Use DISTINCT ON to get the latest row per patient_id
@@ -512,12 +552,21 @@ async def download_batch(
 # ──────────────────────────────────────────────────────────────────────────────
 # File-based xlsx storage (shared across gunicorn workers via disk)
 # ──────────────────────────────────────────────────────────────────────────────
-_UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
+_UPLOAD_DIR = Path(get_settings().upload_dir)
 _PATIENT_ID_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,254}$")
 
 
 def _validate_patient_id(patient_id: str) -> str:
-    """Validate patient_id to prevent path traversal attacks."""
+    """Validate patient_id to prevent path traversal attacks.
+
+    Two-layer defence:
+      1. Regex whitelist — only [a-zA-Z0-9_-], 1-255 chars, must start
+         with alphanumeric. Rejects "..", "/", "\\", null bytes, etc.
+      2. Resolved-path check — even if step 1 passed, ensure the
+         resulting absolute path stays inside UPLOAD_DIR. Defends
+         against weird unicode normalisation tricks the regex might
+         miss.
+    """
     if not _PATIENT_ID_PATTERN.match(patient_id):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -550,76 +599,68 @@ def _get_xlsx_bytes(patient_id: str) -> Optional[bytes]:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# DB storage helper
+# DB storage + AI pipeline orchestration
 # ──────────────────────────────────────────────────────────────────────────────
 
-async def _save_to_db(
-    db: AsyncSession,
+async def _persist_and_run_ai(
     *,
-    patient_id: str,
-    total_sentences: int,
+    result: Dict[str, Any],
+    filename: str,
     top_n: int,
     context_window: int,
-    models: dict,
-    xlsx_bytes: bytes,
-    source_filename: Optional[str],
 ) -> None:
-    """Persist analysis results to transcript_analysis_log + sentence_prediction.
+    """Save full pipeline output via persistence.save_all + run AI pipeline.
 
-    Wrapped in try/except so a DB failure never blocks the primary response.
-    Each call inserts a new row (preserving analysis history for the same patient).
-
-    Note: model_results is no longer populated (set to None). All per-sentence
-    data is stored in the normalized sentence_prediction table. The column is
-    kept for backward compatibility with legacy rows that predate sentence_prediction.
+    Mirrors what `pipeline_runner.run_one` does for the CLI batch path. All
+    failures are logged but never propagate — a DB or AI failure must not
+    break the HTTP response.
     """
+    patient_id = result["patient_id"]
+
     try:
-        record = TranscriptAnalysisLog(
+        ok = await persistence.save_all(
+            AsyncSessionLocal,
+            filename=filename,
             patient_id=patient_id,
-            total_sentences=total_sentences,
+            doctor_speaker=result["doctor_speaker"],
+            patient_speaker=result["patient_speaker"],
+            total_sentences=result["total_sentences"],
             top_n=top_n,
             context_window=context_window,
-            model_results=None,  # deprecated: use sentence_prediction table instead
-            xlsx_data=xlsx_bytes,
-            source_filename=source_filename,
+            xlsx_bytes=result["xlsx_bytes"],
+            final_results=result["final_results"],
+            outcome_to_sheet=OUTCOME_TO_SHEET,
+            domain_slot_map=_DOMAIN_SLOT_MAP,
+            domain_short_map=_DOMAIN_SHORT_MAP,
+            df_raw=result["df_raw"],
+            df_filtered=result["df_filtered"],
+            df_sentences=result["df_sentences"],
+            df_predicted=result["df_predicted"],
+            top_by_model=result["top_by_model"],
         )
-        db.add(record)
-        await db.flush()  # populate record.id before inserting child rows
-
-        # Bulk-insert sentence-level predictions into sentence_prediction table.
-        # Each entry in models dict maps: model_key (cp/inc/ed/ius/le) → list of sentence dicts.
-        # Sentence dict keys map to DB columns as follows:
-        #   dict key    →  DB column               (xlsx column)
-        #   "index"     →  sentence_index           (index)
-        #   "i"         →  utterance_index           (i)
-        #   "i2"        →  sentence_in_utterance     (i2)
-        #   "speaker"   →  speaker                   (speaker)
-        #   "text"      →  sentence_text             (text)
-        #   "pred_1"    →  pred_score                (.pred_1)
-        #   "context"   →  context                   (context)
-        prediction_rows = []
-        for model_key, sentences in models.items():
-            for sent in sentences:
-                prediction_rows.append(SentencePrediction(
-                    analysis_id=record.id,
-                    patient_id=patient_id,
-                    model=model_key,              # xlsx sheet name
-                    sentence_index=sent["index"],  # xlsx 'index'
-                    utterance_index=sent["i"],     # xlsx 'i'
-                    sentence_in_utterance=sent["i2"],  # xlsx 'i2'
-                    speaker=sent["speaker"],       # xlsx 'speaker'
-                    sentence_text=sent["text"],    # xlsx 'text'
-                    pred_score=sent["pred_1"],     # xlsx '.pred_1'
-                    context=sent.get("context"),   # xlsx 'context'
-                ))
-        if prediction_rows:
-            db.add_all(prediction_rows)
-
-        await db.commit()
-        logger.info("Saved analysis + %d predictions to DB for patient %s", len(prediction_rows), patient_id)
     except Exception:
-        await db.rollback()
-        logger.warning("DB save failed for patient %s (non-fatal)", patient_id, exc_info=True)
+        logger.warning("persistence.save_all failed for %s (non-fatal)", patient_id, exc_info=True)
+        return
+
+    if not ok:
+        logger.warning("persistence.save_all returned False for %s — skipping AI pipeline", patient_id)
+        return
+
+    try:
+        analysis_id = await persistence.get_latest_analysis_id(AsyncSessionLocal, patient_id)
+        if analysis_id is None:
+            logger.warning("No analysis_id resolved for %s — skipping AI pipeline", patient_id)
+            return
+        await ai_pipeline_service.run_ai_scoring_and_summary(
+            AsyncSessionLocal,
+            analysis_id=analysis_id,
+            patient_id=patient_id,
+            source_filename=filename,
+            final_results=result["final_results"],
+            outcome_to_sheet=OUTCOME_TO_SHEET,
+        )
+    except Exception:
+        logger.warning("AI pipeline failed for %s (non-fatal)", patient_id, exc_info=True)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -776,7 +817,7 @@ async def get_predictions(
 
     # Apply top_n per model at DB level using window function
     if top_n is not None and rows:
-        from sqlalchemy import over, func as wfunc
+        from sqlalchemy import func as wfunc
         ranked = (
             select(
                 SentencePrediction,
@@ -826,6 +867,12 @@ async def get_predictions(
 
 async def _backfill_predictions(db: AsyncSession, analysis_id: int) -> list:
     """Rebuild sentence_prediction rows from model_results JSON for a legacy analysis run.
+
+    Older analyses (pre-sentence_prediction table) only have the
+    aggregate JSON in `transcript_analysis_log.model_results`; this
+    helper unpacks that JSON into proper sentence_prediction rows on
+    first read so /predictions can serve them. After backfill the rows
+    persist, so subsequent calls hit the cheap query path.
 
     Returns the inserted SentencePrediction objects, or empty list on failure.
     """

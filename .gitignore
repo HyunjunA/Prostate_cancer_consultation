@@ -4,6 +4,7 @@ notused
 .env
 .env.*
 !.env.example
+!.env.*.example
 
 # Python
 __pycache__/
@@ -41,15 +42,24 @@ archive/
 # Korean-only document versions (local only, not pushed)
 *_KR.md
 *_KR.pdf
+*_KR.sql
 *_kr.txt
+*_kr.sql
 *_kr_summary.txt
+
+# PDF build scratch dirs
+docs/architecture/_build_pdf/
+
+# Native deployment env files (host-local credentials, never committed)
+*.native
+.env.native
 
 # Claude Code evaluation harness (local-only test/eval tooling)
 .harness/
 
-# NLP classifiers — only Docker image needed for deployment
-nlp-classifiers/2026-02-17_michael_nlp_pilot_sid14/
-nlp-classifiers/2026-02-26/
-nlp-classifiers/Data_processing_script_for_NLP_input/
-nlp-classifiers/manual_scoring_ground_truth/
-nlp-classifiers/prediction_pipeline_and_results/
+# Claude Code per-directory instruction files (local-only, machine-specific).
+# Path-agnostic rule covers root + app/Backend/ + app/Webapp/ in one go.
+CLAUDE.md
+
+# Native deployment Python venv
+.venv/
