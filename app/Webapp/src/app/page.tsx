@@ -599,7 +599,26 @@ export default function Home() {
         )}
 
         {/* Selection Screen - No URL parameters */}
-        {currentView === "selection" && <SelectionScreen />}
+        {currentView === "selection" && (
+          <>
+            {/* COMPASS brand header — landing screen only.
+                Hidden on Patient first / Patient follow-up / Doctor views
+                so those workspaces stay focused. */}
+            <header className="border-b border-gray-200 bg-white px-6 py-3">
+              <h1 className="text-xl font-bold tracking-tight text-gray-900">
+                COMPASS
+              </h1>
+              <p className="text-xs text-gray-500 mt-0.5">
+                <span className="font-semibold">COM</span>munication of{" "}
+                <span className="font-semibold">P</span>rostate c
+                <span className="font-semibold">A</span>ncer{" "}
+                <span className="font-semibold">S</span>hared deci
+                <span className="font-semibold">S</span>ions
+              </p>
+            </header>
+            <SelectionScreen />
+          </>
+        )}
 
         {/* ═══════════════════════════════════════════════════════════
             APITestDashboard - Only visible in Dev Mode
