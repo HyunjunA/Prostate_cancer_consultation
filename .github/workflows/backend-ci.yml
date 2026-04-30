@@ -4,8 +4,8 @@
 #   ✅ Ruff lint  — must pass (E + F + W rules, see app/Backend/pyproject.toml)
 #   ✅ pytest --collect-only — must pass (proves test imports are intact;
 #                              full test execution is deferred until the
-#                              SQLite/JSONB test fixture is fixed —
-#                              see dev_docs/BACKEND_REFACTOR_PLAN_KR.md)
+#                              SQLite-based test fixtures handle the
+#                              Postgres-only JSONB columns cleanly).
 #
 # Phase 2 (future, separate PRs):
 #   - Add full pytest run with a Postgres service
