@@ -21,11 +21,16 @@ on:
       - "app/Backend/**"
       - ".github/workflows/backend-ci.yml"
   push:
-    branches: [main]
+    # Run on every branch so feature work catches regressions before
+    # the PR is opened. Path filter still scopes execution to backend
+    # changes — touching only Webapp / docs skips this workflow.
+    branches: ["**"]
     paths:
       - "app/Backend/**"
+      - ".github/workflows/backend-ci.yml"
 
 jobs:
+  # ── Job 1 — Fast gate: lint + import check (~1 min) ─────────────────
   lint-and-collect:
     name: Ruff lint + pytest collect
     runs-on: ubuntu-latest
@@ -64,11 +69,47 @@ jobs:
         working-directory: app/Backend
         # Collection-only verifies every test file imports cleanly, which
         # catches the most common kind of regression (a refactor breaks
-        # an import path used only by tests). Full test execution requires
-        # a live Postgres + Redis and is wired up in a separate workflow.
+        # an import path used only by tests). Full test execution runs
+        # in the next job.
         env:
-          # Stub DB url so modules importing db.py do not blow up on the
-          # `+asyncpg` validator. Tests do not actually connect during
-          # collection.
           DATABASE_URL: "postgresql+asyncpg://stub:stub@localhost:5432/stub"
         run: pytest --collect-only -q
+
+  # ── Job 2 — Full unit test run (~3-5 min) ───────────────────────────
+  # Runs `pytest -m "not e2e"` against the in-process FastAPI app
+  # (httpx + ASGITransport). The fixtures use SQLite by default so no
+  # service container is required — see app/Backend/tests/conftest.py.
+  unit-tests:
+    name: pytest (unit, not e2e)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: lint-and-collect  # only run if the fast gate passed
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+          cache-dependency-path: app/Backend/requirements.lock
+
+      - name: Install dependencies
+        working-directory: app/Backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.lock
+          pip install "pytest>=8.0" "pytest-asyncio>=0.23" "pytest-cov>=4.1,<6.0"
+
+      - name: pytest -m "not e2e"
+        working-directory: app/Backend
+        env:
+          # Same stub DB url — the fixtures override with SQLite per-test.
+          DATABASE_URL: "postgresql+asyncpg://stub:stub@localhost:5432/stub"
+          # AUTH_MODE matches local dev so the auth fixture pulls the
+          # APIKeyBackend that most tests assume.
+          AUTH_MODE: "api_key"
+          API_KEY: "ci-test-key"
+        run: pytest -m "not e2e" -q --no-header
