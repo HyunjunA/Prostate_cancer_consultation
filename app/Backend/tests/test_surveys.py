@@ -14,7 +14,6 @@ Unit tests:
   transform_value()  (SDM, DCS, risk_perception, passthrough)
 """
 
-import json
 from typing import Optional
 
 from tests.factories import TestDataFactory

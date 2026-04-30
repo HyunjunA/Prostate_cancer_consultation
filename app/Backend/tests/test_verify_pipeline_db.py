@@ -17,8 +17,6 @@ Strategy:
 """
 
 import json
-import sys
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 
@@ -175,7 +173,7 @@ class TestMainEnvironment:
         # Mock session so _check_analysis is also mocked out entirely
         with patch.dict("os.environ", {"DATABASE_URL": "postgresql+asyncpg://u:p@h/d"}), \
              patch("verify_pipeline_db.create_async_engine", return_value=fake_engine), \
-             patch("verify_pipeline_db._check_analysis", return_value=[]) as mock_check, \
+             patch("verify_pipeline_db._check_analysis", return_value=[]), \
              patch("verify_pipeline_db.async_sessionmaker") as mock_sm:
 
             # Wire up the session context so main() can call db.execute for ids

@@ -20,7 +20,7 @@ Key behaviours under test:
 
 import asyncio
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 def _make_fake_settings(url="postgresql+asyncpg://user:pass@localhost/testdb", timeout=10):

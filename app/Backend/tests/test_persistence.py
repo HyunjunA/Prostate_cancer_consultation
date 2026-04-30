@@ -19,12 +19,10 @@ Strategy:
 import json
 import pytest
 import pandas as pd
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
-from models import TranscriptAnalysisLog, SentencePrediction, PatientSummary
 from tests.factories import TestDataFactory
 
 
