@@ -604,11 +604,25 @@ export default function Home() {
             {/* COMPASS brand header — landing screen only.
                 Hidden on Patient first / Patient follow-up / Doctor views
                 so those workspaces stay focused. */}
-            <header className="border-b border-gray-200 bg-white px-6 py-3">
-              <h1 className="text-xl font-bold tracking-tight text-gray-900">
+            <header
+              className={`border-b px-6 py-3 ${
+                isDarkMode
+                  ? "border-slate-800 bg-slate-900"
+                  : "border-gray-200 bg-white"
+              }`}
+            >
+              <h1
+                className={`text-xl font-bold tracking-tight ${
+                  isDarkMode ? "text-slate-100" : "text-gray-900"
+                }`}
+              >
                 COMPASS
               </h1>
-              <p className="text-xs text-gray-500 mt-0.5">
+              <p
+                className={`text-xs mt-0.5 ${
+                  isDarkMode ? "text-slate-400" : "text-gray-500"
+                }`}
+              >
                 <span className="font-semibold">COM</span>munication of{" "}
                 <span className="font-semibold">P</span>rostate c
                 <span className="font-semibold">A</span>ncer{" "}

@@ -16,7 +16,7 @@ export const DashboardFooter: React.FC = () => {
       id="dashboard-footer"
       className="w-full bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700"
     >
-      <div className="max-w-[90rem] mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <div className="max-w-[90rem] mx-auto px-4 sm:px-6 lg:px-8 py-3">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-2">
             <Info className="w-5 h-5 text-blue-600" />
@@ -26,9 +26,16 @@ export const DashboardFooter: React.FC = () => {
           </div>
 
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            © {year} Prostate_cancer_consultation_dashboard. All rights
+            © {year} COMPASS. All rights reserved.
           </p>
         </div>
+
+        {/* Study attribution — single line under the existing row. */}
+        <p className="mt-1 text-center text-xs text-gray-500 dark:text-gray-400">
+          COMPASS — COMmunication of Prostate cAncer Shared deciSions
+          {" · "}
+          R01 Prostate Cancer Communication Study, Cedars-Sinai Medical Center
+        </p>
       </div>
     </footer>
   );

@@ -1742,10 +1742,48 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
   return (
     <div
       className={cx(
-        "min-h-screen flex",
+        "min-h-screen flex flex-col",
         isDarkMode ? "bg-slate-950" : "bg-gray-50",
       )}
     >
+      {/* COMPASS header — brand name on top with the full mixed-case
+          expansion underneath, matching the Patient first-visit welcome
+          card so returning patients see consistent branding. */}
+      <div
+        className={cx(
+          "border-b px-4 py-3",
+          isDarkMode
+            ? "border-slate-800 bg-slate-950"
+            : "border-gray-100 bg-white",
+        )}
+      >
+        <h2
+          className={cx(
+            "text-base font-bold tracking-tight",
+            isDarkMode ? "text-slate-100" : "text-gray-900",
+          )}
+        >
+          COMPASS
+        </h2>
+        <p
+          className={cx(
+            "text-xs italic mt-0.5",
+            isDarkMode ? "text-slate-400" : "text-gray-500",
+          )}
+        >
+          <span className="font-semibold">COM</span>munication of{" "}
+          <span className="font-semibold">P</span>rostate c
+          <span className="font-semibold">A</span>ncer{" "}
+          <span className="font-semibold">S</span>hared deci
+          <span className="font-semibold">S</span>ions
+          <span className="not-italic mx-2">·</span>
+          <span className="not-italic uppercase tracking-wider">
+            Follow-up Survey
+          </span>
+        </p>
+      </div>
+
+      <div className="flex flex-1">
       {/* Sidebar */}
       <ProgressSidebar
         currentStep={currentStep}
@@ -2042,6 +2080,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
             {currentStep === "complete" && <CompleteStep isDark={isDarkMode} />}
           </div>
         </div>
+      </div>
       </div>
     </div>
   );
