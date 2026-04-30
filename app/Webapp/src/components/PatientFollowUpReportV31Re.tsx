@@ -63,7 +63,7 @@ import {
 
 import RiskPerceptionWithSummary, {
   type TopicSummaryMap,
-} from "@/components/RiskPerceptionWithSummary";
+} from "@/components/RiskPerceptionWithSummaryV2";
 
 import { submitSurvey, fetchSurveySubmissions } from "@/api/surveyApi";
 import { sendTrackingEvents } from "@/api/trackingApi";
