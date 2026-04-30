@@ -1,0 +1,61 @@
+# Webapp CI gate — runs whenever app/Webapp/ changes.
+#
+# Phase 1 (current):
+#   ✅ next lint  — must pass
+#   ✅ jest unit tests (excludes Playwright e2e)
+#
+# Phase 2 (future):
+#   - Add `npm run build` to catch type errors that lint misses
+#   - Add Playwright e2e against a live backend service container
+#   - Coverage threshold
+
+name: Webapp CI
+
+on:
+  pull_request:
+    paths:
+      - "app/Webapp/**"
+      - ".github/workflows/webapp-ci.yml"
+  push:
+    # Run on every branch, same convention as backend-ci.yml.
+    branches: ["**"]
+    paths:
+      - "app/Webapp/**"
+      - ".github/workflows/webapp-ci.yml"
+
+jobs:
+  lint-and-test:
+    name: next lint + jest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: app/Webapp/package-lock.json
+
+      - name: Install dependencies
+        working-directory: app/Webapp
+        # `npm ci` uses the lock file verbatim (faster + reproducible
+        # vs `npm install` which can drift).
+        run: npm ci
+
+      - name: next lint
+        working-directory: app/Webapp
+        # ESLint via next.js — same rules developers see locally on
+        # `npm run lint`.
+        run: npm run lint
+
+      - name: jest
+        working-directory: app/Webapp
+        # Default `jest` config picks up tests under src/__tests__ and
+        # the *.test.ts(x) files, EXCLUDING Playwright e2e (those run
+        # via `npm run test:e2e` and need a live backend, not wired up
+        # in this gate yet).
+        run: npm test -- --ci --passWithNoTests

@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# Pre-push hook — fast local gate before pushing to origin.
+#
+# Goal: catch the lint / import-level regressions that the CI also
+# catches, but ~30 seconds locally instead of waiting for GitHub
+# Actions. Intentionally fast — it does NOT run the full pytest suite,
+# because asking developers to wait > 1 minute on every push leads to
+# `git push --no-verify` becoming the default.
+#
+# Checks performed:
+#   1. Backend ruff lint    — ~2s
+#   2. Backend pytest --collect-only — ~10s
+#   3. (Skipped) Webapp checks — too slow without a long-running watcher
+#                                process; CI handles them.
+#
+# Install:
+#   bash scripts/install-hooks.sh
+#
+# Bypass (for emergency push):
+#   git push --no-verify
+#
+# Author note: keep this hook fast. If a check exceeds 30s, move it
+# to CI instead.
+
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+GREEN="\033[92m"; RED="\033[91m"; YELLOW="\033[93m"; RESET="\033[0m"
+
+ok()   { printf "  ${GREEN}✓${RESET} %s\n" "$1"; }
+fail() { printf "  ${RED}✗${RESET} %s\n" "$1" >&2; }
+warn() { printf "  ${YELLOW}⚠${RESET} %s\n" "$1"; }
+
+# ── Preserve git-lfs behavior (the repo had this hook before) ──────────
+if command -v git-lfs >/dev/null 2>&1; then
+    git lfs pre-push "$@" || true
+fi
+
+# ── Skip if Backend dir is not in the diff being pushed ────────────────
+# Reading remote ref + remote sha from stdin (git's pre-push protocol)
+# would let us compute exactly what changed. For simplicity we just
+# check working-tree state — slightly less precise, but correct enough
+# for a local guard.
+if [ ! -d "$REPO_ROOT/app/Backend" ]; then
+    exit 0
+fi
+
+echo ""
+echo "── pre-push: Backend lint + import check ──────────────────────"
+
+# Pick a Python interpreter. Prefer the project venv if it exists;
+# fall back to whatever python3 is on PATH.
+if [ -x "$REPO_ROOT/.venv/bin/python" ]; then
+    PY="$REPO_ROOT/.venv/bin/python"
+elif command -v python3 >/dev/null 2>&1; then
+    PY="python3"
+else
+    fail "no python3 on PATH and no .venv found — install python or run setup-native-mac.sh"
+    exit 1
+fi
+
+cd "$REPO_ROOT/app/Backend"
+
+# 1. Ruff lint
+if ! "$PY" -m ruff check . --quiet 2>/dev/null; then
+    if ! "$PY" -m ruff check . --config pyproject.toml; then
+        fail "ruff lint failed — fix the lint errors above (or run 'ruff check . --fix')"
+        exit 1
+    fi
+fi
+ok "ruff lint clean"
+
+# 2. pytest --collect-only (verifies test imports without running them)
+# Stub DATABASE_URL so modules importing db.py do not blow up on import.
+export DATABASE_URL="${DATABASE_URL:-postgresql+asyncpg://stub:stub@localhost:5432/stub}"
+if ! "$PY" -m pytest --collect-only -q --no-header > /tmp/pre-push-collect.log 2>&1; then
+    fail "pytest --collect-only failed — a test file's imports are broken:"
+    tail -20 /tmp/pre-push-collect.log >&2
+    exit 1
+fi
+ok "pytest --collect-only clean ($(grep -E 'tests? collected' /tmp/pre-push-collect.log | tail -1))"
+
+echo "── pre-push checks passed ─────────────────────────────────────"
+echo ""
+exit 0
