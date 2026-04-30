@@ -25,6 +25,18 @@ cd "$REPO_ROOT"
 
 case "${1:-up}" in
     up)
+        # Block macOS sleep for the next hour. The Backend image build (R +
+        # stringi compile) plus the prestart auto-pipeline (Azure OpenAI for
+        # 5 domains) easily runs 15-25 min, and a sleeping Mac suspends
+        # Docker Desktop's outbound network mid-call — observed once as a
+        # 30-min ConnectTimeout on a single sentence. `caffeinate -di`
+        # keeps the host awake without touching system settings; the -t
+        # cap means the lock self-releases even if the script crashes.
+        if command -v caffeinate >/dev/null 2>&1; then
+            caffeinate -di -t 3600 &
+            echo "  ✓ caffeinate started (PID $!) — Mac sleep blocked for 1h"
+        fi
+
         docker compose -f "$COMPOSE_FILE" up -d --build
         echo ""
         echo "  Dashboard:  http://localhost:3001"
