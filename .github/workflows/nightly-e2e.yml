@@ -55,6 +55,15 @@ jobs:
     name: pytest -m e2e
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # The five secrets this workflow needs (SUBMODULE_PAT, AZURE_OPENAI_*,
+    # REDCAP_*) are registered at the `test` Environment scope rather than
+    # at Repository scope. Repository-scope secrets are auto-injected into
+    # every workflow; Environment-scope secrets require an explicit
+    # `environment:` declaration on the job. Without this line `secrets.*`
+    # references silently resolve to empty strings, which is exactly how
+    # we landed in the `Input required and not supplied: token` failure
+    # before adding it.
+    environment: test
 
     # Service containers — backed straight onto the runner with health
     # checks so the backend startup doesn't race them.
