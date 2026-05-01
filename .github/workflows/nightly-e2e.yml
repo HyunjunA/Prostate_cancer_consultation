@@ -124,6 +124,40 @@ jobs:
           # submodule in the next step using a fine-grained PAT
           # (Contents:Read scoped to the AI repo only).
 
+      - name: Debug — verify PAT reaches the runner and is accepted
+        # Prints only metadata (length, token-type prefix, HTTP status from
+        # a live API probe). Token VALUE never appears in logs. Remove
+        # this step once the auth is green.
+        env:
+          PAT: ${{ secrets.SUBMODULE_PAT }}
+        run: |
+          if [ -z "$PAT" ]; then
+            echo "  ✗ SUBMODULE_PAT is empty — secret not reaching the job"
+            exit 1
+          fi
+          echo "  ✓ PAT reached job (length=${#PAT})"
+          # Token type tells us classic (ghp_) vs fine-grained (github_pat_)
+          case "$PAT" in
+            ghp_*)         echo "  ✓ token type: classic PAT (ghp_…)" ;;
+            github_pat_*)  echo "  ✓ token type: fine-grained PAT (github_pat_…)" ;;
+            *)             echo "  ⚠ token type: UNKNOWN prefix — wrong value pasted?" ;;
+          esac
+          # Probe the AI repo via GitHub REST API. If PAT is valid+scoped,
+          # this returns 200. 401 = invalid token, 403 = valid but no
+          # access to that repo, 404 = repo not visible to this token.
+          status=$(curl -sS -o /dev/null -w "%{http_code}" \
+            -H "Authorization: token $PAT" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/HyunjunA/AI_physician_patient_communication)
+          echo "  GitHub API probe → HTTP $status"
+          case "$status" in
+            200) echo "  ✓ PAT accepted, repo accessible — submodule clone should now work" ;;
+            401) echo "  ✗ 401 Unauthorized — token value invalid or expired" ;;
+            403) echo "  ✗ 403 Forbidden — token valid but lacks Contents:Read on this repo" ;;
+            404) echo "  ✗ 404 Not Found — token cannot see this repo (wrong owner/scope)" ;;
+            *)   echo "  ✗ unexpected status: $status" ;;
+          esac
+
       - name: Init AI submodule with PAT
         env:
           PAT: ${{ secrets.SUBMODULE_PAT }}
