@@ -1,23 +1,37 @@
 import { test, expect } from "@playwright/test";
+import { requireFirstFixture, type DemoFixture } from "./_fixtures";
 
 /**
  * Cross-View Navigation E2E Tests
  *
- * Tests navigation between different views (selection, patient, doctor)
- * and verifies URL parameter handling, browser history, and resilience
- * to invalid params.
+ * Tests navigation between different views (selection, patient,
+ * doctor) and verifies URL parameter handling, browser history, and
+ * resilience to invalid params.
+ *
+ * Patient / file / doctor identifiers are discovered from the
+ * backend at run time (`requireFirstFixture`) so the spec is
+ * portable across environments — local dev with one demo file, CI
+ * with whatever the seed step produces, a teammate's box with
+ * something completely different. The spec only depends on "at
+ * least one patient exists in the backend".
  */
 
-const PATIENT_FIRST_VISIT_URL =
-  "/?fileid=quality-coded-nlp-pilot-sid-1.xlsx&patid=Patient_quality-coded-nlp-pilot-sid-1&visit=first";
-
-const PATIENT_FOLLOWUP_URL =
-  "/?fileid=quality-coded-nlp-pilot-sid-1.xlsx&patid=Patient_quality-coded-nlp-pilot-sid-1&visit=followup";
-
-const DOCTOR_VIEW_URL =
-  "/?fileid=quality-coded-nlp-pilot-sid-1.xlsx&doctorid=Interviewer:";
+let FIXTURE: DemoFixture;
+let PATIENT_FIRST_VISIT_URL: string;
+let PATIENT_FOLLOWUP_URL: string;
+let DOCTOR_VIEW_URL: string;
 
 test.describe("Cross-View Navigation", () => {
+  test.beforeAll(async ({ request, baseURL }) => {
+    FIXTURE = await requireFirstFixture(request, baseURL);
+    const file = encodeURIComponent(FIXTURE.file);
+    const patient = encodeURIComponent(FIXTURE.patient);
+    const doctor = encodeURIComponent(FIXTURE.doctor);
+    PATIENT_FIRST_VISIT_URL = `/?fileid=${file}&patid=${patient}&visit=first`;
+    PATIENT_FOLLOWUP_URL = `/?fileid=${file}&patid=${patient}&visit=followup`;
+    DOCTOR_VIEW_URL = `/?fileid=${file}&doctorid=${doctor}`;
+  });
+
   test("navigate from selection to patient first visit and back", async ({ page }) => {
     // Start at selection screen
     await page.goto("/");
@@ -25,9 +39,14 @@ test.describe("Cross-View Navigation", () => {
       page.getByText("Patient Consultation System")
     ).toBeVisible({ timeout: 10_000 });
 
-    // Click the Patient First Visit quick link
-    const firstVisitLink = page.getByRole("link", { name: "Patient First Visit" });
-    await firstVisitLink.click();
+    // Click the per-row "First Visit" button. Selection screen at
+    // page.tsx:458-467 renders one such button per patient — `.first()`
+    // picks the row corresponding to the discovered fixture (which is
+    // the first/only row because we discovered it from the same list).
+    const firstVisitBtn = page
+      .getByRole("button", { name: /^\s*First Visit\s*$/i })
+      .first();
+    await firstVisitBtn.click();
 
     // Should now be on patient view
     await expect(page).toHaveURL(/visit=first/);
@@ -49,9 +68,11 @@ test.describe("Cross-View Navigation", () => {
       page.getByText("Patient Consultation System")
     ).toBeVisible({ timeout: 10_000 });
 
-    // Click the Doctor Demo quick link
-    const doctorLink = page.getByRole("link", { name: "Doctor Demo" });
-    await doctorLink.click();
+    // Click the "Physician View" link in the selection-screen header
+    // (page.tsx:334 — <a href="/?doctorid=auto">). The legacy spec
+    // looked for "Doctor Demo" which no longer exists in the UI.
+    const physicianLink = page.getByRole("link", { name: /Physician View/i });
+    await physicianLink.click();
 
     // Should now be on doctor view
     await expect(page).toHaveURL(/doctorid=/);
@@ -67,16 +88,22 @@ test.describe("Cross-View Navigation", () => {
   });
 
   test("URL params are preserved correctly when navigating directly", async ({ page }) => {
-    // Navigate to patient first visit with specific params
+    // Navigate to patient first visit with specific params. The
+    // assertions check that the params we put into the URL come
+    // back out exactly — that's the property the test is about, not
+    // any specific filename.
+    const fileEnc = encodeURIComponent(FIXTURE.file);
+    const patientEnc = encodeURIComponent(FIXTURE.patient);
+
     await page.goto(PATIENT_FIRST_VISIT_URL);
-    await expect(page).toHaveURL(/fileid=quality-coded-nlp-pilot-sid-1\.xlsx/);
-    await expect(page).toHaveURL(/patid=Patient_quality-coded-nlp-pilot-sid-1/);
+    await expect(page).toHaveURL(new RegExp(`fileid=${escapeRegex(fileEnc)}`));
+    await expect(page).toHaveURL(new RegExp(`patid=${escapeRegex(patientEnc)}`));
     await expect(page).toHaveURL(/visit=first/);
 
     // Navigate to doctor view
     await page.goto(DOCTOR_VIEW_URL);
-    await expect(page).toHaveURL(/fileid=quality-coded-nlp-pilot-sid-1\.xlsx/);
-    await expect(page).toHaveURL(/doctorid=Interviewer:/);
+    await expect(page).toHaveURL(new RegExp(`fileid=${escapeRegex(fileEnc)}`));
+    await expect(page).toHaveURL(/doctorid=/);
 
     // Navigate to follow-up
     await page.goto(PATIENT_FOLLOWUP_URL);
@@ -90,14 +117,20 @@ test.describe("Cross-View Navigation", () => {
       page.getByText("Patient Consultation System")
     ).toBeVisible({ timeout: 10_000 });
 
-    // Navigate to patient view via quick link
-    const followUpLink = page.getByRole("link", { name: "Patient Follow-up" });
-    await followUpLink.click();
+    // Navigate to follow-up via the per-row "Follow-up" button
+    // (page.tsx:468-477). The legacy spec used a "Patient Follow-up"
+    // quick link that no longer exists.
+    const followUpBtn = page
+      .getByRole("button", { name: /^\s*Follow-up\s*$/i })
+      .first();
+    await followUpBtn.click();
     await expect(page).toHaveURL(/visit=followup/);
 
-    // Go back
+    // Go back. URL should be the bare baseURL — match any localhost
+    // port (CI uses :3000, native deploy uses :3001) and tolerate a
+    // trailing slash either way. The previous version pinned :3000.
     await page.goBack();
-    await expect(page).toHaveURL(/localhost:3000\/?$/);
+    await expect(page).toHaveURL(/^http:\/\/localhost(:\d+)?\/?$/);
     await expect(
       page.getByText("Patient Consultation System")
     ).toBeVisible({ timeout: 10_000 });
@@ -140,3 +173,11 @@ test.describe("Cross-View Navigation", () => {
     expect(criticalErrors).toHaveLength(0);
   });
 });
+
+/** Escape regex metacharacters in a literal string so it can be
+ *  embedded in a `new RegExp(...)`. URL-encoded fixture names can
+ *  contain `%`, `(`, `)`, `.` etc. which would otherwise be
+ *  interpreted as regex syntax. */
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}

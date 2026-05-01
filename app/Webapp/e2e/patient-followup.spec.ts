@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { requireFirstFixture, type DemoFixture } from "./_fixtures";
 
 /**
  * Patient Follow-up Visit E2E Tests
@@ -7,14 +8,23 @@ import { test, expect } from "@playwright/test";
  * Renders PatientFollowUpReport component (with surveys: SDM, DCS,
  * Risk Perception, Satisfaction).
  *
- * NOTE: These tests use the demo data from the selection screen quick links.
- * Survey sections depend on the component rendering correctly with backend data.
+ * Fixture identifiers come from the backend at run time so the
+ * spec works against any environment that has at least one patient
+ * — no hardcoded filenames.
  */
 
-const PATIENT_FOLLOWUP_URL =
-  "/?fileid=quality-coded-nlp-pilot-sid-1.xlsx&patid=Patient_quality-coded-nlp-pilot-sid-1&visit=followup";
+let FIXTURE: DemoFixture;
+let PATIENT_FOLLOWUP_URL: string;
 
 test.describe("Patient Follow-up Visit", () => {
+  test.beforeAll(async ({ request, baseURL }) => {
+    FIXTURE = await requireFirstFixture(request, baseURL);
+    PATIENT_FOLLOWUP_URL =
+      `/?fileid=${encodeURIComponent(FIXTURE.file)}` +
+      `&patid=${encodeURIComponent(FIXTURE.patient)}` +
+      `&visit=followup`;
+  });
+
   test("page loads with follow-up visit params", async ({ page }) => {
     await page.goto(PATIENT_FOLLOWUP_URL);
     await expect(page).toHaveURL(/visit=followup/);

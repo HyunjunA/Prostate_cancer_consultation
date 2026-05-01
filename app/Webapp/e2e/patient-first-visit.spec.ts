@@ -1,20 +1,30 @@
 import { test, expect } from "@playwright/test";
+import { requireFirstFixture, type DemoFixture } from "./_fixtures";
 
 /**
  * Patient First Visit E2E Tests
  *
  * URL pattern: /?fileid=...&patid=...&visit=first
- * Renders PatientReportFirstVisit component (summary only, no surveys).
+ * Renders PatientReportFirstVisit component (summary only, no
+ * surveys).
  *
- * NOTE: These tests use the demo data from the selection screen quick links.
- * If the backend or data files are not available, some tests may need to be
- * skipped. Tests are written to be resilient to missing data where possible.
+ * Fixture identifiers come from the backend at run time so the
+ * spec works against any environment that has at least one patient
+ * — no hardcoded filenames.
  */
 
-const PATIENT_FIRST_VISIT_URL =
-  "/?fileid=quality-coded-nlp-pilot-sid-1.xlsx&patid=Patient_quality-coded-nlp-pilot-sid-1&visit=first";
+let FIXTURE: DemoFixture;
+let PATIENT_FIRST_VISIT_URL: string;
 
 test.describe("Patient First Visit", () => {
+  test.beforeAll(async ({ request, baseURL }) => {
+    FIXTURE = await requireFirstFixture(request, baseURL);
+    PATIENT_FIRST_VISIT_URL =
+      `/?fileid=${encodeURIComponent(FIXTURE.file)}` +
+      `&patid=${encodeURIComponent(FIXTURE.patient)}` +
+      `&visit=first`;
+  });
+
   test("page loads with patient first visit params", async ({ page }) => {
     await page.goto(PATIENT_FIRST_VISIT_URL);
     await expect(page).toHaveURL(/visit=first/);
@@ -42,7 +52,10 @@ test.describe("Patient First Visit", () => {
     await page.goto(PATIENT_FIRST_VISIT_URL);
     // The page should render something meaningful within the main container.
     // Look for common structural elements (flex-1 main content area).
-    const mainContent = page.locator("div.flex-1");
+    // `.first()` because the V37 layout puts multiple `flex-1` divs on
+    // the page (outer wrapper + inner content area). Strict mode would
+    // otherwise reject a multi-match locator.
+    const mainContent = page.locator("div.flex-1").first();
     await expect(mainContent).toBeVisible({ timeout: 10_000 });
 
     // The page should have some visible text content (not blank)
