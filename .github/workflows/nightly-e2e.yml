@@ -38,6 +38,17 @@ on:
         description: "Branch / tag / SHA to run against"
         required: false
         default: "main"
+  # Self-validation trigger: any push that touches THIS workflow file
+  # re-runs the workflow against the pushed branch. Catches breakage
+  # at edit time instead of waiting for the next 03:00 UTC slot, and
+  # also lets us validate the file from non-default branches before
+  # merging — `schedule` and `workflow_dispatch` only see the default
+  # branch, so without this trigger the first real exercise of a new
+  # workflow happens in production. Same self-check pattern as
+  # backend-ci.yml / webapp-ci.yml.
+  push:
+    paths:
+      - ".github/workflows/nightly-e2e.yml"
 
 jobs:
   e2e:
