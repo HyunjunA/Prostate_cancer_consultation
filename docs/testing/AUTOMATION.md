@@ -40,7 +40,18 @@ the runner — no extra secrets needed.
 
 ## How to run each layer manually
 
+> **Use the project venv (Python 3.10), not the system python.** The
+> backend uses PEP-604 union syntax (`X | None`) and `pydantic-settings`,
+> neither of which work under macOS system Python 3.9. Either activate
+> the venv first (`source .venv/bin/activate`) or invoke via the venv
+> binary (`.venv/bin/python -m pytest …`). The pre-push hook,
+> `watch-tests.sh`, and CI all do this automatically — only manual
+> invocations need the reminder.
+
 ```bash
+# Activate venv once per shell (skips the prefix on every call below)
+source .venv/bin/activate
+
 # Backend unit + integration (most-used)
 cd app/Backend
 pytest -m "not e2e" -q
