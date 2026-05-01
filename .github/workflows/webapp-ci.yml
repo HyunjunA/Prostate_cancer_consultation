@@ -59,3 +59,7 @@ jobs:
         # via `npm run test:e2e` and need a live backend, not wired up
         # in this gate yet).
         run: npm test -- --ci --passWithNoTests
+
+# Failure notifications: rely on GitHub's built-in email. The repo owner
+# is emailed automatically on every red workflow run; recipients tune
+# the cadence under Settings → Notifications. No extra YAML required.

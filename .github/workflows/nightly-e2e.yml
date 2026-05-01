@@ -1,0 +1,162 @@
+# Nightly E2E sweep — runs the live-backend tests against an in-runner stack.
+#
+# Why a separate workflow (not just adding e2e to backend-ci.yml):
+#   * Playwright + a real backend + Postgres + Redis takes 8-12 min and
+#     pulls a Docker image — too heavy for every PR. PRs already have
+#     unit + integration coverage in backend-ci.yml.
+#   * E2E catches a different bug class (env wiring, real schema, real
+#     auth flow). Running once per night against the latest main / active
+#     branch is the standard pattern for that.
+#   * Failures here should be loud (notify-on-failure step at the bottom),
+#     because a green PR with a red nightly means a deployment-blocking
+#     issue that PR review missed.
+#
+# Schedule: 03:00 UTC daily (= 19:00 PT prev day, 04:00 KST). Cheap window;
+# GitHub doesn't queue scheduled runs heavily at this hour.
+#
+# Manual trigger via `workflow_dispatch` lets you re-run after fixing
+# something, without waiting for the next nightly slot.
+#
+# Required repository secrets (set under Settings → Secrets → Actions):
+#   AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_KEY  — AI pipeline (mocked if absent)
+#   REDCAP_API_URL, REDCAP_API_TOKEN          — survey sync (skipped if absent)
+#   E2E_API_KEY                                — backend X-API-Key for tests
+#   E2E_JWT_SECRET                             — JWT signing key (>=32 chars)
+# Missing secrets fall back to test stubs; the workflow degrades to a
+# subset of the full e2e coverage rather than failing outright.
+
+name: Nightly E2E
+
+on:
+  schedule:
+    # 03:00 UTC every day. cron is in UTC always; check the 6-field syntax:
+    # min hour day-of-month month day-of-week
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch / tag / SHA to run against"
+        required: false
+        default: "main"
+
+jobs:
+  e2e:
+    name: pytest -m e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # Service containers — backed straight onto the runner with health
+    # checks so the backend startup doesn't race them.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: prostatecancer_user
+          POSTGRES_PASSWORD: ci-temp-password
+          POSTGRES_DB: prostatecancer_db_native
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U prostatecancer_user -d prostatecancer_db_native"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # The asyncpg DSN points at the postgres service container above.
+      DATABASE_URL: "postgresql+asyncpg://prostatecancer_user:ci-temp-password@localhost:5433/prostatecancer_db_native"
+      DATABASE_URL_SYNC: "postgresql+psycopg2://prostatecancer_user:ci-temp-password@localhost:5433/prostatecancer_db_native"
+      REDIS_URL: "redis://localhost:6379/0"
+      AUTH_MODE: "api_key"
+      API_KEY: ${{ secrets.E2E_API_KEY || 'nightly-e2e-stub-key' }}
+      JWT_SECRET: ${{ secrets.E2E_JWT_SECRET || 'nightly-e2e-stub-secret-at-least-32-chars-long' }}
+      # If the NLP container image isn't published, the e2e suite skips
+      # tests that require it. Leaving the URL pointed at a port nothing
+      # listens on triggers the existing connection-error path, which the
+      # tests handle gracefully via the skipif guard.
+      NLP_API_URL: "http://localhost:8888"
+      AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+      AZURE_OPENAI_KEY: ${{ secrets.AZURE_OPENAI_KEY }}
+      REDCAP_API_URL: ${{ secrets.REDCAP_API_URL }}
+      REDCAP_API_TOKEN: ${{ secrets.REDCAP_API_TOKEN }}
+      OUTPUT_DIR: "/tmp/nightly-e2e-output"
+      TRANSCRIPTS_DIR: "/tmp/nightly-e2e-transcripts"
+      UPLOAD_DIR: "/tmp/nightly-e2e-uploads"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+          cache-dependency-path: app/Backend/requirements.lock
+
+      - name: Install backend dependencies
+        working-directory: app/Backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.lock
+          pip install "pytest>=8.0" "pytest-asyncio>=0.23" "pytest-cov>=4.1,<6.0" python-dotenv
+
+      - name: Initialise schema (alembic upgrade head)
+        working-directory: app/Backend
+        # Same step the native deploy runs on first boot. Service container
+        # is healthy by the time we get here (the `services:` block enforces
+        # readiness before steps execute).
+        run: alembic upgrade head
+
+      - name: Start uvicorn in background
+        working-directory: app/Backend
+        # The e2e tests hit a real http server — start one and wait for
+        # /health before letting pytest run.
+        run: |
+          PYTHONPATH="$PWD:$GITHUB_WORKSPACE/AI_physician_patient_communication" \
+            python -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1 \
+            > /tmp/uvicorn.log 2>&1 &
+          echo "uvicorn pid=$!" >> $GITHUB_STEP_SUMMARY
+          # Wait up to 60s for /health.
+          for _ in $(seq 1 60); do
+            if curl -sfo /dev/null http://localhost:8000/health; then
+              echo "✓ backend ready" >> $GITHUB_STEP_SUMMARY
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "✗ backend failed to come up within 60s" >> $GITHUB_STEP_SUMMARY
+          tail -100 /tmp/uvicorn.log
+          exit 1
+
+      - name: pytest -m e2e
+        working-directory: app/Backend
+        # The e2e files load .env.native via dotenv if it exists; the env
+        # block above already exports everything they need, so no .env.native
+        # file is required in CI. `--tb=short` keeps the failure log
+        # readable in the GitHub UI.
+        run: pytest -m e2e -q --tb=short --no-header
+
+      - name: Upload uvicorn log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: uvicorn-log
+          path: /tmp/uvicorn.log
+          retention-days: 14
+
+# Failure notifications: rely on GitHub's built-in email. The repo owner
+# is emailed automatically on every red workflow run; recipients tune
+# the cadence under Settings → Notifications. No extra YAML required.

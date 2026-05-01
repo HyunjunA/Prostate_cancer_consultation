@@ -113,3 +113,7 @@ jobs:
           AUTH_MODE: "api_key"
           API_KEY: "ci-test-key"
         run: pytest -m "not e2e" -q --no-header
+
+# Failure notifications: rely on GitHub's built-in email. The repo owner
+# is emailed automatically on every red workflow run; recipients tune
+# the cadence under Settings → Notifications. No extra YAML required.
