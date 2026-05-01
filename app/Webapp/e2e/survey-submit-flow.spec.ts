@@ -1,5 +1,5 @@
 import { test, expect, Page } from "@playwright/test";
-import { skipIfFixtureMissing, REQUIRED_FIXTURE_FILE } from "./_fixtures";
+import { requireFirstFixture, type DemoFixture } from "./_fixtures";
 
 /**
  * Survey Submit Full Flow E2E Tests
@@ -10,20 +10,31 @@ import { skipIfFixtureMissing, REQUIRED_FIXTURE_FILE } from "./_fixtures";
  * Survey flow: Welcome → SDM (4Q) → DCS (16Q) → Risk Perception (5Q) → Satisfaction (1Q) → Complete
  *
  * These tests hit the LIVE Docker environment and push real data.
+ *
+ * Fixture identifiers come from the backend at run time so the
+ * spec works against any environment that has at least one patient
+ * — no hardcoded filenames.
  */
 
 // These tests are long multi-step flows — give each test up to 120 seconds
 test.setTimeout(120_000);
 
-// File-level precondition: every describe block below navigates to a
-// hardcoded follow-up URL pinned to the demo fixture. Skip the whole
-// file if that fixture isn't in the backend (CI fresh DB, etc.).
-test.beforeAll(async ({ request, baseURL }) => {
-  await skipIfFixtureMissing(request, baseURL, REQUIRED_FIXTURE_FILE);
-});
+let FIXTURE: DemoFixture;
+let FOLLOWUP_URL: string;
+let SPEAKER: string;
 
-const FOLLOWUP_URL =
-  "/?fileid=quality-coded-nlp-pilot-sid-1.xlsx&patid=Patient_quality-coded-nlp-pilot-sid-1&visit=followup";
+// File-level setup: discover the first available fixture from the
+// backend, build the follow-up URL, and capture the speaker id used
+// by the post-flow backend-verification GET. Skips the whole file
+// when no patient data is in the backend.
+test.beforeAll(async ({ request, baseURL }) => {
+  FIXTURE = await requireFirstFixture(request, baseURL);
+  FOLLOWUP_URL =
+    `/?fileid=${encodeURIComponent(FIXTURE.file)}` +
+    `&patid=${encodeURIComponent(FIXTURE.patient)}` +
+    `&visit=followup`;
+  SPEAKER = FIXTURE.patient;
+});
 const API_BASE = "http://localhost:8000";
 // API_KEY comes from the environment so the real value never lands in git.
 // `e2e/global-setup.ts` populates process.env from app/Backend/.env.native
@@ -213,7 +224,7 @@ test.describe("SDM Survey Submit", () => {
     await completeSDM(page);
 
     // Verify via Backend API that submission was received
-    const speaker = "Patient_quality-coded-nlp-pilot-sid-1";
+    const speaker = SPEAKER;
     const resp = await fetch(
       `${API_BASE}/api/surveys/by-speaker/${encodeURIComponent(speaker)}`,
       { headers: AUTH_HEADERS }
@@ -332,7 +343,7 @@ test.describe("Complete Survey Flow End-to-End", () => {
       !API_KEY,
       "API_KEY not set — load app/Backend/.env.native or export E2E_API_KEY"
     );
-    const speaker = "Patient_quality-coded-nlp-pilot-sid-1";
+    const speaker = SPEAKER;
 
     await waitForFollowUpPage(page);
     await startSurvey(page);

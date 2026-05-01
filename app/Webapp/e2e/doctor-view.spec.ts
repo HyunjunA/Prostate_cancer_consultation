@@ -1,24 +1,27 @@
 import { test, expect } from "@playwright/test";
-import { skipIfFixtureMissing, REQUIRED_FIXTURE_FILE } from "./_fixtures";
+import { requireFirstFixture, type DemoFixture } from "./_fixtures";
 
 /**
  * Doctor View E2E Tests
  *
  * URL pattern: /?fileid=...&doctorid=...
- * Renders PhysicianReports component (quality reports, sentence analysis,
- * AI rewrites).
+ * Renders PhysicianReports component (quality reports, sentence
+ * analysis, AI rewrites).
  *
- * NOTE: These tests use the demo data from the selection screen quick links.
- * The doctor view depends on backend API data being available.
+ * Fixture identifiers come from the backend at run time so the spec
+ * works against any environment that has at least one patient — no
+ * hardcoded filenames.
  */
 
-const DOCTOR_VIEW_URL =
-  "/?fileid=quality-coded-nlp-pilot-sid-1.xlsx&doctorid=Interviewer:";
+let FIXTURE: DemoFixture;
+let DOCTOR_VIEW_URL: string;
 
 test.describe("Doctor View", () => {
-  // Skip if the demo fixture isn't in the backend (CI fresh DB, etc.).
   test.beforeAll(async ({ request, baseURL }) => {
-    await skipIfFixtureMissing(request, baseURL, REQUIRED_FIXTURE_FILE);
+    FIXTURE = await requireFirstFixture(request, baseURL);
+    DOCTOR_VIEW_URL =
+      `/?fileid=${encodeURIComponent(FIXTURE.file)}` +
+      `&doctorid=${encodeURIComponent(FIXTURE.doctor)}`;
   });
 
   test("page loads with doctor view params", async ({ page }) => {
