@@ -36,7 +36,12 @@ import { requireFirstFixture, type DemoFixture } from "./_fixtures";
  *     sentence_select, rewrite_apply.
  */
 
-test.setTimeout(120_000);
+// Bumped from 120 s — added the Scoring Rubric exploration on each
+// page (dashboard / grid / detail). With slowMo=300 each rubric
+// pass walks 6 tabs × 6 score hovers × ~300 ms ≈ 11 s, so 3 passes
+// add ~33 s on top of the original walkthrough. 240 s leaves
+// generous headroom on a slow CI runner.
+test.setTimeout(240_000);
 
 const API_BASE = "http://localhost:8000";
 const API_KEY = process.env.E2E_API_KEY || process.env.API_KEY || "";
@@ -76,8 +81,7 @@ async function clickThroughTour(page: Page, label: string) {
 
     if (await gotIt.isVisible({ timeout: 1_500 }).catch(() => false)) {
       await gotIt.click();
-      await page.waitForTimeout(400);
-      return;
+      break;
     }
     if (await next.isVisible({ timeout: 1_500 }).catch(() => false)) {
       await next.click();
@@ -88,8 +92,140 @@ async function clickThroughTour(page: Page, label: string) {
     // ship a tour. Either way, nothing to do.
     return;
   }
-  // Hit the cap without finishing — log and let the caller decide.
-  console.log(`[doctor-deep] tour at "${label}" exceeded 20 step iterations`);
+
+  // Critical: wait for the joyride overlay to fully unmount before
+  // returning. The overlay <div class="react-joyride__overlay">
+  // sits at z-index 100 and intercepts pointer events while it's
+  // present — even AFTER clicking "Got it!", the overlay's
+  // fade-out animation can still consume the next click. With
+  // slowMo enabled this race becomes deterministic; the next
+  // page-level click fails 220x with "subtree intercepts pointer
+  // events" until Playwright's auto-retry timeout fires. Waiting
+  // for `state: "hidden"` blocks until the DOM node is gone.
+  const overlay = page.locator("div.react-joyride__overlay");
+  await overlay
+    .waitFor({ state: "hidden", timeout: 5_000 })
+    .catch(() => {
+      // If the overlay was never present, waitFor("hidden")
+      // resolves immediately; if it was present but never
+      // unmounted, this catch keeps the test moving (next
+      // click will retry on its own auto-wait).
+    });
+  // Brief settle so any focus/scroll side-effects of tour exit
+  // finish before the caller's next interaction.
+  await page.waitForTimeout(200);
+  void label;
+}
+
+/**
+ * Open the floating Scoring Rubric modal, mouseover every score
+ * (0-5) on every domain tab, then close the modal.
+ *
+ * What this exercises:
+ *   - The fixed-position "Scoring Rubric" floating button at
+ *     V41Timothy.tsx:856 (always rendered top-right at z-60).
+ *   - The 6 domain tabs the modal exposes: "All Domains" plus the
+ *     5 individual domains (V41Timothy.tsx:1035 — note the rubric
+ *     tab labels use the SHORT form for IUS, "Irritative
+ *     Symptoms", which differs from the full domain name
+ *     "Irritative Urinary Symptoms" used elsewhere).
+ *   - The 6 hoverable score blocks (0-5) with onMouseEnter at
+ *     V41Timothy.tsx:966 — each hover sets `hoveredScore` and
+ *     reveals the cumulative criteria for that score level.
+ *
+ * Why the rubric panel might also fire its own custom mini-tour
+ * on first open: V41Timothy.tsx:756-790 wires a localStorage-
+ * backed `rubric-modal-tour-completed` flag. The mini-tour uses
+ * the SAME "Next" / "Got it!" button labels, so reusing
+ * `clickThroughTour` walks it through cleanly on first run; on
+ * subsequent runs the flag suppresses the tour and clickThroughTour
+ * exits immediately.
+ */
+async function exploreScoringRubric(page: Page) {
+  // 1. Click the floating button. Don't fail if it isn't there
+  //    (defensive — a future refactor could relocate it; the test
+  //    shouldn't crash before the rest of the spec runs).
+  const rubricBtn = page.getByRole("button", { name: /^Scoring Rubric$/ });
+  if (
+    !(await rubricBtn.isVisible({ timeout: 3_000 }).catch(() => false))
+  ) {
+    return;
+  }
+  await rubricBtn.click();
+  await page.waitForTimeout(800); // modal mount + open animation
+
+  // 2. The rubric modal has its own mini-tour that fires on first
+  //    open. Same Next/Got-it walkthrough as the page-level tours.
+  await clickThroughTour(page, "rubric-modal");
+  await page.waitForTimeout(300);
+
+  // 3. Walk every tab. "All Domains" is the default — keep it as
+  //    the first iteration so we hover its scores before clicking
+  //    other tabs. Tab labels match the short forms at
+  //    V41Timothy.tsx:1042 (IUS = "Irritative Symptoms").
+  const TAB_LABELS = [
+    "All Domains",
+    "Cancer Prognosis",
+    "Life Expectancy",
+    "Erectile Dysfunction",
+    "Urinary Incontinence",
+    "Irritative Symptoms",
+  ];
+
+  for (const tabName of TAB_LABELS) {
+    if (tabName !== "All Domains") {
+      // Tabs live inside the data-tour="rubric-tabs" container so
+      // we can scope by that anchor and avoid matching button text
+      // outside the rubric.
+      const tabBtn = page
+        .locator('[data-tour="rubric-tabs"]')
+        .getByRole("button", { name: new RegExp(tabName, "i") })
+        .first();
+      if (await tabBtn.isVisible({ timeout: 1_500 }).catch(() => false)) {
+        await tabBtn.click();
+        await page.waitForTimeout(300);
+      }
+    }
+
+    // 4. Hover each score 0-5. The score numbers render as
+    //    text-lg font-bold divs at V41Timothy.tsx:974 — each one
+    //    contains exactly one digit and is wrapped in a parent
+    //    div with the onMouseEnter handler. Hovering the inner
+    //    div bubbles the mouseenter to the parent because the
+    //    handler is on a parent React component.
+    for (let score = 0; score <= 5; score++) {
+      const scoreNum = page
+        .locator("div.text-lg.font-bold")
+        .filter({ hasText: new RegExp(`^${score}$`) })
+        .first();
+      if (
+        await scoreNum.isVisible({ timeout: 1_000 }).catch(() => false)
+      ) {
+        await scoreNum.hover();
+        await page.waitForTimeout(250);
+      }
+    }
+  }
+
+  // 5. Close the modal. The backdrop binds onClick to setOpen(false)
+  //    (V41Timothy.tsx:882), but Escape is more reliable across
+  //    Playwright versions. Try Escape first, fall back to clicking
+  //    the backdrop top-left corner.
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(400);
+
+  // If Escape didn't take, the backdrop is still visible — click
+  // outside the modal content area to dismiss.
+  const stillOpen = await page
+    .getByRole("heading", { name: /Risk Communication Scoring Rubric/i })
+    .isVisible({ timeout: 500 })
+    .catch(() => false);
+  if (stillOpen) {
+    // Click the bare body top-left to land on the backdrop and
+    // miss the modal content.
+    await page.mouse.click(5, 5);
+    await page.waitForTimeout(400);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -147,6 +283,13 @@ test.describe("Doctor View — full clinical walkthrough", () => {
     await page.waitForTimeout(1_500);
     await clickThroughTour(page, "dashboard");
 
+    // ── Step 2b — Scoring Rubric tour from the dashboard view ──────
+    // After the page-level tour the user opens the floating
+    // "Scoring Rubric" button, hovers every score on every domain
+    // tab, then closes the modal. Repeated on each subsequent
+    // page below.
+    await exploreScoringRubric(page);
+
     // ── Step 3 — Pick a random patient → "View Report" ──────────────
     // Dashboard renders one "View Report" button per patient row
     // (V41Timothy.tsx:1621). Pick a random one — different runs
@@ -166,6 +309,9 @@ test.describe("Doctor View — full clinical walkthrough", () => {
     await page.waitForTimeout(1_500);
     await clickThroughTour(page, "grid");
 
+    // ── Step 4b — Scoring Rubric tour from the grid view ───────────
+    await exploreScoringRubric(page);
+
     // ── Step 5 — First topic → detail view ──────────────────────────
     // Grid view has one topic-name button per domain
     // (V41Timothy.tsx:2540).
@@ -184,6 +330,9 @@ test.describe("Doctor View — full clinical walkthrough", () => {
     // ── Step 6 — Detail view tour ───────────────────────────────────
     await page.waitForTimeout(1_500);
     await clickThroughTour(page, "detail");
+
+    // ── Step 6b — Scoring Rubric tour from the detail view ─────────
+    await exploreScoringRubric(page);
 
     // ── Step 7 — Re-write Practice: copy original, type into textarea
     // The Re-write Practice panel is identified by
