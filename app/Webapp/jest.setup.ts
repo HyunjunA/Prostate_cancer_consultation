@@ -15,3 +15,19 @@ if (typeof global.fetch === "undefined") {
     })
   );
 }
+
+// Radix UI primitives (via `@radix-ui/react-use-size`) instantiate
+// `ResizeObserver` during layout effects. jsdom does not implement it, so
+// any test that renders a Radix-backed shadcn/ui component (Tabs, Dialog,
+// Accordion, etc.) crashes with "ReferenceError: ResizeObserver is not
+// defined". The stub below is a no-op — these tests verify component
+// behaviour, not viewport-size reactivity, so observe()/unobserve() can
+// safely do nothing.
+if (typeof (global as unknown as { ResizeObserver?: unknown }).ResizeObserver === "undefined") {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (global as any).ResizeObserver = class ResizeObserver {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  };
+}

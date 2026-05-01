@@ -1251,8 +1251,8 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
           <span className="font-semibold">COM</span>munication of{" "}
           <span className="font-semibold">P</span>rostate c
           <span className="font-semibold">A</span>ncer{" "}
-          <span className="font-semibold">S</span>hared deci
-          <span className="font-semibold">S</span>ions
+          <span className="font-semibold">S</span>hared decision
+          <span className="font-semibold">S</span>
           <span className="not-italic mx-2">·</span>
           <span className="not-italic uppercase tracking-wider">
             Follow-up Survey

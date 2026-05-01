@@ -8,6 +8,11 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
   testDir: ".",
+  // Loads app/Backend/.env.native into process.env before any spec runs,
+  // so backend-verification tests can authenticate against the live API
+  // without a hand-edited key. CI exports `secrets.E2E_API_KEY` into the
+  // workflow env directly — the setup hook only fills gaps.
+  globalSetup: "./global-setup.ts",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
