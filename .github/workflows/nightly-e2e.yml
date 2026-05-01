@@ -114,18 +114,27 @@ jobs:
       UPLOAD_DIR: "/tmp/nightly-e2e-uploads"
 
     steps:
-      - name: Checkout (with AI submodule)
+      - name: Checkout dashboard
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
-          # The dashboard repo carries AI_physician_patient_communication
-          # as a private submodule. The default GITHUB_TOKEN cannot read
-          # private repos outside this repository, so we use a fine-grained
-          # PAT (Contents: Read on the AI repo) registered as
-          # `secrets.SUBMODULE_PAT`. The same token works for both the
-          # main checkout and submodule fetch.
-          submodules: recursive
-          token: ${{ secrets.SUBMODULE_PAT }}
+          # Skip submodules here — the default GITHUB_TOKEN can clone
+          # this repo but does NOT have permission to the private
+          # AI_physician_patient_communication repo. We init the
+          # submodule in the next step using a fine-grained PAT
+          # (Contents:Read scoped to the AI repo only).
+
+      - name: Init AI submodule with PAT
+        env:
+          PAT: ${{ secrets.SUBMODULE_PAT }}
+        # Rewrite https://github.com/ so git auths with the PAT for
+        # this checkout's lifetime, then pull the pinned submodule
+        # commit. Same `insteadOf` rewrite that actions/checkout uses
+        # internally — kept localised to one step so the PAT does not
+        # leak into later git operations on the runner.
+        run: |
+          git config --global url."https://x-access-token:${PAT}@github.com/".insteadOf "https://github.com/"
+          git submodule update --init --recursive
 
       - name: Set up Python
         uses: actions/setup-python@v5
