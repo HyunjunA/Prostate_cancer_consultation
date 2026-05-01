@@ -17,7 +17,12 @@ test.setTimeout(120_000);
 const FOLLOWUP_URL =
   "/?fileid=quality-coded-nlp-pilot-sid-1.xlsx&patid=Patient_quality-coded-nlp-pilot-sid-1&visit=followup";
 const API_BASE = "http://localhost:8000";
-const API_KEY = "REDACTED_API_KEY";
+// API_KEY comes from the environment so the real value never lands in git.
+// `e2e/global-setup.ts` populates process.env from app/Backend/.env.native
+// when running locally; CI exports `secrets.E2E_API_KEY` directly. The two
+// backend-verification tests below skip themselves when the key is absent
+// so the UI-only tests in this file still run on a fresh checkout.
+const API_KEY = process.env.E2E_API_KEY || process.env.API_KEY || "";
 const AUTH_HEADERS = { "X-API-Key": API_KEY };
 
 // ---------------------------------------------------------------------------
@@ -191,6 +196,10 @@ test.describe("SDM Survey Submit", () => {
   });
 
   test("SDM submit is received by backend", async ({ page }) => {
+    test.skip(
+      !API_KEY,
+      "API_KEY not set — load app/Backend/.env.native or export E2E_API_KEY"
+    );
     await waitForFollowUpPage(page);
     await startSurvey(page);
     await completeSDM(page);
@@ -311,6 +320,10 @@ test.describe("Complete Survey Flow End-to-End", () => {
   test("all 4 survey submissions exist in backend after full flow", async ({
     page,
   }) => {
+    test.skip(
+      !API_KEY,
+      "API_KEY not set — load app/Backend/.env.native or export E2E_API_KEY"
+    );
     const speaker = "Patient_quality-coded-nlp-pilot-sid-1";
 
     await waitForFollowUpPage(page);
