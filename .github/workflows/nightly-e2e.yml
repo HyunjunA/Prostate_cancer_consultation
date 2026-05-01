@@ -105,10 +105,18 @@ jobs:
       UPLOAD_DIR: "/tmp/nightly-e2e-uploads"
 
     steps:
-      - name: Checkout
+      - name: Checkout (with AI submodule)
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
+          # The dashboard repo carries AI_physician_patient_communication
+          # as a private submodule. The default GITHUB_TOKEN cannot read
+          # private repos outside this repository, so we use a fine-grained
+          # PAT (Contents: Read on the AI repo) registered as
+          # `secrets.SUBMODULE_PAT`. The same token works for both the
+          # main checkout and submodule fetch.
+          submodules: recursive
+          token: ${{ secrets.SUBMODULE_PAT }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
