@@ -16,25 +16,34 @@ export const DashboardFooter: React.FC = () => {
       id="dashboard-footer"
       className="w-full bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700"
     >
-      <div className="max-w-[90rem] mx-auto px-4 sm:px-6 lg:px-8 py-3">
-        <div className="flex justify-between items-center">
+      {/* `pl-16 sm:pl-4` reserves space on the left for the fixed ThemeToggle
+          (bottom-8 left-4) so its icon never overlaps the attribution text on
+          narrow viewports. On sm+ the toggle no longer reaches the footer. */}
+      <div className="max-w-[90rem] mx-auto pl-16 pr-4 sm:px-6 lg:px-8 py-2">
+        {/* Stack metadata + © on mobile, side-by-side on sm+. */}
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-2">
           <div className="flex items-center gap-2">
-            <Info className="w-5 h-5 text-blue-600" />
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <Info className="w-4 h-4 text-blue-600 shrink-0" />
+            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
               Last updated: {dateString}
             </p>
           </div>
 
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
             © {year} COMPASS. All rights reserved.
           </p>
         </div>
 
-        {/* Study attribution — single line under the existing row. */}
-        <p className="mt-1 text-center text-xs text-gray-500 dark:text-gray-400">
-          COMPASS — COMmunication of Prostate cAncer Shared decisionS
-          {" · "}
-          R01 Prostate Cancer Communication Study, Cedars-Sinai Medical Center
+        {/* Attribution — abbreviated on mobile, full on sm+ to avoid 3-line wrap. */}
+        <p className="mt-1 text-[11px] sm:text-xs text-center text-gray-500 dark:text-gray-400">
+          <span className="sm:hidden">
+            R01 Prostate Cancer Communication Study, Cedars-Sinai
+          </span>
+          <span className="hidden sm:inline">
+            COMPASS — COMmunication of Prostate cAncer Shared decisionS
+            {" · "}
+            R01 Prostate Cancer Communication Study, Cedars-Sinai Medical Center
+          </span>
         </p>
       </div>
     </footer>

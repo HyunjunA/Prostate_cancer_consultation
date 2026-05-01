@@ -507,12 +507,16 @@ export default function Home() {
 
   return (
     <div
-      className={`flex min-h-screen ${
+      className={`flex flex-col min-h-screen ${
         isDarkMode ? "dark bg-gray-900 text-white" : "bg-white text-black"
       }`}
     >
       {/* <FilterSidebar isDarkMode={isDarkMode} /> */}
-      <div className="flex-1">
+      {/* `flex-1` so the active view fills the viewport and DashboardFooter
+          (rendered as a sibling below) hugs the bottom — fixes the empty
+          space that appeared under the footer when the active view's own
+          `min-h-screen` no longer matched the outer flex layout. */}
+      <div className="flex-1 flex flex-col">
         {/* ═══════════════════════════════════════════════════════════
             Debug UI - Only visible when Dev Mode is enabled
             To enable: localStorage.setItem("prostatecancerapp_dev_mode", "true")
@@ -640,8 +644,10 @@ export default function Home() {
         {isDevMode && <APITestDashboard />}
 
         {/* <ReportDownload /> */}
-        <DashboardFooter />
       </div>
+      {/* Footer is a sibling of the view container so it always sits at
+          the bottom regardless of how short the view content is. */}
+      <DashboardFooter />
     </div>
   );
 }

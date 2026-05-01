@@ -1016,13 +1016,23 @@ const TopicCard: React.FC<TopicCardProps> = ({
         </div>
       </button>
 
-      {/* Topic Content (Collapsible) */}
+      {/* Topic Content (Collapsible)
+          With the V37 Cancer Prognosis / LE / ED / Inc / IUS sub-question
+          blocks added, each card's inner content can be 1200 px+ tall.
+          `max-h-0 + overflow-hidden` clips the content visually but the
+          children are still rendered at their natural geometry, which
+          extends document.scrollHeight by the full sum of every collapsed
+          card's children — that's where the "footer 아래 빈 공간" bug
+          came from. Fix: only mount the children when expanded. The
+          smooth slide-down animation is sacrificed; users still get the
+          fade via opacity-0 on the wrapper for the brief unmount frame. */}
       <div
         className={cx(
           "transition-all duration-300 ease-in-out overflow-hidden",
           isExpanded ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0",
         )}
       >
+        {isExpanded && (
         <div
           className={cx(
             "px-4 pb-4 pt-3 sm:px-5 sm:pb-5 sm:pt-4 lg:px-6 lg:pb-6 lg:pt-5",
@@ -2496,6 +2506,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
 
           {/* Helpfulness Rating — relocated above to sit right under AI Summary. */}
         </div>
+        )}
       </div>
     </div>
   );
@@ -2948,7 +2959,10 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
     return (
       <div
         className={cx(
-          "min-h-screen flex items-center justify-center",
+          // Same pattern as the error state — flex-1 instead of
+          // min-h-screen so the loading wrapper exactly fills the
+          // remaining viewport space inside page.tsx's column flex.
+          "flex-1 flex items-center justify-center",
           isDarkMode
             ? "bg-slate-950"
             : "bg-gradient-to-br from-slate-50 via-white to-gray-100",
@@ -2979,7 +2993,12 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
     return (
       <div
         className={cx(
-          "min-h-screen flex items-center justify-center p-8",
+          // `flex-1` (not min-h-screen) so the error wrapper grows to
+          // exactly fill page.tsx's flex-col viewport allotment without
+          // adding a tall empty band below the footer. `flex flex-col`
+          // + `justify-center` keeps the card vertically centred. Same
+          // pattern matches what the loading state does above.
+          "flex-1 flex flex-col items-center justify-center p-8",
           isDarkMode
             ? "bg-slate-950"
             : "bg-gradient-to-br from-slate-50 via-white to-gray-100",
@@ -3041,13 +3060,24 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
   return (
     <div
       className={cx(
-        "min-h-screen",
+        // `flex-1 flex flex-col` (no min-h-screen) so V37 takes exactly
+        // page.tsx's column-flex allotment — which is `viewport height
+        // minus DashboardFooter height`. This guarantees the page total
+        // equals the viewport whenever V37 content is shorter than the
+        // viewport, so no empty band appears below the footer. When
+        // content is taller, the wrapper just grows naturally.
+        "flex-1 flex flex-col",
         isDarkMode
           ? "bg-slate-950"
           : "bg-gradient-to-br from-slate-50 via-white to-gray-100",
       )}
     >
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12" id="report-content">
+      {/* The inner gets `flex-1 w-full` so it absorbs V37 outer's
+          remaining vertical space (matching V31Re's `flex flex-1`
+          pattern). Without this, when V37 content is shorter than the
+          viewport, the gradient leaves a tall empty band beneath the
+          content cards which reads visually as "footer is long". */}
+      <div className="w-full flex-1 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12" id="report-content">
         {/* COMPASS branding card — first impression for patients arriving via SMS / email link */}
         <div
           className={cx(

@@ -27,8 +27,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    // `suppressHydrationWarning` on <html> + <body> silences React's mismatch
+    // log when browser extensions inject attributes (e.g. `nilread-wkx` from
+    // a reading/translation extension) into the root tags before hydration.
+    // It only suppresses the diff on these two elements — nested children
+    // still warn normally.
+    <html lang="en" suppressHydrationWarning>
       <body
+        suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {/* COMPASS brand header AND footer are rendered inside `page.tsx`
