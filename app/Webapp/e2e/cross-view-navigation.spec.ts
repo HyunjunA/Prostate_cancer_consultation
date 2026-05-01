@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { skipIfFixtureMissing, REQUIRED_FIXTURE_FILE } from "./_fixtures";
 
 /**
  * Cross-View Navigation E2E Tests
@@ -18,6 +19,13 @@ const DOCTOR_VIEW_URL =
   "/?fileid=quality-coded-nlp-pilot-sid-1.xlsx&doctorid=Interviewer:";
 
 test.describe("Cross-View Navigation", () => {
+  // Every URL above hardcodes the demo fixture file. Skip the
+  // whole block on a fresh CI database where that file isn't seeded
+  // yet — see e2e/_fixtures.ts for the rationale.
+  test.beforeAll(async ({ request, baseURL }) => {
+    await skipIfFixtureMissing(request, baseURL, REQUIRED_FIXTURE_FILE);
+  });
+
   test("navigate from selection to patient first visit and back", async ({ page }) => {
     // Start at selection screen
     await page.goto("/");

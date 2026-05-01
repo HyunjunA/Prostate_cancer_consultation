@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { skipIfFixtureMissing, REQUIRED_FIXTURE_FILE } from "./_fixtures";
 
 /**
  * Patient Follow-up Visit E2E Tests
@@ -15,6 +16,11 @@ const PATIENT_FOLLOWUP_URL =
   "/?fileid=quality-coded-nlp-pilot-sid-1.xlsx&patid=Patient_quality-coded-nlp-pilot-sid-1&visit=followup";
 
 test.describe("Patient Follow-up Visit", () => {
+  // Skip if the demo fixture isn't in the backend (CI fresh DB, etc.).
+  test.beforeAll(async ({ request, baseURL }) => {
+    await skipIfFixtureMissing(request, baseURL, REQUIRED_FIXTURE_FILE);
+  });
+
   test("page loads with follow-up visit params", async ({ page }) => {
     await page.goto(PATIENT_FOLLOWUP_URL);
     await expect(page).toHaveURL(/visit=followup/);

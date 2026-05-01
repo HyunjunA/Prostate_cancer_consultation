@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { skipIfFixtureMissing, REQUIRED_FIXTURE_FILE } from "./_fixtures";
 
 /**
  * Patient First Visit E2E Tests
@@ -15,6 +16,11 @@ const PATIENT_FIRST_VISIT_URL =
   "/?fileid=quality-coded-nlp-pilot-sid-1.xlsx&patid=Patient_quality-coded-nlp-pilot-sid-1&visit=first";
 
 test.describe("Patient First Visit", () => {
+  // Skip if the demo fixture isn't in the backend (CI fresh DB, etc.).
+  test.beforeAll(async ({ request, baseURL }) => {
+    await skipIfFixtureMissing(request, baseURL, REQUIRED_FIXTURE_FILE);
+  });
+
   test("page loads with patient first visit params", async ({ page }) => {
     await page.goto(PATIENT_FIRST_VISIT_URL);
     await expect(page).toHaveURL(/visit=first/);
@@ -42,7 +48,10 @@ test.describe("Patient First Visit", () => {
     await page.goto(PATIENT_FIRST_VISIT_URL);
     // The page should render something meaningful within the main container.
     // Look for common structural elements (flex-1 main content area).
-    const mainContent = page.locator("div.flex-1");
+    // `.first()` because the V37 layout puts multiple `flex-1` divs on
+    // the page (outer wrapper + inner content area). Strict mode would
+    // otherwise reject a multi-match locator.
+    const mainContent = page.locator("div.flex-1").first();
     await expect(mainContent).toBeVisible({ timeout: 10_000 });
 
     // The page should have some visible text content (not blank)

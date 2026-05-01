@@ -1,4 +1,5 @@
 import { test, expect, Page } from "@playwright/test";
+import { skipIfFixtureMissing, REQUIRED_FIXTURE_FILE } from "./_fixtures";
 
 /**
  * Survey Submit Full Flow E2E Tests
@@ -13,6 +14,13 @@ import { test, expect, Page } from "@playwright/test";
 
 // These tests are long multi-step flows — give each test up to 120 seconds
 test.setTimeout(120_000);
+
+// File-level precondition: every describe block below navigates to a
+// hardcoded follow-up URL pinned to the demo fixture. Skip the whole
+// file if that fixture isn't in the backend (CI fresh DB, etc.).
+test.beforeAll(async ({ request, baseURL }) => {
+  await skipIfFixtureMissing(request, baseURL, REQUIRED_FIXTURE_FILE);
+});
 
 const FOLLOWUP_URL =
   "/?fileid=quality-coded-nlp-pilot-sid-1.xlsx&patid=Patient_quality-coded-nlp-pilot-sid-1&visit=followup";
