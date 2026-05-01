@@ -282,6 +282,148 @@ Unify System A and System B into a single tracking pipeline:
 
 ---
 
+## P0-D — NEW: E2E test infrastructure & coverage gaps
+
+**Status:** Planning | **Priority:** High | **Added:** 2026-05-01
+
+### What is this?
+
+The Webapp Playwright e2e suite landed with three deep specs that drive the actual user journeys (`patient-first-visit-deep`, `patient-followup-complete-flow`, `doctor-view-deep`). Running them surfaced three blocking gaps that are tracked here so the next person can pick them up without re-deriving the analysis.
+
+### D-1. CI fixture-seed step
+
+**Symptom.** On a freshly bootstrapped CI Postgres (alembic + database_schema.sql, no pipeline run) every spec that depends on patient data calls `requireFirstFixture` and self-skips with "no patient data in backend". Nightly stays green but verifies infrastructure only — the substantive flow checks never actually run.
+
+**Fix.** Add a step in `nightly-e2e.yml` (both `e2e` and `playwright-e2e` jobs) between `Initialise schema` and `Start uvicorn in background`:
+
+```yaml
+- name: Seed fixture data via pipeline
+  working-directory: app/Backend
+  env:
+    AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+    AZURE_OPENAI_KEY: ${{ secrets.AZURE_OPENAI_KEY }}
+  run: |
+    python ../../scripts/run-pipeline-standalone.py \
+      --file tests/fixtures/sample_transcript.xlsx
+```
+
+**Open decisions.**
+
+| Component | Choice |
+|---|---|
+| Sample transcript .xlsx | Must contain ZERO PHI — synthetic conversation only (~10–20 patient + interviewer turns) committed at `app/Backend/tests/fixtures/sample_transcript.xlsx`. Naming determines fixture id: `Patient_<filename without .xlsx>`. |
+| NLP classifier in CI | Three options: (A) publish OCI to GHCR + `services:` container (~632 MB pull, strongest fidelity); (B) mock the `/classify` endpoint with an `httpx`/`uvicorn` shim returning canned responses; (C) ship a JSON sidecar with classifier output and skip the NLP call in fixture mode. Decide based on cost vs fidelity. |
+| Pipeline cost | One transcript ≈ 30–90 s + 5 Azure GPT-4o calls per nightly run (≈ $0.10 order). Acceptable. |
+
+**Acceptance.** After this lands, the next nightly run reports 33 passed / 0 skipped; `requireFirstFixture` returns the seeded file's identifiers; specs target real data instead of skipping.
+
+### D-2. V37 patient experimental questions persistence
+
+**Symptom.** `PatientInitialVisitReportV37.tsx` exposes VAS sliders, "select all that apply" checkboxes, and single-select radios on the first-visit page. They render and accept input, but live in **local React state only** (`useState`). They never POST anywhere. Concrete code references:
+
+- `PatientInitialVisitReportV37.tsx:871` — `setCpRiskWithoutTreatment` etc., pure `useState`
+- `PatientInitialVisitReportV37.tsx:1149,1235,1592,1854,2120` — `onValueChange={(v) => setX(v[0])}` for each Radix Slider, no fetch
+- The 1–5 NIH PROMIS rating IS persisted via `handleRatingChange` → `updateSingleClassScore` → PUT `/api/patient/scoring`, but the rating UI itself is currently commented out at V37:2317-2360.
+
+**Why this blocks e2e.** `patient-first-visit-deep.spec.ts` walks the full flow — opens every domain card, drags every VAS slider, ticks every checkbox, picks every radio — and the test passes. But the assertion at the end can ONLY check tracking events in `patient_first_behavior` (`page_view`, `topic_open`, `topic_close`). The patient's actual answers never reach the backend, so we cannot verify "the patient's risk perception score was saved" or "the patient's selected concerns were stored". `patient-followup-complete-flow` and `doctor-view-deep` both have proper round-trip checks; patient first-visit is the odd-one-out.
+
+**Fix outline.**
+
+1. Schema decision — three reasonable options:
+   - Extend `patient_summary_domain` with a JSONB column for free-form per-domain answers (lightest)
+   - New table `patient_experimental_response` with FK to `patient_summary_domain` (cleanest if many fields)
+   - Reuse `patient_summary_domain.patient_response` (currently single text — could become structured JSONB)
+2. Backend endpoint — likely `PUT /api/patient/experimental-responses` or extend the existing `PUT /api/patient/responses` shape.
+3. Frontend wire-up — replace local `useState` for VAS / checkbox / radio with a `usePatientData` variant that PUTs on change (or on a "Save" button if we want fewer round-trips).
+4. Migration — Alembic revision adding the column or table. Reversible (`down()`).
+5. Update `patient-first-visit-deep.spec.ts` — once the backend persists, add a "backend persisted patient responses" assertion block GETing the new endpoint and comparing every dragged slider value, every ticked checkbox, every selected radio.
+
+**Out of scope.** Doctor "Try & Score" rewrites are intentionally NOT persisted (V41Timothy.tsx:2800 — "Score-only handler: no DB save, just instant feedback"). Don't accidentally extend this task to that flow.
+
+### D-3. Backend e2e coverage gaps
+
+**Symptom.** `app/Backend/tests/e2e/test_full_flow.py` (24 tests) is endpoint-smoke-level — each test calls one route and asserts status 200 + a couple of response keys. Twelve substantive areas remain unverified, grouped by tier so the work can be tackled in priority order.
+
+#### Tier 1 — Security & data-integrity (do first)
+
+1. **Per-patient ACL.** `patient_access` grants per-user × per-patient read access. No e2e verifies user A is denied user B's data — silent regression risk. Cover: A reads own (200), A reads B's (403), ACL row added → access mid-session, doctor role bypass behavior.
+2. **Concurrent submission.** `survey_submission_log`, `doctor_rewrite_log`, `patient_first_behavior` all accept POSTs the frontend can fire near-simultaneously. Use `asyncio.gather` to submit N concurrent identical-key writes; assert exactly one survives (or N if duplicates allowed by design — confirm intent).
+3. **Error paths.** None of the 24 tests check 4xx behavior. Add: malformed JSON, missing required fields, FK violation, expired JWT, malformed API key, missing X-API-Key on protected route, body-too-large boundary.
+
+#### Tier 2 — Coverage expansion (medium-term)
+
+4. **Pipeline upstream e2e.** Suite reads pipeline OUTPUT but never drives it. Upload sample transcript → poll status → wait for AI scoring → assert all 17 tables populated correctly. Mark with `@pytest.mark.pipeline_e2e` so it can be opted in (~30–90 s per run).
+5. **Migration round-trip.** `alembic upgrade head` on empty DB → `downgrade base` (no orphan FKs) → `upgrade head` again (idempotent). Verify each direction for migrations 001–010.
+6. **Behavior tracking aggregate correctness.** `GET /api/track/<area>/aggregate` — verify counts match POSTed events, per-domain breakdown correct, time-bucket aggregates handle TZ correctly, empty session returns sensible empty (not 500).
+
+#### Tier 3 — Operational quality (longer-term)
+
+7. **Pagination.** Doctor/patient list endpoints' skip / limit / sort. Boundary: skip=0, skip=N, limit=1, limit=max, sort stable across pages, `total` count accurate.
+8. **Redis cache.** First call → NLP hit + Redis store with TTL. Second call → cache hit, no NLP container call. After TTL → cache miss + fresh fetch. Cache invalidation on transcript update.
+9. **REDCap field mapping depth.** Current `test_redcap_import_sample` only asserts HTTP 200. Strengthen: POST a survey, GET the actual REDCap record, verify each field mapped per `Frontend_REDCap_Field_Mapping.md`. Boundary cases: long text, special chars, missing optional fields.
+10. **Auth mode switching under load.** N requests under `AUTH_MODE=api_key` → all pass. Live-switch to `jwt` → API key requests now 401, JWT pass. Switch back → original key works again. Verifies the auth registry's reload path.
+11. **Pipeline partial failure.** When NLP succeeds but AI fails, `transcript_analysis_log.processed` should reflect "partial" or "ai_failed", not the success state. Mock Azure to 500 and assert the row state.
+12. **Schema drift detection.** Diff `pg_dump --schema-only` between (a) database_schema.sql baseline + alembic upgrade head, and (b) alembic upgrade head from empty DB. These should be identical; fail if anything differs.
+
+**Acceptance criteria.** Each area lands as a separate test class or file under `app/Backend/tests/e2e/`. New pytest markers: `pipeline_e2e`, `auth_acl`, `redcap_deep`, `migration_roundtrip` so suites can run subsets. Tier 1 tests run in the regular `pytest -m e2e` nightly. Tier 2 + 3 in their own scheduled jobs (e.g. weekly) so per-night cost stays bounded.
+
+**Out of scope.** Webapp Playwright e2e (covered by D-1). This task is strictly backend HTTP/DB layer.
+
+---
+
+## P0-E — NEW: ML backend hardening (clinical AI pipeline)
+
+**Status:** Planning | **Priority:** High | **Added:** 2026-05-01
+
+### What is this?
+
+The AI pipeline (`AI_physician_patient_communication/ai_pipeline/`) and its backend integration (`app/Backend/ai_pipeline_service.py`) drive every patient-visible summary and every doctor-visible score. A wrong AI output here is not a UX glitch — it's a clinical safety problem. Today's pipeline ships without the observability, validation, and audit machinery that a production-grade clinical ML system needs. Eight areas to harden, grouped by risk tier.
+
+### Tier 1 — Clinical safety (do first)
+
+#### E-1. Output schema validation
+The pipeline calls Azure GPT-4o and parses responses by string extraction. A malformed response doesn't fail closed. **Fix:** wrap every Azure call's response in a Pydantic model that asserts the shape; on parse failure, log + skip persistence rather than write garbage to `llm_domain_scoring_and_summary`.
+
+#### E-2. Hallucination detection
+GPT-4o extracts risk numbers (e.g. "12% at 15 years") in the extraction step. Nothing currently verifies those numbers actually appear in the source transcript. **Fix:** post-extraction step that checks every numeric value in the AI output against a regex over the source — flag any AI-extracted number that doesn't match anything in the input.
+
+#### E-3. PHI protection at the Azure boundary
+Patient transcripts go to Azure GPT-4o. Need to verify (a) the Azure deployment has a signed BAA, (b) the data residency is acceptable, (c) audit logs at the Azure side are retained per HIPAA. **Fix:** documentation + automated check that `AZURE_OPENAI_ENDPOINT` points at the BAA-covered tenant.
+
+### Tier 2 — Observability & audit (medium-term)
+
+#### E-4. Per-call audit logging
+Every Azure call should log: prompt id + version, input transcript id, response, latency, token counts, cost, timestamp, user/role. **Fix:** new table `ai_pipeline_call_log` written by a wrapper around the Azure client. Append-only. Retained per compliance policy.
+
+#### E-5. Cost & latency observability
+Azure spend per consultation is currently invisible. **Fix:** the audit table from E-4 already has the data; add a daily summary endpoint + dashboard widget showing per-domain p50/p95/p99 latency and rolling-30d spend. Alert when a single consultation costs >2× the median.
+
+#### E-6. Prompt versioning + golden test set
+Prompts at `ai_pipeline/prompts/` can change at any time, with no regression signal. **Fix:** every prompt gets a version string baked in; commit a `tests/golden/` directory with N input transcripts and their expected AI outputs; CI runs the pipeline against these and fails if outputs drift beyond a tolerance.
+
+### Tier 3 — Operational resilience (longer-term)
+
+#### E-7. Fallback strategy
+When Azure is unreachable or the NLP container is down, the user sees an unhelpful error. **Fix:** documented and tested behavior — degrade gracefully (e.g. show "AI summary temporarily unavailable, retry later"), never block the patient view from rendering.
+
+#### E-8. NLP classifier model versioning + drift detection
+The R + RandomForest classifier at `nlp-classifiers/` has no version tracking and no monitoring of production prediction distribution vs training. **Fix:** every classification response includes a `model_version` field; periodic job compares production class probabilities against training-set baseline and flags drift > N%.
+
+### Acceptance criteria
+
+- Tier 1 items land before any new clinical-facing feature ships.
+- Pydantic schema for every Azure response in `ai_pipeline_service.py`.
+- `ai_pipeline_call_log` migration deployed; every Azure call written to it.
+- Golden test set with ≥ 5 transcripts in CI; prompt change → diff visible in PR.
+- Fallback behavior documented in `docs/operations/AI_PIPELINE_OUTAGE.md`.
+
+### Out of scope
+
+- AI Pipeline backend integration itself (covered by P0-A).
+- E2E test coverage of these areas (covered by P0-D / D-3 backend e2e tier 2 + 3 items).
+
+---
+
 ## Recently Completed
 
 | Item | Date | Commit |
