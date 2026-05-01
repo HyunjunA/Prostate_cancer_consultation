@@ -124,12 +124,31 @@ jobs:
           pip install -r requirements.lock
           pip install "pytest>=8.0" "pytest-asyncio>=0.23" "pytest-cov>=4.1,<6.0" python-dotenv
 
-      - name: Initialise schema (alembic upgrade head)
+      - name: Initialise schema (database_schema.sql + alembic upgrade)
         working-directory: app/Backend
-        # Same step the native deploy runs on first boot. Service container
-        # is healthy by the time we get here (the `services:` block enforces
-        # readiness before steps execute).
-        run: alembic upgrade head
+        # The 001_baseline migration is intentionally a no-op marker —
+        # it stamps the existing schema as the starting point for
+        # subsequent migrations, but does not create any tables. The
+        # 12 base tables (auth_user, session_recording, transcript_*,
+        # patient_summary, etc.) are defined in database_schema.sql,
+        # which is applied by the postgres entrypoint in Docker mode
+        # and by scripts/init-db-native.sh in native mode. CI replicates
+        # the native bootstrap order:
+        #   1. Apply database_schema.sql via psql (creates 12 tables).
+        #   2. `alembic stamp 001_baseline` so alembic knows the
+        #      starting point.
+        #   3. `alembic upgrade head` runs 002+ migrations, which now
+        #      have the tables they expect to ALTER.
+        # Without step 1, migration 002 fails with
+        # `UndefinedTable: relation "session_recording" does not exist`.
+        env:
+          PGPASSWORD: ci-temp-password
+        run: |
+          psql -h localhost -p 5433 -U prostatecancer_user \
+            -d prostatecancer_db_native \
+            -f database_schema.sql -v ON_ERROR_STOP=1
+          alembic stamp 001_baseline
+          alembic upgrade head
 
       - name: Start uvicorn in background
         working-directory: app/Backend
