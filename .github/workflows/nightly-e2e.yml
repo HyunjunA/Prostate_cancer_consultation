@@ -213,6 +213,220 @@ jobs:
           path: /tmp/uvicorn.log
           retention-days: 14
 
+  # ──────────────────────────────────────────────────────────────────────────
+  # Job 2 — Playwright (Webapp e2e)
+  #
+  # Runs the deep Webapp e2e specs (patient-first-visit-deep + the existing
+  # smoke + survey-submit-flow files) against a real backend AND a real
+  # Webapp build, end-to-end through the browser. The pytest job above
+  # validates HTTP-layer behavior; this job validates that a patient can
+  # actually click through the page and that every UI interaction which
+  # writes to the backend does so correctly (round-trip via the
+  # /api/track/patient-first endpoint).
+  #
+  # Same service-container + secret + AI submodule story as `e2e`. Runs
+  # in parallel — the two jobs don't share state, so a failure in one
+  # doesn't mask issues in the other. The duplication of Postgres /
+  # Redis / Python boot is the price; nightly cadence makes it tolerable.
+  #
+  # Test fixtures: this workflow does NOT seed patient_summary rows, so
+  # the deep spec self-skips on selection screens with zero "First Visit"
+  # buttons (see test.skip(buttonCount === 0, …) in the spec). When a
+  # fixture-seed step is added later, the deep flow starts running
+  # automatically without spec changes.
+  # ──────────────────────────────────────────────────────────────────────────
+  playwright-e2e:
+    name: playwright (webapp e2e)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: test
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: prostatecancer_user
+          POSTGRES_PASSWORD: ci-temp-password
+          POSTGRES_DB: prostatecancer_db_native
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U prostatecancer_user -d prostatecancer_db_native"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: "postgresql+asyncpg://prostatecancer_user:ci-temp-password@localhost:5433/prostatecancer_db_native"
+      DATABASE_URL_SYNC: "postgresql+psycopg2://prostatecancer_user:ci-temp-password@localhost:5433/prostatecancer_db_native"
+      REDIS_URL: "redis://localhost:6379/0"
+      AUTH_MODE: "api_key"
+      API_KEY: ${{ secrets.E2E_API_KEY || 'nightly-e2e-stub-key' }}
+      JWT_SECRET: ${{ secrets.E2E_JWT_SECRET || 'nightly-e2e-stub-secret-at-least-32-chars-long' }}
+      NLP_API_URL: "http://localhost:8888"
+      AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+      AZURE_OPENAI_KEY: ${{ secrets.AZURE_OPENAI_KEY }}
+      REDCAP_API_URL: ${{ secrets.REDCAP_API_URL }}
+      REDCAP_API_TOKEN: ${{ secrets.REDCAP_API_TOKEN }}
+      OUTPUT_DIR: "/tmp/nightly-playwright-output"
+      TRANSCRIPTS_DIR: "/tmp/nightly-playwright-transcripts"
+      UPLOAD_DIR: "/tmp/nightly-playwright-uploads"
+
+    steps:
+      - name: Checkout dashboard
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+          # Same submodule + PAT story as the e2e job above — see
+          # the comments there for why this is split into two steps.
+
+      - name: Init AI submodule with PAT
+        env:
+          PAT: ${{ secrets.SUBMODULE_PAT }}
+        run: |
+          git config --global url."https://x-access-token:${PAT}@github.com/".insteadOf "https://github.com/"
+          git submodule update --init --recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+          cache-dependency-path: app/Backend/requirements.lock
+
+      - name: Install backend dependencies
+        working-directory: app/Backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.lock
+
+      - name: Initialise schema (database_schema.sql + alembic upgrade)
+        working-directory: app/Backend
+        env:
+          PGPASSWORD: ci-temp-password
+        run: |
+          psql -h localhost -p 5433 -U prostatecancer_user \
+            -d prostatecancer_db_native \
+            -f database_schema.sql -v ON_ERROR_STOP=1
+          alembic stamp 001_baseline
+          alembic upgrade head
+
+      - name: Start uvicorn in background
+        working-directory: app/Backend
+        # Same boot pattern as the e2e job. Output goes to a different
+        # log file so the artifact upload at the end of THIS job doesn't
+        # collide with the e2e job's upload.
+        run: |
+          PYTHONPATH="$PWD:$GITHUB_WORKSPACE/AI_physician_patient_communication" \
+            python -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1 \
+            > /tmp/uvicorn-playwright.log 2>&1 &
+          echo "uvicorn pid=$!" >> $GITHUB_STEP_SUMMARY
+          for _ in $(seq 1 60); do
+            if curl -sfo /dev/null http://localhost:8000/health; then
+              echo "✓ backend ready" >> $GITHUB_STEP_SUMMARY
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "✗ backend failed to come up within 60s" >> $GITHUB_STEP_SUMMARY
+          tail -100 /tmp/uvicorn-playwright.log
+          exit 1
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: app/Webapp/package-lock.json
+
+      - name: Install Webapp dependencies
+        working-directory: app/Webapp
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: app/Webapp
+        # `--with-deps` pulls the system libraries Chromium needs on
+        # ubuntu-latest (libnspr, libgbm, etc.). `chromium` only — the
+        # specs don't run firefox/webkit and skipping them halves the
+        # download time.
+        run: npx playwright install chromium --with-deps
+
+      - name: Build Webapp
+        working-directory: app/Webapp
+        # `next build` produces the .next/ output that `npm run start`
+        # serves. We use the production build (not `next dev`) because
+        # it's representative of what users actually see, and because
+        # `next dev` does HMR work that adds noise to network traces.
+        env:
+          # The Webapp's Next.js Route Handlers (api/backend/[...path])
+          # need to know where the FastAPI backend is. Defaults to
+          # localhost:8000 in code; pin it explicitly so a future
+          # rename of that fallback can't silently break CI.
+          NEXT_PUBLIC_API_URL: "http://localhost:8000"
+          BACKEND_API_URL: "http://localhost:8000"
+        run: npm run build
+
+      - name: Start Webapp in background
+        working-directory: app/Webapp
+        # Mirrors the uvicorn step: start in background, wait for the
+        # port, fail loud if it doesn't come up. The Playwright spec
+        # uses PLAYWRIGHT_BASE_URL=http://localhost:3000.
+        env:
+          NEXT_PUBLIC_API_URL: "http://localhost:8000"
+          BACKEND_API_URL: "http://localhost:8000"
+          PORT: "3000"
+        run: |
+          npm run start > /tmp/webapp.log 2>&1 &
+          echo "webapp pid=$!" >> $GITHUB_STEP_SUMMARY
+          for _ in $(seq 1 60); do
+            if curl -sfo /dev/null http://localhost:3000; then
+              echo "✓ webapp ready" >> $GITHUB_STEP_SUMMARY
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "✗ webapp failed to come up within 60s" >> $GITHUB_STEP_SUMMARY
+          tail -100 /tmp/webapp.log
+          exit 1
+
+      - name: Run Playwright e2e
+        working-directory: app/Webapp
+        env:
+          PLAYWRIGHT_BASE_URL: "http://localhost:3000"
+          # PLAYWRIGHT_SLOW_MO is intentionally unset — CI wants
+          # full-speed runs, slowMo is a manual demo-only feature.
+        # `--reporter=list` is friendlier in GitHub Actions logs than
+        # the default html reporter, which CI doesn't render anyway.
+        run: |
+          npx playwright test --config=e2e/playwright.config.ts --reporter=list
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: app/Webapp/playwright-report/
+          retention-days: 14
+
+      - name: Upload backend + webapp logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-logs
+          path: |
+            /tmp/uvicorn-playwright.log
+            /tmp/webapp.log
+          retention-days: 14
+
 # Failure notifications: rely on GitHub's built-in email. The repo owner
 # is emailed automatically on every red workflow run; recipients tune
 # the cadence under Settings → Notifications. No extra YAML required.
