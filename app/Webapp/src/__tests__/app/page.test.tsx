@@ -34,7 +34,7 @@ jest.mock("@/components/PhysicianReportsModifiedV41Timothy", () => {
   };
 });
 
-jest.mock("@/components/PatientInitialVisitReportV35", () => {
+jest.mock("@/components/PatientInitialVisitReportV37", () => {
   return function MockPatientFirstVisit() {
     return <div data-testid="patient-first">Patient First Visit</div>;
   };
