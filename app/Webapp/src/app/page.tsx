@@ -28,7 +28,7 @@ import PatientConsultationReports from "@/components/PatientConsultationReports"
 // import PatientReport from "@/components/PatientInitialVisitReportV29";
 // import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV31";
 // import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV33";
-import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV35";
+import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV37";
 
 // // These below components are the one with feedback from Dr. Timothy
 // Modified but not the version where one question appears per page.
@@ -626,8 +626,8 @@ export default function Home() {
                 <span className="font-semibold">COM</span>munication of{" "}
                 <span className="font-semibold">P</span>rostate c
                 <span className="font-semibold">A</span>ncer{" "}
-                <span className="font-semibold">S</span>hared deci
-                <span className="font-semibold">S</span>ions
+                <span className="font-semibold">S</span>hared decision
+                <span className="font-semibold">S</span>
               </p>
             </header>
             <SelectionScreen />

@@ -32,7 +32,7 @@ export const DashboardFooter: React.FC = () => {
 
         {/* Study attribution — single line under the existing row. */}
         <p className="mt-1 text-center text-xs text-gray-500 dark:text-gray-400">
-          COMPASS — COMmunication of Prostate cAncer Shared deciSions
+          COMPASS — COMmunication of Prostate cAncer Shared decisionS
           {" · "}
           R01 Prostate Cancer Communication Study, Cedars-Sinai Medical Center
         </p>

@@ -70,6 +70,7 @@ import { usePatientId } from "@/stores/usePatientId";
 import { useFileId } from "@/stores/useFileId";
 import { sendTrackingEvents } from "@/api/trackingApi";
 import { trackFirst, startSession, endSession, type Domain } from "@/tracking/track";
+import { Slider } from "@/components/ui/slider";
 
 // Display name → backend domain code (cp/le/ed/inc/ius)
 const TOPIC_TO_DOMAIN: Record<string, Domain> = {
@@ -863,6 +864,18 @@ const TopicCard: React.FC<TopicCardProps> = ({
   const topicId = topicName.replace(/\s+/g, "");
   const colors = TOPIC_COLORS[topicName] || TOPIC_COLORS["Cancer Prognosis"];
 
+  // [V37] Cancer Prognosis (Experimental arm) — three additional questions
+  // are rendered directly below the AI Summary for this topic only. Other
+  // topics ignore these state slots. Local state only; backend persistence
+  // will be wired in a follow-up.
+  const [cpRiskWithoutTreatment, setCpRiskWithoutTreatment] = React.useState<
+    number | null
+  >(null);
+  const [cpRiskWithTreatment, setCpRiskWithTreatment] = React.useState<
+    number | null
+  >(null);
+  const [cpTimePeriod, setCpTimePeriod] = React.useState<string | null>(null);
+
   return (
     <div
       data-track-proximity={`TopicCard_${topicId}`}
@@ -983,8 +996,283 @@ const TopicCard: React.FC<TopicCardProps> = ({
             </p>
           </div>
 
-          {/* Helpfulness Rating — placed directly under the AI Summary so the
-              patient can rate as they read, before scrolling to evidence. */}
+          {/* [V37] Cancer Prognosis — Experimental arm sub-questions
+              Sits directly under the AI Summary so the wording
+              ("the AI summary from your consultation is above") is
+              true. Other topics skip this block entirely. */}
+          {topicName === "Cancer Prognosis" && (
+            <div
+              className={cx(
+                "p-4 sm:p-5 rounded-xl border mb-6 space-y-6",
+                isDark
+                  ? "bg-slate-800/30 border-slate-700/30"
+                  : "bg-white border-gray-200",
+              )}
+            >
+              {/* (1) VAS — risk of dying WITHOUT treatment */}
+              <div>
+                <p
+                  className={cx(
+                    "text-sm leading-relaxed mb-3",
+                    isDark ? "text-slate-300" : "text-gray-700",
+                  )}
+                >
+                  <span className="font-semibold">(1)</span> The AI summary
+                  from your consultation is above. Based on the AI summary
+                  and/or what you remember from your consultation, what is
+                  your understanding of the risk of dying of cancer{" "}
+                  <strong>without treatment</strong>?
+                </p>
+                {/* Native <input type="range"> renders a thumb whose center
+                    moves between THUMB_R (=8px) and (track_width - THUMB_R).
+                    To make the floating bubble + ticks + 0/50/100 anchor
+                    labels line up with the thumb at every value, the inner
+                    elements get `mx-2` (8px L/R) so they span the same
+                    range as the thumb. The bubble's `left` is computed as
+                    calc(8px + (100% - 16px) * value/100). */}
+                <div>
+                  {/* Top anchor labels: 0 / 50 / 100. Absolute-positioned
+                      with -translate-x-1/2 so each label's CENTRE sits at
+                      its target percent, matching the thumb centre. The
+                      `mx-2` defines the inner range (8px → W-8px) where
+                      0% maps to thumb-at-0 and 100% to thumb-at-100. */}
+                  <div className="relative h-4 mb-1.5 mx-2">
+                    {[
+                      { v: 0, label: "0" },
+                      { v: 50, label: "50" },
+                      { v: 100, label: "100" },
+                    ].map((t) => (
+                      <span
+                        key={t.v}
+                        className={cx(
+                          "absolute top-0 -translate-x-1/2 text-[11px] font-medium tabular-nums",
+                          isDark ? "text-slate-400" : "text-gray-500",
+                        )}
+                        style={{ left: `${t.v}%` }}
+                      >
+                        {t.label}
+                      </span>
+                    ))}
+                  </div>
+                  {/* shadcn Slider — thumb fixed at 16px (h-4 w-4),
+                      so the floating bubble's calc(8px + (100% - 16px) *
+                      v/100) and the mx-2 ticks line up exactly. */}
+                  <div className="relative pt-6">
+                    {cpRiskWithoutTreatment !== null && (
+                      <span
+                        className="absolute top-0 -translate-x-1/2 px-1.5 py-0.5 rounded text-xs font-bold tabular-nums bg-sky-500 text-white shadow-sm"
+                        style={{
+                          left: `calc(8px + (100% - 16px) * ${cpRiskWithoutTreatment} / 100)`,
+                        }}
+                      >
+                        {cpRiskWithoutTreatment}
+                      </span>
+                    )}
+                    <Slider
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={[cpRiskWithoutTreatment ?? 50]}
+                      onValueChange={(v) =>
+                        setCpRiskWithoutTreatment(v[0] ?? 0)
+                      }
+                      aria-label="Risk of dying of cancer without treatment, 0 to 100"
+                    />
+                  </div>
+                  {/* 10-unit ticks + numbers — absolute positioning so
+                      each tick's CENTRE (line + number) sits exactly on
+                      the thumb's centre at the matching value. h-6 holds
+                      the 8px tick line + a small gap + the 10px number. */}
+                  <div className="relative h-6 mt-1.5 mx-2">
+                    {[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map((n) => (
+                      <div
+                        key={n}
+                        className="absolute top-0 -translate-x-1/2 flex flex-col items-center"
+                        style={{ left: `${n}%` }}
+                      >
+                        <span
+                          className={cx(
+                            "w-px h-2",
+                            isDark ? "bg-slate-500" : "bg-gray-400",
+                          )}
+                        />
+                        <span
+                          className={cx(
+                            "text-[10px] leading-none mt-0.5 tabular-nums",
+                            isDark ? "text-slate-400" : "text-gray-500",
+                          )}
+                        >
+                          {n}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* (2) VAS — risk of dying WITH treatment */}
+              <div>
+                <p
+                  className={cx(
+                    "text-sm leading-relaxed mb-3",
+                    isDark ? "text-slate-300" : "text-gray-700",
+                  )}
+                >
+                  <span className="font-semibold">(2)</span> The AI summary
+                  from your consultation is above. Based on the AI summary
+                  and/or what you remember from your consultation, what is
+                  your understanding of the risk of dying of cancer{" "}
+                  <strong>with treatment</strong>?
+                </p>
+                <div>
+                  <div className="relative h-4 mb-1.5 mx-2">
+                    {[
+                      { v: 0, label: "0" },
+                      { v: 50, label: "50" },
+                      { v: 100, label: "100" },
+                    ].map((t) => (
+                      <span
+                        key={t.v}
+                        className={cx(
+                          "absolute top-0 -translate-x-1/2 text-[11px] font-medium tabular-nums",
+                          isDark ? "text-slate-400" : "text-gray-500",
+                        )}
+                        style={{ left: `${t.v}%` }}
+                      >
+                        {t.label}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="relative pt-6">
+                    {cpRiskWithTreatment !== null && (
+                      <span
+                        className="absolute top-0 -translate-x-1/2 px-1.5 py-0.5 rounded text-xs font-bold tabular-nums bg-sky-500 text-white shadow-sm"
+                        style={{
+                          left: `calc(8px + (100% - 16px) * ${cpRiskWithTreatment} / 100)`,
+                        }}
+                      >
+                        {cpRiskWithTreatment}
+                      </span>
+                    )}
+                    <Slider
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={[cpRiskWithTreatment ?? 50]}
+                      onValueChange={(v) =>
+                        setCpRiskWithTreatment(v[0] ?? 0)
+                      }
+                      aria-label="Risk of dying of cancer with treatment, 0 to 100"
+                    />
+                  </div>
+                  <div className="relative h-6 mt-1.5 mx-2">
+                    {[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map((n) => (
+                      <div
+                        key={n}
+                        className="absolute top-0 -translate-x-1/2 flex flex-col items-center"
+                        style={{ left: `${n}%` }}
+                      >
+                        <span
+                          className={cx(
+                            "w-px h-2",
+                            isDark ? "bg-slate-500" : "bg-gray-400",
+                          )}
+                        />
+                        <span
+                          className={cx(
+                            "text-[10px] leading-none mt-0.5 tabular-nums",
+                            isDark ? "text-slate-400" : "text-gray-500",
+                          )}
+                        >
+                          {n}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* (3) Radio — time period */}
+              <div>
+                <p
+                  className={cx(
+                    "text-sm leading-relaxed mb-3",
+                    isDark ? "text-slate-300" : "text-gray-700",
+                  )}
+                >
+                  <span className="font-semibold">(3)</span> The AI summary
+                  from your consultation is above. Based on the AI summary
+                  and/or what you remember from your consultation, over
+                  what time period was the risk of cancer death quoted
+                  (choose one)?
+                </p>
+                <div className="space-y-2">
+                  {[
+                    { value: "A", label: "Over my lifetime" },
+                    { value: "B", label: "Over next 5 years" },
+                    { value: "C", label: "Over next 5-10 years" },
+                    { value: "D", label: "Over next 11-15 years" },
+                    { value: "E", label: "Over next 16-20 years" },
+                    { value: "F", label: "Over next 20-30 years" },
+                  ].map((opt) => (
+                    <label
+                      key={opt.value}
+                      className={cx(
+                        "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors border-2",
+                        cpTimePeriod === opt.value
+                          ? isDark
+                            ? "bg-sky-900/30 border-sky-500"
+                            : "bg-sky-50 border-sky-400"
+                          : isDark
+                            ? "border-slate-700 hover:bg-slate-700/30"
+                            : "border-gray-200 hover:bg-gray-50",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name={`cpTimePeriod_${topicId}`}
+                        value={opt.value}
+                        checked={cpTimePeriod === opt.value}
+                        onChange={() => setCpTimePeriod(opt.value)}
+                        className="sr-only"
+                      />
+                      <span
+                        className={cx(
+                          "w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0",
+                          cpTimePeriod === opt.value
+                            ? "border-sky-500 bg-sky-500"
+                            : isDark
+                              ? "border-slate-500"
+                              : "border-gray-300",
+                        )}
+                      >
+                        {cpTimePeriod === opt.value && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                        )}
+                      </span>
+                      <span
+                        className={cx(
+                          "text-sm font-medium",
+                          isDark ? "text-slate-200" : "text-gray-700",
+                        )}
+                      >
+                        <span className="font-semibold mr-2">
+                          ({opt.value})
+                        </span>
+                        {opt.label}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* [V37] Helpfulness Rating block commented out per request —
+              "How helpful was this information about ..." question and
+              the rating selector are hidden for now. Restore by un-
+              commenting the block below if/when the rating returns.
+
           <div
             className={cx(
               "py-4 px-4 rounded-xl border mb-6",
@@ -1022,6 +1310,8 @@ const TopicCard: React.FC<TopicCardProps> = ({
               </p>
             )}
           </div>
+
+          */}
 
           {/* [V33] Evidence Sentences — moved UP to where star rating used to be */}
           {/* Tim: "in the area where the star ratings is now" */}
@@ -1819,8 +2109,10 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
         {/* Instructions */}
         <InstructionsBox isDark={isDarkMode} />
 
-        {/* Helpfulness Scale Legend - NIH PROMIS unipolar scale */}
+        {/* [V37] Helpfulness Scale Legend (1-5: Not at all helpful → Extremely helpful)
+            commented out per request — restore by un-commenting if the scale returns.
         <HelpfulnessLegend isDark={isDarkMode} />
+        */}
 
         {/* Rating Progress Indicator */}
         <div

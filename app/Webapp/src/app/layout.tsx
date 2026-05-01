@@ -17,7 +17,7 @@ const geistMono = localFont({
 export const metadata: Metadata = {
   title: "COMPASS",
   description:
-    "COMPASS — COMmunication of Prostate cAncer Shared deciSions. " +
+    "COMPASS — COMmunication of Prostate cAncer Shared decisionS. " +
     "Research dashboard for analyzing physician-patient consultation transcripts.",
 };
 

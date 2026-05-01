@@ -330,6 +330,14 @@ const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
 }) => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = React.useState(0);
 
+  // Dev-only study-group switch — lets the developer flip the survey
+  // wording between the Experimental and Control arms while iterating
+  // on the V2 layout. Will be replaced by a real randomization signal
+  // (URL param or backend lookup) before the study goes live.
+  const [studyGroup, setStudyGroup] = React.useState<
+    "experimental" | "control"
+  >("experimental");
+
   React.useEffect(() => {
     const q = RISK_QUESTIONS[currentQuestionIndex];
     if (q) onQuestionView?.(q.id, currentQuestionIndex);
@@ -383,6 +391,28 @@ const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
+      {/* Dev-only study-group toggle. Yellow = clearly a developer tool,
+          not a patient-facing control. Click to flip between arms. */}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() =>
+            setStudyGroup((g) =>
+              g === "experimental" ? "control" : "experimental",
+            )
+          }
+          title="Dev only — toggle study group (Experimental ↔ Control)"
+          className={cx(
+            "text-[11px] font-mono font-semibold tracking-wide",
+            "px-2.5 py-1 rounded-md border transition-colors",
+            "bg-yellow-100 hover:bg-yellow-200 border-yellow-400 text-yellow-900",
+            "dark:bg-yellow-500/20 dark:hover:bg-yellow-500/30 dark:border-yellow-500/40 dark:text-yellow-200",
+          )}
+        >
+          [DEV] {studyGroup === "experimental" ? "Experimental" : "Control"}
+        </button>
+      </div>
+
       {/* Topic Badge */}
       <div className="flex items-center gap-2">
         <div
