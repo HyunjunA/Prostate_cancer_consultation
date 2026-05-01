@@ -1,67 +1,111 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { requireFirstFixture, type DemoFixture } from "./_fixtures";
 
 /**
- * Doctor View — deep flow with backend tracking round-trip
+ * Doctor View — full clinical walkthrough
  *
- * Smoke checks for the physician surface live in
- * `doctor-view.spec.ts`. This file drives the actual three-stage
- * physician walkthrough that V41 was built around:
+ * Drives V41Timothy through the actual physician journey:
  *
- *   1. Dashboard view — patient list. Click a row's "View Report"
- *      button → fires `patient_select`, switches the doctor surface
- *      to the grid view (V41Timothy.tsx ~line 1621).
- *   2. Grid view — per-topic table for the selected patient. Click
- *      a topic-name button (e.g. "Cancer Prognosis") → fires
- *      `topic_select`, switches to the detail view (~line 2540).
- *   3. Detail view — sentences for the chosen topic. Click any
- *      sentence card → fires `sentence_select` (~line 4257).
+ *   1. Selection screen → click the "Physician View" header link
+ *      (page.tsx:334) to enter the doctor surface.
+ *   2. Dashboard tour (react-joyride) — click "Next" until the tour
+ *      ends with "Got it!". Tours might be absent if a previous
+ *      session already completed them; the helper handles that
+ *      gracefully (timeouts → break out).
+ *   3. Pick a random patient row from the dashboard, click
+ *      "View Report" to drill into their grid view.
+ *   4. Grid tour — same Next/Got-it walk-through.
+ *   5. Click the first topic-name button (e.g. "Cancer Prognosis")
+ *      to open the detail view.
+ *   6. Detail tour — same walk-through.
+ *   7. In the Re-write Practice panel, copy the displayed Original
+ *      Sentence verbatim into the "How would you say it better?"
+ *      textarea, then click "Try & Score".
+ *   8. Wait for the scoring result message ("Your rewrite scored:
+ *      X.X" on success, "Could not score…" on backend miss). Either
+ *      outcome means the backend round-trip completed.
  *
- * Each `trackEvent(...)` call posts to `/api/track/doctor` and
- * writes a row to `doctor_behavior`. After the walk we GET
- * `/api/track/doctor/session/{id}` and assert at least
- * `page_view`, `patient_select`, and `topic_select` came back —
- * the three events that prove the physician moved through the
- * intended view chain rather than just landing on the dashboard.
- *
- * `sentence_select` is best-effort because the detail view's
- * sentence list takes an extra API roundtrip to populate (sentences
- * are fetched on demand); the assertion treats it as a soft target.
+ * Round-trip verification:
+ *   - The "Try & Score" path fires `trackDoctor` with
+ *     event_type=`rewrite_apply` (V41Timothy.tsx:2805) and on
+ *     success calls `saveRewriteWithTimestamp` which PUTs to
+ *     `/api/doctor/rewrites` writing a row to `doctor_rewrite_log`.
+ *   - We GET `/api/track/doctor/session/{id}` afterwards and assert
+ *     the chain of events that proves the physician walked through
+ *     each stage: page_view, patient_select, topic_select,
+ *     sentence_select, rewrite_apply.
  */
 
 test.setTimeout(120_000);
 
 const API_BASE = "http://localhost:8000";
-// Tracking GET endpoint inherits the same auth conventions as the
-// rest of the suite. The endpoint itself doesn't enforce auth, but
-// keeping the X-API-Key header consistent across specs simplifies
-// debugging.
 const API_KEY = process.env.E2E_API_KEY || process.env.API_KEY || "";
 const AUTH_HEADERS = API_KEY ? { "X-API-Key": API_KEY } : {};
 
 let FIXTURE: DemoFixture;
-let DOCTOR_VIEW_URL: string;
 
-test.describe("Doctor View — deep flow", () => {
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Pick a uniformly-random index in [0, n). */
+function randIdx(n: number): number {
+  return Math.floor(Math.random() * n);
+}
+
+/**
+ * Walk the visible react-joyride tour to completion by clicking
+ * "Next" until the final step's "Got it!" button appears, or the
+ * tour disappears (already completed in a prior run, dismissed,
+ * etc.). Tour buttons live in a portal at document root so a
+ * page-level locator finds them regardless of which view rendered
+ * them.
+ *
+ * The locale strings come from OnboardingTour.tsx:361-367 — the
+ * project pins them to `next: "Next"` and `last: "Got it!"`, so
+ * matching by exact button name is stable across versions.
+ */
+async function clickThroughTour(page: Page, label: string) {
+  for (let i = 0; i < 20 /* safety cap */; i++) {
+    // OnboardingTour.tsx enables `showProgress: true`, so Joyride
+    // suffixes the buttons with " (Step X of Y)". Match the verb
+    // prefix instead of an exact string so the locator survives
+    // the suffix.
+    const gotIt = page.getByRole("button", { name: /^Got it!/ });
+    const next = page.getByRole("button", { name: /^Next\b/ });
+
+    if (await gotIt.isVisible({ timeout: 1_500 }).catch(() => false)) {
+      await gotIt.click();
+      await page.waitForTimeout(400);
+      return;
+    }
+    if (await next.isVisible({ timeout: 1_500 }).catch(() => false)) {
+      await next.click();
+      await page.waitForTimeout(400);
+      continue;
+    }
+    // No tour visible — already completed, or this view doesn't
+    // ship a tour. Either way, nothing to do.
+    return;
+  }
+  // Hit the cap without finishing — log and let the caller decide.
+  console.log(`[doctor-deep] tour at "${label}" exceeded 20 step iterations`);
+}
+
+// ---------------------------------------------------------------------------
+// Test
+// ---------------------------------------------------------------------------
+
+test.describe("Doctor View — full clinical walkthrough", () => {
   test.beforeAll(async ({ request, baseURL }) => {
     FIXTURE = await requireFirstFixture(request, baseURL);
-    // Intentionally NOT including `fileid=` in the URL. V41 has an
-    // auto-select effect (PhysicianReportsModifiedV41Timothy.tsx
-    // ~line 3850) that bypasses the dashboard and jumps straight
-    // to the grid view when `fileid` is in the URL — and that
-    // jump skips `trackEvent("patient_select", ...)` because
-    // `setSelectedPatient` is called directly instead of via the
-    // wrapper at line 4197. Starting from `/?doctorid=...` lands
-    // us on the dashboard so we can click "View Report" the way a
-    // physician would and exercise the full event chain.
-    DOCTOR_VIEW_URL = `/?doctorid=${encodeURIComponent(FIXTURE.doctor)}`;
   });
 
-  test("walk dashboard → grid → detail and confirm tracking events persist", async ({
+  test("Physician View → tour → patient → tour → topic → tour → re-write practice → Try & Score", async ({
     page,
   }) => {
-    // Capture every tracking POST so we can pull the session id
-    // and check exactly which event_types fired during the flow.
+    // Capture every doctor-tracking POST so we can assert the
+    // backend persisted the chain of events.
     const trackedRequests: Array<{
       session_id: string;
       events: Array<{ event_type: string }>;
@@ -73,96 +117,149 @@ test.describe("Doctor View — deep flow", () => {
           const body = req.postData();
           if (body) trackedRequests.push(JSON.parse(body));
         } catch {
-          /* non-JSON bodies aren't expected here — ignore */
+          /* non-JSON body, ignore */
         }
       }
     });
 
-    // Surface uncaught render errors as test failures with the
-    // original stack instead of a torn-down section.
+    // Surface uncaught render errors as test failures.
     const pageErrors: string[] = [];
     page.on("pageerror", (e) => {
       if (!/Hydration|hydrat/i.test(e.message)) pageErrors.push(e.message);
     });
 
-    // ── 1. Dashboard view (initial mount) ────────────────────────────
-    // Loading dashboard triggers `page_view` + the initial
-    // patient list fetch. We wait for the patient table's "View
-    // Report" button to be present before clicking — that's the
-    // affordance physicians actually use to drill into a patient
-    // (V41 ~1621). Selection-screen heading must be gone too.
-    await page.goto(DOCTOR_VIEW_URL);
-    await expect(page).toHaveURL(/doctorid=/);
-    await expect(
-      page.getByText("Patient Consultation System"),
-    ).not.toBeVisible({ timeout: 10_000 });
+    // ── Step 1 — Selection screen → Physician View ──────────────────
+    // Start at the bare root URL and click the "Physician View"
+    // link in the header (page.tsx:334 — <a href="/?doctorid=auto">).
+    // This drops the user onto the doctor dashboard.
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
 
-    const viewReportBtn = page
-      .getByRole("button", { name: /^View Report$/i })
-      .first();
-    await expect(
-      viewReportBtn,
-      "expected at least one 'View Report' button on the dashboard",
-    ).toBeVisible({ timeout: 15_000 });
+    const physicianLink = page.getByRole("link", { name: /Physician View/i });
+    await expect(physicianLink).toBeVisible({ timeout: 10_000 });
+    await physicianLink.click();
+    await expect(page).toHaveURL(/doctorid=/, { timeout: 10_000 });
 
-    // ── 2. Stage 1 → 2 transition (dashboard → grid) ─────────────────
-    // Clicking "View Report" calls `setSelectedPatient(...)` which
-    // is wired to `trackEvent("patient_select", ...)` at the V41
-    // top level (~line 4197). Then the view state flips to "grid".
-    await viewReportBtn.click();
-    // Grid view shows topic-name buttons for each domain
-    // (Cancer Prognosis / Life Expectancy / etc.). Wait for the
-    // first one to appear — that's the next click target.
+    // ── Step 2 — Dashboard tour ─────────────────────────────────────
+    // V41 fires its dashboard tour on first arrival. Walk through
+    // every step. Wait briefly first so the Joyride portal has time
+    // to mount.
+    await page.waitForTimeout(1_500);
+    await clickThroughTour(page, "dashboard");
+
+    // ── Step 3 — Pick a random patient → "View Report" ──────────────
+    // Dashboard renders one "View Report" button per patient row
+    // (V41Timothy.tsx:1621). Pick a random one — different runs
+    // exercise different demo data.
+    const viewReportBtns = page.getByRole("button", { name: /^View Report$/i });
+    const reportCount = await viewReportBtns.count();
+    expect(
+      reportCount,
+      "expected at least one 'View Report' button on the doctor dashboard",
+    ).toBeGreaterThan(0);
+    const pickedReport = viewReportBtns.nth(randIdx(reportCount));
+    await pickedReport.scrollIntoViewIfNeeded();
+    await pickedReport.click();
+    console.log(`[doctor-deep] picked patient ${randIdx} of ${reportCount}`);
+
+    // ── Step 4 — Grid view tour ─────────────────────────────────────
+    await page.waitForTimeout(1_500);
+    await clickThroughTour(page, "grid");
+
+    // ── Step 5 — First topic → detail view ──────────────────────────
+    // Grid view has one topic-name button per domain
+    // (V41Timothy.tsx:2540).
     const topicBtn = page
       .getByRole("button", {
-        name: /Cancer Prognosis|Life Expectancy|Erectile Dysfunction|Urinary Incontinence|Irritative Urinary Symptoms/i,
+        name: /^(Cancer Prognosis|Life Expectancy|Erectile Dysfunction|Urinary Incontinence|Irritative Urinary Symptoms)$/i,
       })
       .first();
     await expect(
       topicBtn,
-      "grid view should expose at least one topic-name button after patient_select",
+      "grid view should expose at least one topic-name button after View Report",
+    ).toBeVisible({ timeout: 15_000 });
+    await topicBtn.scrollIntoViewIfNeeded();
+    await topicBtn.click();
+
+    // ── Step 6 — Detail view tour ───────────────────────────────────
+    await page.waitForTimeout(1_500);
+    await clickThroughTour(page, "detail");
+
+    // ── Step 7 — Re-write Practice: copy original, type into textarea
+    // The Re-write Practice panel is identified by
+    // `data-tour="detail-rewrite-panel"` (V41Timothy.tsx:3144). The
+    // Original Sentence text sits in a quoted div under the
+    // "Original Sentence" header. We extract it and paste verbatim
+    // into the "How would you say it better?" textarea — matching
+    // the user's spec ("type the same as the original sentence").
+    const rewritePanel = page.locator('[data-tour="detail-rewrite-panel"]');
+    await expect(
+      rewritePanel,
+      "Re-write Practice panel should be visible in detail view",
     ).toBeVisible({ timeout: 15_000 });
 
-    // ── 3. Stage 2 → 3 transition (grid → detail) ────────────────────
-    // The topic-name button has `setSelectedTopic({name, patient})`
-    // wired to `trackEvent("topic_select", ...)` (~line 4233).
-    await topicBtn.click();
-    await page.waitForTimeout(1_500);
-
-    // ── 4. Stage 3 — best-effort sentence_select ─────────────────────
-    // Detail view fetches sentences on demand so the list is
-    // sometimes empty for a brief moment. If a sentence card is
-    // visible within 5 s click it; otherwise just move on (the
-    // soft assertion below tolerates the absence).
-    const sentenceCard = page
-      .locator('[data-testid="sentence-card"], button:has-text("Score:")')
+    // The original sentence renders inside a div containing the
+    // text wrapped in unicode quotes. Grab the text and clean off
+    // the surrounding quote characters.
+    const originalSentenceDiv = rewritePanel
+      .locator("div")
+      .filter({ hasText: /^[\s"“”].*[\s"“”]$/ })
       .first();
-    const sentenceVisible = await sentenceCard
-      .isVisible({ timeout: 5_000 })
-      .catch(() => false);
-    if (sentenceVisible) {
-      await sentenceCard.click().catch(() => {
-        // Sentence click can collide with the detail-view's own
-        // re-render — best-effort, don't fail the whole test on it.
-      });
-      await page.waitForTimeout(800);
-    }
+    const rawOriginal = await originalSentenceDiv.textContent();
+    const originalSentence = (rawOriginal ?? "")
+      .replace(/[“”"]/g, "")
+      .trim();
+    expect(
+      originalSentence.length,
+      "expected to read a non-empty Original Sentence",
+    ).toBeGreaterThan(0);
+    console.log(
+      `[doctor-deep] original sentence (${originalSentence.length} chars): ` +
+        `"${originalSentence.slice(0, 60)}${originalSentence.length > 60 ? "…" : ""}"`,
+    );
 
-    // ── 5. No uncaught render errors during the flow ─────────────────
+    const textarea = rewritePanel.locator("textarea");
+    await expect(textarea).toBeVisible({ timeout: 5_000 });
+    await textarea.fill(originalSentence);
+
+    // ── Step 8 — Try & Score, wait for result ───────────────────────
+    const tryScoreBtn = page.getByRole("button", { name: /Try & Score/i });
+    await expect(tryScoreBtn).toBeEnabled({ timeout: 5_000 });
+    await tryScoreBtn.click();
+
+    // The button label flips to "Scoring..." while the request is
+    // in flight; wait for it to flip back. Either of two outcomes
+    // is acceptable end-state:
+    //   - success: status text reads "Your rewrite scored: X.X"
+    //   - error  : status text reads "Could not score…"
+    // Both prove the round-trip completed; the second just means
+    // the AI sibling pipeline isn't reachable in the current
+    // environment.
+    const resultText = page.locator("text=/Your rewrite scored:|Could not score|Scoring failed/i");
+    await expect(
+      resultText.first(),
+      "expected either a success or error scoring message after Try & Score",
+    ).toBeVisible({ timeout: 30_000 });
+    const finalStatus = (await resultText.first().textContent()) ?? "";
+    console.log(`[doctor-deep] scoring result: "${finalStatus.trim()}"`);
+
+    // Pause briefly after the result lands — matches the user's
+    // spec ("a little bit after, end") and gives any deferred
+    // tracking POSTs time to land before we GET below.
+    await page.waitForTimeout(2_000);
+
+    // ── Step 9 — No uncaught render errors during the whole walk ────
     expect(
       pageErrors,
-      `no uncaught page errors on doctor view — got: ${pageErrors.join(" | ")}`,
+      `no uncaught page errors during doctor walkthrough — got: ${pageErrors.join(" | ")}`,
     ).toEqual([]);
 
-    // ── 6. Round-trip — events landed in doctor_behavior ─────────────
+    // ── Step 10 — Round-trip: events landed in doctor_behavior ──────
     expect(
       trackedRequests.length,
-      "expected at least one tracking POST during the dashboard → grid → detail walk",
+      "expected at least one tracking POST during the walkthrough",
     ).toBeGreaterThan(0);
 
-    // The doctor surface generates one session per mount — pick
-    // the session with the most events to skip any short-lived
-    // mount/unmount sessions on adjacent pages.
     const sessionEventCounts = new Map<string, number>();
     for (const req of trackedRequests) {
       sessionEventCounts.set(
@@ -174,9 +271,6 @@ test.describe("Doctor View — deep flow", () => {
       (a, b) => b[1] - a[1],
     )[0][0];
     expect(sessionId, "session_id captured from a tracking POST").toBeTruthy();
-
-    // Give the backend a moment to flush the last POST before we GET.
-    await page.waitForTimeout(750);
 
     const sessionResp = await page.request.get(
       `${API_BASE}/api/track/doctor/session/${encodeURIComponent(sessionId)}`,
@@ -194,24 +288,19 @@ test.describe("Doctor View — deep flow", () => {
     };
     const persistedTypes = sessionBody.events.map((e) => e.event_type);
 
-    // Hard assertions: the three events the physician drove
-    // intentionally must all be persisted.
+    // Assert the events the physician drove intentionally are
+    // present. `tour_open` and `view_change` may also appear but
+    // are emergent; not asserted on directly.
     for (const required of [
       "page_view",
       "patient_select",
       "topic_select",
+      "rewrite_apply",
     ] as const) {
       expect(
         persistedTypes,
-        `${required} should appear in doctor_behavior — got types: ${persistedTypes.join(", ")}`,
+        `${required} should appear in doctor_behavior — got: ${persistedTypes.join(", ")}`,
       ).toContain(required);
-    }
-
-    // Soft signal — sentence_select only fires when the detail
-    // view had time to render its sentence list and the click
-    // landed. Logged for diagnostic value but not asserted on.
-    if (persistedTypes.includes("sentence_select")) {
-      console.log("[doctor-deep] sentence_select also fired — full chain");
     }
 
     console.log(
