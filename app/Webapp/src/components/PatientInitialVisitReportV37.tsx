@@ -876,6 +876,69 @@ const TopicCard: React.FC<TopicCardProps> = ({
   >(null);
   const [cpTimePeriod, setCpTimePeriod] = React.useState<string | null>(null);
 
+  // [V37] Life Expectancy (Experimental arm) — two questions placed
+  // directly under the AI Summary for the Life Expectancy topic only.
+  // q1 is single-select (one of 5 ranges); q2 is multi-select (any
+  // subset of 5 factors). Local state only.
+  const [leProjectedLE, setLeProjectedLE] = React.useState<string | null>(
+    null,
+  );
+  const [leFactors, setLeFactors] = React.useState<string[]>([]);
+  const toggleLeFactor = (factor: string) => {
+    setLeFactors((prev) =>
+      prev.includes(factor)
+        ? prev.filter((f) => f !== factor)
+        : [...prev, factor],
+    );
+  };
+
+  // [V37] Erectile Dysfunction (Experimental arm) — three questions:
+  // (1) VAS 0-100 slider for likelihood of returning to baseline.
+  // (2) Single-select radio across 5 time-period options.
+  // (3) Multi-select factor checklist (any subset of 5 factors).
+  const [edBaselineReturn, setEdBaselineReturn] = React.useState<
+    number | null
+  >(null);
+  const [edTimePeriod, setEdTimePeriod] = React.useState<string | null>(null);
+  const [edFactors, setEdFactors] = React.useState<string[]>([]);
+  const toggleEdFactor = (factor: string) => {
+    setEdFactors((prev) =>
+      prev.includes(factor)
+        ? prev.filter((f) => f !== factor)
+        : [...prev, factor],
+    );
+  };
+
+  // [V37] Urinary Incontinence (Experimental arm) — three questions:
+  // (1) VAS 0-100 slider for the patient's understanding of their risk.
+  // (2) Single-select radio across 5 timeline options.
+  // (3) Multi-select factor checklist (any subset of 5 factors).
+  const [incRisk, setIncRisk] = React.useState<number | null>(null);
+  const [incTimeline, setIncTimeline] = React.useState<string | null>(null);
+  const [incFactors, setIncFactors] = React.useState<string[]>([]);
+  const toggleIncFactor = (factor: string) => {
+    setIncFactors((prev) =>
+      prev.includes(factor)
+        ? prev.filter((f) => f !== factor)
+        : [...prev, factor],
+    );
+  };
+
+  // [V37] Irritative Urinary Symptoms (Experimental arm) — three Qs:
+  // (1) VAS 0-100 slider for risk of irritative lower urinary tract sx.
+  // (2) Single-select radio across 5 timeline options.
+  // (3) Multi-select factor checklist (any subset of 5 factors).
+  const [iusRisk, setIusRisk] = React.useState<number | null>(null);
+  const [iusTimeline, setIusTimeline] = React.useState<string | null>(null);
+  const [iusFactors, setIusFactors] = React.useState<string[]>([]);
+  const toggleIusFactor = (factor: string) => {
+    setIusFactors((prev) =>
+      prev.includes(factor)
+        ? prev.filter((f) => f !== factor)
+        : [...prev, factor],
+    );
+  };
+
   return (
     <div
       data-track-proximity={`TopicCard_${topicId}`}
@@ -1214,7 +1277,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
                     { value: "D", label: "Over next 11-15 years" },
                     { value: "E", label: "Over next 16-20 years" },
                     { value: "F", label: "Over next 20-30 years" },
-                  ].map((opt) => (
+                  ].map((opt, idx) => (
                     <label
                       key={opt.value}
                       className={cx(
@@ -1263,6 +1326,979 @@ const TopicCard: React.FC<TopicCardProps> = ({
                       </span>
                     </label>
                   ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* [V37] Life Expectancy — Experimental arm sub-questions
+              Same placement rule as Cancer Prognosis: directly under
+              the AI Summary, only on the Life Expectancy card.
+              (1) Single-select radio across 5 lifetime ranges.
+              (2) Multi-select factor checklist — patients can mark any
+              combination of items. */}
+          {topicName === "Life Expectancy" && (
+            <div
+              className={cx(
+                "p-4 sm:p-5 rounded-xl border mb-6 space-y-6",
+                isDark
+                  ? "bg-slate-800/30 border-slate-700/30"
+                  : "bg-white border-gray-200",
+              )}
+            >
+              {/* (1) Radio — projected life expectancy */}
+              <div>
+                <p
+                  className={cx(
+                    "text-sm leading-relaxed mb-3",
+                    isDark ? "text-slate-300" : "text-gray-700",
+                  )}
+                >
+                  <span className="font-semibold">(1)</span> The AI summary
+                  from your consultation is above. Based on the AI summary
+                  and/or what you remember from your consultation, what is
+                  your understanding of your projected life expectancy?
+                </p>
+                <div className="space-y-2">
+                  {[
+                    "Less than 5 years",
+                    "5-10 years",
+                    "11-15 years",
+                    "16-20 years",
+                    "More than 20 years",
+                  ].map((opt, idx) => (
+                    <label
+                      key={opt}
+                      className={cx(
+                        "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors border-2",
+                        leProjectedLE === opt
+                          ? isDark
+                            ? "bg-sky-900/30 border-sky-500"
+                            : "bg-sky-50 border-sky-400"
+                          : isDark
+                            ? "border-slate-700 hover:bg-slate-700/30"
+                            : "border-gray-200 hover:bg-gray-50",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name={`leProjectedLE_${topicId}`}
+                        value={opt}
+                        checked={leProjectedLE === opt}
+                        onChange={() => setLeProjectedLE(opt)}
+                        className="sr-only"
+                      />
+                      <span
+                        className={cx(
+                          "w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0",
+                          leProjectedLE === opt
+                            ? "border-sky-500 bg-sky-500"
+                            : isDark
+                              ? "border-slate-500"
+                              : "border-gray-300",
+                        )}
+                      >
+                        {leProjectedLE === opt && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                        )}
+                      </span>
+                      <span
+                        className={cx(
+                          "text-sm font-medium",
+                          isDark ? "text-slate-200" : "text-gray-700",
+                        )}
+                      >
+                        <span className="font-semibold mr-2">
+                          ({String.fromCharCode(65 + idx)})
+                        </span>
+                        {opt}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* (2) Multi-select — factors considered */}
+              <div>
+                <p
+                  className={cx(
+                    "text-sm leading-relaxed mb-3",
+                    isDark ? "text-slate-300" : "text-gray-700",
+                  )}
+                >
+                  <span className="font-semibold">(2)</span> The AI summary
+                  from your consultation is above. Based on the AI summary
+                  and/or what you remember from your consultation, what
+                  factors were considered by your doctor in making this
+                  estimate?{" "}
+                  <span
+                    className={cx(
+                      "italic font-normal",
+                      isDark ? "text-slate-500" : "text-gray-500",
+                    )}
+                  >
+                    (select all that apply)
+                  </span>
+                </p>
+                <div className="space-y-2">
+                  {[
+                    "Tumor grade",
+                    "Age",
+                    "Marital status",
+                    "Health conditions or comorbidities",
+                    "Tumor stage",
+                  ].map((factor, idx) => {
+                    const checked = leFactors.includes(factor);
+                    return (
+                      <label
+                        key={factor}
+                        className={cx(
+                          "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors border-2",
+                          checked
+                            ? isDark
+                              ? "bg-sky-900/30 border-sky-500"
+                              : "bg-sky-50 border-sky-400"
+                            : isDark
+                              ? "border-slate-700 hover:bg-slate-700/30"
+                              : "border-gray-200 hover:bg-gray-50",
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleLeFactor(factor)}
+                          className="sr-only"
+                        />
+                        <span
+                          className={cx(
+                            "w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0",
+                            checked
+                              ? "border-sky-500 bg-sky-500"
+                              : isDark
+                                ? "border-slate-500"
+                                : "border-gray-300",
+                          )}
+                        >
+                          {checked && (
+                            <svg
+                              viewBox="0 0 16 16"
+                              className="w-3 h-3 text-white"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth={3}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <polyline points="3 8 7 12 13 4" />
+                            </svg>
+                          )}
+                        </span>
+                        <span
+                          className={cx(
+                            "text-sm font-medium",
+                            isDark ? "text-slate-200" : "text-gray-700",
+                          )}
+                        >
+                          <span className="font-semibold mr-2">
+                            ({String.fromCharCode(65 + idx)})
+                          </span>
+                          {factor}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* [V37] Erectile Dysfunction — Experimental arm sub-questions
+              (1) VAS slider — likelihood of returning to baseline ED.
+              (2) Single-select radio — 5 time-period options.
+              (3) Multi-select factor checklist (any subset of 5). */}
+          {topicName === "Erectile Dysfunction" && (
+            <div
+              className={cx(
+                "p-4 sm:p-5 rounded-xl border mb-6 space-y-6",
+                isDark
+                  ? "bg-slate-800/30 border-slate-700/30"
+                  : "bg-white border-gray-200",
+              )}
+            >
+              {/* (1) VAS — likelihood of returning to baseline */}
+              <div>
+                <p
+                  className={cx(
+                    "text-sm leading-relaxed mb-3",
+                    isDark ? "text-slate-300" : "text-gray-700",
+                  )}
+                >
+                  <span className="font-semibold">(1)</span> The AI summary
+                  of your consultation is above. Based on the AI summary
+                  and/or what you remember from your consultation, how
+                  likely is it that you will return to your{" "}
+                  <strong>
+                    baseline erectile function (firmness of penis for sex)
+                  </strong>{" "}
+                  after radical prostatectomy?
+                </p>
+                <div>
+                  {/* Top anchor labels */}
+                  <div className="relative h-4 mb-1.5 mx-2">
+                    {[
+                      { v: 0, label: "0" },
+                      { v: 50, label: "50" },
+                      { v: 100, label: "100" },
+                    ].map((t) => (
+                      <span
+                        key={t.v}
+                        className={cx(
+                          "absolute top-0 -translate-x-1/2 text-[11px] font-medium tabular-nums",
+                          isDark ? "text-slate-400" : "text-gray-500",
+                        )}
+                        style={{ left: `${t.v}%` }}
+                      >
+                        {t.label}
+                      </span>
+                    ))}
+                  </div>
+                  {/* shadcn Slider with floating value bubble */}
+                  <div className="relative pt-6">
+                    {edBaselineReturn !== null && (
+                      <span
+                        className="absolute top-0 -translate-x-1/2 px-1.5 py-0.5 rounded text-xs font-bold tabular-nums bg-sky-500 text-white shadow-sm"
+                        style={{
+                          left: `calc(8px + (100% - 16px) * ${edBaselineReturn} / 100)`,
+                        }}
+                      >
+                        {edBaselineReturn}
+                      </span>
+                    )}
+                    <Slider
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={[edBaselineReturn ?? 50]}
+                      onValueChange={(v) => setEdBaselineReturn(v[0] ?? 0)}
+                      aria-label="Likelihood of returning to baseline erectile function, 0 to 100"
+                    />
+                  </div>
+                  {/* 10-unit ticks + numbers */}
+                  <div className="relative h-6 mt-1.5 mx-2">
+                    {[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map((n) => (
+                      <div
+                        key={n}
+                        className="absolute top-0 -translate-x-1/2 flex flex-col items-center"
+                        style={{ left: `${n}%` }}
+                      >
+                        <span
+                          className={cx(
+                            "w-px h-2",
+                            isDark ? "bg-slate-500" : "bg-gray-400",
+                          )}
+                        />
+                        <span
+                          className={cx(
+                            "text-[10px] leading-none mt-0.5 tabular-nums",
+                            isDark ? "text-slate-400" : "text-gray-500",
+                          )}
+                        >
+                          {n}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* (2) Radio — time period quoted */}
+              <div>
+                <p
+                  className={cx(
+                    "text-sm leading-relaxed mb-3",
+                    isDark ? "text-slate-300" : "text-gray-700",
+                  )}
+                >
+                  <span className="font-semibold">(2)</span> The AI summary
+                  of your consultation is above. Based on the AI summary
+                  and/or what you remember from your consultation, over
+                  what time period was this risk quoted?
+                </p>
+                <div className="space-y-2">
+                  {[
+                    "3 months after treatment",
+                    "6 months after treatment",
+                    "12 months after treatment",
+                    "24 months after treatment",
+                    "Lifetime",
+                  ].map((opt, idx) => (
+                    <label
+                      key={opt}
+                      className={cx(
+                        "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors border-2",
+                        edTimePeriod === opt
+                          ? isDark
+                            ? "bg-sky-900/30 border-sky-500"
+                            : "bg-sky-50 border-sky-400"
+                          : isDark
+                            ? "border-slate-700 hover:bg-slate-700/30"
+                            : "border-gray-200 hover:bg-gray-50",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name={`edTimePeriod_${topicId}`}
+                        value={opt}
+                        checked={edTimePeriod === opt}
+                        onChange={() => setEdTimePeriod(opt)}
+                        className="sr-only"
+                      />
+                      <span
+                        className={cx(
+                          "w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0",
+                          edTimePeriod === opt
+                            ? "border-sky-500 bg-sky-500"
+                            : isDark
+                              ? "border-slate-500"
+                              : "border-gray-300",
+                        )}
+                      >
+                        {edTimePeriod === opt && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                        )}
+                      </span>
+                      <span
+                        className={cx(
+                          "text-sm font-medium",
+                          isDark ? "text-slate-200" : "text-gray-700",
+                        )}
+                      >
+                        <span className="font-semibold mr-2">
+                          ({String.fromCharCode(65 + idx)})
+                        </span>
+                        {opt}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* (3) Multi-select — factors considered */}
+              <div>
+                <p
+                  className={cx(
+                    "text-sm leading-relaxed mb-3",
+                    isDark ? "text-slate-300" : "text-gray-700",
+                  )}
+                >
+                  <span className="font-semibold">(3)</span> The AI summary
+                  from your consultation is above. Based on the AI summary
+                  and/or what you remember from your consultation, what
+                  factors were considered by your doctor in making this
+                  estimate?{" "}
+                  <span
+                    className={cx(
+                      "italic font-normal",
+                      isDark ? "text-slate-500" : "text-gray-500",
+                    )}
+                  >
+                    (select all that apply)
+                  </span>
+                </p>
+                <div className="space-y-2">
+                  {[
+                    "Tumor grade",
+                    "Age",
+                    "Tumor stage",
+                    "Health conditions or comorbidities",
+                    "Baseline function",
+                  ].map((factor, idx) => {
+                    const checked = edFactors.includes(factor);
+                    return (
+                      <label
+                        key={factor}
+                        className={cx(
+                          "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors border-2",
+                          checked
+                            ? isDark
+                              ? "bg-sky-900/30 border-sky-500"
+                              : "bg-sky-50 border-sky-400"
+                            : isDark
+                              ? "border-slate-700 hover:bg-slate-700/30"
+                              : "border-gray-200 hover:bg-gray-50",
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleEdFactor(factor)}
+                          className="sr-only"
+                        />
+                        <span
+                          className={cx(
+                            "w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0",
+                            checked
+                              ? "border-sky-500 bg-sky-500"
+                              : isDark
+                                ? "border-slate-500"
+                                : "border-gray-300",
+                          )}
+                        >
+                          {checked && (
+                            <svg
+                              viewBox="0 0 16 16"
+                              className="w-3 h-3 text-white"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth={3}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <polyline points="3 8 7 12 13 4" />
+                            </svg>
+                          )}
+                        </span>
+                        <span
+                          className={cx(
+                            "text-sm font-medium",
+                            isDark ? "text-slate-200" : "text-gray-700",
+                          )}
+                        >
+                          <span className="font-semibold mr-2">
+                            ({String.fromCharCode(65 + idx)})
+                          </span>
+                          {factor}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* [V37] Urinary Incontinence — Experimental arm sub-questions
+              (1) VAS slider — risk of urinary incontinence.
+              (2) Single-select radio — 5 timeline options.
+              (3) Multi-select factor checklist (any subset of 5). */}
+          {topicName === "Urinary Incontinence" && (
+            <div
+              className={cx(
+                "p-4 sm:p-5 rounded-xl border mb-6 space-y-6",
+                isDark
+                  ? "bg-slate-800/30 border-slate-700/30"
+                  : "bg-white border-gray-200",
+              )}
+            >
+              {/* (1) VAS — risk of urinary incontinence */}
+              <div>
+                <p
+                  className={cx(
+                    "text-sm leading-relaxed mb-3",
+                    isDark ? "text-slate-300" : "text-gray-700",
+                  )}
+                >
+                  <span className="font-semibold">(1)</span> The AI summary
+                  from your consultation is above. Based on the AI summary
+                  and/or what you remember from your consultation, what is
+                  your understanding of your{" "}
+                  <strong>risk of urinary incontinence</strong>?
+                </p>
+                <div>
+                  {/* Top anchor labels */}
+                  <div className="relative h-4 mb-1.5 mx-2">
+                    {[
+                      { v: 0, label: "0" },
+                      { v: 50, label: "50" },
+                      { v: 100, label: "100" },
+                    ].map((t) => (
+                      <span
+                        key={t.v}
+                        className={cx(
+                          "absolute top-0 -translate-x-1/2 text-[11px] font-medium tabular-nums",
+                          isDark ? "text-slate-400" : "text-gray-500",
+                        )}
+                        style={{ left: `${t.v}%` }}
+                      >
+                        {t.label}
+                      </span>
+                    ))}
+                  </div>
+                  {/* shadcn Slider with floating value bubble */}
+                  <div className="relative pt-6">
+                    {incRisk !== null && (
+                      <span
+                        className="absolute top-0 -translate-x-1/2 px-1.5 py-0.5 rounded text-xs font-bold tabular-nums bg-sky-500 text-white shadow-sm"
+                        style={{
+                          left: `calc(8px + (100% - 16px) * ${incRisk} / 100)`,
+                        }}
+                      >
+                        {incRisk}
+                      </span>
+                    )}
+                    <Slider
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={[incRisk ?? 50]}
+                      onValueChange={(v) => setIncRisk(v[0] ?? 0)}
+                      aria-label="Risk of urinary incontinence, 0 to 100"
+                    />
+                  </div>
+                  {/* 10-unit ticks + numbers */}
+                  <div className="relative h-6 mt-1.5 mx-2">
+                    {[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map((n) => (
+                      <div
+                        key={n}
+                        className="absolute top-0 -translate-x-1/2 flex flex-col items-center"
+                        style={{ left: `${n}%` }}
+                      >
+                        <span
+                          className={cx(
+                            "w-px h-2",
+                            isDark ? "bg-slate-500" : "bg-gray-400",
+                          )}
+                        />
+                        <span
+                          className={cx(
+                            "text-[10px] leading-none mt-0.5 tabular-nums",
+                            isDark ? "text-slate-400" : "text-gray-500",
+                          )}
+                        >
+                          {n}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* (2) Radio — timeline quoted */}
+              <div>
+                <p
+                  className={cx(
+                    "text-sm leading-relaxed mb-3",
+                    isDark ? "text-slate-300" : "text-gray-700",
+                  )}
+                >
+                  <span className="font-semibold">(2)</span> The AI summary
+                  from your consultation is above. Based on the AI summary
+                  and/or what you remember from your consultation, over
+                  what timeline was this risk quoted?
+                </p>
+                <div className="space-y-2">
+                  {[
+                    "3 months",
+                    "6 months",
+                    "9 months",
+                    "1 year",
+                    "2 years",
+                  ].map((opt, idx) => (
+                    <label
+                      key={opt}
+                      className={cx(
+                        "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors border-2",
+                        incTimeline === opt
+                          ? isDark
+                            ? "bg-sky-900/30 border-sky-500"
+                            : "bg-sky-50 border-sky-400"
+                          : isDark
+                            ? "border-slate-700 hover:bg-slate-700/30"
+                            : "border-gray-200 hover:bg-gray-50",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name={`incTimeline_${topicId}`}
+                        value={opt}
+                        checked={incTimeline === opt}
+                        onChange={() => setIncTimeline(opt)}
+                        className="sr-only"
+                      />
+                      <span
+                        className={cx(
+                          "w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0",
+                          incTimeline === opt
+                            ? "border-sky-500 bg-sky-500"
+                            : isDark
+                              ? "border-slate-500"
+                              : "border-gray-300",
+                        )}
+                      >
+                        {incTimeline === opt && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                        )}
+                      </span>
+                      <span
+                        className={cx(
+                          "text-sm font-medium",
+                          isDark ? "text-slate-200" : "text-gray-700",
+                        )}
+                      >
+                        <span className="font-semibold mr-2">
+                          ({String.fromCharCode(65 + idx)})
+                        </span>
+                        {opt}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* (3) Multi-select — factors considered */}
+              <div>
+                <p
+                  className={cx(
+                    "text-sm leading-relaxed mb-3",
+                    isDark ? "text-slate-300" : "text-gray-700",
+                  )}
+                >
+                  <span className="font-semibold">(3)</span> The AI summary
+                  from your consultation is above. Based on the AI summary
+                  and/or what you remember from your consultation, what
+                  factors were considered by your doctor in making this
+                  estimate?{" "}
+                  <span
+                    className={cx(
+                      "italic font-normal",
+                      isDark ? "text-slate-500" : "text-gray-500",
+                    )}
+                  >
+                    (select all that apply)
+                  </span>
+                </p>
+                <div className="space-y-2">
+                  {[
+                    "Tumor grade",
+                    "Age",
+                    "Tumor stage",
+                    "Health conditions or comorbidities",
+                    "Baseline function",
+                  ].map((factor, idx) => {
+                    const checked = incFactors.includes(factor);
+                    return (
+                      <label
+                        key={factor}
+                        className={cx(
+                          "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors border-2",
+                          checked
+                            ? isDark
+                              ? "bg-sky-900/30 border-sky-500"
+                              : "bg-sky-50 border-sky-400"
+                            : isDark
+                              ? "border-slate-700 hover:bg-slate-700/30"
+                              : "border-gray-200 hover:bg-gray-50",
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleIncFactor(factor)}
+                          className="sr-only"
+                        />
+                        <span
+                          className={cx(
+                            "w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0",
+                            checked
+                              ? "border-sky-500 bg-sky-500"
+                              : isDark
+                                ? "border-slate-500"
+                                : "border-gray-300",
+                          )}
+                        >
+                          {checked && (
+                            <svg
+                              viewBox="0 0 16 16"
+                              className="w-3 h-3 text-white"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth={3}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <polyline points="3 8 7 12 13 4" />
+                            </svg>
+                          )}
+                        </span>
+                        <span
+                          className={cx(
+                            "text-sm font-medium",
+                            isDark ? "text-slate-200" : "text-gray-700",
+                          )}
+                        >
+                          <span className="font-semibold mr-2">
+                            ({String.fromCharCode(65 + idx)})
+                          </span>
+                          {factor}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* [V37] Irritative Urinary Symptoms — Experimental arm
+              sub-questions
+              (1) VAS slider — risk of irritative lower urinary tract sx.
+              (2) Single-select radio — 5 timeline options.
+              (3) Multi-select factor checklist (any subset of 5). */}
+          {topicName === "Irritative Urinary Symptoms" && (
+            <div
+              className={cx(
+                "p-4 sm:p-5 rounded-xl border mb-6 space-y-6",
+                isDark
+                  ? "bg-slate-800/30 border-slate-700/30"
+                  : "bg-white border-gray-200",
+              )}
+            >
+              {/* (1) VAS — risk of irritative lower urinary tract sx */}
+              <div>
+                <p
+                  className={cx(
+                    "text-sm leading-relaxed mb-3",
+                    isDark ? "text-slate-300" : "text-gray-700",
+                  )}
+                >
+                  <span className="font-semibold">(1)</span> The AI summary
+                  from your consultation is above. Based on the AI summary
+                  and/or what you remember from your consultation, what is
+                  your understanding of your{" "}
+                  <strong>
+                    risk of irritative lower urinary tract symptoms
+                  </strong>
+                  ?
+                </p>
+                <div>
+                  {/* Top anchor labels */}
+                  <div className="relative h-4 mb-1.5 mx-2">
+                    {[
+                      { v: 0, label: "0" },
+                      { v: 50, label: "50" },
+                      { v: 100, label: "100" },
+                    ].map((t) => (
+                      <span
+                        key={t.v}
+                        className={cx(
+                          "absolute top-0 -translate-x-1/2 text-[11px] font-medium tabular-nums",
+                          isDark ? "text-slate-400" : "text-gray-500",
+                        )}
+                        style={{ left: `${t.v}%` }}
+                      >
+                        {t.label}
+                      </span>
+                    ))}
+                  </div>
+                  {/* shadcn Slider with floating value bubble */}
+                  <div className="relative pt-6">
+                    {iusRisk !== null && (
+                      <span
+                        className="absolute top-0 -translate-x-1/2 px-1.5 py-0.5 rounded text-xs font-bold tabular-nums bg-sky-500 text-white shadow-sm"
+                        style={{
+                          left: `calc(8px + (100% - 16px) * ${iusRisk} / 100)`,
+                        }}
+                      >
+                        {iusRisk}
+                      </span>
+                    )}
+                    <Slider
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={[iusRisk ?? 50]}
+                      onValueChange={(v) => setIusRisk(v[0] ?? 0)}
+                      aria-label="Risk of irritative lower urinary tract symptoms, 0 to 100"
+                    />
+                  </div>
+                  {/* 10-unit ticks + numbers */}
+                  <div className="relative h-6 mt-1.5 mx-2">
+                    {[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map((n) => (
+                      <div
+                        key={n}
+                        className="absolute top-0 -translate-x-1/2 flex flex-col items-center"
+                        style={{ left: `${n}%` }}
+                      >
+                        <span
+                          className={cx(
+                            "w-px h-2",
+                            isDark ? "bg-slate-500" : "bg-gray-400",
+                          )}
+                        />
+                        <span
+                          className={cx(
+                            "text-[10px] leading-none mt-0.5 tabular-nums",
+                            isDark ? "text-slate-400" : "text-gray-500",
+                          )}
+                        >
+                          {n}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* (2) Radio — timeline quoted */}
+              <div>
+                <p
+                  className={cx(
+                    "text-sm leading-relaxed mb-3",
+                    isDark ? "text-slate-300" : "text-gray-700",
+                  )}
+                >
+                  <span className="font-semibold">(2)</span> Based on the
+                  AI summary above and/or what you remember from your
+                  consultation, over what timeline was this risk quoted?
+                </p>
+                <div className="space-y-2">
+                  {[
+                    "1 month",
+                    "3-6 months",
+                    "1 year",
+                    "2 years",
+                    "Lifetime",
+                  ].map((opt, idx) => (
+                    <label
+                      key={opt}
+                      className={cx(
+                        "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors border-2",
+                        iusTimeline === opt
+                          ? isDark
+                            ? "bg-sky-900/30 border-sky-500"
+                            : "bg-sky-50 border-sky-400"
+                          : isDark
+                            ? "border-slate-700 hover:bg-slate-700/30"
+                            : "border-gray-200 hover:bg-gray-50",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name={`iusTimeline_${topicId}`}
+                        value={opt}
+                        checked={iusTimeline === opt}
+                        onChange={() => setIusTimeline(opt)}
+                        className="sr-only"
+                      />
+                      <span
+                        className={cx(
+                          "w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0",
+                          iusTimeline === opt
+                            ? "border-sky-500 bg-sky-500"
+                            : isDark
+                              ? "border-slate-500"
+                              : "border-gray-300",
+                        )}
+                      >
+                        {iusTimeline === opt && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                        )}
+                      </span>
+                      <span
+                        className={cx(
+                          "text-sm font-medium",
+                          isDark ? "text-slate-200" : "text-gray-700",
+                        )}
+                      >
+                        <span className="font-semibold mr-2">
+                          ({String.fromCharCode(65 + idx)})
+                        </span>
+                        {opt}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* (3) Multi-select — factors considered */}
+              <div>
+                <p
+                  className={cx(
+                    "text-sm leading-relaxed mb-3",
+                    isDark ? "text-slate-300" : "text-gray-700",
+                  )}
+                >
+                  <span className="font-semibold">(3)</span> The AI summary
+                  from your consultation is above. Based on the AI summary
+                  and/or what you remember from your consultation, what
+                  factors were considered by your doctor in making this
+                  estimate?{" "}
+                  <span
+                    className={cx(
+                      "italic font-normal",
+                      isDark ? "text-slate-500" : "text-gray-500",
+                    )}
+                  >
+                    (select all that apply)
+                  </span>
+                </p>
+                <div className="space-y-2">
+                  {[
+                    "Tumor grade",
+                    "Age",
+                    "Tumor stage",
+                    "Health conditions or comorbidities",
+                    "Baseline function",
+                  ].map((factor, idx) => {
+                    const checked = iusFactors.includes(factor);
+                    return (
+                      <label
+                        key={factor}
+                        className={cx(
+                          "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors border-2",
+                          checked
+                            ? isDark
+                              ? "bg-sky-900/30 border-sky-500"
+                              : "bg-sky-50 border-sky-400"
+                            : isDark
+                              ? "border-slate-700 hover:bg-slate-700/30"
+                              : "border-gray-200 hover:bg-gray-50",
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleIusFactor(factor)}
+                          className="sr-only"
+                        />
+                        <span
+                          className={cx(
+                            "w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0",
+                            checked
+                              ? "border-sky-500 bg-sky-500"
+                              : isDark
+                                ? "border-slate-500"
+                                : "border-gray-300",
+                          )}
+                        >
+                          {checked && (
+                            <svg
+                              viewBox="0 0 16 16"
+                              className="w-3 h-3 text-white"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth={3}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <polyline points="3 8 7 12 13 4" />
+                            </svg>
+                          )}
+                        </span>
+                        <span
+                          className={cx(
+                            "text-sm font-medium",
+                            isDark ? "text-slate-200" : "text-gray-700",
+                          )}
+                        >
+                          <span className="font-semibold mr-2">
+                            ({String.fromCharCode(65 + idx)})
+                          </span>
+                          {factor}
+                        </span>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
             </div>
