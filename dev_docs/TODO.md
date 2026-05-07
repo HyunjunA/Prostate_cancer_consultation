@@ -317,7 +317,13 @@ The Webapp Playwright e2e suite landed with three deep specs that drive the actu
 
 **Acceptance.** After this lands, the next nightly run reports 33 passed / 0 skipped; `requireFirstFixture` returns the seeded file's identifiers; specs target real data instead of skipping.
 
-### D-2. V37 patient experimental questions persistence
+### D-2. V37 patient experimental questions persistence — ✅ DONE 2026-05-07
+
+**Status.** Closed by `feat/v37-first-visit-persistence` (migration 010 + new `PUT/GET /api/patient/first-visit-responses` + `useFirstVisitResponses` hook + per-domain Submit button on V37). Patients' 14 cognition inputs now round-trip through `patient_first_visit_responses`. See `dev_docs/V37_First_Visit_Persistence_Design.md` for the design rationale and `daily_control_logs/2026-05-07_TASKS.md` for the implementation log. The Playwright assertion sketched in this entry's original "Fix outline" remains pending — D-1's CI fixture seed needs to land first.
+
+---
+
+**Original entry (preserved for context).**
 
 **Symptom.** `PatientInitialVisitReportV37.tsx` exposes VAS sliders, "select all that apply" checkboxes, and single-select radios on the first-visit page. They render and accept input, but live in **local React state only** (`useState`). They never POST anywhere. Concrete code references:
 
