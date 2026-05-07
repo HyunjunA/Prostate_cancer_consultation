@@ -96,6 +96,28 @@ export function useFirstVisitResponses(
       if (!file || !speaker) {
         throw new Error("saveDomain called before file/speaker were known");
       }
+      // Per-Submit visibility: log what is about to be sent so a
+      // watcher (manual via DevTools console, or automated via
+      // page.on('console')) can see exactly what hits the backend
+      // and what comes back. Counts factors as a length so the line
+      // stays compact even with five factor labels.
+      // eslint-disable-next-line no-console
+      console.log(
+        `%c[V37 Submit] → PUT /api/patient/first-visit-responses`,
+        "color:#10b981;font-weight:bold",
+        {
+          domain,
+          file,
+          speaker,
+          vas_primary: patch.vas_primary ?? null,
+          vas_secondary: patch.vas_secondary ?? null,
+          timeline: patch.timeline ?? null,
+          factors_count: Array.isArray(patch.factors)
+            ? patch.factors.length
+            : 0,
+          factors: patch.factors ?? null,
+        },
+      );
       try {
         const saved = await firstVisitApi.put({
           file,
@@ -103,6 +125,18 @@ export function useFirstVisitResponses(
           domain,
           ...patch,
         });
+        // eslint-disable-next-line no-console
+        console.log(
+          `%c[V37 Submit] ✓ saved domain=${domain}`,
+          "color:#10b981;font-weight:bold",
+          {
+            submitted_at: saved.submitted_at,
+            vas_primary: saved.vas_primary,
+            vas_secondary: saved.vas_secondary,
+            timeline: saved.timeline,
+            factors: saved.factors,
+          },
+        );
         // Merge into the cache so a subsequent GET-less re-render
         // still sees the latest server-confirmed values.
         setResponses((prev) => ({ ...prev, [domain]: saved }));
@@ -110,6 +144,12 @@ export function useFirstVisitResponses(
         return saved;
       } catch (e) {
         const err = e instanceof Error ? e : new Error(String(e));
+        // eslint-disable-next-line no-console
+        console.error(
+          `%c[V37 Submit] ✗ failed domain=${domain}`,
+          "color:#ef4444;font-weight:bold",
+          err.message,
+        );
         setError(err);
         throw err;
       }

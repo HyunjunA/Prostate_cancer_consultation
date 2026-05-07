@@ -1408,12 +1408,18 @@ const TopicCard: React.FC<TopicCardProps> = ({
                 </p>
                 <div className="space-y-2">
                   {[
-                    { value: "A", label: "Over my lifetime" },
-                    { value: "B", label: "Over next 5 years" },
-                    { value: "C", label: "Over next 5-10 years" },
-                    { value: "D", label: "Over next 11-15 years" },
-                    { value: "E", label: "Over next 16-20 years" },
-                    { value: "F", label: "Over next 20-30 years" },
+                    // Use the human-readable label as the persisted
+                    // value so cp matches every other domain's
+                    // timeline column in the DB. Without this cp
+                    // would store opaque codes like "A", "B" while
+                    // le/ed/inc/ius store "Less than 5 years",
+                    // "3 months after treatment", etc.
+                    { value: "Over my lifetime", label: "Over my lifetime" },
+                    { value: "Over next 5 years", label: "Over next 5 years" },
+                    { value: "Over next 5-10 years", label: "Over next 5-10 years" },
+                    { value: "Over next 11-15 years", label: "Over next 11-15 years" },
+                    { value: "Over next 16-20 years", label: "Over next 16-20 years" },
+                    { value: "Over next 20-30 years", label: "Over next 20-30 years" },
                   ].map((opt, idx) => (
                     <label
                       key={opt.value}
