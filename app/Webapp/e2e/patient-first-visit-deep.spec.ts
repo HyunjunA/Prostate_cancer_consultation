@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page, type Locator } from "@playwright/test";
 
 /**
  * Patient First Visit — deep flow (single integrated test)
@@ -10,27 +10,27 @@ import { test, expect, type Page } from "@playwright/test";
  * which DOES persist data to the backend lands correctly in
  * Postgres.
  *
- * What V37 actually persists to the backend:
- *   The experimental questions in V37 (VAS sliders, "select all
- *   that apply" checkboxes, single-select radios) and the 1–5
- *   helpfulness rating are local React state only — none of them
- *   write to the backend (the rating UI itself is currently
- *   commented out in V37, see lines ~2317–2360 in
- *   PatientInitialVisitReportV37.tsx).
+ * What V37 persists to the backend (two independent round-trips):
+ *   1. Behavior tracking — every category open/close, every
+ *      "View relevant sentences" toggle, and the page mount itself
+ *      fires `trackFirst(...)` which POSTs to
+ *      /api/track/patient-first and writes a row to the
+ *      `patient_first_behavior` table. The round-trip is verified
+ *      via GET /api/track/patient-first/session/{id}.
+ *   2. (Added 2026-05-07, PR #9) The patient's per-domain answers
+ *      themselves. Each card now has a Submit button; clicking it
+ *      PUTs the domain's local state (VAS sliders + radio + factor
+ *      checkboxes) to /api/patient/first-visit-responses, which
+ *      upserts a row in `patient_first_visit_responses`. This
+ *      file's per-card sweep clicks Submit on every domain and
+ *      then GETs the typed read endpoint to confirm all five
+ *      domains have a persisted row.
  *
- *   What DOES round-trip is behavior tracking. Every category
- *   open/close, every "View relevant sentences" toggle, and the
- *   page mount itself fires `trackFirst(...)` (V37:2548, 2807,
- *   2841), which POSTs to /api/track/patient-first and writes a
- *   row to the `patient_first_behavior` table. So the round-trip
- *   we verify is: user clicks → POST /api/backend/track/patient-first
- *   → DB write → GET /api/track/patient-first/session/{id}
- *   → events come back.
- *
- *   When V37 grows real persistence for the patient's answers
- *   (e.g. wires the rating button back in, or PUTs VAS values to
- *   /api/patient/responses), THIS file is the right place to add a
- *   second round-trip block at the end of the sweep.
+ *   The 1–5 NIH PROMIS helpfulness rating is still UI-commented-out
+ *   in V37 (see lines ~2317–2360 of PatientInitialVisitReportV37.tsx);
+ *   if it's brought back in a future release, it lands in
+ *   `patient_summary_domain.patient_scoring` via PUT
+ *   /api/patient/scoring and would gain a third round-trip block here.
  *
  * Flow:
  *   1. Selection screen (`/`) → randomly pick one of the listed
@@ -97,8 +97,8 @@ function randIdx(n: number): number {
  */
 const SLIDER_PRESSES = 20;
 
-async function fillVisibleSliders(page: Page) {
-  const sliders = page.locator('[role="slider"]:visible');
+async function fillVisibleSliders(scope: Page | Locator) {
+  const sliders = scope.locator('[role="slider"]:visible');
   const count = await sliders.count();
   for (let i = 0; i < count; i++) {
     const slider = sliders.nth(i);
@@ -115,8 +115,8 @@ async function fillVisibleSliders(page: Page) {
  * because shadcn checkboxes hide the native input behind a visual
  * overlay that Playwright considers non-interactable by default.
  */
-async function tickAllCheckboxes(page: Page) {
-  const checkboxes = page.locator('input[type="checkbox"]:visible');
+async function tickAllCheckboxes(scope: Page | Locator) {
+  const checkboxes = scope.locator('input[type="checkbox"]:visible');
   const count = await checkboxes.count();
   for (let i = 0; i < count; i++) {
     await checkboxes.nth(i).check({ force: true });
@@ -130,8 +130,8 @@ async function tickAllCheckboxes(page: Page) {
  * first group on the page and leave every other single-select
  * question blank.
  */
-async function pickFirstRadioPerGroup(page: Page) {
-  const radios = page.locator('input[type="radio"]:visible');
+async function pickFirstRadioPerGroup(scope: Page | Locator) {
+  const radios = scope.locator('input[type="radio"]:visible');
   const count = await radios.count();
   const groupsAnswered = new Set<string>();
   for (let i = 0; i < count; i++) {
@@ -177,6 +177,171 @@ test.describe("Patient First Visit — deep flow", () => {
     const pageErrors: string[] = [];
     page.on("pageerror", (e) => {
       if (!/Hydration|hydrat/i.test(e.message)) pageErrors.push(e.message);
+    });
+
+    // [demo] Inject a fetch() wrapper into the PAGE's JS context so
+    // V37's own backend writes log directly to the browser DevTools
+    // console (not just the Playwright runner's terminal). With
+    // PLAYWRIGHT_DEVTOOLS=1 the panel is auto-opened, so a watcher
+    // sees these messages live in the inspector. addInitScript runs
+    // before any page script, so the wrapper is in place before V37
+    // even mounts.
+    // [demo] Mirror everything that lands in the browser console
+    // back to the test's terminal output. Helps verify whether the
+    // init-script logs below are actually being captured by the
+    // page (vs being swallowed by the DevTools panel filter etc).
+    page.on("console", (msg) => {
+      const txt = msg.text();
+      if (
+        txt.includes("V37 SUBMIT") ||
+        txt.includes("INIT SCRIPT LOADED") ||
+        txt.includes("TRACK")
+      ) {
+        console.log(`  [browser-console][${msg.type()}] ${txt}`);
+      }
+    });
+
+    await page.addInitScript(() => {
+      // Immediate ping so the watcher can verify the wrapper is in
+      // place before any V37 fetch fires.
+      // eslint-disable-next-line no-console
+      console.log(
+        "%c🟢 [INIT SCRIPT LOADED] fetch wrapper installed",
+        "color:#10b981;font-weight:bold;font-size:14px",
+      );
+
+      // [demo] Floating overlay so DB writes are visible WITHOUT
+      // having to click the DevTools Console tab. Renders a fixed
+      // panel on the right edge of the viewport, appends a colored
+      // line for each tracked event, auto-scrolls to the latest.
+      const ensurePanel = (): HTMLElement => {
+        const id = "__e2e_demo_panel__";
+        const existing = document.getElementById(id);
+        if (existing) return existing;
+        const panel = document.createElement("div");
+        panel.id = id;
+        panel.style.cssText = [
+          "position:fixed",
+          "top:10px",
+          "right:10px",
+          "width:520px",
+          "max-height:80vh",
+          "overflow:auto",
+          "background:rgba(0,0,0,0.92)",
+          "color:#e2e8f0",
+          "font:12px ui-monospace,Menlo,monospace",
+          "padding:12px 14px",
+          "z-index:2147483647",
+          "border-radius:10px",
+          "box-shadow:0 6px 24px rgba(0,0,0,0.5)",
+          "pointer-events:none",
+        ].join(";");
+        const header = document.createElement("div");
+        header.textContent = "🟢 Backend writes (DB persistence) — live";
+        header.style.cssText =
+          "color:#10b981;font-weight:bold;margin-bottom:6px;font-size:13px";
+        panel.appendChild(header);
+        if (document.body) document.body.appendChild(panel);
+        else
+          document.addEventListener("DOMContentLoaded", () =>
+            document.body.appendChild(panel),
+          );
+        return panel;
+      };
+      (window as unknown as { __e2eLog?: (m: string, c?: string) => void }).__e2eLog = (
+        msg: string,
+        color = "#e2e8f0",
+      ) => {
+        const panel = ensurePanel();
+        const line = document.createElement("div");
+        line.style.cssText = `color:${color};margin:2px 0;white-space:pre-wrap;word-break:break-word`;
+        const t = new Date().toLocaleTimeString();
+        line.textContent = `${t}  ${msg}`;
+        panel.appendChild(line);
+        panel.scrollTop = panel.scrollHeight;
+      };
+
+      const orig = window.fetch.bind(window);
+      window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : (input as Request).url;
+        const method = init?.method ?? "GET";
+        const isV37 = url.includes("/patient/first-visit-responses");
+        const isTrack = url.includes("/track/patient-first");
+        const log = (window as unknown as { __e2eLog?: (m: string, c?: string) => void }).__e2eLog;
+        if (isV37 && method === "PUT" && init?.body) {
+          try {
+            const payload = JSON.parse(String(init.body));
+            log?.(
+              `🟢 PUT first-visit-responses\n   domain=${payload.domain}  vas=${payload.vas_primary ?? "·"}/${payload.vas_secondary ?? "·"}  timeline=${payload.timeline ?? "·"}  factors=${payload.factors ? payload.factors.length + " items" : "·"}`,
+              "#10b981",
+            );
+          } catch {
+            log?.("🟢 PUT first-visit-responses (unparseable body)", "#10b981");
+          }
+        }
+        const resp = await orig(input, init);
+        if (isV37 && method === "PUT") {
+          try {
+            const body = await resp.clone().json();
+            log?.(
+              `   ↳ ${resp.status} OK   submitted_at=${(body as { submitted_at?: string }).submitted_at?.slice(11, 19) ?? "?"}`,
+              "#22d3ee",
+            );
+          } catch {
+            log?.(`   ↳ ${resp.status} (non-JSON)`, "#ef4444");
+          }
+        }
+        if (isTrack) {
+          log?.(`🔵 TRACK ${method} → ${resp.status}`, "#60a5fa");
+        }
+        return resp;
+      };
+    });
+
+    // [demo] Live console echo for every backend write the page makes.
+    // Useful when running --headed to watch the DB persistence happen
+    // in real time. Filtered to the per-domain Submit (PUT
+    // /api/backend/patient/first-visit-responses) and to behavior
+    // tracking POSTs (/api/backend/track/patient-first); other proxy
+    // calls stay silent so the console stays readable. Truncates long
+    // bodies to keep the headed run from drowning in noise.
+    const trim = (s: string, n = 200) =>
+      s.length > n ? `${s.slice(0, n)}…(${s.length - n} more)` : s;
+    page.on("response", async (resp) => {
+      const url = resp.url();
+      const method = resp.request().method();
+      const isFirstVisit = url.includes("/patient/first-visit-responses");
+      const isTrackFirst = url.includes("/track/patient-first");
+      if (!isFirstVisit && !isTrackFirst) return;
+      let reqBody = "";
+      try {
+        reqBody = resp.request().postData() ?? "";
+      } catch {
+        /* ignore */
+      }
+      let respBody = "";
+      try {
+        respBody = await resp.text();
+      } catch {
+        /* ignore */
+      }
+      const tag = isFirstVisit ? "[v37-persist]" : "[track]";
+      const line = `${tag} ${method} ${url} → ${resp.status()}\n   request : ${trim(reqBody)}\n   response: ${trim(respBody)}`;
+      // Echo to the test's terminal output (this file's stdout)…
+      console.log(line);
+      // …AND to the browser's own DevTools console so a watcher
+      // running with PLAYWRIGHT_DEVTOOLS=1 sees DB persistence
+      // happen live in the inspector panel.
+      try {
+        await page.evaluate((msg) => console.log(msg), line);
+      } catch {
+        // page may have navigated; ignore.
+      }
     });
 
     // ── 1. Selection screen → random first-visit button ─────────────
@@ -245,6 +410,25 @@ test.describe("Patient First Visit — deep flow", () => {
       // section is fully laid out before we look inside it.
       await page.waitForTimeout(800);
 
+      // 3a-bis. V37 starts with the FIRST topic (Cancer Prognosis)
+      // expanded by default, so the click in 3a COLLAPSES that card.
+      // Detect via the per-card Submit button — which only renders
+      // inside the isExpanded branch — and click the header again to
+      // restore the expanded state. Without this, the fill steps
+      // below run against a collapsed card and Submit fires with an
+      // empty payload (vas/timeline/factors all NULL).
+      const topicId = topic.replace(/\s+/g, "");
+      const submitBtn = page.locator(
+        `[data-track-proximity="SubmitTopic_${topicId}"]`,
+      );
+      const expanded = await submitBtn
+        .isVisible({ timeout: 1_500 })
+        .catch(() => false);
+      if (!expanded) {
+        await topicHeaderBtn.click();
+        await page.waitForTimeout(800);
+      }
+
       // 3b. Click "View relevant sentences from your visit" if
       // present. Demo files without NLP evidence don't render the
       // button, so this is best-effort. The button text toggles
@@ -263,14 +447,19 @@ test.describe("Patient First Visit — deep flow", () => {
         await page.waitForTimeout(400);
       }
 
-      // 3c-e. Fill every visible question in this expanded section.
-      // Slider values, "select all that apply" checkboxes, and
-      // single-select radios are all local React state in V37 — no
-      // backend persistence. The point is to prove the component
-      // accepts a fully-answered patient state without throwing.
-      await fillVisibleSliders(page);
-      await tickAllCheckboxes(page);
-      await pickFirstRadioPerGroup(page);
+      // 3c-e. Fill every visible question in THIS card only. Scoping
+      // to the per-card container (data-track-proximity="TopicCard_…")
+      // is critical: V37 keeps every previously-expanded card open
+      // when a new card opens, so without this scope each iteration
+      // would touch all already-expanded cards' inputs as well — the
+      // visible flow would look like every card reacting to every
+      // step instead of one card progressing at a time.
+      const cardScope = page.locator(
+        `[data-track-proximity="TopicCard_${topicId}"]`,
+      );
+      await fillVisibleSliders(cardScope);
+      await tickAllCheckboxes(cardScope);
+      await pickFirstRadioPerGroup(cardScope);
 
       // 3f. Click "Hide relevant sentences from your visit" to
       // collapse the evidence section back. Real users typically
@@ -291,6 +480,28 @@ test.describe("Patient First Visit — deep flow", () => {
         await hideSentencesBtn.click();
         await page.waitForTimeout(300);
       }
+
+      // 3g. Click the per-domain Submit button (V37 added 2026-05-07).
+      // The handler PUTs the domain's local state to
+      //   /api/backend/patient/first-visit-responses
+      // and only flips submittedDomains[topic] = true on a 200, so a
+      // server failure leaves the button in its un-submitted style.
+      // The card is guaranteed expanded by step 3a-bis above, so the
+      // Submit button is in the DOM at this point.
+      await expect(
+        submitBtn,
+        `Submit button must exist on the ${topic} card`,
+      ).toBeVisible({ timeout: 5_000 });
+      await submitBtn.scrollIntoViewIfNeeded();
+      await submitBtn.click();
+      // [demo] Pad after Submit so a watcher with DevTools open can
+      // read the per-domain payload + response in the Console panel
+      // before the next iteration starts.
+      await page.waitForTimeout(2_000);
+      await expect(
+        submitBtn,
+        `${topic} button should switch to the "Submitted" state after PUT`,
+      ).toContainText(/Submitted/i, { timeout: 5_000 });
     }
 
     // ── 4. No uncaught render errors anywhere in the sweep ──────────
@@ -376,6 +587,62 @@ test.describe("Patient First Visit — deep flow", () => {
     console.log(
       `[deep] session=${sessionId} persisted ${sessionBody.count} events ` +
         `covering domains [${[...topicDomains].join(", ")}] ` +
+        `for file=${fileid} speaker=${patid}`,
+    );
+
+    // ── 6. V37 first-visit-responses round-trip ─────────────────────
+    // The 5 Submit clicks above each PUT to
+    //   /api/backend/patient/first-visit-responses
+    // and a row should land in patient_first_visit_responses for
+    // every (file, speaker, domain). Verify by GET-ing the typed
+    // endpoint directly: the response is keyed by domain so the
+    // five expected keys are guaranteed by the schema.
+    const fvResp = await page.request.get(
+      `${API_BASE}/api/patient/first-visit-responses/${encodeURIComponent(fileid!)}/${encodeURIComponent(patid!)}`,
+      { headers: AUTH_HEADERS },
+    );
+    expect(
+      fvResp.ok(),
+      `GET /api/patient/first-visit-responses should return 200, got ${fvResp.status()}`,
+    ).toBeTruthy();
+
+    const fvBody = (await fvResp.json()) as {
+      responses: Record<
+        string,
+        {
+          domain: string;
+          vas_primary: number | null;
+          vas_secondary: number | null;
+          timeline: string | null;
+          factors: string[] | null;
+          submitted_at: string;
+        } | null
+      >;
+    };
+
+    // Stable shape: all five domain keys are always present, missing
+    // rows are explicit nulls.
+    expect(
+      Object.keys(fvBody.responses).sort(),
+      "GET response always includes all five domain keys",
+    ).toEqual(["cp", "ed", "inc", "ius", "le"]);
+
+    // After the sweep every domain must have a persisted row.
+    for (const { domain } of TOPICS) {
+      const row = fvBody.responses[domain];
+      expect(
+        row,
+        `domain=${domain} should have a persisted row after Submit`,
+      ).not.toBeNull();
+      expect(
+        row!.submitted_at,
+        `domain=${domain} row must carry a submitted_at timestamp`,
+      ).toBeTruthy();
+    }
+
+    console.log(
+      `[deep] first-visit-responses persisted for all ${TOPICS.length} domains ` +
+        `(${TOPICS.map((t) => t.domain).join(", ")}) ` +
         `for file=${fileid} speaker=${patid}`,
     );
   });

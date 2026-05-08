@@ -101,41 +101,90 @@ const TOPIC_COLORS: Record<
 // Question + answer-option data
 // ─────────────────────────────────────────────────────────────────────────────
 
-const RISK_QUESTIONS = [
-  {
-    id: "q1",
-    text: "What is the chance that your cancer will spread or come back if you choose active surveillance?",
-    topic: "Cancer Prognosis",
-  },
-  {
-    id: "q2",
-    text: "What is the chance that your cancer will spread or come back if you choose treatment (surgery or radiation)?",
-    topic: "Cancer Prognosis",
-  },
-  {
-    id: "q3",
-    text: "What is the chance of having erectile dysfunction after treatment?",
-    topic: "Erectile Dysfunction",
-  },
-  {
-    id: "q4",
-    text: "What is the chance of having urinary incontinence after treatment?",
-    topic: "Urinary Incontinence",
-  },
-  {
-    id: "q5",
-    text: "What is the chance of having irritative urinary symptoms after treatment?",
-    topic: "Irritative Urinary Symptoms",
-  },
-];
+// Question + option text mirrors the REDCap `risk_perception` form 1:1.
+// `id` is the key in RiskPerceptionAnswers and feeds the backend mapping in
+// routes_surveys.py: cancerRiskUntreated → risk_percep_1_1, cancerRiskTreated →
+// risk_percept2_2, erectileDysfunctionRisk → risk_percept_3_3, etc.
+type RiskQuestion =
+  | {
+      id: keyof RiskPerceptionAnswers;
+      text: string;
+      topic: string;
+      inputType: "slider";
+      min: number;
+      max: number;
+      step: number;
+    }
+  | {
+      id: keyof RiskPerceptionAnswers;
+      text: string;
+      topic: string;
+      inputType: "radio";
+      options: { value: string; label: string }[];
+    };
 
-const RISK_ANSWER_OPTIONS = [
-  { value: "very_low", label: "Very Low (0-10%)" },
-  { value: "low", label: "Low (11-30%)" },
-  { value: "moderate", label: "Moderate (31-50%)" },
-  { value: "high", label: "High (51-70%)" },
-  { value: "very_high", label: "Very High (71-100%)" },
-  { value: "not_sure", label: "Not Sure" },
+const RISK_QUESTIONS: RiskQuestion[] = [
+  {
+    id: "cancerRiskUntreated",
+    text: "Which of the following is closest to the risk of your cancer if you don't treat it?",
+    topic: "Cancer Prognosis",
+    inputType: "slider",
+    min: 0,
+    max: 100,
+    step: 1,
+  },
+  {
+    id: "cancerRiskTreated",
+    text: "Which of the following is closest to the risk of your cancer if you do treat it?",
+    topic: "Cancer Prognosis",
+    inputType: "radio",
+    options: [
+      { value: "1", label: "5 out of 100 men die of cancer at your life expectancy" },
+      { value: "2", label: "10 out of 100 men die of cancer at your life expectancy" },
+      { value: "3", label: "20 out of 100 men die of cancer at your life expectancy" },
+      { value: "4", label: "30 out of 100 men die of cancer at your life expectancy" },
+      { value: "5", label: "40 or more out of 100 men die of cancer at your life expectancy" },
+    ],
+  },
+  {
+    id: "erectileDysfunctionRisk",
+    text: "Which of the following is closest to the risk of permanent erectile dysfunction at 2 years (requiring injection therapy or penile prosthesis)?",
+    topic: "Erectile Dysfunction",
+    inputType: "radio",
+    options: [
+      { value: "1", label: "10 out of 100 men" },
+      { value: "2", label: "25 out of 100 men" },
+      { value: "3", label: "50 out of 100 men" },
+      { value: "4", label: "75 out of 100 men" },
+      { value: "5", label: "90 out of 100 men" },
+    ],
+  },
+  {
+    id: "urinaryIncontinenceRisk",
+    text: "Which of the following is closest to the risk of urinary incontinence at 1 year (requiring pads)?",
+    topic: "Urinary Incontinence",
+    inputType: "radio",
+    options: [
+      { value: "1", label: "5 out of 100 men" },
+      { value: "2", label: "10 out of 100 men" },
+      { value: "3", label: "20 out of 100 men" },
+      { value: "4", label: "30 out of 100 men" },
+      { value: "5", label: "50 out of 100 men" },
+    ],
+  },
+  {
+    id: "irritativeUrinaryRisk",
+    text: "Which of the following is closest to the risk of irritative urinary symptoms at 1 year (moderate or severe problem requiring medical or surgical intervention)?",
+    topic: "Irritative Urinary Symptoms",
+    inputType: "radio",
+    options: [
+      { value: "1", label: "5 out of 100 men" },
+      { value: "2", label: "10 out of 100 men" },
+      { value: "3", label: "15 out of 100 men" },
+      { value: "4", label: "20 out of 100 men" },
+      { value: "5", label: "30 out of 100 men" },
+    ],
+  },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -299,7 +348,10 @@ const CollapsibleSummary: React.FC<CollapsibleSummaryProps> = ({
 
 interface RiskPerceptionWithSummaryProps {
   answers: RiskPerceptionAnswers;
-  onChange: (questionId: keyof RiskPerceptionAnswers, value: string) => void;
+  onChange: (
+    questionId: keyof RiskPerceptionAnswers,
+    value: string | number,
+  ) => void;
   onSubmit?: () => void;
   onProgressSave?: () => void;
   isSubmitting?: boolean;
@@ -348,9 +400,9 @@ const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
 
   const totalQuestions = RISK_QUESTIONS.length;
   const currentQuestion = RISK_QUESTIONS[currentQuestionIndex];
-  const currentAnswer =
-    answers[currentQuestion.id as keyof RiskPerceptionAnswers];
-  const isCurrentAnswered = currentAnswer !== null;
+  const currentAnswer = answers[currentQuestion.id];
+  const isCurrentAnswered =
+    currentAnswer !== null && currentAnswer !== undefined;
   const isLastQuestion = currentQuestionIndex === totalQuestions - 1;
 
   const handleNext = () => {
@@ -451,70 +503,156 @@ const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
           {currentQuestion.text}
         </p>
 
-        {/* Answer Options */}
-        <div className="space-y-3">
-          {RISK_ANSWER_OPTIONS.map((option) => (
-            <label
-              key={option.value}
-              className={cx(
-                "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors border-2",
-                currentAnswer === option.value
-                  ? isDark
-                    ? "bg-blue-900/30 border-blue-500"
-                    : "bg-blue-50 border-blue-400"
-                  : isDark
-                    ? "border-slate-700 hover:bg-slate-700"
-                    : "border-gray-200 hover:bg-gray-50",
-              )}
-            >
-              <input
-                type="radio"
-                name={currentQuestion.id}
-                value={option.value}
-                checked={currentAnswer === option.value}
-                onChange={() => {
-                  onChange(
-                    currentQuestion.id as keyof RiskPerceptionAnswers,
-                    option.value,
-                  );
-                  onTrackEvent?.({
-                    eventType: "survey_answer",
-                    elementId: `RiskPerception_${currentQuestion.id}`,
-                    metadata: {
-                      survey: "risk_perception",
-                      questionId: currentQuestion.id,
-                      answer: option.value,
-                      topic: currentQuestion.topic,
-                    },
-                  });
-                }}
-                className="sr-only"
-              />
+        {/* Answer Input — slider for Q1, radio (5-choice) for Q2–Q5.
+            Raw values are sent to the backend as-is so REDCap receives
+            them unchanged: 0–100 integer for Q1, "1"–"5" string for Q2–Q5. */}
+        {currentQuestion.inputType === "slider" ? (
+          <div className="px-2">
+            <div className="flex justify-between mb-2">
               <span
                 className={cx(
-                  "w-4 h-4 rounded-full border-2 flex items-center justify-center",
-                  currentAnswer === option.value
-                    ? "border-blue-500 bg-blue-500"
-                    : isDark
-                      ? "border-slate-500"
-                      : "border-gray-300",
+                  "text-sm font-medium",
+                  isDark ? "text-slate-400" : "text-gray-500",
                 )}
               >
-                {currentAnswer === option.value && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-white" />
-                )}
+                {currentQuestion.min}
               </span>
               <span
                 className={cx(
                   "text-sm font-medium",
-                  isDark ? "text-slate-300" : "text-gray-700",
+                  isDark ? "text-slate-400" : "text-gray-500",
                 )}
               >
-                {option.label}
+                50
               </span>
-            </label>
-          ))}
-        </div>
+              <span
+                className={cx(
+                  "text-sm font-medium",
+                  isDark ? "text-slate-400" : "text-gray-500",
+                )}
+              >
+                {currentQuestion.max}
+              </span>
+            </div>
+            <input
+              type="range"
+              min={currentQuestion.min}
+              max={currentQuestion.max}
+              step={currentQuestion.step}
+              value={
+                typeof currentAnswer === "number"
+                  ? currentAnswer
+                  : currentQuestion.min
+              }
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                onChange(currentQuestion.id, v);
+                onTrackEvent?.({
+                  eventType: "survey_answer",
+                  elementId: `RiskPerception_${currentQuestion.id}`,
+                  metadata: {
+                    survey: "risk_perception",
+                    questionId: currentQuestion.id,
+                    answer: v,
+                    topic: currentQuestion.topic,
+                  },
+                });
+              }}
+              className={cx(
+                "w-full h-2 rounded-lg appearance-none cursor-pointer accent-rose-500",
+                isDark ? "bg-slate-600" : "bg-gray-200",
+              )}
+            />
+            <div className="flex justify-end mt-3">
+              <div
+                className={cx(
+                  "flex items-center gap-2 px-4 py-2 rounded-lg border",
+                  isDark
+                    ? "bg-slate-700 border-slate-600"
+                    : "bg-gray-50 border-gray-200",
+                )}
+              >
+                <span
+                  className={cx(
+                    "text-2xl font-bold",
+                    isDark ? "text-rose-400" : "text-rose-600",
+                  )}
+                >
+                  {typeof currentAnswer === "number" ? currentAnswer : "--"}
+                </span>
+                <span
+                  className={cx(
+                    "text-sm",
+                    isDark ? "text-slate-400" : "text-gray-500",
+                  )}
+                >
+                  out of 100
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {currentQuestion.options.map((option) => (
+              <label
+                key={option.value}
+                className={cx(
+                  "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors border-2",
+                  currentAnswer === option.value
+                    ? isDark
+                      ? "bg-blue-900/30 border-blue-500"
+                      : "bg-blue-50 border-blue-400"
+                    : isDark
+                      ? "border-slate-700 hover:bg-slate-700"
+                      : "border-gray-200 hover:bg-gray-50",
+                )}
+              >
+                <input
+                  type="radio"
+                  name={currentQuestion.id}
+                  value={option.value}
+                  checked={currentAnswer === option.value}
+                  onChange={() => {
+                    onChange(currentQuestion.id, option.value);
+                    onTrackEvent?.({
+                      eventType: "survey_answer",
+                      elementId: `RiskPerception_${currentQuestion.id}`,
+                      metadata: {
+                        survey: "risk_perception",
+                        questionId: currentQuestion.id,
+                        answer: option.value,
+                        topic: currentQuestion.topic,
+                      },
+                    });
+                  }}
+                  className="sr-only"
+                />
+                <span
+                  className={cx(
+                    "w-4 h-4 rounded-full border-2 flex items-center justify-center",
+                    currentAnswer === option.value
+                      ? "border-blue-500 bg-blue-500"
+                      : isDark
+                        ? "border-slate-500"
+                        : "border-gray-300",
+                  )}
+                >
+                  {currentAnswer === option.value && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                  )}
+                </span>
+                <span
+                  className={cx(
+                    "text-sm font-medium",
+                    isDark ? "text-slate-300" : "text-gray-700",
+                  )}
+                >
+                  {option.label}
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Collapsible Summary */}
@@ -627,4 +765,4 @@ const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
 };
 
 export default RiskPerceptionWithSummary;
-export { RISK_QUESTIONS, RISK_ANSWER_OPTIONS, TOPIC_COLORS };
+export { RISK_QUESTIONS, TOPIC_COLORS };

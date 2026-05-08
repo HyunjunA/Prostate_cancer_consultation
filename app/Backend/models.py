@@ -33,7 +33,7 @@ Conventions used throughout:
 
 from sqlalchemy import (
     JSON, Column, ForeignKey, ForeignKeyConstraint, Index, LargeBinary, String, Integer, Float,
-    Boolean, Text, TIMESTAMP, CheckConstraint, func
+    Boolean, Text, TIMESTAMP, CheckConstraint, UniqueConstraint, func
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship, declarative_base
@@ -155,6 +155,84 @@ class PatientSummaryDomain(Base):
 
     def __repr__(self):
         return f"<PatientSummaryDomain(file={self.file}, domain={self.domain})>"
+
+
+class PatientFirstVisitResponses(Base):
+    """V37 experimental-arm responses — one row per (file, speaker, domain).
+
+    PatientInitialVisitReportV37.tsx (experimental arm only) collects 14
+    cognition / understanding inputs across the five clinical domains:
+      - 5 VAS sliders (cp uses two; ed/inc/ius use one; le has none)
+      - 5 single-select radios (one per domain)
+      - 4 multi-select checkboxes (le/ed/inc/ius; cp has none)
+
+    The 14 inputs collapse into four nullable columns by row-per-domain
+    layout: vas_primary, vas_secondary (cp only), timeline, factors (JSONB).
+    See `dev_docs/V37_First_Visit_Persistence_Design.md` §3.3 for the
+    full column rationale, and §3.3.1 for the columns intentionally
+    omitted (visit_version, updated_at).
+
+    Written by PUT /api/patient/first-visit-responses on each per-domain
+    Submit click; read by GET /api/patient/first-visit-responses/{file}/{speaker}
+    on V37 mount to prefill the 14 React.useState slots.
+
+    FK targets patient_summary (not patient_summary_domain) because the
+    domain row may not exist yet when the patient first reaches V37.
+    """
+    __tablename__ = 'patient_first_visit_responses'
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ['file', 'speaker'],
+            ['patient_summary.file', 'patient_summary.speaker'],
+            ondelete='CASCADE',
+            name='fk_first_visit_to_patient_summary',
+        ),
+        # Collapses re-Submits to a single row per (file, speaker, domain).
+        UniqueConstraint('file', 'speaker', 'domain', name='uq_first_visit'),
+        # Defence in depth — Pydantic blocks the bad value at the API edge,
+        # this catches anything entering via direct SQL.
+        CheckConstraint(
+            "domain IN ('cp','le','ed','inc','ius')",
+            name='ck_first_visit_domain',
+        ),
+        CheckConstraint(
+            'vas_primary IS NULL OR vas_primary BETWEEN 0 AND 100',
+            name='ck_first_visit_vas_primary',
+        ),
+        CheckConstraint(
+            'vas_secondary IS NULL OR vas_secondary BETWEEN 0 AND 100',
+            name='ck_first_visit_vas_secondary',
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    file = Column(String(255), nullable=False)
+    speaker = Column(String(100), nullable=False)
+    domain = Column(String(100), nullable=False)
+    # cp = without-treatment; ed/inc/ius = single VAS; le = NULL (no VAS).
+    vas_primary = Column(Integer)
+    # cp only (with-treatment); NULL for every other domain forever.
+    vas_secondary = Column(Integer)
+    # Single-select radio value. cp uses short codes ('B'..'F'); le uses
+    # prose ('5-10 years'). 50 chars is comfortably wider than the
+    # longest ('More than 20 years').
+    timeline = Column(String(50))
+    # Multi-select checkbox values, e.g. ["Age", "Tumor grade"]. Always
+    # NULL for cp. Per-domain whitelist enforced by Pydantic, not at
+    # the DB level (JSONB element-level CHECK would need a trigger).
+    # JSONB_COMPAT falls back to JSON in the SQLite-backed test suite.
+    factors = Column(JSONB_COMPAT)
+    # Reset on every Submit (re-Submit overwrites). The system tracks no
+    # edit history elsewhere, so a single timestamp is sufficient.
+    submitted_at = Column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    def __repr__(self):
+        return (
+            f"<PatientFirstVisitResponses(file={self.file}, "
+            f"speaker={self.speaker}, domain={self.domain})>"
+        )
 
 
 # =====================================================

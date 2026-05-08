@@ -66,6 +66,11 @@ import React, {
   useCallback,
 } from "react";
 import { usePatientData } from "@/hooks/usePatientData";
+import { useFirstVisitResponses } from "@/hooks/useFirstVisitResponses";
+import {
+  FirstVisitResponseRead,
+  FirstVisitResponseUpsert,
+} from "@/api/firstVisitApi";
 import { usePatientId } from "@/stores/usePatientId";
 import { useFileId } from "@/stores/useFileId";
 import { sendTrackingEvents } from "@/api/trackingApi";
@@ -833,6 +838,20 @@ interface TopicCardProps {
   onToggleExpand: () => void;
   showEvidence: boolean;
   onToggleEvidence: () => void;
+  isSubmitted: boolean;
+  onSubmit: () => void;
+  /** Server-side persisted row, used to prefill state on mount. */
+  prefill?: FirstVisitResponseRead | null;
+  /**
+   * Persistence callback. Called with the per-domain payload built from
+   * local state when the patient clicks Submit. If it resolves, the
+   * parent will call onSubmit() to flip the submittedDomains flag; if
+   * it rejects, the flag stays unchanged so progress reflects the
+   * server-confirmed state only.
+   */
+  onSave?: (
+    payload: Omit<FirstVisitResponseUpsert, "file" | "speaker">,
+  ) => Promise<void>;
   isDark?: boolean;
   patientId?: string;
   visitId?: string;
@@ -854,6 +873,10 @@ const TopicCard: React.FC<TopicCardProps> = ({
   onToggleExpand,
   showEvidence,
   onToggleEvidence,
+  isSubmitted,
+  onSubmit,
+  prefill,
+  onSave,
   isDark,
   patientId,
   visitId,
@@ -868,12 +891,17 @@ const TopicCard: React.FC<TopicCardProps> = ({
   // are rendered directly below the AI Summary for this topic only. Other
   // topics ignore these state slots. Local state only; backend persistence
   // will be wired in a follow-up.
+  // Default to 50 (slider midpoint) so an untouched slider submits the
+  // value the patient actually saw — see Radix Slider's `value` prop on
+  // line ~1275 which falls back to 50 visually. Initializing state to
+  // null caused silent data loss (visible 50, persisted NULL) when the
+  // patient submitted without dragging.
   const [cpRiskWithoutTreatment, setCpRiskWithoutTreatment] = React.useState<
     number | null
-  >(null);
+  >(50);
   const [cpRiskWithTreatment, setCpRiskWithTreatment] = React.useState<
     number | null
-  >(null);
+  >(50);
   const [cpTimePeriod, setCpTimePeriod] = React.useState<string | null>(null);
 
   // [V37] Life Expectancy (Experimental arm) — two questions placed
@@ -898,7 +926,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
   // (3) Multi-select factor checklist (any subset of 5 factors).
   const [edBaselineReturn, setEdBaselineReturn] = React.useState<
     number | null
-  >(null);
+  >(50);
   const [edTimePeriod, setEdTimePeriod] = React.useState<string | null>(null);
   const [edFactors, setEdFactors] = React.useState<string[]>([]);
   const toggleEdFactor = (factor: string) => {
@@ -913,7 +941,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
   // (1) VAS 0-100 slider for the patient's understanding of their risk.
   // (2) Single-select radio across 5 timeline options.
   // (3) Multi-select factor checklist (any subset of 5 factors).
-  const [incRisk, setIncRisk] = React.useState<number | null>(null);
+  const [incRisk, setIncRisk] = React.useState<number | null>(50);
   const [incTimeline, setIncTimeline] = React.useState<string | null>(null);
   const [incFactors, setIncFactors] = React.useState<string[]>([]);
   const toggleIncFactor = (factor: string) => {
@@ -928,7 +956,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
   // (1) VAS 0-100 slider for risk of irritative lower urinary tract sx.
   // (2) Single-select radio across 5 timeline options.
   // (3) Multi-select factor checklist (any subset of 5 factors).
-  const [iusRisk, setIusRisk] = React.useState<number | null>(null);
+  const [iusRisk, setIusRisk] = React.useState<number | null>(50);
   const [iusTimeline, setIusTimeline] = React.useState<string | null>(null);
   const [iusFactors, setIusFactors] = React.useState<string[]>([]);
   const toggleIusFactor = (factor: string) => {
@@ -937,6 +965,155 @@ const TopicCard: React.FC<TopicCardProps> = ({
         ? prev.filter((f) => f !== factor)
         : [...prev, factor],
     );
+  };
+
+  // [V37] Per-domain Submit-time validation popup. VAS sliders default
+  // to 50 so they are always considered answered; factors are optional
+  // (zero is a valid response). Only the timeline radio is required.
+  const [incompleteDialog, setIncompleteDialog] = React.useState<{
+    open: boolean;
+    missing: string[];
+  }>({ open: false, missing: [] });
+
+  // [V37] Hydrate the per-domain state slots from the server's last
+  // persisted row exactly once — when prefill arrives non-null. Each
+  // domain only touches its own slots; cp ignores factors etc.
+  const hasHydrated = React.useRef(false);
+  React.useEffect(() => {
+    if (hasHydrated.current || !prefill) return;
+    hasHydrated.current = true;
+    switch (trackDomain) {
+      case "cp":
+        if (prefill.vas_primary != null) setCpRiskWithoutTreatment(prefill.vas_primary);
+        if (prefill.vas_secondary != null) setCpRiskWithTreatment(prefill.vas_secondary);
+        if (prefill.timeline) setCpTimePeriod(prefill.timeline);
+        break;
+      case "le":
+        if (prefill.timeline) setLeProjectedLE(prefill.timeline);
+        if (prefill.factors) setLeFactors(prefill.factors);
+        break;
+      case "ed":
+        if (prefill.vas_primary != null) setEdBaselineReturn(prefill.vas_primary);
+        if (prefill.timeline) setEdTimePeriod(prefill.timeline);
+        if (prefill.factors) setEdFactors(prefill.factors);
+        break;
+      case "inc":
+        if (prefill.vas_primary != null) setIncRisk(prefill.vas_primary);
+        if (prefill.timeline) setIncTimeline(prefill.timeline);
+        if (prefill.factors) setIncFactors(prefill.factors);
+        break;
+      case "ius":
+        if (prefill.vas_primary != null) setIusRisk(prefill.vas_primary);
+        if (prefill.timeline) setIusTimeline(prefill.timeline);
+        if (prefill.factors) setIusFactors(prefill.factors);
+        break;
+    }
+  }, [prefill, trackDomain]);
+
+  // [V37] Build the per-domain payload for the PUT body. Returns only
+  // the fields relevant for that domain so the backend's exclude_unset
+  // semantic preserves untouched columns on subsequent re-Submits.
+  const buildSubmitPayload = (): Omit<
+    FirstVisitResponseUpsert,
+    "file" | "speaker"
+  > | null => {
+    switch (trackDomain) {
+      case "cp":
+        return {
+          domain: "cp",
+          vas_primary: cpRiskWithoutTreatment,
+          vas_secondary: cpRiskWithTreatment,
+          timeline: cpTimePeriod,
+        };
+      case "le":
+        return {
+          domain: "le",
+          timeline: leProjectedLE,
+          factors: leFactors.length ? leFactors : null,
+        };
+      case "ed":
+        return {
+          domain: "ed",
+          vas_primary: edBaselineReturn,
+          timeline: edTimePeriod,
+          factors: edFactors.length ? edFactors : null,
+        };
+      case "inc":
+        return {
+          domain: "inc",
+          vas_primary: incRisk,
+          timeline: incTimeline,
+          factors: incFactors.length ? incFactors : null,
+        };
+      case "ius":
+        return {
+          domain: "ius",
+          vas_primary: iusRisk,
+          timeline: iusTimeline,
+          factors: iusFactors.length ? iusFactors : null,
+        };
+      default:
+        return null;
+    }
+  };
+
+  // [V37] Per-domain required-field check. Returns the user-facing
+  // labels of any unanswered required questions for the current domain.
+  // Sliders default to 50 (always considered answered); factors are
+  // optional (zero selections is a valid response). Only the timeline
+  // radio is required across every domain.
+  const getMissingRequired = (): string[] => {
+    switch (trackDomain) {
+      case "cp":
+        return cpTimePeriod
+          ? []
+          : ["Time period when you would expect to see the cancer prognosis"];
+      case "le":
+        return leProjectedLE ? [] : ["Your projected life expectancy"];
+      case "ed":
+        return edTimePeriod
+          ? []
+          : ["Time period for return to baseline erectile function"];
+      case "inc":
+        return incTimeline
+          ? []
+          : ["Time period for urinary incontinence to develop"];
+      case "ius":
+        return iusTimeline
+          ? []
+          : ["Time period for irritative urinary symptoms to develop"];
+      default:
+        return [];
+    }
+  };
+
+  // [V37] Submit click handler — validate first, then persist. On any
+  // missing required field, open the incomplete-questions popup and
+  // skip onSave entirely so nothing lands in the DB. If onSave is not
+  // wired (test rigs / pages without backend access) fall back to the
+  // legacy local-only behaviour.
+  const handleSubmitClick = async () => {
+    const missing = getMissingRequired();
+    if (missing.length > 0) {
+      setIncompleteDialog({ open: true, missing });
+      return;
+    }
+    if (!onSave) {
+      onSubmit();
+      return;
+    }
+    const payload = buildSubmitPayload();
+    if (!payload) {
+      onSubmit();
+      return;
+    }
+    try {
+      await onSave(payload);
+      onSubmit();
+    } catch {
+      // Hook surfaces the error; the card stays in its un-submitted
+      // visual state so progress reflects only persisted Submits.
+    }
   };
 
   return (
@@ -1281,12 +1458,18 @@ const TopicCard: React.FC<TopicCardProps> = ({
                 </p>
                 <div className="space-y-2">
                   {[
-                    { value: "A", label: "Over my lifetime" },
-                    { value: "B", label: "Over next 5 years" },
-                    { value: "C", label: "Over next 5-10 years" },
-                    { value: "D", label: "Over next 11-15 years" },
-                    { value: "E", label: "Over next 16-20 years" },
-                    { value: "F", label: "Over next 20-30 years" },
+                    // Use the human-readable label as the persisted
+                    // value so cp matches every other domain's
+                    // timeline column in the DB. Without this cp
+                    // would store opaque codes like "A", "B" while
+                    // le/ed/inc/ius store "Less than 5 years",
+                    // "3 months after treatment", etc.
+                    { value: "Over my lifetime", label: "Over my lifetime" },
+                    { value: "Over next 5 years", label: "Over next 5 years" },
+                    { value: "Over next 5-10 years", label: "Over next 5-10 years" },
+                    { value: "Over next 11-15 years", label: "Over next 11-15 years" },
+                    { value: "Over next 16-20 years", label: "Over next 16-20 years" },
+                    { value: "Over next 20-30 years", label: "Over next 20-30 years" },
                   ].map((opt, idx) => (
                     <label
                       key={opt.value}
@@ -2505,9 +2688,105 @@ const TopicCard: React.FC<TopicCardProps> = ({
           </div>
 
           {/* Helpfulness Rating — relocated above to sit right under AI Summary. */}
+
+          {/* Per-domain Submit button. Marks this topic as completed in the
+              parent's submittedDomains map so Submission Progress can advance.
+              Re-clicking after submission is allowed: inputs stay editable
+              and the button label switches to an "Update" affordance. */}
+          <div className="mt-6">
+            <button
+              type="button"
+              onClick={handleSubmitClick}
+              data-track-proximity={`SubmitTopic_${topicId}`}
+              className={cx(
+                "w-full px-6 py-3 rounded-xl text-sm font-bold transition-all duration-200 border-2",
+                isSubmitted
+                  ? isDark
+                    ? "bg-emerald-900/30 text-emerald-300 border-emerald-600 hover:bg-emerald-900/40"
+                    : "bg-emerald-50 text-emerald-700 border-emerald-400 hover:bg-emerald-100"
+                  : isDark
+                    ? "bg-indigo-600 text-white border-indigo-500 hover:bg-indigo-500 shadow-lg shadow-indigo-500/30"
+                    : "bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-500/30",
+              )}
+            >
+              {isSubmitted ? "Submitted ✓ — Click to update" : "Submit"}
+            </button>
+          </div>
         </div>
         )}
       </div>
+
+      {/* [V37] Incomplete-questions popup. Only renders when validation
+          fails so it stays out of the layout flow otherwise. Plain
+          Tailwind modal (no Radix) — single-purpose, low ceremony.
+          Backdrop click and OK button both close the dialog; nothing
+          is persisted to the backend. */}
+      {incompleteDialog.open && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="v37-incomplete-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+          onClick={() => setIncompleteDialog({ open: false, missing: [] })}
+        >
+          <div
+            className={cx(
+              "w-full max-w-md rounded-2xl shadow-2xl p-6",
+              isDark
+                ? "bg-slate-900 border border-slate-700 text-slate-100"
+                : "bg-white border border-gray-200 text-gray-900",
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              id="v37-incomplete-title"
+              className="text-lg font-semibold mb-3"
+            >
+              Please complete all questions
+            </h3>
+            <p
+              className={cx(
+                "text-sm mb-3",
+                isDark ? "text-slate-300" : "text-gray-600",
+              )}
+            >
+              You haven&apos;t answered the following question
+              {incompleteDialog.missing.length > 1 ? "s" : ""} for this
+              section:
+            </p>
+            <ul
+              className={cx(
+                "list-disc pl-5 mb-4 text-sm space-y-1",
+                isDark ? "text-slate-200" : "text-gray-800",
+              )}
+            >
+              {incompleteDialog.missing.map((m) => (
+                <li key={m}>{m}</li>
+              ))}
+            </ul>
+            <p
+              className={cx(
+                "text-sm mb-5",
+                isDark ? "text-slate-300" : "text-gray-600",
+              )}
+            >
+              Please review the section and answer{" "}
+              {incompleteDialog.missing.length > 1 ? "them" : "it"} before
+              submitting.
+            </p>
+            <button
+              type="button"
+              autoFocus
+              className="w-full rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-4 py-2 transition-colors"
+              onClick={() =>
+                setIncompleteDialog({ open: false, missing: [] })
+              }
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -2594,6 +2873,11 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
   const currentSpeaker = patientId || "Patient_Input_Keystrokes REC001 (SID 14)";
   const visitId = `visit_${currentFile}_${Date.now()}`;
 
+  // [V37] Persistence — fetch any previously-submitted answers on mount
+  // so the page restores after reload, and expose saveDomain() for the
+  // per-domain Submit click in TopicCard.
+  const firstVisit = useFirstVisitResponses(currentFile, currentSpeaker);
+
   // First topic (Cancer Prognosis) expanded by default, rest collapsed
   const [expandedTopics, setExpandedTopics] = useState<Record<string, boolean>>(
     { [TOPIC_ORDER[0]]: true },
@@ -2603,6 +2887,29 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
   >({});
   // Rating state management
   const [ratings, setRatings] = useState<Record<string, number>>({});
+
+  // Per-domain Submit state. Each entry maps a topic name to whether
+  // the patient has a confirmed-persisted submission for that domain.
+  // Drives Submission Progress. Initialised empty; reconciled with the
+  // server cache once useFirstVisitResponses hydrates (effect below).
+  const [submittedDomains, setSubmittedDomains] = useState<
+    Record<string, boolean>
+  >({});
+
+  // [V37] After mount-time GET resolves, mark any domain that already
+  // has a persisted row as submitted so the progress indicator and
+  // each card's button reflect the patient's prior session.
+  useEffect(() => {
+    if (!firstVisit.isHydrated) return;
+    const initial: Record<string, boolean> = {};
+    for (const topic of TOPIC_ORDER) {
+      const domain = TOPIC_TO_DOMAIN[topic];
+      if (domain && firstVisit.responses[domain]) {
+        initial[topic] = true;
+      }
+    }
+    setSubmittedDomains(initial);
+  }, [firstVisit.isHydrated, firstVisit.responses]);
 
   // [V35] Scroll indicator state
   const [showScrollIndicator, setShowScrollIndicator] = useState(true);
@@ -2765,6 +3072,18 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
   // Event Handlers
 
   /**
+   * Submit handler for the per-domain Submit button.
+   * Marks this topic as submitted so Submission Progress can advance.
+   * Re-clicking after submission is a no-op for the count (already true).
+   */
+  const handleSubmitDomain = (topic: string): void => {
+    setSubmittedDomains((prev: Record<string, boolean>) => ({
+      ...prev,
+      [topic]: true,
+    }));
+  };
+
+  /**
    * Rating change handler
    * - Updates local state
    * - Saves to server via API call
@@ -2846,15 +3165,18 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
     }
   };
 
-  // Rating Progress calculation
-  const ratingProgress = useMemo(() => {
-    const rated = TOPIC_ORDER.filter((topic) => ratings[topic] > 0).length;
+  // Submission Progress calculation — counts topics for which the patient
+  // has clicked the per-domain Submit button.
+  const submissionProgress = useMemo(() => {
+    const submitted = TOPIC_ORDER.filter(
+      (topic) => submittedDomains[topic],
+    ).length;
     return {
-      rated,
+      submitted,
       total: TOPIC_ORDER.length,
-      percentage: Math.round((rated / TOPIC_ORDER.length) * 100),
+      percentage: Math.round((submitted / TOPIC_ORDER.length) * 100),
     };
-  }, [ratings]);
+  }, [submittedDomains]);
 
   // Print Styles
   useEffect(() => {
@@ -3180,7 +3502,7 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
         <HelpfulnessLegend isDark={isDarkMode} />
         */}
 
-        {/* Rating Progress Indicator */}
+        {/* Submission Progress Indicator */}
         <div
           className={cx(
             "mb-4 sm:mb-6 lg:mb-8 p-4 sm:p-5 lg:p-6 rounded-2xl border",
@@ -3196,19 +3518,19 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
                 isDarkMode ? "text-white" : "text-gray-800",
               )}
             >
-              Rating Progress
+              Submission Progress
             </span>
             <span
               className={cx(
                 "text-sm font-bold px-4 py-1.5 rounded-full",
-                ratingProgress.percentage === 100
+                submissionProgress.percentage === 100
                   ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400"
                   : isDarkMode
                     ? "bg-slate-800 text-slate-400"
                     : "bg-gray-100 text-gray-600",
               )}
             >
-              {ratingProgress.rated} / {ratingProgress.total}
+              {submissionProgress.submitted} / {submissionProgress.total}
             </span>
           </div>
           <div
@@ -3220,17 +3542,17 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
             <div
               className={cx(
                 "h-full rounded-full transition-all duration-700 ease-out",
-                ratingProgress.percentage === 100
+                submissionProgress.percentage === 100
                   ? "bg-gradient-to-r from-emerald-400 to-teal-500"
                   : "bg-gradient-to-r from-indigo-500 to-violet-500",
               )}
-              style={{ width: `${ratingProgress.percentage}%` }}
+              style={{ width: `${submissionProgress.percentage}%` }}
             />
           </div>
-          {ratingProgress.percentage === 100 && (
+          {submissionProgress.percentage === 100 && (
             <p className="mt-4 text-sm font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
               <CheckCircle2 size={18} />
-              Thank you for rating all topics!
+              Thank you for submitting all topics!
             </p>
           )}
         </div>
@@ -3254,6 +3576,14 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
                 onToggleExpand={() => handleToggleExpand(topic)}
                 showEvidence={showEvidenceStates[topic] || false}
                 onToggleEvidence={() => handleToggleEvidence(topic)}
+                isSubmitted={!!submittedDomains[topic]}
+                onSubmit={() => handleSubmitDomain(topic)}
+                prefill={firstVisit.responses[TOPIC_TO_DOMAIN[topic]] ?? null}
+                onSave={(payload) =>
+                  firstVisit
+                    .saveDomain(TOPIC_TO_DOMAIN[topic], payload)
+                    .then(() => undefined)
+                }
                 isDark={isDarkMode}
                 patientId={currentSpeaker}
                 visitId={visitId}

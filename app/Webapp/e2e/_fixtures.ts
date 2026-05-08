@@ -184,3 +184,32 @@ export async function requireFirstFixture(
   // unreachable when test.skip fires, but TS doesn't know that
   return fixture as DemoFixture;
 }
+
+/**
+ * Return EVERY patient/file pair the backend currently knows about.
+ * Use when a spec must walk all available patients deterministically
+ * (e.g. demoing the follow-up flow for each of three SIDs in order)
+ * rather than picking one at random. Skips the whole describe block
+ * when the list is empty so behaviour matches `requireFirstFixture`.
+ */
+export async function getAllFixtures(
+  request: APIRequestContext,
+  baseURL: string | undefined,
+): Promise<DemoFixture[]> {
+  const root = baseURL ?? "http://localhost:3000";
+  const url = `${root}/api/backend/patient/files`;
+  let resp;
+  try {
+    resp = await request.get(url);
+  } catch {
+    return [];
+  }
+  if (!resp.ok()) return [];
+  const body = (await resp.json()) as { files?: string[] };
+  const files = body.files ?? [];
+  return files.map((file) => ({
+    file,
+    patient: `Patient_${file.replace(/\.xlsx$/i, "")}`,
+    doctor: "Interviewer:",
+  }));
+}

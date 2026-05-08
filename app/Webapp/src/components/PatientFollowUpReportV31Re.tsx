@@ -61,9 +61,23 @@ import {
   Check,
 } from "lucide-react";
 
+// V1 (legacy, no REDCap mapping) — preserved for reference / rollback only.
+// Inline question wording ("What is the chance of having ... after treatment?")
+// and the shared 6-option Very Low / Low / Moderate / High / Very High / Not
+// Sure radio set are NOT aligned with REDCap's `risk_perception` form, so
+// submissions through V1 cannot be mirrored to REDCap.
+// import RiskPerceptionWithSummary, {
+//   type TopicSummaryMap,
+// } from "@/components/RiskPerceptionWithSummary";
+
+// V2 (active) — REDCap-aligned. Question text and choices match the
+// `risk_perception` instrument 1:1, ids equal the keys in
+// RiskPerceptionAnswers, and Q1 sends the raw 0–100 slider integer (no
+// sliderToCategory compression), so the backend mapping in
+// routes_surveys.py mirrors every answer to REDCap unchanged.
 import RiskPerceptionWithSummary, {
   type TopicSummaryMap,
-} from "@/components/RiskPerceptionWithSummary";
+} from "@/components/RiskPerceptionWithSummaryV2";
 
 import { submitSurvey, fetchSurveySubmissions } from "@/api/surveyApi";
 import { sendTrackingEvents } from "@/api/trackingApi";
@@ -985,7 +999,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
 
   const handleRiskChange = (
     questionId: keyof RiskPerceptionAnswers,
-    value: string,
+    value: string | number,
   ) => {
     setRiskAnswers((prev) => ({ ...prev, [questionId]: value }));
     trackFollowup(currentFile, currentSpeaker, {

@@ -32,12 +32,12 @@ Related modules:
 
 import json
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from collections import defaultdict
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -48,6 +48,7 @@ from auth.base import AuthUser
 from db import get_db
 from models import (
     DoctorRewriteLog,
+    PatientFirstVisitResponses,
     PatientSummary,
     PatientSummaryDomain,
     SentencePrediction,
@@ -80,6 +81,91 @@ class PatientDomainResponseUpdate(BaseModel):
     speaker: str
     domain: str
     patient_response: str
+
+
+# ── V37 first-visit responses (experimental arm) ──────────────────────────────
+# Matches the table created by migration 010_first_visit_responses. The
+# 14 inputs that V37 collects collapse into four nullable fields by
+# row-per-domain layout:
+#   vas_primary    cp = without-treatment, ed/inc/ius single VAS, le NULL
+#   vas_secondary  cp only (with-treatment); rejected on every other domain
+#   timeline       single-select radio value
+#   factors        multi-select checkbox values; rejected on cp
+# Per-domain factor whitelist mirrors the literal arrays in
+# `app/Webapp/src/components/PatientInitialVisitReportV37.tsx`. Any
+# future edit to either side must touch both — the integration tests
+# catch a mismatch.
+
+DomainLiteral = Literal["cp", "le", "ed", "inc", "ius"]
+
+_FACTOR_WHITELIST: Dict[str, set[str]] = {
+    "le":  {"Tumor grade", "Age", "Marital status",
+            "Health conditions or comorbidities", "Tumor stage"},
+    "ed":  {"Tumor grade", "Age", "Tumor stage",
+            "Health conditions or comorbidities", "Baseline function"},
+    "inc": {"Tumor grade", "Age", "Tumor stage",
+            "Health conditions or comorbidities", "Baseline function"},
+    "ius": {"Tumor grade", "Age", "Tumor stage",
+            "Health conditions or comorbidities", "Baseline function"},
+}
+
+
+class FirstVisitResponseUpsert(BaseModel):
+    """Body for PUT /api/patient/first-visit-responses.
+
+    Only fields the patient touched should be present. Unsent fields are
+    left at NULL on first write or untouched on subsequent writes (the
+    upsert path uses model_dump(exclude_unset=True)).
+    """
+    file: str = Field(..., min_length=1, max_length=255)
+    speaker: str = Field(..., min_length=1, max_length=100)
+    domain: DomainLiteral
+    vas_primary: Optional[int] = Field(None, ge=0, le=100)
+    vas_secondary: Optional[int] = Field(None, ge=0, le=100)
+    timeline: Optional[str] = Field(None, max_length=50)
+    factors: Optional[List[str]] = None
+
+    @field_validator("vas_secondary")
+    @classmethod
+    def _vas_secondary_only_cp(cls, v, info):
+        if v is not None and info.data.get("domain") != "cp":
+            raise ValueError("vas_secondary is only valid for cp domain")
+        return v
+
+    @field_validator("factors")
+    @classmethod
+    def _factors_match_domain(cls, v, info):
+        if v is None:
+            return v
+        domain = info.data.get("domain")
+        if domain == "cp":
+            raise ValueError("cp domain does not support factors")
+        allowed = _FACTOR_WHITELIST.get(domain, set())
+        invalid = [f for f in v if f not in allowed]
+        if invalid:
+            raise ValueError(
+                f"invalid factors for {domain}: {invalid}"
+            )
+        return v
+
+
+class FirstVisitResponseRead(BaseModel):
+    """One persisted row, suitable for both GET and PUT responses."""
+    domain: DomainLiteral
+    vas_primary: Optional[int] = None
+    vas_secondary: Optional[int] = None
+    timeline: Optional[str] = None
+    factors: Optional[List[str]] = None
+    submitted_at: str  # ISO8601
+
+
+class FirstVisitResponsesGet(BaseModel):
+    """GET response — keyed by domain so the frontend can index directly.
+
+    All five domain keys are always present; missing rows come back as
+    null so the consumer never has to null-check the wrapper itself.
+    """
+    responses: Dict[DomainLiteral, Optional[FirstVisitResponseRead]]
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -823,3 +909,104 @@ async def import_to_redcap(
         "status": "success",
         "redcap_response": response.json()
     }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# V37 First-Visit Responses (experimental arm)
+# ──────────────────────────────────────────────────────────────────────────────
+# Persists the 14 cognition / understanding inputs that
+# PatientInitialVisitReportV37.tsx collects per clinical domain. The
+# table is patient_first_visit_responses (migration 010); auth + ACL
+# follow the same pattern as update_patient_scoring above. Detailed
+# rationale is in dev_docs/V37_First_Visit_Persistence_Design.md.
+
+_DOMAIN_ORDER: List[str] = ["cp", "le", "ed", "inc", "ius"]
+
+
+def _row_to_read(row: PatientFirstVisitResponses) -> FirstVisitResponseRead:
+    return FirstVisitResponseRead(
+        domain=row.domain,
+        vas_primary=row.vas_primary,
+        vas_secondary=row.vas_secondary,
+        timeline=row.timeline,
+        factors=row.factors,
+        submitted_at=row.submitted_at.isoformat(),
+    )
+
+
+@router.get(
+    "/api/patient/first-visit-responses/{file}/{speaker}",
+    response_model=FirstVisitResponsesGet,
+)
+async def get_first_visit_responses(
+    file: str,
+    speaker: str,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Return V37 experimental-arm responses keyed by clinical domain.
+
+    Always returns all five domain keys; rows that have not been
+    submitted yet come back as null so the frontend can index directly.
+    """
+    await check_patient_access(file, user, db)
+
+    stmt = select(PatientFirstVisitResponses).where(
+        PatientFirstVisitResponses.file == file,
+        PatientFirstVisitResponses.speaker == speaker,
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    by_domain = {row.domain: _row_to_read(row) for row in rows}
+    return FirstVisitResponsesGet(
+        responses={d: by_domain.get(d) for d in _DOMAIN_ORDER},
+    )
+
+
+@router.put(
+    "/api/patient/first-visit-responses",
+    response_model=FirstVisitResponseRead,
+)
+async def upsert_first_visit_response(
+    body: FirstVisitResponseUpsert,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Upsert one (file, speaker, domain) row.
+
+    Called when the patient clicks Submit on a domain card. Uses the
+    select-then-update-or-insert pattern (matches update_patient_scoring
+    above) — ON CONFLICT is avoided because the row may not exist yet.
+    Re-Submits overwrite: submitted_at is reset on every PUT.
+    """
+    await check_patient_access(body.file, user, db)
+
+    stmt = select(PatientFirstVisitResponses).where(
+        PatientFirstVisitResponses.file == body.file,
+        PatientFirstVisitResponses.speaker == body.speaker,
+        PatientFirstVisitResponses.domain == body.domain,
+    )
+    record = (await db.execute(stmt)).scalars().first()
+
+    # exclude_unset is the linchpin: clients that send only the field
+    # they changed do not accidentally null other columns.
+    payload = body.model_dump(
+        exclude_unset=True,
+        exclude={"file", "speaker", "domain"},
+    )
+
+    if record:
+        for key, value in payload.items():
+            setattr(record, key, value)
+        record.submitted_at = func.now()
+    else:
+        record = PatientFirstVisitResponses(
+            file=body.file,
+            speaker=body.speaker,
+            domain=body.domain,
+            **payload,
+        )
+        db.add(record)
+
+    await db.commit()
+    await db.refresh(record)
+    return _row_to_read(record)
