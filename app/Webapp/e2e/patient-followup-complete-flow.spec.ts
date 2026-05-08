@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { requireFirstFixture, type DemoFixture } from "./_fixtures";
+import { getAllFixtures, type DemoFixture } from "./_fixtures";
 import {
   waitForFollowUpPage,
   startSurvey,
@@ -43,94 +43,96 @@ import {
 // doesn't trip the default 30 s test timeout.
 test.setTimeout(120_000);
 
-let FIXTURE: DemoFixture;
-let FOLLOWUP_URL: string;
-let SPEAKER: string;
+let ALL_FIXTURES: DemoFixture[] = [];
 
 const API_BASE = "http://localhost:8000";
 const API_KEY = process.env.E2E_API_KEY || process.env.API_KEY || "";
 const AUTH_HEADERS = { "X-API-Key": API_KEY };
 
 test.beforeAll(async ({ request, baseURL }) => {
-  FIXTURE = await requireFirstFixture(request, baseURL);
-  FOLLOWUP_URL =
-    `/?fileid=${encodeURIComponent(FIXTURE.file)}` +
-    `&patid=${encodeURIComponent(FIXTURE.patient)}` +
-    `&visit=followup`;
-  SPEAKER = FIXTURE.patient;
+  ALL_FIXTURES = await getAllFixtures(request, baseURL);
+  test.skip(
+    ALL_FIXTURES.length === 0,
+    "precondition: no patient data — /api/backend/patient/files returned []",
+  );
 });
 
 test.describe("Patient Follow-up — Complete Flow End-to-End", () => {
-  test("complete all 4 surveys, type feedback, click Complete Survey", async ({
+  // Single sequential test: drive the full flow once per available
+  // patient. With three demo fixtures (SID 10/14/15) seeded, this
+  // walks all three deterministically — no random pick. Each loop
+  // iteration: navigate to that patient's follow-up URL, complete
+  // SDM/DCS/Risk/Satisfaction in order, click Complete Survey,
+  // verify the Thank You screen, then move to the next patient.
+  test("complete all 4 surveys for every seeded patient (deterministic)", async ({
     page,
   }) => {
-    await waitForFollowUpPage(page, FOLLOWUP_URL);
-    await startSurvey(page);
+    for (const fixture of ALL_FIXTURES) {
+      const url =
+        `/?fileid=${encodeURIComponent(fixture.file)}` +
+        `&patid=${encodeURIComponent(fixture.patient)}` +
+        `&visit=followup`;
+      // eslint-disable-next-line no-console
+      console.log(
+        `[followup-loop] starting ${fixture.patient}  (file=${fixture.file})`,
+      );
 
-    // Walk each survey section in order, hitting "Continue to Next
-    // Section" between sections to advance the wizard.
-    await completeSDM(page);
-    await goToNextStep(page);
-    await completeDCS(page);
-    await goToNextStep(page);
-    await completeRiskPerception(page);
-    await goToNextStep(page);
+      await waitForFollowUpPage(page, url);
+      await startSurvey(page);
 
-    // Final section — type the patient's free-form feedback. The
-    // string is the literal the user asked for; do not prefix it.
-    await completeSatisfaction(page, "Great experience.");
+      await completeSDM(page);
+      await goToNextStep(page);
+      await completeDCS(page);
+      await goToNextStep(page);
+      await completeRiskPerception(page);
+      await goToNextStep(page);
+      await completeSatisfaction(page, "Great experience.");
 
-    // Click the final "Complete Survey" button on the satisfaction
-    // step's footer (distinct from the per-section "Submit Feedback"
-    // button that completeSatisfaction already clicked).
-    const completeButton = page.getByRole("button", {
-      name: /Complete Survey/i,
-    });
-    await expect(completeButton).toBeEnabled({ timeout: 5_000 });
-    await completeButton.click();
+      const completeButton = page.getByRole("button", {
+        name: /Complete Survey/i,
+      });
+      await expect(completeButton).toBeEnabled({ timeout: 5_000 });
+      await completeButton.click();
 
-    // Final "Complete" step should render the Thank You confirmation.
-    await expect(
-      page.getByText("Complete").first(),
-    ).toBeVisible({ timeout: 5_000 });
-    await expect(
-      page.getByRole("heading", { name: /Thank You/i }),
-    ).toBeVisible({ timeout: 5_000 });
+      await expect(
+        page.getByText("Complete").first(),
+      ).toBeVisible({ timeout: 5_000 });
+      await expect(
+        page.getByRole("heading", { name: /Thank You/i }),
+      ).toBeVisible({ timeout: 5_000 });
+
+      // eslint-disable-next-line no-console
+      console.log(`[followup-loop] ✓ completed ${fixture.patient}`);
+    }
   });
 
-  test("backend has all 4 submission types after the full flow", async ({
-    page,
-  }) => {
+  test("backend records all 4 submission types for every seeded patient", async () => {
     test.skip(
       !API_KEY,
       "API_KEY not set — load app/Backend/.env.native or export E2E_API_KEY",
     );
 
-    await waitForFollowUpPage(page, FOLLOWUP_URL);
-    await startSurvey(page);
+    // GET /api/surveys/by-speaker/{speaker} per patient. After the
+    // UI loop above, all three patients must have all four survey
+    // types persisted. Asserts per-patient so a single missing
+    // submission identifies the offending fixture immediately.
+    for (const fixture of ALL_FIXTURES) {
+      const resp = await fetch(
+        `${API_BASE}/api/surveys/by-speaker/${encodeURIComponent(fixture.patient)}`,
+        { headers: AUTH_HEADERS },
+      );
+      expect(
+        resp.ok,
+        `GET surveys for ${fixture.patient} should return 200`,
+      ).toBe(true);
+      const body = (await resp.json()) as { survey_types: string[] };
 
-    await completeSDM(page);
-    await goToNextStep(page);
-    await completeDCS(page);
-    await goToNextStep(page);
-    await completeRiskPerception(page);
-    await goToNextStep(page);
-    await completeSatisfaction(page, "Great experience.");
-
-    // GET /api/surveys/by-speaker/{speaker} returns the list of
-    // survey types this speaker has submitted. After a full-flow
-    // run all four types must be present, otherwise the wizard
-    // didn't actually persist one (or more) of the steps.
-    const resp = await fetch(
-      `${API_BASE}/api/surveys/by-speaker/${encodeURIComponent(SPEAKER)}`,
-      { headers: AUTH_HEADERS },
-    );
-    expect(resp.ok).toBe(true);
-    const body = await resp.json();
-
-    expect(body.survey_types).toContain("sdm");
-    expect(body.survey_types).toContain("dcs");
-    expect(body.survey_types).toContain("risk_perception");
-    expect(body.survey_types).toContain("satisfaction");
+      for (const type of ["sdm", "dcs", "risk_perception", "satisfaction"]) {
+        expect(
+          body.survey_types,
+          `${fixture.patient} must have ${type} after the UI loop`,
+        ).toContain(type);
+      }
+    }
   });
 });
