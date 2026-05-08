@@ -267,16 +267,21 @@ export default function Home() {
   // rrweb session recording with PHI masking — Pattern A area-aware.
   // Start a new capture whenever the visible view/file changes; tag it with
   // the matching area so admin can filter recordings by interface.
+  // Doctor overview screens have no per-patient fileId, so for that area
+  // we record without one (the `file` column on session_recording is
+  // nullable). Patient views still require a fileId because their
+  // recordings are pinned to a specific patient submission.
   useEffect(() => {
-    if (currentView === "selection" || !fileId) return;
+    if (currentView === "selection") return;
     let area: "patient_first" | "patient_followup" | "doctor" | null = null;
     if (currentView === "doctor") area = "doctor";
     else if (currentView === "patient" && visitType === "first") area = "patient_first";
     else if (currentView === "patient" && visitType === "followup") area = "patient_followup";
     if (!area) return;
+    if (area !== "doctor" && !fileId) return;
     stopRecording(); // stop previous recording if any
     const sessionId = `rec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    startRecording(sessionId, fileId, area);
+    startRecording(sessionId, fileId || "", area);
     return () => { stopRecording(); };
   }, [currentView, fileId, visitType]);
 
