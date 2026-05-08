@@ -339,32 +339,6 @@ export const DecisionalConflictSurvey: React.FC<
 
   return (
     <div data-track-proximity="DCS_Survey">
-      {/* Header */}
-      <div className="mb-6">
-        <h3
-          className={cx(
-            "text-lg font-semibold mb-3",
-            isDark ? "text-teal-300" : "text-teal-700",
-          )}
-        >
-          Decisional Conflict Survey
-        </h3>
-        <p
-          className={cx(
-            "text-sm mb-2",
-            isDark ? "text-slate-300" : "text-gray-700",
-          )}
-        >
-          Below are some questions regarding your recent consultation with your doctor.
-        </p>
-        <p
-          className={cx("text-sm", isDark ? "text-slate-400" : "text-gray-600")}
-        >
-          Please select a response that best describes how you felt during the
-          appointment with your doctor.
-        </p>
-      </div>
-
       {/* Current Question */}
       <div className="mb-6">
         <LikertQuestion

@@ -645,24 +645,6 @@ export const SDMSurvey: React.FC<SDMSurveyProps> = ({
 
   return (
     <div data-track-proximity="SDM_Survey">
-      {/* Header */}
-      <div className="mb-6">
-        <h3
-          className={cx(
-            "text-lg font-semibold mb-2",
-            isDark ? "text-purple-300" : "text-purple-700",
-          )}
-        >
-          Shared Decision Making Survey
-        </h3>
-        <p
-          className={cx("text-sm", isDark ? "text-slate-400" : "text-gray-600")}
-        >
-          Please answer the following questions about your consultation
-          experience.
-        </p>
-      </div>
-
       {/* Current Question */}
       <div className="mb-6">
         {currentQuestion.type === "yesno" ? (

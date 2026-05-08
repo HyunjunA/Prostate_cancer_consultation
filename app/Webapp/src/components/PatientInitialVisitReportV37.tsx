@@ -891,12 +891,17 @@ const TopicCard: React.FC<TopicCardProps> = ({
   // are rendered directly below the AI Summary for this topic only. Other
   // topics ignore these state slots. Local state only; backend persistence
   // will be wired in a follow-up.
+  // Default to 50 (slider midpoint) so an untouched slider submits the
+  // value the patient actually saw — see Radix Slider's `value` prop on
+  // line ~1275 which falls back to 50 visually. Initializing state to
+  // null caused silent data loss (visible 50, persisted NULL) when the
+  // patient submitted without dragging.
   const [cpRiskWithoutTreatment, setCpRiskWithoutTreatment] = React.useState<
     number | null
-  >(null);
+  >(50);
   const [cpRiskWithTreatment, setCpRiskWithTreatment] = React.useState<
     number | null
-  >(null);
+  >(50);
   const [cpTimePeriod, setCpTimePeriod] = React.useState<string | null>(null);
 
   // [V37] Life Expectancy (Experimental arm) — two questions placed
@@ -921,7 +926,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
   // (3) Multi-select factor checklist (any subset of 5 factors).
   const [edBaselineReturn, setEdBaselineReturn] = React.useState<
     number | null
-  >(null);
+  >(50);
   const [edTimePeriod, setEdTimePeriod] = React.useState<string | null>(null);
   const [edFactors, setEdFactors] = React.useState<string[]>([]);
   const toggleEdFactor = (factor: string) => {
@@ -936,7 +941,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
   // (1) VAS 0-100 slider for the patient's understanding of their risk.
   // (2) Single-select radio across 5 timeline options.
   // (3) Multi-select factor checklist (any subset of 5 factors).
-  const [incRisk, setIncRisk] = React.useState<number | null>(null);
+  const [incRisk, setIncRisk] = React.useState<number | null>(50);
   const [incTimeline, setIncTimeline] = React.useState<string | null>(null);
   const [incFactors, setIncFactors] = React.useState<string[]>([]);
   const toggleIncFactor = (factor: string) => {
@@ -951,7 +956,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
   // (1) VAS 0-100 slider for risk of irritative lower urinary tract sx.
   // (2) Single-select radio across 5 timeline options.
   // (3) Multi-select factor checklist (any subset of 5 factors).
-  const [iusRisk, setIusRisk] = React.useState<number | null>(null);
+  const [iusRisk, setIusRisk] = React.useState<number | null>(50);
   const [iusTimeline, setIusTimeline] = React.useState<string | null>(null);
   const [iusFactors, setIusFactors] = React.useState<string[]>([]);
   const toggleIusFactor = (factor: string) => {
@@ -961,6 +966,14 @@ const TopicCard: React.FC<TopicCardProps> = ({
         : [...prev, factor],
     );
   };
+
+  // [V37] Per-domain Submit-time validation popup. VAS sliders default
+  // to 50 so they are always considered answered; factors are optional
+  // (zero is a valid response). Only the timeline radio is required.
+  const [incompleteDialog, setIncompleteDialog] = React.useState<{
+    open: boolean;
+    missing: string[];
+  }>({ open: false, missing: [] });
 
   // [V37] Hydrate the per-domain state slots from the server's last
   // persisted row exactly once — when prefill arrives non-null. Each
@@ -1044,10 +1057,47 @@ const TopicCard: React.FC<TopicCardProps> = ({
     }
   };
 
-  // [V37] Submit click handler — persist first, mark complete only on
-  // success. If onSave is not wired (test rigs / pages without backend
-  // access) fall back to the legacy local-only behaviour.
+  // [V37] Per-domain required-field check. Returns the user-facing
+  // labels of any unanswered required questions for the current domain.
+  // Sliders default to 50 (always considered answered); factors are
+  // optional (zero selections is a valid response). Only the timeline
+  // radio is required across every domain.
+  const getMissingRequired = (): string[] => {
+    switch (trackDomain) {
+      case "cp":
+        return cpTimePeriod
+          ? []
+          : ["Time period when you would expect to see the cancer prognosis"];
+      case "le":
+        return leProjectedLE ? [] : ["Your projected life expectancy"];
+      case "ed":
+        return edTimePeriod
+          ? []
+          : ["Time period for return to baseline erectile function"];
+      case "inc":
+        return incTimeline
+          ? []
+          : ["Time period for urinary incontinence to develop"];
+      case "ius":
+        return iusTimeline
+          ? []
+          : ["Time period for irritative urinary symptoms to develop"];
+      default:
+        return [];
+    }
+  };
+
+  // [V37] Submit click handler — validate first, then persist. On any
+  // missing required field, open the incomplete-questions popup and
+  // skip onSave entirely so nothing lands in the DB. If onSave is not
+  // wired (test rigs / pages without backend access) fall back to the
+  // legacy local-only behaviour.
   const handleSubmitClick = async () => {
+    const missing = getMissingRequired();
+    if (missing.length > 0) {
+      setIncompleteDialog({ open: true, missing });
+      return;
+    }
     if (!onSave) {
       onSubmit();
       return;
@@ -2665,6 +2715,78 @@ const TopicCard: React.FC<TopicCardProps> = ({
         </div>
         )}
       </div>
+
+      {/* [V37] Incomplete-questions popup. Only renders when validation
+          fails so it stays out of the layout flow otherwise. Plain
+          Tailwind modal (no Radix) — single-purpose, low ceremony.
+          Backdrop click and OK button both close the dialog; nothing
+          is persisted to the backend. */}
+      {incompleteDialog.open && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="v37-incomplete-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+          onClick={() => setIncompleteDialog({ open: false, missing: [] })}
+        >
+          <div
+            className={cx(
+              "w-full max-w-md rounded-2xl shadow-2xl p-6",
+              isDark
+                ? "bg-slate-900 border border-slate-700 text-slate-100"
+                : "bg-white border border-gray-200 text-gray-900",
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              id="v37-incomplete-title"
+              className="text-lg font-semibold mb-3"
+            >
+              Please complete all questions
+            </h3>
+            <p
+              className={cx(
+                "text-sm mb-3",
+                isDark ? "text-slate-300" : "text-gray-600",
+              )}
+            >
+              You haven&apos;t answered the following question
+              {incompleteDialog.missing.length > 1 ? "s" : ""} for this
+              section:
+            </p>
+            <ul
+              className={cx(
+                "list-disc pl-5 mb-4 text-sm space-y-1",
+                isDark ? "text-slate-200" : "text-gray-800",
+              )}
+            >
+              {incompleteDialog.missing.map((m) => (
+                <li key={m}>{m}</li>
+              ))}
+            </ul>
+            <p
+              className={cx(
+                "text-sm mb-5",
+                isDark ? "text-slate-300" : "text-gray-600",
+              )}
+            >
+              Please review the section and answer{" "}
+              {incompleteDialog.missing.length > 1 ? "them" : "it"} before
+              submitting.
+            </p>
+            <button
+              type="button"
+              autoFocus
+              className="w-full rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-4 py-2 transition-colors"
+              onClick={() =>
+                setIncompleteDialog({ open: false, missing: [] })
+              }
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

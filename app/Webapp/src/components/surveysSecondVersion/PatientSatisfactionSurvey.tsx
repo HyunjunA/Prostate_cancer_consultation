@@ -702,23 +702,6 @@ export const PatientSatisfactionSurvey: React.FC<
 
   return (
     <div data-track-proximity="PatientSatisfaction_Survey">
-      {/* Header */}
-      <div className="mb-6">
-        <h3
-          className={cx(
-            "text-lg font-semibold mb-2",
-            isDark ? "text-indigo-300" : "text-indigo-700",
-          )}
-        >
-          Patient Satisfaction Survey
-        </h3>
-        <p
-          className={cx("text-sm", isDark ? "text-slate-400" : "text-gray-600")}
-        >
-          {SATISFACTION_QUESTION_TEXT}
-        </p>
-      </div>
-
       {/* Free-form Feedback */}
       <div className="space-y-6">
         <FeedbackTextInput

@@ -462,11 +462,6 @@ export const RiskPerceptionSurvey: React.FC<RiskPerceptionSurveyProps> = ({
       ? answers[currentRadioQuestion.id as keyof RiskPerceptionAnswers] !== null
       : false;
 
-  const title =
-    variant === "pre"
-      ? "Pre-Consultation Risk Perception"
-      : "Post-Consultation Risk Perception";
-
   const handleNext = () => {
     if (currentQuestionIndex < totalQuestions - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
@@ -475,23 +470,6 @@ export const RiskPerceptionSurvey: React.FC<RiskPerceptionSurveyProps> = ({
 
   return (
     <div data-track-proximity="RiskPerception_Survey">
-      {/* Header */}
-      <div className="mb-6">
-        <h3
-          className={cx(
-            "text-lg font-semibold mb-2",
-            isDark ? "text-rose-300" : "text-rose-700",
-          )}
-        >
-          {title}
-        </h3>
-        <p
-          className={cx("text-sm", isDark ? "text-slate-400" : "text-gray-600")}
-        >
-          Please select the answer that best represents your understanding of
-          the risks.
-        </p>
-      </div>
 
       {/* Current Question */}
       <div className="mb-6">
