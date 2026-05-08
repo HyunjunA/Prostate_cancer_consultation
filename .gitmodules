@@ -1,4 +1,0 @@
-[submodule "AI_physician_patient_communication"]
-	path = AI_physician_patient_communication
-	url = https://github.com/HyunjunA/AI_physician_patient_communication.git
-	branch = feat/native-deployment
