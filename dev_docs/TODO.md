@@ -2,7 +2,28 @@
 
 > Consolidated list of outstanding items, organized by priority.  
 > Target: **Production level**  
-> Last updated: 2026-04-10
+> Last updated: 2026-05-08
+
+---
+
+## HIGH-priority schema items (defer-but-must-resolve)
+
+- [ ] **DB schema cleanup roadmap (9 items, LOW/MED/HIGH risk-tiered)** —
+      comprehensive audit on 2026-05-08 produced a graded TODO list with
+      per-item risk, effort, scope, mitigation, and trigger conditions.
+      Includes the `sentence_text` drop below plus dead-column audit,
+      auth-table limbo resolution, behavior-table consolidation, identifier
+      unification, BLOB-to-object-storage migration, and others. Full plan
+      at
+      `/Users/choih2/Documents/GitHub/Graciela_Lab_Collab/prostate_cancer_project/Prostate_cancer_consultation_dashboard/dev_docs/DB_SCHEMA_CLEANUP_TODO.md`.
+
+- [ ] **Drop `llm_pipeline_intermediate.sentence_text`** — derivable from
+      `context` via regex-strip of `<main>` markers; 100 % redundant
+      across all rows. Defer-but-must-resolve before the next
+      persistence-touching PR ships. Full investigation, impact map, and
+      step-by-step action plan in
+      `/Users/choih2/Documents/GitHub/Graciela_Lab_Collab/prostate_cancer_project/Prostate_cancer_consultation_dashboard/dev_docs/SCHEMA_CLEANUP_LPI_SENTENCE_TEXT.md`.
+      _Discovered 2026-05-08._
 
 ---
 
