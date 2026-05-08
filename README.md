@@ -10,18 +10,37 @@ Developed at Cedars-Sinai Medical Center as part of the R01 Prostate Cancer Comm
 
 ## Quick Start — Native Deployment (recommended)
 
-PostgreSQL / Redis / Backend run natively on the host; only NLP-classifiers and the webapp run in Docker.
+PostgreSQL / Redis / Backend run natively on the host; only NLP-classifiers and the webapp run in Docker. The two repos must already be cloned as siblings under a shared parent directory (see [`docs/setup/DEPLOYMENT_NATIVE.md`](docs/setup/DEPLOYMENT_NATIVE.md) for the clone commands).
 
 ```bash
-bash scripts/setup-native-mac.sh                      # one-time native deps
-cp app/Backend/.env.native.example app/Backend/.env.native   # then edit secrets
-bash scripts/init-db-native.sh                        # one-time DB bootstrap
-bash scripts/run-native.sh                            # start everything
+# 1. Install native dependencies (Postgres 16, Redis, R, Python venv, Node) — one-time
+bash scripts/setup-native-mac.sh
+
+# 2. Copy the .env.native templates — one-time
+cp app/Backend/.env.native.example app/Backend/.env.native
+cp app/Webapp/.env.native.example  app/Webapp/.env.native
+
+# 3. Edit app/Backend/.env.native and fill in at least:
+#      POSTGRES_PASSWORD, API_KEY, AZURE_OPENAI_API_KEY
+#    REDCAP_API_TOKEN is optional (without it, REDCap mirroring is skipped silently)
+nano app/Backend/.env.native
+
+# 4. Bootstrap the database (Postgres user + schema + alembic upgrade head) — one-time
+bash scripts/init-db-native.sh
+
+# 5. Drop one or more consultation .xlsx transcripts into the sibling AI repo's input dir
+mkdir -p ../AI_physician_patient_communication/data/input
+cp <your-transcript>.xlsx ../AI_physician_patient_communication/data/input/
+
+# 6. Start everything (NLP image load + webapp build + auto-pipeline + native backend)
+bash scripts/run-native.sh
+
+# 7. Verify in the browser
+#      http://localhost:3001       — Dashboard
+#      http://localhost:8000/docs  — API docs (Swagger)
 ```
 
-After startup:
-- Dashboard:  http://localhost:3001
-- API docs:   http://localhost:8000/docs
+Steps 1–4 only run on the first deployment; steps 5–7 are the daily-use loop. Skipping step 3 leaves the webapp container without an `API_KEY` (every API call will return 401), and skipping step 5 leaves `data/input/` empty so the auto-pipeline silently does nothing.
 
 **Full walkthrough**: [`docs/setup/DEPLOYMENT_NATIVE.md`](docs/setup/DEPLOYMENT_NATIVE.md) — covers prerequisites, the NLP OCI archive, the standalone pipeline runner (`scripts/run-pipeline-standalone.py`), DB verification helpers, and troubleshooting.
 
