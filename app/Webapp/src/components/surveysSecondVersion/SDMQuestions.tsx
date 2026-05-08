@@ -627,14 +627,31 @@ export const SDMSurvey: React.FC<SDMSurveyProps> = ({
   const isCurrentAnswered = currentAnswer !== null;
   const isLastQuestion = currentQuestionIndex === totalQuestions - 1;
 
+  // Per-question Next/Submit gate: button stays clickable so handleNext
+  // can show this popup when the patient hasn't answered yet. The grey
+  // visual styling below is kept as a cue — the popup is the explanation.
+  const [incompleteDialog, setIncompleteDialog] = React.useState(false);
+
   const formatQuestion = (text: string) =>
     text.replace(/\[intervention\]/g, interventionName);
 
   const handleNext = () => {
+    if (!isCurrentAnswered) {
+      setIncompleteDialog(true);
+      return;
+    }
     if (currentQuestionIndex < totalQuestions - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
       onProgressSave?.();
     }
+  };
+
+  const handleSubmitClick = () => {
+    if (!isCurrentAnswered) {
+      setIncompleteDialog(true);
+      return;
+    }
+    onSubmit?.();
   };
 
   const handlePrev = () => {
@@ -733,7 +750,6 @@ export const SDMSurvey: React.FC<SDMSurveyProps> = ({
         {!isLastQuestion ? (
           <button
             onClick={handleNext}
-            disabled={!isCurrentAnswered}
             className={cx(
               "px-6 py-3 rounded-lg text-sm font-semibold transition-all",
               isCurrentAnswered
@@ -741,8 +757,8 @@ export const SDMSurvey: React.FC<SDMSurveyProps> = ({
                   ? "bg-purple-700 text-purple-100 hover:bg-purple-600"
                   : "bg-purple-600 text-white hover:bg-purple-700"
                 : isDark
-                  ? "bg-slate-700 text-slate-500 cursor-not-allowed"
-                  : "bg-gray-300 text-gray-500 cursor-not-allowed",
+                  ? "bg-slate-700 text-slate-500"
+                  : "bg-gray-300 text-gray-500",
             )}
           >
             Next
@@ -750,8 +766,7 @@ export const SDMSurvey: React.FC<SDMSurveyProps> = ({
         ) : (
           onSubmit && (
             <button
-              onClick={onSubmit}
-              disabled={!isCurrentAnswered}
+              onClick={handleSubmitClick}
               data-track-proximity="SDM_Submit_Button"
               className={cx(
                 "px-8 py-3 rounded-lg text-sm font-semibold transition-all shadow-lg",
@@ -760,8 +775,8 @@ export const SDMSurvey: React.FC<SDMSurveyProps> = ({
                     ? "bg-purple-700 text-purple-100 hover:bg-purple-600 hover:shadow-xl"
                     : "bg-purple-600 text-white hover:bg-purple-700 hover:shadow-xl"
                   : isDark
-                    ? "bg-slate-700 text-slate-500 cursor-not-allowed"
-                    : "bg-gray-300 text-gray-500 cursor-not-allowed",
+                    ? "bg-slate-700 text-slate-500"
+                    : "bg-gray-300 text-gray-500",
               )}
             >
               Submit Responses
@@ -769,6 +784,49 @@ export const SDMSurvey: React.FC<SDMSurveyProps> = ({
           )
         )}
       </div>
+
+      {incompleteDialog && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="sdm-incomplete-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+          onClick={() => setIncompleteDialog(false)}
+        >
+          <div
+            className={cx(
+              "w-full max-w-md rounded-2xl shadow-2xl p-6",
+              isDark
+                ? "bg-slate-900 border border-slate-700 text-slate-100"
+                : "bg-white border border-gray-200 text-gray-900",
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              id="sdm-incomplete-title"
+              className="text-lg font-semibold mb-3"
+            >
+              Please answer this question
+            </h3>
+            <p
+              className={cx(
+                "text-sm mb-5",
+                isDark ? "text-slate-300" : "text-gray-600",
+              )}
+            >
+              Please select an answer before continuing to the next question.
+            </p>
+            <button
+              type="button"
+              autoFocus
+              className="w-full rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium px-4 py-2 transition-colors"
+              onClick={() => setIncompleteDialog(false)}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

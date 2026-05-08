@@ -700,6 +700,18 @@ export const PatientSatisfactionSurvey: React.FC<
   // Survey is complete when feedback text has content
   const isComplete = answers.feedbackText.trim().length > 0;
 
+  // Empty-feedback gate — keep button clickable so handleSubmitClick
+  // can show this popup; the gray styling stays as a visual cue.
+  const [incompleteDialog, setIncompleteDialog] = React.useState(false);
+
+  const handleSubmitClick = () => {
+    if (!isComplete) {
+      setIncompleteDialog(true);
+      return;
+    }
+    onSubmit?.();
+  };
+
   return (
     <div data-track-proximity="PatientSatisfaction_Survey">
       {/* Free-form Feedback */}
@@ -719,8 +731,7 @@ export const PatientSatisfactionSurvey: React.FC<
       {onSubmit && (
         <div className="mt-10 flex justify-center">
           <button
-            onClick={onSubmit}
-            disabled={!isComplete}
+            onClick={handleSubmitClick}
             data-track-proximity="Satisfaction_Submit_Button"
             className={cx(
               "px-8 py-4 rounded-lg text-lg font-semibold transition-all shadow-lg",
@@ -729,12 +740,56 @@ export const PatientSatisfactionSurvey: React.FC<
                   ? "bg-indigo-700 text-indigo-100 hover:bg-indigo-600 hover:shadow-xl"
                   : "bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-xl"
                 : isDark
-                  ? "bg-slate-700 text-slate-500 cursor-not-allowed"
-                  : "bg-gray-300 text-gray-500 cursor-not-allowed",
+                  ? "bg-slate-700 text-slate-500"
+                  : "bg-gray-300 text-gray-500",
             )}
           >
             {isComplete ? "Submit Feedback" : "Please enter feedback to submit"}
           </button>
+        </div>
+      )}
+
+      {incompleteDialog && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="satisfaction-incomplete-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+          onClick={() => setIncompleteDialog(false)}
+        >
+          <div
+            className={cx(
+              "w-full max-w-md rounded-2xl shadow-2xl p-6",
+              isDark
+                ? "bg-slate-900 border border-slate-700 text-slate-100"
+                : "bg-white border border-gray-200 text-gray-900",
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              id="satisfaction-incomplete-title"
+              className="text-lg font-semibold mb-3"
+            >
+              Please share your feedback
+            </h3>
+            <p
+              className={cx(
+                "text-sm mb-5",
+                isDark ? "text-slate-300" : "text-gray-600",
+              )}
+            >
+              Please enter your feedback in the text box above before
+              submitting the survey.
+            </p>
+            <button
+              type="button"
+              autoFocus
+              className="w-full rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-4 py-2 transition-colors"
+              onClick={() => setIncompleteDialog(false)}
+            >
+              OK
+            </button>
+          </div>
         </div>
       )}
     </div>
