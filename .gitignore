@@ -63,3 +63,11 @@ CLAUDE.md
 
 # Native deployment Python venv
 .venv/
+
+# Temporarily ignored 2026-05-08 — sibling clone at parent dir is the
+# canonical source. Was previously a submodule (commit 7e9063b) but the
+# duplication caused confusion and scripts only ever used the sibling
+# path ($REPO_ROOT/../AI_physician_patient_communication).
+# Re-evaluate when AI_physician_patient_communication path strategy is
+# finalised.
+AI_physician_patient_communication/
