@@ -324,11 +324,27 @@ export const DecisionalConflictSurvey: React.FC<
   const isCurrentAnswered = currentAnswer !== null;
   const isLastQuestion = currentQuestionIndex === totalQuestions - 1;
 
+  // Per-question Next/Submit gate — keep button clickable so handleNext
+  // can show this popup; the gray styling below stays as a visual cue.
+  const [incompleteDialog, setIncompleteDialog] = React.useState(false);
+
   const handleNext = () => {
+    if (!isCurrentAnswered) {
+      setIncompleteDialog(true);
+      return;
+    }
     if (currentQuestionIndex < totalQuestions - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
       onProgressSave?.();
     }
+  };
+
+  const handleSubmitClick = () => {
+    if (!isCurrentAnswered) {
+      setIncompleteDialog(true);
+      return;
+    }
+    onSubmit?.();
   };
 
   const handlePrev = () => {
@@ -409,7 +425,6 @@ export const DecisionalConflictSurvey: React.FC<
         {!isLastQuestion ? (
           <button
             onClick={handleNext}
-            disabled={!isCurrentAnswered}
             className={cx(
               "px-6 py-3 rounded-lg text-sm font-semibold transition-all",
               isCurrentAnswered
@@ -417,8 +432,8 @@ export const DecisionalConflictSurvey: React.FC<
                   ? "bg-teal-700 text-teal-100 hover:bg-teal-600"
                   : "bg-teal-600 text-white hover:bg-teal-700"
                 : isDark
-                  ? "bg-slate-700 text-slate-500 cursor-not-allowed"
-                  : "bg-gray-300 text-gray-500 cursor-not-allowed",
+                  ? "bg-slate-700 text-slate-500"
+                  : "bg-gray-300 text-gray-500",
             )}
           >
             Next
@@ -426,8 +441,7 @@ export const DecisionalConflictSurvey: React.FC<
         ) : (
           onSubmit && (
             <button
-              onClick={onSubmit}
-              disabled={!isCurrentAnswered}
+              onClick={handleSubmitClick}
               data-track-proximity="DCS_Submit_Button"
               className={cx(
                 "px-8 py-3 rounded-lg text-sm font-semibold transition-all shadow-lg",
@@ -436,8 +450,8 @@ export const DecisionalConflictSurvey: React.FC<
                     ? "bg-teal-700 text-teal-100 hover:bg-teal-600 hover:shadow-xl"
                     : "bg-teal-600 text-white hover:bg-teal-700 hover:shadow-xl"
                   : isDark
-                    ? "bg-slate-700 text-slate-500 cursor-not-allowed"
-                    : "bg-gray-300 text-gray-500 cursor-not-allowed",
+                    ? "bg-slate-700 text-slate-500"
+                    : "bg-gray-300 text-gray-500",
               )}
             >
               Submit Responses
@@ -445,6 +459,49 @@ export const DecisionalConflictSurvey: React.FC<
           )
         )}
       </div>
+
+      {incompleteDialog && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="dcs-incomplete-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+          onClick={() => setIncompleteDialog(false)}
+        >
+          <div
+            className={cx(
+              "w-full max-w-md rounded-2xl shadow-2xl p-6",
+              isDark
+                ? "bg-slate-900 border border-slate-700 text-slate-100"
+                : "bg-white border border-gray-200 text-gray-900",
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              id="dcs-incomplete-title"
+              className="text-lg font-semibold mb-3"
+            >
+              Please answer this question
+            </h3>
+            <p
+              className={cx(
+                "text-sm mb-5",
+                isDark ? "text-slate-300" : "text-gray-600",
+              )}
+            >
+              Please select an answer before continuing to the next question.
+            </p>
+            <button
+              type="button"
+              autoFocus
+              className="w-full rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-medium px-4 py-2 transition-colors"
+              onClick={() => setIncompleteDialog(false)}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
