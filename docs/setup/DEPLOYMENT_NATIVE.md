@@ -1,5 +1,28 @@
 # Native Deployment Guide
 
+> **Which branches to check out (fresh clones)**
+>
+> The instructions below assume both repos are checked out on the
+> branches that carry this refactor. If you are setting up from a
+> brand-new clone, use these explicitly — the default `main` on the
+> Ivan-owned upstream of the AI repo does not yet contain
+> `main_complete_pipeline_db.py`:
+>
+> - **AI repo** (`AI_physician_patient_communication`):
+>   `refactor/decouple-nlp-from-dashboard-runtime`
+> - **Dashboard repo** (`Prostate_cancer_consultation_dashboard`):
+>   `docs/fix-deployment-stale`
+>
+> ```bash
+> # AI repo
+> cd AI_physician_patient_communication
+> git checkout refactor/decouple-nlp-from-dashboard-runtime
+>
+> # Dashboard repo
+> cd ../Prostate_cancer_consultation_dashboard
+> git checkout docs/fix-deployment-stale
+> ```
+
 End-to-end instructions for deploying the project with **only two Docker
 containers** (NLP-classifiers + frontend webapp). Everything else
 (PostgreSQL, Redis, Backend FastAPI, AI Pipeline) runs as native
