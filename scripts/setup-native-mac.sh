@@ -88,7 +88,7 @@ export PATH="$BREW_PREFIX/opt/postgresql@16/bin:$PATH"
 # Pin postgres@16 to port 5433 to avoid the 5432 collision with system-wide
 # EDB-style installs (Postgres.app, /Library/PostgreSQL/*). Idempotent —
 # only appends `port = 5433` if the line is not already there. Matches the
-# default in app/Backend/.env.native.example so nothing else needs editing.
+# default in app/Backend/.env.example so nothing else needs editing.
 PG_CONF="$BREW_PREFIX/var/postgresql@16/postgresql.conf"
 if [[ -f "$PG_CONF" ]] && ! grep -q "^port = 5433" "$PG_CONF"; then
     echo "port = 5433" >> "$PG_CONF"
@@ -157,7 +157,7 @@ cat <<EOF
   100% identical to Michael's reference (R 4.5.1 + stringi 1.8.7 + ICU 74.2).
 
   Next steps:
-    1. cp app/Backend/.env.native.example app/Backend/.env.native
+    1. cp app/Backend/.env.example app/Backend/.env
        (then edit POSTGRES_PASSWORD, AZURE_OPENAI_*, API_KEY)
     2. bash scripts/init-db-native.sh     # bootstrap database
     3. bash scripts/run-frontend-backend.sh         # start everything

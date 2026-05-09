@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-ENV_FILE = REPO_ROOT / "app" / "Backend" / ".env.native"
+ENV_FILE = REPO_ROOT / "app" / "Backend" / ".env"
 
 try:
     from dotenv import load_dotenv

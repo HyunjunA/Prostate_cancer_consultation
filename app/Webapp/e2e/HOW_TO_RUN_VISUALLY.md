@@ -38,7 +38,7 @@ modes documented here are strictly for human eyes.
      --file /path/to/sample.xlsx
    ```
 
-4. **`.env.native` should hold the real `API_KEY`.** The Playwright
+4. **`.env` should hold the real `API_KEY`.** The Playwright
    `globalSetup` (`e2e/global-setup.ts`) loads it into
    `process.env` automatically; the backend round-trip checks
    skip themselves if it's missing.

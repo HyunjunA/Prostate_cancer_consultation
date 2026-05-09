@@ -8,7 +8,7 @@
 #
 #  Steps:
 #    1. Source the venv
-#    2. Load app/Backend/.env.native into the environment
+#    2. Load app/Backend/.env into the environment
 #    3. Run scripts/preflight-native.sh (ICU, DB, redis, alembic)
 #    4. exec uvicorn (or gunicorn in production-like mode)
 #
@@ -25,7 +25,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BACKEND_DIR="$REPO_ROOT/app/Backend"
 VENV_DIR="$REPO_ROOT/.venv"
-ENV_FILE="$BACKEND_DIR/.env.native"
+ENV_FILE="$BACKEND_DIR/.env"
 
 # ── Defaults / arg parsing ──────────────────────────────────────────────────
 WORKERS=3
@@ -63,7 +63,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ── Sanity ──────────────────────────────────────────────────────────────────
-[[ -f "$ENV_FILE" ]] || { echo "✗ $ENV_FILE not found — copy from .env.native.example" >&2; exit 1; }
+[[ -f "$ENV_FILE" ]] || { echo "✗ $ENV_FILE not found — copy from .env.example" >&2; exit 1; }
 [[ -d "$VENV_DIR" ]] || { echo "✗ Python venv missing at $VENV_DIR — run setup-native-{mac,linux}.sh" >&2; exit 1; }
 
 # ── Load env (POSTGRES_*, AZURE_*, NLP_API_URL, PORT, ...) ──────────────────

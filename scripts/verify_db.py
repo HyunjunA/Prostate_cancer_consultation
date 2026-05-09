@@ -2,7 +2,7 @@
 
 Mirrors app/Backend/verify_pipeline_db.py but runs as a plain Python
 script (no Backend startup needed). Reads DATABASE_URL from
-app/Backend/.env.native and runs the same 7 checks per analysis.
+app/Backend/.env and runs the same 7 checks per analysis.
 
 Usage:
     source .venv/bin/activate
@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-ENV_FILE = REPO_ROOT / "app" / "Backend" / ".env.native"
+ENV_FILE = REPO_ROOT / "app" / "Backend" / ".env"
 
 # Load env BEFORE importing sqlalchemy (asyncpg URL must be set)
 try:

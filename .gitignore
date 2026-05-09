@@ -50,9 +50,10 @@ archive/
 # PDF build scratch dirs
 docs/architecture/_build_pdf/
 
-# Native deployment env files (host-local credentials, never committed)
+# Native deployment env files were renamed to .env / .env.example
+# (matched by the .env / .env.* rules higher up). The legacy *.native
+# pattern is kept to suppress any leftover dotfile from old branches.
 *.native
-.env.native
 
 # Claude Code evaluation harness (local-only test/eval tooling)
 .harness/

@@ -24,7 +24,7 @@ plus the Actions tab in the repo UI.
 
 ## What you do once to enable nightly e2e secrets
 
-The nightly workflow reads the same env names as `.env.native`. Add
+The nightly workflow reads the same env names as `.env`. Add
 each as a GitHub Actions secret if you want the corresponding test
 path to run:
 

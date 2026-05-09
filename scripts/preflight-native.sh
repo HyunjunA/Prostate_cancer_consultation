@@ -25,7 +25,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BACKEND_DIR="$REPO_ROOT/app/Backend"
 VENV_DIR="$REPO_ROOT/.venv"
-ENV_FILE="$BACKEND_DIR/.env.native"
+ENV_FILE="$BACKEND_DIR/.env"
 
 # ── Pretty print ────────────────────────────────────────────────────────────
 section() { echo ""; echo "===  $1"; }
@@ -34,7 +34,7 @@ warn()    { echo "  ⚠ $1"; }
 fail()    { echo "  ✗ $1" >&2; exit 1; }
 
 # ── Step 0: Sanity ──────────────────────────────────────────────────────────
-[[ -f "$ENV_FILE" ]] || fail "$ENV_FILE not found — copy from .env.native.example"
+[[ -f "$ENV_FILE" ]] || fail "$ENV_FILE not found — copy from .env.example"
 [[ -d "$VENV_DIR" ]] || fail "Python venv missing at $VENV_DIR — run setup-native-{mac,linux}.sh"
 
 set -a

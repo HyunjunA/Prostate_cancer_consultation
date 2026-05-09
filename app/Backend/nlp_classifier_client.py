@@ -374,9 +374,12 @@ async def predict_all_models(text: str) -> Dict[str, Any]:
 async def nlp_health_check() -> Dict[str, Any]:
     """Check if the NLP service is reachable (via /ping).
 
-    Used by routes_system.py /health and routes_nlp.py /health. Stays
-    cheap (5-second timeout, no retry) so frequent probes never tie up
-    the NLP container.
+    Used by routes_nlp.py's dedicated /api/nlp/health proxy. The
+    dashboard's main /health (routes_system.py) does NOT call this —
+    NLP is owned by the AI repo (Phase A) and the dashboard backend
+    does not depend on the container at request time. Stays cheap
+    (5-second timeout, no retry) so frequent probes never tie up the
+    NLP container.
     """
     client = _get_client()
     try:

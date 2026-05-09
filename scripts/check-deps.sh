@@ -15,11 +15,11 @@ set -uo pipefail   # NOTE: no -e — keep checking after a failure
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 VENV_DIR="$REPO_ROOT/.venv"
-ENV_FILE="$REPO_ROOT/app/Backend/.env.native"
+ENV_FILE="$REPO_ROOT/app/Backend/.env"
 
-# Pull POSTGRES_HOST/PORT, REDIS_HOST/PORT from .env.native if present so the
+# Pull POSTGRES_HOST/PORT, REDIS_HOST/PORT from .env if present so the
 # checks below probe the same endpoints the actual stack uses (5433 / 6379 by
-# default — see .env.native.example). Falls back to project defaults when the
+# default — see .env.example). Falls back to project defaults when the
 # env file does not exist yet (e.g. running check-deps.sh before configure).
 if [[ -f "$ENV_FILE" ]]; then
     set -a

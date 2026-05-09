@@ -87,14 +87,16 @@ async def client(db, monkeypatch):
     # source module does not retroactively rewrite — each binding is its
     # own reference. raising=False is safe for consumers that may have
     # since refactored to call through the module.
+    #
+    # routes_system used to import nlp_health_check too, but no longer
+    # does — the dashboard /health intentionally does not probe NLP.
+    # Only the dedicated /api/nlp/health proxy in routes_nlp uses it.
     import nlp_classifier_client
     import main as main_module
-    import routes_system
     async def _mock_nlp_health():
         return {"status": "healthy", "detail": "mocked"}
     monkeypatch.setattr(nlp_classifier_client, "nlp_health_check", _mock_nlp_health)
     monkeypatch.setattr(main_module, "nlp_health_check", _mock_nlp_health, raising=False)
-    monkeypatch.setattr(routes_system, "nlp_health_check", _mock_nlp_health, raising=False)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:

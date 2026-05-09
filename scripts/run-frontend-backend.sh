@@ -65,24 +65,24 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ── 0. Sanity ──────────────────────────────────────────────────────────────
-if [[ ! -f app/Backend/.env.native ]]; then
-    echo "✗ app/Backend/.env.native missing — copy from .env.native.example" >&2
+if [[ ! -f app/Backend/.env ]]; then
+    echo "✗ app/Backend/.env missing — copy from .env.example" >&2
     exit 1
 fi
 
-if [[ ! -f app/Webapp/.env.native && $BACKEND_ONLY -eq 0 ]]; then
-    warn "app/Webapp/.env.native missing — copying from .example"
-    cp app/Webapp/.env.native.example app/Webapp/.env.native
+if [[ ! -f app/Webapp/.env && $BACKEND_ONLY -eq 0 ]]; then
+    warn "app/Webapp/.env missing — copying from .example"
+    cp app/Webapp/.env.example app/Webapp/.env
 fi
 
 # Export the env vars docker-compose-frontend.yml interpolates (e.g. `${API_KEY}`).
 # Without this, compose substitutes empty strings — webapp boots without an
 # API key and every backend call fails (manifests in the UI as
 # "No patients found" / "Loading...").
-if [[ -f app/Backend/.env.native ]]; then
+if [[ -f app/Backend/.env ]]; then
     set -a
     # shellcheck disable=SC1091
-    source app/Backend/.env.native
+    source app/Backend/.env
     set +a
 fi
 

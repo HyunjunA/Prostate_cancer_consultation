@@ -24,10 +24,10 @@ if [[ ! -x "$PTW" ]]; then
 fi
 
 # Source the dev env so tests find DATABASE_URL etc.
-if [[ -f "$BACKEND_DIR/.env.native" ]]; then
+if [[ -f "$BACKEND_DIR/.env" ]]; then
     set -a
     # shellcheck disable=SC1090
-    source "$BACKEND_DIR/.env.native"
+    source "$BACKEND_DIR/.env"
     set +a
 fi
 

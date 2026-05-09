@@ -326,7 +326,7 @@ The codebase uses Alembic (versions in `app/Backend/migrations/versions/`). The 
 | FK violation when patient row missing | V37 does not render without an existing `patient_summary`; if it ever does, the API rejects cleanly. |
 | Factor whitelist drift between webapp and Pydantic | Integration test enforces the two lists match. |
 | Migration applied without backend/webapp changes | The PR ships all three together as one unit. |
-| `API_KEY` env unset on webapp container start | Recreate the webapp with `export API_KEY=$(grep '^API_KEY=' app/Backend/.env.native | cut -d= -f2)` first. |
+| `API_KEY` env unset on webapp container start | Recreate the webapp with `export API_KEY=$(grep '^API_KEY=' app/Backend/.env | cut -d= -f2)` first. |
 
 ---
 

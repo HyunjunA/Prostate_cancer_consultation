@@ -38,7 +38,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth import get_current_user
 from auth.base import AuthUser
 from db import db_ready_ping, get_db
-from nlp_classifier_client import nlp_health_check
 from redis_client import get_redis
 
 # A single router — main.py picks it up via `app.include_router(system_router)`.
@@ -67,7 +66,7 @@ async def root(user: AuthUser = Depends(get_current_user)):
 
 @router.get("/health")
 async def health_check(db: AsyncSession = Depends(get_db)):
-    """Liveness probe — checks DB, Redis, NLP. No API key required.
+    """Liveness probe — checks DB and Redis. No API key required.
 
     Returns 200 with a per-component status map when the process is
     healthy enough to keep running. Returns 503 (Service Unavailable)
@@ -76,9 +75,16 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     is reported but does NOT trigger 503, because the backend keeps
     working (uncached) when Redis is gone.
 
+    The NLP classifier container is intentionally NOT probed here. The
+    AI pipeline repo (Phase A) owns that container's lifecycle, and the
+    dashboard backend (Phase B) does not call it at request time — the
+    webapp reads pipeline results from the database, not from the NLP
+    service. Reporting NLP status from this endpoint would surface a
+    component that this process does not actually depend on.
+
     Response shape on success:
         {"status": "healthy",
-         "components": {"database": "healthy", "redis": "...", "nlp": "..."}}
+         "components": {"database": "healthy", "redis": "..."}}
     """
     # Build the components dict incrementally so even partial failures
     # produce a useful response body for the operator.
@@ -110,13 +116,6 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     else:
         components["redis"] = "disabled"
 
-    # ── NLP service ─────────────────────────────────────────────────
-    # nlp_health_check() returns a dict like {"status": "healthy"}
-    # already — it's centralised in nlp_classifier_client so other
-    # callers (admin endpoints, batch jobs) get the same probe logic.
-    nlp_status = await nlp_health_check()
-    components["nlp"] = nlp_status["status"]
-
     # Final verdict. Only DB drives the 503 — see docstring for why.
     overall = "healthy" if components["database"] == "healthy" else "unhealthy"
     if overall != "healthy":
@@ -135,9 +134,9 @@ async def ready():
     """Readiness probe — cheap "can I serve traffic?" check.
 
     Deliberately lighter than /health: it only pings the DB and skips
-    Redis/NLP. The reason is that readiness probes run very frequently
-    (every few seconds in k8s) and we do not want them hammering the
-    NLP container with health pings.
+    Redis. Readiness probes run very frequently (every few seconds in
+    k8s), so we keep the work to the single dependency that actually
+    blocks request serving.
     """
     # db_ready_ping() returns True/False — we just forward it. Anything
     # more nuanced belongs in /health.

@@ -38,7 +38,7 @@ services:
       dockerfile: Dockerfile
     container_name: prostatecancer-webapp-native
     env_file:
-      - app/Webapp/.env.native       # NEXT_PUBLIC_API_URL=http://host.docker.internal:8000
+      - app/Webapp/.env       # NEXT_PUBLIC_API_URL=http://host.docker.internal:8000
     environment:
       NODE_ENV: production
       # Server-only env vars (host.docker.internal lets the container reach

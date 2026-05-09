@@ -123,7 +123,7 @@ Each domain has its own RF classifier (in NLP container) and its own LLM extract
 
 ## Environment configuration
 
-All secrets in `app/Backend/.env.native` (or `.env` for Docker mode). Pipeline I/O paths default to the sibling AI repo:
+All secrets in `app/Backend/.env` (or `.env` for Docker mode). Pipeline I/O paths default to the sibling AI repo:
 
 ```
 DATABASE_URL=postgresql+asyncpg://prostatecancer_user:***@localhost:5433/prostatecancer_db_native
@@ -136,7 +136,7 @@ REDCAP_API_URL=https://iredcap.csmc.edu/api/   # optional
 REDCAP_API_TOKEN=...                           # optional
 ```
 
-`.env.native.example` ships the full template.
+`.env.example` ships the full template.
 
 ---
 
