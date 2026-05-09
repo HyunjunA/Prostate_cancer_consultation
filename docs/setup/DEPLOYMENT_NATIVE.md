@@ -5,8 +5,14 @@ containers** (NLP-classifiers + frontend webapp). Everything else
 (PostgreSQL, Redis, Backend FastAPI, AI Pipeline) runs as native
 processes on the host.
 
-The existing Docker mode (`docker compose up -d`) keeps working
-unchanged — see [`DEPLOYMENT_MODES.md`](DEPLOYMENT_MODES.md).
+The deployment is split into two phases that can be operated
+independently:
+  - **Phase A** — process transcripts: requires the NLP container,
+    runs `main_complete_pipeline_db.py` in the sibling AI repo, writes
+    results to PostgreSQL. Operator-driven.
+  - **Phase B** — serve the dashboard: webapp container + native
+    backend, reads from PostgreSQL, never calls the NLP container at
+    request time.
 
 ---
 
@@ -284,7 +290,7 @@ bash scripts/init-db-native.sh
 ```
 
 Creates the role + database, applies `app/Backend/database_schema.sql`,
-then runs `alembic upgrade head` (migrations 001–009). Verifies the 18
+then runs `alembic upgrade head` (migrations 001–010). Verifies the 19
 expected tables are present.
 
 ### 4. (Optional) Sanity check
@@ -310,7 +316,7 @@ The script + compose file backing Phase A live in the AI repo:
 | `docker-compose-ai-nlp-pipeline.yml` | NLP container lifecycle |
 | `nlp-classifiers/r01-nlp-classifiers-docker-image/` | OCI archive (image source) |
 
-Phase A reads its DB credentials from this dashboard repo's `app/Backend/.env`, so the dashboard's [One-time setup](#one-time-setup) must already be done before Phase A can write to the database.
+Phase A reads its DB credentials from the AI repo's own `.env` (set up in Step 2b above) — that file holds the same `DATABASE_URL` value as the dashboard's `.env`, so both phases write to and read from the same database. The dashboard's [One-time setup](#one-time-setup) must still be done before Phase A can write to the database (it is what creates the schema in Step 3).
 
 ### Place input transcripts
 
@@ -437,21 +443,21 @@ The Phase A NLP container (if you left it running from a previous pipeline run) 
 
 ---
 
-## Stopping / switching modes
+## Stopping the dashboard
 
 ```bash
-# Stop native mode
-Ctrl-C                                                  # backend
-docker compose -f docker-compose-frontend.yml down       # NLP + webapp
-
-# Switch to Docker mode
-bash scripts/run-docker.sh up                            # full Docker stack
+Ctrl-C                                                  # stops the backend
+docker compose -f docker-compose-frontend.yml down       # stops the webapp container
 ```
 
-Native and Docker modes use **different Postgres ports** (native 5433
-vs Docker 5432) so the data does not overlap. Other ports
-(8000 backend, 3001 webapp, 6379 redis) collide — bring up only one
-mode at a time.
+The Phase A NLP container — if you left it running after a previous
+pipeline run — is owned by the AI repo's compose file and is not
+touched by either of the commands above. To stop it explicitly:
+
+```bash
+cd ../AI_physician_patient_communication
+docker compose -f docker-compose-ai-nlp-pipeline.yml down
+```
 
 ---
 
@@ -463,7 +469,7 @@ mode at a time.
 | Redis fails to bind :6379 | Some VS Code / Cursor extension is squatting on :6379 | `lsof -nP -iTCP:6379 -sTCP:LISTEN` to find the PID, `kill <pid>`, redis will pick up the port on next bootstrap |
 | `init-db-native.sh`: peer auth fails | Mac postgres uses OS user as superuser | Script auto-detects; if it still fails, run `createdb $(whoami)` first |
 | `init-db-native.sh`: CHANGE_ME error | placeholder still in `.env` | edit `POSTGRES_PASSWORD` |
-| Backend starts but `/health` says nlp=unhealthy | The NLP container is not running. This is harmless for Phase B — the dashboard does not call NLP at request time — but it means a fresh Phase A run cannot start until you bring NLP back up. | Run a Phase A pipeline (which starts NLP automatically), or bring the NLP container up directly: `cd ../AI_physician_patient_communication && docker compose -f docker-compose-ai-nlp-pipeline.yml up -d`. |
+| Phase A fails on Step 2 with `docker exec` / NLP-segmentation errors | The NLP container is not running. Phase A's `main_complete_pipeline_db.py` brings it up automatically by default; this only happens if you passed `--skip-nlp-startup` and never started the container. | Re-run without `--skip-nlp-startup`, or bring the NLP container up directly: `cd ../AI_physician_patient_communication && docker compose -f docker-compose-ai-nlp-pipeline.yml up -d`. The dashboard's `/health` does NOT report NLP status (Phase A owns that container), so do not look for an `nlp=...` field there. |
 | Webapp loads but UI shows "No patients found" | webapp container booted with empty `API_KEY` (compose interpolated `${API_KEY}` to empty) | confirm `.env` is sourced before `docker compose up`; `run-frontend-backend.sh` does this automatically |
 | Standalone script: `No module named 'greenlet'` | sqlalchemy async lazy-imports greenlet | `.venv/bin/pip install greenlet` (already pinned in requirements.txt as of `1e3de47`) |
 | Webapp UI shows "No patients found" AND `curl /health` returns 500 AND `curl /docs` returns 200 | uvicorn workers have a stale module cache — sqlalchemy registered `_not_implemented` for greenlet at module-load time (before `pip install greenlet`). The pip install only helps brand-new Python processes; running workers keep the failed resolution. | **Restart uvicorn** (Ctrl-C the foreground process, then `bash scripts/run-backend.sh` again). General rule: after **any** `pip install` / `pip upgrade` against a venv whose uvicorn is already running, restart all workers. Pinning deps in `requirements.txt` prevents this scenario for fresh setups. |
@@ -493,13 +499,16 @@ The deployment is split across two repos that mirror the data flow:
 └─ webapp            :3001  (Next.js, started via docker-compose-frontend.yml)
 
 Webapp(Docker)   ──host.docker.internal:8000──→ Backend(native)
-Backend(native)  ──localhost:8888──────────────→ NLP(Docker)
 Backend(native)  ──localhost:5433──────────────→ Postgres(native)
 Pipeline(native) ──localhost:5433──────────────→ Postgres(native)
 Pipeline(native) ──localhost:8888──────────────→ NLP(Docker)
 Pipeline(native) ──docker exec────────────────→ NLP(Docker)  [stringi]
 ```
 
-See [`DEPLOYMENT_MODES.md`](DEPLOYMENT_MODES.md) for choosing between
-Docker and Native, and [`PIPELINE_DB_FLOW.md`](PIPELINE_DB_FLOW.md) for
-the per-stage data flow into PostgreSQL.
+The dashboard backend used to also call the NLP container at
+`localhost:8888`, but that path was removed when the orchestration
+moved to the AI repo — Phase B's request handlers read from Postgres
+only.
+
+For the per-stage data flow into PostgreSQL (which step writes which
+columns), see [`../ml-pipeline/ML_PIPELINE.md`](../ml-pipeline/ML_PIPELINE.md).
