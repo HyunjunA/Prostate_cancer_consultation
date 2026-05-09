@@ -11,7 +11,7 @@
 #
 #  Prerequisites:
 #    1. bash scripts/setup-native-mac.sh        (or setup-native-linux.sh)
-#    2. cp app/Backend/.env.native.example app/Backend/.env.native
+#    2. cp app/Backend/.env.example app/Backend/.env
 #       (then edit POSTGRES_PASSWORD etc.)
 #
 #  Usage:
@@ -25,7 +25,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BACKEND_DIR="$REPO_ROOT/app/Backend"
 VENV_DIR="$REPO_ROOT/.venv"
-ENV_FILE="$BACKEND_DIR/.env.native"
+ENV_FILE="$BACKEND_DIR/.env"
 
 cd "$REPO_ROOT"
 
@@ -39,8 +39,8 @@ fail()    { echo "  ✗ $1" >&2; exit 1; }
 section "Step 0: Sanity checks"
 
 if [[ ! -f "$ENV_FILE" ]]; then
-    fail "$ENV_FILE not found. Copy from .env.native.example and fill in values:
-       cp app/Backend/.env.native.example app/Backend/.env.native"
+    fail "$ENV_FILE not found. Copy from .env.example and fill in values:
+       cp app/Backend/.env.example app/Backend/.env"
 fi
 
 if [[ ! -d "$VENV_DIR" ]]; then
@@ -216,7 +216,7 @@ cat <<EOF
     psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DB -c "\\dt"
 
   Next steps:
-    bash scripts/run-backend-native.sh           # start native FastAPI
-    python scripts/run-pipeline-standalone.py    # standalone pipeline run
+    bash scripts/run-backend.sh           # start native FastAPI
+    python scripts/run-ai-nlp-pipeline.py    # standalone pipeline run
 
 EOF

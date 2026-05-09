@@ -14,7 +14,7 @@ modes documented here are strictly for human eyes.
 
 1. **Run the full stack locally.** The specs hit a real backend at
    `:8000` and a real Webapp at `:3000` (or `:3001` behind nginx —
-   pick one). Easiest way: `bash scripts/run-native.sh` from the
+   pick one). Easiest way: `bash scripts/run-frontend-backend.sh` from the
    repo root, which spins up Postgres, Redis, the NLP container,
    the FastAPI backend, and the Webapp in dev mode.
 
@@ -34,11 +34,11 @@ modes documented here are strictly for human eyes.
    pipeline once on any sample transcript:
 
    ```bash
-   .venv/bin/python scripts/run-pipeline-standalone.py \
+   .venv/bin/python scripts/run-ai-nlp-pipeline.py \
      --file /path/to/sample.xlsx
    ```
 
-4. **`.env.native` should hold the real `API_KEY`.** The Playwright
+4. **`.env` should hold the real `API_KEY`.** The Playwright
    `globalSetup` (`e2e/global-setup.ts`) loads it into
    `process.env` automatically; the backend round-trip checks
    skip themselves if it's missing.

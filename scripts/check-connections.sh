@@ -15,7 +15,7 @@ set -uo pipefail   # no -e — keep checking after a failure
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-ENV_FILE="$REPO_ROOT/app/Backend/.env.native"
+ENV_FILE="$REPO_ROOT/app/Backend/.env"
 VENV_DIR="$REPO_ROOT/.venv"
 
 GREEN="\033[92m"; RED="\033[91m"; YELLOW="\033[93m"; BOLD="\033[1m"; RESET="\033[0m"
@@ -25,7 +25,7 @@ fail() { echo -e "  ${RED}[FAIL]${RESET} $1"; FAIL=$((FAIL+1)); }
 warn() { echo -e "  ${YELLOW}[WARN]${RESET} $1"; }
 
 if [[ ! -f "$ENV_FILE" ]]; then
-    fail ".env.native missing — copy from .env.native.example"
+    fail ".env missing — copy from .env.example"
     exit 1
 fi
 
@@ -69,7 +69,7 @@ if curl -sf -m 3 "${NLP_URL}/ping" >/dev/null 2>&1; then
 elif curl -sf -m 3 "${NLP_URL}/" >/dev/null 2>&1; then
     pass "NLP classifiers reachable at $NLP_URL (no /ping endpoint)"
 else
-    fail "NLP NOT reachable at $NLP_URL — start Docker: docker compose -f docker-compose-minimal.yml up -d"
+    fail "NLP NOT reachable at $NLP_URL — start Docker: docker compose -f docker-compose-frontend.yml up -d"
 fi
 echo ""
 

@@ -50,9 +50,10 @@ archive/
 # PDF build scratch dirs
 docs/architecture/_build_pdf/
 
-# Native deployment env files (host-local credentials, never committed)
+# Native deployment env files were renamed to .env / .env.example
+# (matched by the .env / .env.* rules higher up). The legacy *.native
+# pattern is kept to suppress any leftover dotfile from old branches.
 *.native
-.env.native
 
 # Claude Code evaluation harness (local-only test/eval tooling)
 .harness/
@@ -63,3 +64,11 @@ CLAUDE.md
 
 # Native deployment Python venv
 .venv/
+
+# Temporarily ignored 2026-05-08 — sibling clone at parent dir is the
+# canonical source. Was previously a submodule (commit 7e9063b) but the
+# duplication caused confusion and scripts only ever used the sibling
+# path ($REPO_ROOT/../AI_physician_patient_communication).
+# Re-evaluate when AI_physician_patient_communication path strategy is
+# finalised.
+AI_physician_patient_communication/

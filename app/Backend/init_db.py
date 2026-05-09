@@ -24,8 +24,9 @@ Idempotency:
     migrations/versions/.
 
 Data population:
-    Out of scope. Real data flows in via pipeline_runner.py (transcript
-    -> NLP -> scoring -> DB), not via this bootstrap script.
+    Out of scope. Real data flows in via the AI repo's
+    main_complete_pipeline_db.py (transcript → NLP → AI scoring → DB),
+    not via this bootstrap script.
 
 Usage:
     python init_db.py          # Create all tables
@@ -128,7 +129,7 @@ async def main():
 
     print("\n" + "=" * 60)
     print("[OK] Database initialization completed!")
-    print("   Data population: run pipeline_runner.py with real transcripts")
+    print("   Data population: run main_complete_pipeline_db.py (in the AI repo) with real transcripts")
     print("=" * 60 + "\n")
 
 

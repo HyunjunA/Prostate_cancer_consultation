@@ -15,11 +15,11 @@ set -uo pipefail   # NOTE: no -e — keep checking after a failure
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 VENV_DIR="$REPO_ROOT/.venv"
-ENV_FILE="$REPO_ROOT/app/Backend/.env.native"
+ENV_FILE="$REPO_ROOT/app/Backend/.env"
 
-# Pull POSTGRES_HOST/PORT, REDIS_HOST/PORT from .env.native if present so the
+# Pull POSTGRES_HOST/PORT, REDIS_HOST/PORT from .env if present so the
 # checks below probe the same endpoints the actual stack uses (5433 / 6379 by
-# default — see .env.native.example). Falls back to project defaults when the
+# default — see .env.example). Falls back to project defaults when the
 # env file does not exist yet (e.g. running check-deps.sh before configure).
 if [[ -f "$ENV_FILE" ]]; then
     set -a
@@ -136,7 +136,7 @@ if command -v docker >/dev/null 2>&1; then
             fail "docker exec stringi probe failed"
         fi
     else
-        warn "NLP container '$NLP_CONTAINER' not running — segmentation will fail until you start it (bash scripts/run-native.sh)"
+        warn "NLP container '$NLP_CONTAINER' not running — segmentation will fail until you start it (bash scripts/run-frontend-backend.sh)"
     fi
 else
     fail "Docker not installed — required for NLP-classifiers + webapp containers"
@@ -151,7 +151,7 @@ if [[ "$FAIL_COUNT" -eq 0 ]]; then
     echo ""
     echo "  Native environment is ready. Next:"
     echo "    bash scripts/init-db-native.sh    # bootstrap database (if not done)"
-    echo "    bash scripts/run-native.sh        # start everything"
+    echo "    bash scripts/run-frontend-backend.sh        # start everything"
     exit 0
 else
     echo -e "  ${RED}${BOLD}FAIL${RESET}  $PASS_COUNT/$TOTAL passed, $FAIL_COUNT failed"

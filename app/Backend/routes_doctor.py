@@ -34,7 +34,8 @@ Related modules:
     models.py        : DoctorRewriteLog, PatientSummary, PatientSummaryDomain
     routes_patient.py: patient-side equivalent
     persistence.py   : shared DB query helpers
-    nlp_classifier_client.py : on-the-fly /score-sentence path
+    /score-sentence  : calls Azure OpenAI directly (via the AI repo's
+                       ai_pipeline.llm); does not touch the NLP container.
 """
 
 import logging

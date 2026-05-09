@@ -1,8 +1,8 @@
 """FastAPI lifespan context — startup/shutdown hooks.
 
 Extracted from main.py per CR #1 (Thin Main): main.py should orchestrate
-the app, not contain runtime logic. Init/teardown of Redis, the NLP
-HTTP client, and the rate limiter all live here.
+the app, not contain runtime logic. Init/teardown of Redis and the
+rate limiter live here.
 
 What "lifespan" means in FastAPI:
     A lifespan is an async context manager that FastAPI runs once when
@@ -20,10 +20,15 @@ Why each piece is here:
                        in try/except because rate limiting is a "nice
                        to have" — Redis being down should disable
                        limiting, not crash the whole backend.
-    - close_http_client / close_redis : graceful shutdown so we don't
-                       leak sockets or leave Redis pools open when
-                       uvicorn is told to stop (e.g. SIGTERM during a
-                       deploy).
+    - close_redis    : graceful shutdown so we don't leave the Redis
+                       pool open when uvicorn is told to stop (e.g.
+                       SIGTERM during a deploy).
+
+The dashboard used to also close an outbound HTTP client to the NLP
+service here. That client (nlp_classifier_client) has been moved to
+archive/decoupled_pipeline_2026-05/ — Phase A (AI repo) owns the NLP
+container at request time now, so the dashboard has no NLP pool to
+close on shutdown.
 """
 
 import logging
@@ -31,7 +36,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from nlp_classifier_client import close_http_client
 from redis_client import close_redis, init_redis
 
 logger = logging.getLogger(__name__)
@@ -74,9 +78,6 @@ async def lifespan(app: FastAPI):
     yield
 
     # ── Shutdown ────────────────────────────────────────────────────
-    # Order matters: close the outbound HTTP client (to the NLP service)
-    # FIRST so any in-flight requests get a clean cancellation, then
-    # close the Redis pool. Both are no-ops if the resource was never
-    # initialised, so missing-init does not turn into a shutdown crash.
-    await close_http_client()
+    # Close the Redis pool. No-op if Redis was never initialised, so
+    # a missing init does not turn into a shutdown crash.
     await close_redis()

@@ -109,7 +109,7 @@ test.describe("Patient Follow-up — Complete Flow End-to-End", () => {
   test("backend records all 4 submission types for every seeded patient", async () => {
     test.skip(
       !API_KEY,
-      "API_KEY not set — load app/Backend/.env.native or export E2E_API_KEY",
+      "API_KEY not set — load app/Backend/.env or export E2E_API_KEY",
     );
 
     // GET /api/surveys/by-speaker/{speaker} per patient. After the

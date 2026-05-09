@@ -20,7 +20,7 @@ Transcript (.xlsx / .csv)
 PostgreSQL (8 tables) + nested output folder
 ```
 
-Both stages run as one process via `pipeline_runner.py`; the standalone CLI `scripts/run-pipeline-standalone.py` invokes the same code path against the same DB without needing the FastAPI backend.
+Both stages run as one process via `../AI_physician_patient_communication/main_complete_pipeline_db.py` (the canonical Phase A entry point in the sibling AI repo). It calls AI repo's own NLP and AI modules directly and writes to the same DB by importing the dashboard's `persistence.save_all()` cross-repo. The dashboard's old in-house orchestrator (`pipeline_runner.py`, `ai_pipeline_service.py`) has been moved to `app/Backend/archive/decoupled_pipeline_2026-05/` — kept for reference only, no longer wired into the running app.
 
 ---
 
@@ -66,7 +66,7 @@ For each domain, the top-10 sentences plus ±3 context windows are passed throug
 | 4 — selection | Pick the most representative survivors |
 | 5 — reformat | Generate patient-friendly summary text |
 
-Implementation: `../AI_physician_patient_communication/ai_pipeline/pipeline.py` (sibling repo). The Backend invokes it through `ai_pipeline_service.run_ai_scoring_and_summary()` after the NLP stage finishes.
+Implementation: `../AI_physician_patient_communication/ai_pipeline/pipeline.py` (sibling repo). The Phase A entry point (`main_complete_pipeline_db.py`) calls `run_ai_pipeline()` from this module directly after the NLP stage finishes; the resulting per-domain dict is then written to the LLM tables by an inline `_save_ai_to_db` helper in the same file.
 
 LLM: Azure OpenAI GPT-4o, configured via `AZURE_OPENAI_ENDPOINT` + `AZURE_OPENAI_KEY` + `AZURE_OPENAI_API_VERSION` (default `2024-08-01-preview`) + `AZURE_OPENAI_MODEL` (default `gpt-4o`).
 
@@ -74,12 +74,12 @@ LLM: Azure OpenAI GPT-4o, configured via `AZURE_OPENAI_ENDPOINT` + `AZURE_OPENAI
 
 ## Database Persistence
 
-All pipeline outputs land in PostgreSQL through two persistence modules:
+All pipeline outputs land in PostgreSQL through two write paths:
 
-| Module | Tables | Stage |
+| Where the writes are issued | Tables | Stage |
 |---|---|---|
-| `app/Backend/persistence.py` | `transcript_analysis_log`, `sentence_prediction`, `nlp_all_predictions`, `nlp_pipeline_intermediate`, `patient_summary`, `patient_summary_domain` | NLP |
-| `app/Backend/ai_pipeline_service.py` | `llm_pipeline_intermediate`, `llm_domain_scoring_and_summary`, plus `transcript_analysis_log.ai_overall_score` UPDATE | AI |
+| `app/Backend/persistence.py` (in this repo) — called cross-repo by Phase A's `_save_nlp_to_db` | `transcript_analysis_log`, `sentence_prediction`, `nlp_all_predictions`, `nlp_pipeline_intermediate`, `patient_summary`, `patient_summary_domain` | NLP |
+| `_save_ai_to_db` helper inside `main_complete_pipeline_db.py` (in the AI repo) | `llm_pipeline_intermediate`, `llm_domain_scoring_and_summary`, plus `transcript_analysis_log.ai_overall_score` UPDATE | AI |
 
 See [`DATABASE_SCHEMA.md`](../architecture/DATABASE_SCHEMA.md) for column-level detail. Migration `009_widen_llm_text_columns` widens `estimate`/`treatment` columns to `TEXT` so longer LLM outputs do not overflow.
 
@@ -112,7 +112,7 @@ Format matches `data/output_test/` (frozen R-pipeline reference) — used for by
 ### Standalone (manager validation path)
 
 ```bash
-.venv/bin/python scripts/run-pipeline-standalone.py \
+.venv/bin/python main_complete_pipeline_db.py \
     --file "../AI_physician_patient_communication/data/input/Input_Keystrokes REC 001 (SID 10).xlsx"
 ```
 
@@ -137,9 +137,19 @@ DB writes are printed with a `[DB]` prefix so the operator can watch each table 
 [DB]    UPDATE transcript_analysis_log id=5: ai_overall_score=2.14, processed=true
 ```
 
-### Auto-run on backend start
+### Phase A — explicit invocation
 
-`scripts/run-native.sh` automatically processes every transcript in `OUTPUT_DIR` before launching uvicorn. Files that already produced a row in `transcript_analysis_log` are still re-processed (no dedup yet — see Known Limitations).
+There is no auto-run on backend start any more. The pipeline runs only when the operator explicitly invokes the Phase A entry point in the sibling AI repo:
+
+```bash
+cd ../AI_physician_patient_communication
+../Prostate_cancer_consultation_dashboard/.venv/bin/python \
+    main_complete_pipeline_db.py --dir data/input
+```
+
+That entry point owns the NLP container lifecycle (loads the OCI image if missing, brings the container up via `docker-compose-ai-nlp-pipeline.yml`, waits for healthcheck) and orchestrates NLP + AI directly by calling AI repo's own modules. Files that already produced a row in `transcript_analysis_log` are still re-processed (no dedup yet — see Known Limitations).
+
+The dashboard's Phase B start scripts (`scripts/run-frontend-backend.sh`, `scripts/run-backend.sh`) no longer touch the pipeline or the NLP container — they only start the webapp and backend, which read the rows Phase A wrote.
 
 ### Verification
 
@@ -155,18 +165,39 @@ Exit code 0 = pass.
 
 ## Configuration Knobs
 
-In `app/Backend/.env.native`:
+The pipeline reads its runtime config from **two separate env files** — one
+per repo, by design (each side owns the variables it consumes; see the env
+files for the rationale):
+
+In the AI repo (`../AI_physician_patient_communication/.env`) — Phase A only:
 
 ```
-NLP_API_URL=http://localhost:8888
+DATABASE_URL=postgresql+asyncpg://...     # write target (shared with dashboard)
+NLP_API_URL=http://localhost:8888         # NLP container (Phase A only)
 AZURE_OPENAI_ENDPOINT=https://YOUR-RESOURCE.openai.azure.com
 AZURE_OPENAI_KEY=...
 AZURE_OPENAI_MODEL=gpt-4o
-TRANSCRIPTS_DIR=../AI_physician_patient_communication/data/input
-OUTPUT_DIR=../AI_physician_patient_communication/data/output
+TRANSCRIPTS_DIR=data/input                # relative to AI repo root
+OUTPUT_DIR=data/output                    # relative to AI repo root
 ```
 
-Selection defaults (top-N, context window) are CLI flags on the standalone runner; the API-driven path reads them from request parameters.
+In the dashboard repo (`app/Backend/.env`) — Phase B (webapp + backend):
+
+```
+DATABASE_URL=postgresql+asyncpg://...     # read target (same DB as Phase A)
+AZURE_OPENAI_ENDPOINT=https://YOUR-RESOURCE.openai.azure.com   # Try & Score
+AZURE_OPENAI_KEY=...
+REDCAP_API_URL=...                        # survey sync (Phase B only)
+REDCAP_API_TOKEN=...
+API_KEY=...                               # webapp ↔ backend auth
+```
+
+`DATABASE_URL` and `AZURE_OPENAI_*` are duplicated in both files on purpose —
+each repo carries its own copy of every variable it actually consumes. Drift
+between the two values is a deployment concern, not an architectural one.
+
+Selection defaults (top-N, context window) are CLI flags on the Phase A
+runner; the API-driven path reads them from request parameters.
 
 ---
 
@@ -174,13 +205,16 @@ Selection defaults (top-N, context window) are CLI flags on the standalone runne
 
 | Concern | Location |
 |---|---|
-| Backend orchestration | `app/Backend/pipeline_runner.py`, `persistence.py`, `ai_pipeline_service.py` |
-| NLP module (independent) | `../AI_physician_patient_communication/sentence_classification/` |
-| AI/LLM module (independent) | `../AI_physician_patient_communication/ai_pipeline/` |
+| Pipeline orchestration (Phase A entry point) | `../AI_physician_patient_communication/main_complete_pipeline_db.py` |
+| NLP-side DB writes (cross-repo import target) | `app/Backend/persistence.py` (`save_all`, `get_latest_analysis_id`) |
+| ORM definitions | `app/Backend/models.py` |
+| NLP module (in AI repo) | `../AI_physician_patient_communication/sentence_classification/` |
+| AI/LLM module (in AI repo) | `../AI_physician_patient_communication/ai_pipeline/` |
 | NLP Docker image | OCI archive at `../AI_physician_patient_communication/nlp-classifiers/r01-nlp-classifiers-docker-image/` |
 | Reference data (frozen) | `../AI_physician_patient_communication/data/output_test/` |
+| Archived old orchestrator (reference only) | `app/Backend/archive/decoupled_pipeline_2026-05/{pipeline_runner,ai_pipeline_service,nlp_classifier_client,sentence_classification_loader}.py` |
 
-Backend imports the AI repo modules via `sys.path` insertion in `ai_pipeline_service.py` and `pipeline_runner.py` — no installation step is required when both repos are siblings.
+The Phase A entry point imports `persistence.save_all` and a few ORM models from the dashboard repo via `sys.path` insertion — no installation step is required when both repos are siblings.
 
 ---
 

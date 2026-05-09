@@ -108,14 +108,18 @@ class Settings(BaseSettings):
     pipeline_batch_size: int = Field(50, ge=1, le=1000)
 
     # ── Background worker (CLI watch mode) ───────────────────────────
-    # Used by pipeline_runner.py when run with --watch or when
-    # WORKER_ENABLED=true. The scan interval is in seconds.
+    # Legacy knobs kept for backwards compatibility with older config
+    # snapshots. The AI repo's main_complete_pipeline_db.py has its own
+    # watch-folder mode driven by FileManager (poll interval comes from
+    # PipelineConfig there), so the dashboard backend itself does not
+    # consume these any more.
     worker_enabled: bool = Field(False)
     worker_scan_interval: int = Field(3600, ge=1, le=86400)
 
     # ── Azure OpenAI ─────────────────────────────────────────────────
-    # All optional — the AI pipeline degrades gracefully when these
-    # are missing (see ai_pipeline_service._create_client).
+    # All optional — the doctor's "Try & Score" route degrades gracefully
+    # when these are missing. The AI repo's main_complete_pipeline_db.py
+    # also reads these (via its own .env) to drive the AI 5-substep.
     azure_openai_endpoint: Optional[str] = None
     azure_openai_key: Optional[str] = None
     azure_openai_api_version: str = Field("2024-08-01-preview")

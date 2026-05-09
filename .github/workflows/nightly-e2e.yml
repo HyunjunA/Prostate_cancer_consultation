@@ -199,8 +199,8 @@ jobs:
 
       - name: pytest -m e2e
         working-directory: app/Backend
-        # The e2e files load .env.native via dotenv if it exists; the env
-        # block above already exports everything they need, so no .env.native
+        # The e2e files load .env via dotenv if it exists; the env
+        # block above already exports everything they need, so no .env
         # file is required in CI. `--tb=short` keeps the failure log
         # readable in the GitHub UI.
         run: pytest -m e2e -q --tb=short --no-header

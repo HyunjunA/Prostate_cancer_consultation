@@ -2,7 +2,7 @@
 
 Endpoints tested:
   GET /          (requires auth)
-  GET /health    (no auth, checks DB + Redis + NLP)
+  GET /health    (no auth, checks DB + Redis)
   GET /ready     (no auth, checks DB only)
 """
 
@@ -32,7 +32,12 @@ class TestRootEndpoint:
 # ── GET /health ───────────────────────────────────────────────────────────
 
 class TestHealthEndpoint:
-    """GET /health checks DB, Redis, NLP components."""
+    """GET /health checks DB and Redis components.
+
+    NLP is intentionally NOT probed here — the dashboard backend does
+    not depend on the NLP container at request time. See
+    routes_system.health_check() for the rationale.
+    """
 
     @pytest.mark.asyncio
     async def test_health_returns_200_when_db_is_healthy(self, client):
@@ -51,11 +56,12 @@ class TestHealthEndpoint:
         assert data["components"]["redis"] in ("healthy", "disabled")
 
     @pytest.mark.asyncio
-    async def test_health_includes_nlp_status(self, client):
+    async def test_health_does_not_include_nlp(self, client):
+        """NLP is owned by the AI repo (Phase A); the dashboard's /health
+        must not surface a component this process does not depend on."""
         resp = await client.get("/health")
         data = resp.json()
-        # NLP is mocked as healthy
-        assert data["components"]["nlp"] == "healthy"
+        assert "nlp" not in data["components"]
 
 
 # ── GET /ready ────────────────────────────────────────────────────────────

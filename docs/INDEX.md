@@ -8,8 +8,7 @@ Top-level catalog of all docs under `docs/`. Updated 2026-04-28.
 
 | Document | Use for |
 |---|---|
-| [`DEPLOYMENT_NATIVE.md`](setup/DEPLOYMENT_NATIVE.md) | **Recommended.** Native Postgres / Redis / Backend + Docker for NLP and webapp only. |
-| [`DEPLOYMENT_DOCKER.md`](setup/DEPLOYMENT_DOCKER.md) | Legacy full-Docker mode. |
+| [`DEPLOYMENT_NATIVE.md`](setup/DEPLOYMENT_NATIVE.md) | Native Postgres / Redis / Backend + Docker for NLP and webapp only. End-to-end fresh-deploy walkthrough. |
 
 ---
 

@@ -324,7 +324,7 @@ The Webapp Playwright e2e suite landed with three deep specs that drive the actu
     AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
     AZURE_OPENAI_KEY: ${{ secrets.AZURE_OPENAI_KEY }}
   run: |
-    python ../../scripts/run-pipeline-standalone.py \
+    python ../../scripts/run-ai-nlp-pipeline.py \
       --file tests/fixtures/sample_transcript.xlsx
 ```
 

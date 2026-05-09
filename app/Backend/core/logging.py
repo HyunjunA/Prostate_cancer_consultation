@@ -8,10 +8,9 @@ Why centralise this:
     - Module-level `logging.getLogger(__name__)` calls (in db.py,
       redis_client.py, etc.) work fine, but the FORMAT and LEVEL of
       what they emit is determined by whichever module calls
-      `basicConfig` first. That used to be `pipeline_runner.py` —
-      meaning when pipeline_runner was imported the format changed,
-      and otherwise the root logger fell back to Python's default
-      "WARNING and above only".
+      `basicConfig` first. Without a single owner, the root logger
+      falls back to Python's default "WARNING and above only" — so
+      info-level lines silently disappear depending on import order.
     - Centralising means every uvicorn worker, CLI script, and test
       gets the same format and level, with a single env knob
       (LOG_LEVEL) to override.
@@ -50,7 +49,7 @@ def configure_logging() -> None:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
         # force=True replaces any handlers a previous import already
-        # installed (e.g. if pipeline_runner ran first under test).
+        # installed (e.g. another module's basicConfig ran first under test).
         force=True,
     )
 

@@ -145,10 +145,10 @@ cat <<EOF
   100% identical to Michael's reference (R 4.5.1 + stringi 1.8.7 + ICU 74.2).
 
   Next steps:
-    1. cp app/Backend/.env.native.example app/Backend/.env.native
+    1. cp app/Backend/.env.example app/Backend/.env
        (then edit POSTGRES_PASSWORD, AZURE_OPENAI_*, API_KEY)
     2. bash scripts/init-db-native.sh
-    3. bash scripts/run-native.sh
-    4. python scripts/run-pipeline-standalone.py --file ...
+    3. bash scripts/run-frontend-backend.sh
+    4. python scripts/run-ai-nlp-pipeline.py --file ...
 
 EOF

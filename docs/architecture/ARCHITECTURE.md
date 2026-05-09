@@ -13,7 +13,7 @@ High-level architecture of the COMPASS. For pipeline-step detail see [`../ml-pip
 ├── Backend FastAPI  :8000             │     └── prostatecancer-webapp-native :3001
 │   (uvicorn, native Python venv)      │           (Next.js 13 webapp)
 └── Pipeline CLI                       │
-    (scripts/run-pipeline-standalone.py)
+    (scripts/run-ai-nlp-pipeline.py)
                                        │
 Webapp (Docker)  ──host.docker.internal:8000──→  Backend (native)
 Backend (native) ──localhost:8888────────────→   NLP (Docker)
@@ -27,8 +27,6 @@ Three components are **independently restartable** (per the 2026-04-24 architect
 - Pipeline runs as CLI → does not need uvicorn.
 - Dashboard (uvicorn + webapp) runs without the pipeline → reads what is in DB.
 
-For the full Docker mode see [`../setup/DEPLOYMENT_DOCKER.md`](../setup/DEPLOYMENT_DOCKER.md) (legacy).
-
 ---
 
 ## Repo layout
@@ -37,7 +35,7 @@ For the full Docker mode see [`../setup/DEPLOYMENT_DOCKER.md`](../setup/DEPLOYME
 |---|---|
 | `app/Backend/` | FastAPI app, SQLAlchemy models, persistence modules, migrations |
 | `app/Webapp/` | Next.js 13 frontend (App Router) |
-| `scripts/` | `run-native.sh`, `init-db-native.sh`, `run-pipeline-standalone.py`, etc. |
+| `scripts/` | `run-frontend-backend.sh`, `init-db-native.sh`, `run-ai-nlp-pipeline.py`, etc. |
 | `docs/` | This documentation |
 | `dev_docs/` | Internal development notes (mostly Korean) |
 | `meeting_notes/` | Meeting records (parent folder, project-wide) |
@@ -70,7 +68,7 @@ The Backend imports the AI repo via `sys.path` insertion — both repos must be 
 ```
 1. Transcript (.xlsx) drops into AI_repo/data/input/
         │
-2. run-pipeline-standalone.py picks it up
+2. run-ai-nlp-pipeline.py picks it up
         │   → pipeline_runner.run_pipeline()
         │       ├─ NLP 7-step  (sentence_classification + nlp container)
         │       │      → persistence.save_all()  → 6 tables
@@ -123,7 +121,7 @@ Each domain has its own RF classifier (in NLP container) and its own LLM extract
 
 ## Environment configuration
 
-All secrets in `app/Backend/.env.native` (or `.env` for Docker mode). Pipeline I/O paths default to the sibling AI repo:
+All secrets in `app/Backend/.env` (or `.env` for Docker mode). Pipeline I/O paths default to the sibling AI repo:
 
 ```
 DATABASE_URL=postgresql+asyncpg://prostatecancer_user:***@localhost:5433/prostatecancer_db_native
@@ -136,7 +134,7 @@ REDCAP_API_URL=https://iredcap.csmc.edu/api/   # optional
 REDCAP_API_TOKEN=...                           # optional
 ```
 
-`.env.native.example` ships the full template.
+`.env.example` ships the full template.
 
 ---
 

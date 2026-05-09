@@ -37,7 +37,7 @@ let SPEAKER: string;
 const API_BASE = "http://localhost:8000";
 // API_KEY comes from the environment so the real value never lands
 // in git. `e2e/global-setup.ts` populates process.env from
-// app/Backend/.env.native when running locally; CI exports
+// app/Backend/.env when running locally; CI exports
 // `secrets.E2E_API_KEY` directly. The backend-verification test
 // below skips itself when the key is absent so the UI-only tests in
 // this file still run on a fresh checkout.
@@ -67,7 +67,7 @@ test.describe("SDM Survey Submit", () => {
   test("SDM submit is received by backend", async ({ page }) => {
     test.skip(
       !API_KEY,
-      "API_KEY not set — load app/Backend/.env.native or export E2E_API_KEY",
+      "API_KEY not set — load app/Backend/.env or export E2E_API_KEY",
     );
     await waitForFollowUpPage(page, FOLLOWUP_URL);
     await startSurvey(page);

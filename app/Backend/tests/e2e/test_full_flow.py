@@ -15,10 +15,10 @@ import pytest
 import httpx
 
 # ---------------------------------------------------------------------------
-# Load secrets from app/Backend/.env.native
+# Load secrets from app/Backend/.env
 # ---------------------------------------------------------------------------
 # The native deployment stores the real API_KEY (and Postgres credentials,
-# Azure OpenAI keys, etc.) in app/Backend/.env.native. Tests run in a
+# Azure OpenAI keys, etc.) in app/Backend/.env. Tests run in a
 # fresh subprocess where the shell that started pytest may or may not
 # have sourced that file, so do it here explicitly. dotenv.load_dotenv
 # does not overwrite values already set in os.environ, so a CI that
@@ -29,8 +29,8 @@ except ImportError:
     _load_dotenv = None
 
 if _load_dotenv is not None:
-    # tests/e2e/test_full_flow.py -> app/Backend/.env.native: ../../.env.native
-    _ENV_NATIVE = Path(__file__).resolve().parent.parent.parent / ".env.native"
+    # tests/e2e/test_full_flow.py -> app/Backend/.env: ../../.env
+    _ENV_NATIVE = Path(__file__).resolve().parent.parent.parent / ".env"
     if _ENV_NATIVE.exists():
         _load_dotenv(_ENV_NATIVE)
 
@@ -41,7 +41,7 @@ if _load_dotenv is not None:
 # These tests hit the live backend at BASE_URL. The previous version
 # hardcoded API_KEY = "<YOUR_API_KEY>" which always returned 403 — the
 # tests never actually exercised any authenticated path. Read the real
-# key from the environment (populated by .env.native above) instead.
+# key from the environment (populated by .env above) instead.
 # The pre-existing skipif guard below already keeps us from running when
 # the backend is not up, so this just needs a sensible value when it IS
 # reachable.
