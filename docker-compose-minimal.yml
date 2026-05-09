@@ -1,43 +1,30 @@
 # =============================================================================
-# Native deployment — minimal compose (Phase 6)
+# Dashboard deployment (Phase B) — webapp container only.
 #
-# Brings up only the two containers that cannot be replaced by native
-# processes:
-#   - nlp-classifiers : Michael's third-party OCI image (no source available)
-#   - webapp          : Next.js frontend (kept Docker per user decision)
+# This file owns ONLY the dashboard's read-time concerns: the Next.js
+# webapp container that browsers connect to. The native FastAPI backend,
+# PostgreSQL, and Redis run as host processes (see scripts/run-native.sh
+# and scripts/setup-native-mac.sh).
 #
-# Everything else (postgres, redis, backend, nginx) runs natively. See:
-#   bash scripts/setup-native-mac.sh        # one-time native deps
-#   bash scripts/init-db-native.sh          # one-time DB bootstrap
-#   bash scripts/run-backend-native.sh      # native uvicorn
+# What is intentionally NOT here:
+#   nlp-classifiers   The NLP classifier OCI is a write-time asset of the
+#                     sibling AI pipeline (see ../AI_physician_patient_communication/
+#                     and scripts/run-pipeline-standalone.py). Bundling it
+#                     here used to couple two unrelated lifecycles —
+#                     teammates who only wanted to view dashboard pages
+#                     were forced to also have a working NLP image. The
+#                     pipeline command now manages that container's
+#                     lifecycle itself; the dashboard never touches it.
 #
 # Usage:
 #   docker compose -f docker-compose-minimal.yml up -d
 #   docker compose -f docker-compose-minimal.yml logs -f webapp
 #   docker compose -f docker-compose-minimal.yml down
 #
-# Reference: dev_docs/DEPLOYMENT_NATIVE_PLAN.md (Phase 6)
+# Reference: README.md "Quick Start — Native Deployment" (Phase A vs Phase B)
 # =============================================================================
 
 services:
-
-  # ── NLP classifiers (Michael's image, single replica is fine for native) ──
-  nlp-classifiers:
-    image: r01-nlp-classifiers:latest
-    container_name: prostatecancer-nlp-native
-    ports:
-      - "127.0.0.1:8888:8000"   # exposed to native backend on the host (8001 conflicts with VS Code on some setups)
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-    healthcheck:
-      test: ["CMD-SHELL", "Rscript -e 'q(status=!grepl(\"online\",readLines(url(\"http://localhost:8000/ping\"))))'"]
-      interval: 15s
-      timeout: 15s
-      retries: 10
-      start_period: 90s
-    restart: unless-stopped
 
   # ── Frontend webapp (talks to native backend via host.docker.internal) ───
   webapp:
