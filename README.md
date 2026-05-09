@@ -53,10 +53,10 @@ cp <your-transcript>.xlsx data/input/
 
 # 6. Run the pipeline — manages the NLP container lifecycle itself
 ../Prostate_cancer_consultation_dashboard/.venv/bin/python \
-    scripts/run-ai-nlp-pipeline.py --dir data/input
+    main_complete_pipeline_db.py --dir data/input
 ```
 
-The pipeline script lives in the AI repo (`scripts/run-ai-nlp-pipeline.py`) alongside `docker-compose-ai-nlp-pipeline.yml` for the NLP container — both are write-time concerns of the AI/NLP pipeline. The script still depends on the dashboard repo as a sibling clone for the persistence layer (DB models / FastAPI settings) and reuses the dashboard's Python venv.
+The pipeline entry point lives at the AI repo's root (`main_complete_pipeline_db.py`) alongside `docker-compose-ai-nlp-pipeline.yml` for the NLP container — both are write-time concerns of the AI/NLP pipeline. It depends on this dashboard repo as a sibling clone for the persistence layer (DB models + `core/settings.get_settings()` for the database URL) and reuses the dashboard's Python venv.
 
 After Phase A finishes, the NLP container can be left running for repeat runs (default) or stopped explicitly with `--stop-nlp-after`. Phase B proceeds against the persisted DB rows regardless.
 
@@ -129,13 +129,23 @@ The backend lives at [`app/Backend/`](app/Backend/). Each concern has its own fi
 | [`inspect_pipeline_run.py`](app/Backend/inspect_pipeline_run.py) | CLI: dump pipeline outputs for one analysis |
 | [`migrations/versions/`](app/Backend/migrations/versions/) | Alembic 001–010 (10 migrations, all reversible) |
 
-### Pipeline orchestration and NLP integration
+### Pipeline write-side — DB persistence only
+
+The dashboard backend no longer orchestrates the NLP/AI pipeline; that
+moved to the AI repo's `main_complete_pipeline_db.py`. The dashboard
+just owns the DB-write side:
 
 | File | Role |
 |---|---|
-| [`pipeline_runner.py`](app/Backend/pipeline_runner.py) | NLP 7-step orchestrator (xlsx upload → R container → top-N selection → context window → DB) |
-| [`nlp_classifier_client.py`](app/Backend/nlp_classifier_client.py) | HTTP client for the NLP container |
-| [`sentence_classification_loader.py`](app/Backend/sentence_classification_loader.py) | Sample loader helper |
+| [`persistence.py`](app/Backend/persistence.py) | `save_all()` writes the NLP-side rows in one transaction (called cross-repo by the AI repo's pipeline entry point) |
+| [`models.py`](app/Backend/models.py) | SQLAlchemy ORM definitions for every pipeline table — the schema source of truth |
+
+The previous orchestrator + NLP HTTP client (`pipeline_runner.py`,
+`ai_pipeline_service.py`, `nlp_classifier_client.py`,
+`sentence_classification_loader.py`, `routes_transcript.py`,
+`routes_nlp.py`) have been moved to
+`app/Backend/archive/decoupled_pipeline_2026-05/` — kept for reference
+but no longer wired into the running app.
 
 ### App lifecycle and configuration
 

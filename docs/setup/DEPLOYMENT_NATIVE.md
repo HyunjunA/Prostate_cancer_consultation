@@ -50,7 +50,7 @@ anything in the **second** list is generated for you and needs no action.
       (Step 0.5)
 - [ ] **Azure OpenAI** endpoint URL + API key — your organisation's
       Azure subscription. Required for the AI sub-pipeline; pass
-      `--skip-ai` to `run-ai-nlp-pipeline.py` if you only want the
+      `--skip-ai` to `main_complete_pipeline_db.py` if you only want the
       NLP 7-step (no Azure call, no token cost)
 - [ ] **REDCap API token** (optional) — only if you want patient survey
       submissions to sync to iREDCap. Get from REDCap project page →
@@ -257,7 +257,7 @@ The script + compose file backing Phase A live in the AI repo:
 
 | File (in AI repo) | Role |
 |---|---|
-| `scripts/run-ai-nlp-pipeline.py` | Pipeline runner (NLP 7-step + AI 5-substep) |
+| `main_complete_pipeline_db.py` | Pipeline runner (NLP 7-step + AI 5-substep) |
 | `docker-compose-ai-nlp-pipeline.yml` | NLP container lifecycle |
 | `nlp-classifiers/r01-nlp-classifiers-docker-image/` | OCI archive (image source) |
 
@@ -291,7 +291,7 @@ Single transcript:
 cd ../AI_physician_patient_communication
 
 ../Prostate_cancer_consultation_dashboard/.venv/bin/python \
-    scripts/run-ai-nlp-pipeline.py \
+    main_complete_pipeline_db.py \
     --file "data/input/Input_Keystrokes REC 001 (SID 10).xlsx"
 ```
 
@@ -301,7 +301,7 @@ Whole folder (every `.xlsx`/`.csv` inside, processed in sorted order):
 cd ../AI_physician_patient_communication
 
 ../Prostate_cancer_consultation_dashboard/.venv/bin/python \
-    scripts/run-ai-nlp-pipeline.py --dir data/input
+    main_complete_pipeline_db.py --dir data/input
 ```
 
 Every database INSERT is printed with a `[DB]` prefix so you can watch each table grow as the pipeline runs:
@@ -429,7 +429,7 @@ The deployment is split across two repos that mirror the data flow:
 
 ```
 [Phase A — sibling AI repo]
-└─ scripts/run-ai-nlp-pipeline.py
+└─ main_complete_pipeline_db.py
    ├─ docker-compose-ai-nlp-pipeline.yml
    │  └─ nlp-classifiers      :8888  (R + 5 RF models, third-party OCI)
    └─ writes results → PostgreSQL (owned by the dashboard repo below)
