@@ -91,14 +91,23 @@ class TestCheckResult:
 class TestMainEnvironment:
     """main() handles missing DATABASE_URL and empty transcript_analysis_log."""
 
-    async def test_returns_2_when_database_url_not_set(self):
+    async def test_returns_2_when_database_url_not_set(self, monkeypatch):
         """main() must return exit code 2 when DATABASE_URL is not in the env."""
         # core.settings.get_settings is @lru_cache'd; if a previous test
         # already constructed Settings with a valid DATABASE_URL, the
         # cache hides our cleared environment. Invalidate it so this
         # test actually exercises the Settings-validation failure path.
-        from core.settings import get_settings
+        from core.settings import Settings, get_settings
         get_settings.cache_clear()
+
+        # pydantic-settings reads from `.env` even when os.environ is
+        # cleared (model_config.env_file = ".env"). Point it at a
+        # non-existent file so this test really does exercise the
+        # "DATABASE_URL missing" path; otherwise Settings() picks up
+        # DATABASE_URL from the on-disk .env file and the assertion
+        # below fires for the wrong reason.
+        monkeypatch.setitem(Settings.model_config, "env_file", "_nonexistent.env")
+
         with patch.dict("os.environ", {}, clear=True):
             import os
             os.environ.pop("DATABASE_URL", None)

@@ -290,7 +290,8 @@ class TranscriptAnalysisLog(Base):
     """Stores each transcript analysis run: metadata, JSON results, and xlsx binary.
 
     Pipeline timing:
-      - pipeline_started_at: when pipeline_runner began processing this file
+      - pipeline_started_at: when the pipeline orchestrator began
+        processing this file (the AI repo's main_complete_pipeline_db.py)
       - analyzed_at: when NLP results were saved to DB (Step 8)
       - processed_at: when AI pipeline (GPT-4o) completed (Step 9)
       - processed: True if full pipeline (NLP + AI) completed successfully

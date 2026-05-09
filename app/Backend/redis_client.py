@@ -12,18 +12,19 @@ Graceful degradation:
     traffic; users just lose cache hits and limit enforcement.
 
 What Redis is used for in this backend:
-    1. Caching NLP responses     : nlp_classifier_client.py uses
-                                   make_cache_key() to memoise expensive
-                                   classifier calls. Same sentence + same
-                                   model + same params -> same cache hit.
-    2. Rate limiting              : fastapi-limiter (configured in
+    1. Rate limiting              : fastapi-limiter (configured in
                                    app_lifespan.py) stores per-user
                                    counters in Redis under the
                                    "prostate:rl" key prefix.
-    3. Future: session storage,
+    2. Future: session storage,
        distributed locks, pub/sub : not yet wired but the connection
                                    is already shared so adding them
                                    will not require a new client.
+
+The previous "cache NLP classifier responses" use case went away when
+nlp_classifier_client was moved to archive/decoupled_pipeline_2026-05/
+— the dashboard backend no longer talks to the NLP container at
+request time, so there is nothing classifier-shaped left to cache.
 
 Why module-level state instead of a class:
     The Redis client is a singleton per process. Wrapping it in a class

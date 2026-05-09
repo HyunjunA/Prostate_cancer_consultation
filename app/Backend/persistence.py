@@ -1,17 +1,16 @@
-"""Database persistence module — Step 10 of the pipeline.
+"""Database persistence — NLP-side writes for the AI/NLP pipeline.
 
-Ivan's rule: "Pipeline ≠ DB ≠ UI — never mix them."
-This module handles all DB writes for the pipeline. The pipeline_runner
-calls persistence.save_all() as a single line — it doesn't know DB internals.
+Project rule: "Pipeline ≠ DB ≠ UI — never mix them."
+This module owns every INSERT / UPSERT the NLP pipeline performs at
+the end of a transcript run. It is called as a single line by the
+pipeline orchestrator (the AI repo's `main_complete_pipeline_db.py`),
+which does not know any DB internals.
 
-What this module owns:
-    Every INSERT / UPSERT the NLP pipeline performs at the end of a
-    run. Centralising them here means:
-      - pipeline_runner.py stays focused on orchestration ("step 1
-        then 2 then 3 then save").
-      - DB schema changes touch ONE file, not every pipeline step.
-      - One transaction wraps every write so a partial failure rolls
-        back cleanly.
+Why centralising here matters:
+    - The orchestrator stays focused on "step 1 then 2 then 3 then save".
+    - DB schema changes touch ONE file, not every pipeline step.
+    - One transaction wraps every write so a partial failure rolls
+      back cleanly.
 
 Tables this module writes to:
     1. transcript_analysis_log    (1 row : the run itself)
@@ -24,7 +23,8 @@ Tables this module writes to:
 
 Tables this module DOES NOT write to:
     - llm_pipeline_intermediate, llm_domain_scoring_and_summary :
-      handled later by ai_pipeline_service.py during the LLM stage.
+      handled by the AI repo's main_complete_pipeline_db.py
+      (`_save_ai_to_db` helper) after the AI 5-substep finishes.
     - survey_submission_log, doctor_rewrite_log, behaviour tables :
       written by user-facing routes, not by the batch pipeline.
 """
@@ -89,7 +89,8 @@ async def save_all(
 ) -> bool:
     """Save all pipeline results to DB in a single transaction.
 
-    Called as one line from pipeline_runner: persistence.save_all(Session, ...)
+    Called as one line from the pipeline orchestrator (the AI repo's
+    main_complete_pipeline_db.py): persistence.save_all(Session, ...).
 
     Tables written:
       - transcript_analysis_log    (1 row)
@@ -101,8 +102,8 @@ async def save_all(
 
     Returns:
         True on success (commit applied), False on any failure (transaction
-        rolled back). pipeline_runner uses the return value to decide
-        whether to surface a per-file error to the operator.
+        rolled back). The caller uses the return value to decide whether
+        to surface a per-file error to the operator.
     """
     # Single `async with Session()` opens ONE transaction for ALL writes
     # below. If anything raises, the except branch rolls everything back
@@ -274,9 +275,9 @@ async def save_all(
 async def file_already_processed(Session: async_sessionmaker, filename: str) -> bool:
     """Check if a file has already been processed (exists in sentence_prediction).
 
-    Used by pipeline_runner to skip files it has already handled —
-    saves several seconds per file in the typical "scan a folder, only
-    process new ones" loop.
+    Used by the pipeline orchestrator to skip files it has already
+    handled — saves several seconds per file in the typical "scan a
+    folder, only process new ones" loop.
 
     Note we look at sentence_prediction (not transcript_analysis_log)
     because transcript_analysis_log gets its row at the START of the
