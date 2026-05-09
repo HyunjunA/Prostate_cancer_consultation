@@ -28,14 +28,14 @@ Run these once on a fresh machine.
 # 1. Install native dependencies (Postgres 16, Redis, R, Python venv, Node)
 bash scripts/setup-native-mac.sh
 
-# 2. Copy the .env.native templates
-cp app/Backend/.env.native.example app/Backend/.env.native
-cp app/Webapp/.env.native.example  app/Webapp/.env.native
+# 2. Copy the .env templates
+cp app/Backend/.env.example app/Backend/.env
+cp app/Webapp/.env.example  app/Webapp/.env
 
-# 3. Edit app/Backend/.env.native and fill in at least:
+# 3. Edit app/Backend/.env and fill in at least:
 #      POSTGRES_PASSWORD, API_KEY, AZURE_OPENAI_API_KEY
 #    REDCAP_API_TOKEN is optional (without it, REDCap mirroring is skipped silently)
-nano app/Backend/.env.native
+nano app/Backend/.env
 
 # 4. Bootstrap the database (Postgres user + schema + alembic upgrade head)
 bash scripts/init-db-native.sh
@@ -181,6 +181,9 @@ Active development is tracked here at a high level. Detailed plans, audits, and 
 
 ### Just shipped (May 2026)
 
+- **NLP container decoupled from dashboard deployment** — `nlp-classifiers` removed from `docker-compose-frontend.yml`; its lifecycle now lives with the pipeline command (Phase A only) in the AI repo. `run-frontend-backend.sh` shrank to webapp + backend (Phase B only) so the dashboard never touches the NLP container at request time.
+- **Env config split + `.env.native` → `.env` rename** — Phase A reads its runtime config from the AI repo's own `.env`; the dashboard's `.env` keeps only what Phase B actually consumes. `DATABASE_URL` and `AZURE_OPENAI_*` are duplicated by design (each side owns its copy). The legacy `.env.native` filename was retired across all 27 scripts/tests/docs in favour of plain `.env`.
+- **`/health` no longer probes NLP** — the dashboard backend's liveness probe reports only the components it actually depends on (DB + Redis); NLP is owned by Phase A and exposed separately at `/api/nlp/health` for callers that need it.
 - **V37 first-visit page** — slider state initialised at the slider's visible default so untouched sliders persist their displayed value (silent NULL bug fixed); per-section required-answer popup blocks Submit when the timeline radio is unanswered.
 - **Follow-up survey popups** — Next/Submit click on an unanswered question now opens a clear inline modal across all four sections (SDM / DCS / Risk Perception / Satisfaction). Duplicate inner section headers removed for a single source of truth.
 - **Three-patient deterministic end-to-end coverage** — Playwright walks every seeded patient (SID 10/14/15) in fixed order with backend round-trip assertions per patient.
@@ -189,7 +192,6 @@ Active development is tracked here at a high level. Detailed plans, audits, and 
 
 ### Now (this sprint)
 
-- **Decouple the NLP container from the dashboard's deployment artefacts** — remove the `nlp-classifiers` service from `docker-compose-frontend.yml`, move its lifecycle into the pipeline command (Phase A only), and shrink `run-frontend-backend.sh` to webapp + backend (Phase B only). Tracked on the `refactor/decouple-nlp-from-dashboard-runtime` branch.
 - **Drop `llm_pipeline_intermediate.sentence_text`** — fully derivable from `context` (regex-strip `<main>` markers, 100% redundant across all rows). Plan and impact map in [`dev_docs/SCHEMA_CLEANUP_LPI_SENTENCE_TEXT.md`](dev_docs/SCHEMA_CLEANUP_LPI_SENTENCE_TEXT.md).
 - **Manual smoke test** — verify the recent UI changes against the three patient fixtures end-to-end.
 - **REDCap mirror verification** — confirm follow-up survey submissions reach the active REDCap project with the correct field-level mapping.

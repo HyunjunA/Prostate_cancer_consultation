@@ -20,7 +20,7 @@ Transcript (.xlsx / .csv)
 PostgreSQL (8 tables) + nested output folder
 ```
 
-Both stages run as one process via `pipeline_runner.py`; the standalone CLI `scripts/run-ai-nlp-pipeline.py` invokes the same code path against the same DB without needing the FastAPI backend.
+Both stages run as one process via `pipeline_runner.py`; the standalone CLI `../AI_physician_patient_communication/scripts/run-ai-nlp-pipeline.py` (in the sibling AI repo) invokes the same code path against the same DB without needing the FastAPI backend.
 
 ---
 
@@ -137,9 +137,19 @@ DB writes are printed with a `[DB]` prefix so the operator can watch each table 
 [DB]    UPDATE transcript_analysis_log id=5: ai_overall_score=2.14, processed=true
 ```
 
-### Auto-run on backend start
+### Phase A — explicit invocation
 
-`scripts/run-frontend-backend.sh` automatically processes every transcript in `OUTPUT_DIR` before launching uvicorn. Files that already produced a row in `transcript_analysis_log` are still re-processed (no dedup yet — see Known Limitations).
+There is no auto-run on backend start any more. The pipeline runs only when the operator explicitly invokes the Phase A entry point in the sibling AI repo:
+
+```bash
+cd ../AI_physician_patient_communication
+../Prostate_cancer_consultation_dashboard/.venv/bin/python \
+    scripts/run-ai-nlp-pipeline.py --dir data/input
+```
+
+That entry point owns the NLP container lifecycle (loads the OCI image if missing, brings the container up via `docker-compose-ai-nlp-pipeline.yml`, waits for healthcheck, then runs the same `pipeline_runner.process_single_file` code path used by the API). Files that already produced a row in `transcript_analysis_log` are still re-processed (no dedup yet — see Known Limitations).
+
+The dashboard's Phase B start scripts (`scripts/run-frontend-backend.sh`, `scripts/run-backend.sh`) no longer touch the pipeline or the NLP container — they only start the webapp and backend, which read the rows Phase A wrote.
 
 ### Verification
 
@@ -155,18 +165,39 @@ Exit code 0 = pass.
 
 ## Configuration Knobs
 
-In `app/Backend/.env.native`:
+The pipeline reads its runtime config from **two separate env files** — one
+per repo, by design (each side owns the variables it consumes; see the env
+files for the rationale):
+
+In the AI repo (`../AI_physician_patient_communication/.env`) — Phase A only:
 
 ```
-NLP_API_URL=http://localhost:8888
+DATABASE_URL=postgresql+asyncpg://...     # write target (shared with dashboard)
+NLP_API_URL=http://localhost:8888         # NLP container (Phase A only)
 AZURE_OPENAI_ENDPOINT=https://YOUR-RESOURCE.openai.azure.com
 AZURE_OPENAI_KEY=...
 AZURE_OPENAI_MODEL=gpt-4o
-TRANSCRIPTS_DIR=../AI_physician_patient_communication/data/input
-OUTPUT_DIR=../AI_physician_patient_communication/data/output
+TRANSCRIPTS_DIR=data/input                # relative to AI repo root
+OUTPUT_DIR=data/output                    # relative to AI repo root
 ```
 
-Selection defaults (top-N, context window) are CLI flags on the standalone runner; the API-driven path reads them from request parameters.
+In the dashboard repo (`app/Backend/.env`) — Phase B (webapp + backend):
+
+```
+DATABASE_URL=postgresql+asyncpg://...     # read target (same DB as Phase A)
+AZURE_OPENAI_ENDPOINT=https://YOUR-RESOURCE.openai.azure.com   # Try & Score
+AZURE_OPENAI_KEY=...
+REDCAP_API_URL=...                        # survey sync (Phase B only)
+REDCAP_API_TOKEN=...
+API_KEY=...                               # webapp ↔ backend auth
+```
+
+`DATABASE_URL` and `AZURE_OPENAI_*` are duplicated in both files on purpose —
+each repo carries its own copy of every variable it actually consumes. Drift
+between the two values is a deployment concern, not an architectural one.
+
+Selection defaults (top-N, context window) are CLI flags on the Phase A
+runner; the API-driven path reads them from request parameters.
 
 ---
 
