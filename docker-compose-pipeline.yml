@@ -1,0 +1,46 @@
+# =============================================================================
+# Pipeline NLP container (Phase A) — invoked by scripts/run-pipeline-standalone.py
+#
+# This compose file owns the dashboard's *write-time* dependency: the
+# NLP classifier OCI image. It is intentionally kept separate from
+# docker-compose-minimal.yml (which owns dashboard read-time concerns
+# only — the webapp container) because the two have unrelated
+# lifecycles:
+#
+#   - NLP container is needed during transcript processing (Phase A)
+#     and can be stopped immediately afterwards.
+#   - Dashboard webapp is needed every time someone opens a browser
+#     (Phase B) and never depends on the NLP container being up.
+#
+# Lifecycle is owned by scripts/run-pipeline-standalone.py:
+#   - That script loads the OCI archive into Docker if the image is
+#     missing, brings the container up via this file, waits for the
+#     healthcheck, and runs the pipeline.
+#   - You can also bring the container up manually for ad-hoc work:
+#       docker compose -f docker-compose-pipeline.yml up -d
+#       docker compose -f docker-compose-pipeline.yml down
+#
+# Reference: README.md "Quick Start — Native Deployment" (Phase A)
+# =============================================================================
+
+services:
+
+  # ── NLP classifiers — third-party OCI image (no source available) ──────────
+  # Single replica is fine for native dev; the pipeline serialises domain
+  # classification per transcript so concurrency does not buy anything here.
+  nlp-classifiers:
+    image: r01-nlp-classifiers:latest
+    container_name: prostatecancer-nlp-native
+    ports:
+      - "127.0.0.1:8888:8000"   # 8001 conflicts with VS Code on some setups
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    healthcheck:
+      test: ["CMD-SHELL", "Rscript -e 'q(status=!grepl(\"online\",readLines(url(\"http://localhost:8000/ping\"))))'"]
+      interval: 15s
+      timeout: 15s
+      retries: 10
+      start_period: 90s
+    restart: unless-stopped

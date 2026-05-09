@@ -1,15 +1,17 @@
-"""Standalone AI Pipeline runner — Phase 4, manager's primary requirement.
+"""Standalone AI Pipeline runner — Phase A entry point.
 
-Runs the full pipeline (NLP 7 steps + AI 5 sub-steps) on one transcript
-file, against the native PostgreSQL configured in app/Backend/.env.native.
-No FastAPI server, no Docker for the pipeline itself — pure Python +
-the existing backend modules.
+Runs the full pipeline (NLP 7 steps + AI 5 sub-steps) on one or more
+transcript files, against the native PostgreSQL configured in
+app/Backend/.env.native. Manages the NLP classifier container
+lifecycle itself — load the OCI archive if the image is missing, bring
+the container up via docker-compose-pipeline.yml, wait for the
+healthcheck, run the pipeline. The dashboard's read-time stack
+(scripts/run-native.sh) is unaffected.
 
 Usage (from the repo root):
 
-    # 1. Make sure native postgres + Docker NLP are up:
-    brew services start postgresql@16 redis            # native
-    docker compose -f docker-compose-minimal.yml up -d # NLP + webapp
+    # 1. Make sure native postgres + redis are up (one-time, brew):
+    brew services start postgresql@16 redis
 
     # 2. Activate the venv and run:
     source .venv/bin/activate
@@ -18,14 +20,17 @@ Usage (from the repo root):
 
     # Other options:
     --skip-ai             skip the Azure OpenAI sub-pipeline (NLP only)
+    --skip-nlp-startup    assume nlp-classifiers is already running
+                          (e.g., for repeated runs)
+    --stop-nlp-after      stop the NLP container after the run
     --top-n 10            top-N sentences per domain (default 10)
     --context-window 3    context ±N sentences (default 3)
     --quiet               only show stage headers, hide chatty INFO logs
 
 Output: every database INSERT is printed with a [DB] prefix so the
-manager can see exactly what is being persisted, when, and where.
+operator can see exactly what is being persisted, when, and where.
 
-Reference: dev_docs/DEPLOYMENT_NATIVE_PLAN.md (Phase 4)
+Reference: README.md "Quick Start — Native Deployment" (Phase A)
 """
 
 from __future__ import annotations
@@ -124,8 +129,112 @@ def configure_logging(quiet: bool) -> None:
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
+# ── NLP container lifecycle ────────────────────────────────────────────────
+# The pipeline owns the NLP classifier container's lifecycle now —
+# starts it before processing, optionally stops it afterwards. The
+# dashboard (scripts/run-native.sh, docker-compose-minimal.yml) does
+# not touch this container.
+
+NLP_COMPOSE_FILE = REPO_ROOT / "docker-compose-pipeline.yml"
+NLP_IMAGE_TAG = "r01-nlp-classifiers:latest"
+NLP_CONTAINER = "prostatecancer-nlp-native"
+NLP_OCI_DIR_DEFAULT = (
+    REPO_ROOT.parent
+    / "AI_physician_patient_communication"
+    / "nlp-classifiers"
+    / "r01-nlp-classifiers-docker-image"
+)
+
+
+def _docker_image_exists(tag: str) -> bool:
+    import subprocess
+    r = subprocess.run(
+        ["docker", "image", "inspect", tag],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    return r.returncode == 0
+
+
+def _load_nlp_image_from_oci() -> None:
+    """Load the NLP image from the sibling AI repo's OCI archive."""
+    import subprocess, tarfile, tempfile
+    oci_dir = Path(os.getenv("NLP_IMAGE_DIR", str(NLP_OCI_DIR_DEFAULT)))
+    if not oci_dir.is_dir():
+        fail(f"NLP OCI archive not found at {oci_dir}")
+        print(
+            "       Set NLP_IMAGE_DIR or clone AI_physician_patient_communication\n"
+            "       as a sibling of this repo.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    print(f"  ▸ Loading NLP image from {oci_dir} (~1.4 GB) ...")
+    with tempfile.NamedTemporaryFile(suffix=".tar", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+    try:
+        with tarfile.open(tmp_path, "w") as tar:
+            for entry in oci_dir.iterdir():
+                tar.add(entry, arcname=entry.name)
+        subprocess.run(
+            ["docker", "load", "-i", str(tmp_path)],
+            check=True,
+        )
+    finally:
+        tmp_path.unlink(missing_ok=True)
+    ok("NLP image loaded")
+
+
+def _ensure_nlp_running(skip_startup: bool) -> None:
+    """Make sure the NLP container is up and healthy before pipeline start."""
+    import subprocess, time
+    if skip_startup:
+        ok("--skip-nlp-startup — assuming NLP container is already running")
+        return
+
+    if not _docker_image_exists(NLP_IMAGE_TAG):
+        _load_nlp_image_from_oci()
+
+    # `up -d` is idempotent — does nothing if already running.
+    print("  ▸ Bringing NLP container up via docker-compose-pipeline.yml ...")
+    subprocess.run(
+        ["docker", "compose", "-f", str(NLP_COMPOSE_FILE), "up", "-d", "--pull", "never"],
+        check=True,
+    )
+
+    # Wait for healthcheck — R + stringi cold start typically lands inside 60 s
+    # on a warm cache, longer on the first run.
+    print("  ▸ Waiting for NLP healthcheck (up to 120s) ...")
+    deadline = time.time() + 120
+    last_status = "unknown"
+    while time.time() < deadline:
+        r = subprocess.run(
+            ["docker", "inspect", "--format", "{{.State.Health.Status}}", NLP_CONTAINER],
+            capture_output=True, text=True,
+        )
+        last_status = r.stdout.strip() or "missing"
+        if last_status == "healthy":
+            ok("NLP container healthy")
+            return
+        time.sleep(3)
+    print(
+        f"  ⚠ NLP not healthy after 120 s (last status: {last_status}). "
+        "Pipeline will still try; failures show up as Step 2 segmentation errors.",
+        file=sys.stderr,
+    )
+
+
+def _stop_nlp_container() -> None:
+    """Tear down the NLP container after the pipeline run."""
+    import subprocess
+    print(f"  ▸ Stopping NLP container ({NLP_CONTAINER}) ...")
+    subprocess.run(
+        ["docker", "compose", "-f", str(NLP_COMPOSE_FILE), "down"],
+        check=False,   # don't raise if compose file or container missing
+    )
+    ok("NLP container stopped")
+
+
 # ── Env validation ──────────────────────────────────────────────────────────
-def check_env(skip_ai: bool) -> None:
+def check_env(skip_ai: bool, skip_nlp_startup: bool) -> None:
     section("Environment")
     db_url = os.getenv("DATABASE_URL", "")
     if not db_url:
@@ -141,18 +250,26 @@ def check_env(skip_ai: bool) -> None:
             redacted = f"{scheme}://{user}:***@{host}"
     ok(f"DATABASE_URL: {redacted}")
 
-    nlp = os.getenv("NLP_API_URL", "http://localhost:8001")
+    nlp = os.getenv("NLP_API_URL", "http://localhost:8888")
     ok(f"NLP_API_URL:  {nlp}")
 
-    # Probe NLP up front — without this, failure only surfaces inside Step 2
-    # segmentation as a cryptic docker exec error.
+    # Bring the NLP container up ourselves (Phase A owns its lifecycle now).
+    _ensure_nlp_running(skip_startup=skip_nlp_startup)
+
+    # Final reachability probe — ensures the route from the host to the
+    # container's exposed port works, not just that the container is healthy.
     try:
         import httpx
         httpx.get(f"{nlp}/ping", timeout=2.0).raise_for_status()
         ok("NLP service reachable")
     except Exception as e:
         fail(f"NLP service not reachable at {nlp} ({e.__class__.__name__}: {e})")
-        print("       Start it: docker compose -f docker-compose-minimal.yml up -d", file=sys.stderr)
+        print(
+            "       The NLP container is up but the host port is not. Check\n"
+            "       NLP_API_URL in app/Backend/.env.native and the port mapping\n"
+            "       in docker-compose-pipeline.yml.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     if not skip_ai:
@@ -252,7 +369,7 @@ async def _process_one(transcript: Path, Session, models_mod, pipeline_runner_mo
 # ── Main ────────────────────────────────────────────────────────────────────
 async def main(args: argparse.Namespace) -> int:
     configure_logging(args.quiet)
-    check_env(skip_ai=args.skip_ai)
+    check_env(skip_ai=args.skip_ai, skip_nlp_startup=args.skip_nlp_startup)
 
     transcripts = _resolve_transcripts(args)
 
@@ -322,6 +439,13 @@ async def main(args: argparse.Namespace) -> int:
             print(f"           python scripts/verify_db.py --analysis-id {r['analysis_id']}")
 
     await engine.dispose()
+
+    # Optional teardown — keep NLP container running by default so a follow-up
+    # transcript run is fast (no container start, no healthcheck wait).
+    if args.stop_nlp_after:
+        section("Stopping NLP container (--stop-nlp-after)")
+        _stop_nlp_container()
+
     return 0 if not failures else 1
 
 
@@ -333,6 +457,14 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--top-n", type=int, default=10, help="Top-N sentences per NLP domain (default 10)")
     p.add_argument("--context-window", type=int, default=3, help="Context window size (default 3)")
     p.add_argument("--skip-ai", action="store_true", help="Skip the Azure OpenAI sub-pipeline (NLP-only run)")
+    p.add_argument(
+        "--skip-nlp-startup", action="store_true",
+        help="Assume the NLP container is already running (default: bring it up)",
+    )
+    p.add_argument(
+        "--stop-nlp-after", action="store_true",
+        help="Stop the NLP container after the run (default: leave it up for repeat runs)",
+    )
     p.add_argument("--quiet", action="store_true", help="Suppress INFO logs (only stage headers)")
     return p.parse_args()
 
