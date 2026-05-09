@@ -10,13 +10,25 @@ Developed at Cedars-Sinai Medical Center as part of the R01 Prostate Cancer Comm
 
 ## Quick Start — Native Deployment (recommended)
 
-PostgreSQL / Redis / Backend run natively on the host; only NLP-classifiers and the webapp run in Docker. The two repos must already be cloned as siblings under a shared parent directory (see [`docs/setup/DEPLOYMENT_NATIVE.md`](docs/setup/DEPLOYMENT_NATIVE.md) for the clone commands).
+The deployment is split into two **independent phases** that mirror the real data flow:
+
+```
+Phase A   :  transcript → Pipeline → NLP Container → PostgreSQL DB
+Phase B   :  Browser ← Webapp ← Backend ← PostgreSQL DB
+                                              (no NLP container needed)
+```
+
+The dashboard's deployment artefacts (this repo) manage **Phase B only**: PostgreSQL, Redis, the FastAPI backend, and the webapp container. The **NLP classifier container is owned by the sibling AI pipeline repo** and is only required during Phase A — bundling it into the dashboard's startup would couple two unrelated lifecycles. (The two repos must already be cloned as siblings; see [`docs/setup/DEPLOYMENT_NATIVE.md`](docs/setup/DEPLOYMENT_NATIVE.md) for the clone commands.)
+
+### One-time setup
+
+Run these once on a fresh machine.
 
 ```bash
-# 1. Install native dependencies (Postgres 16, Redis, R, Python venv, Node) — one-time
+# 1. Install native dependencies (Postgres 16, Redis, R, Python venv, Node)
 bash scripts/setup-native-mac.sh
 
-# 2. Copy the .env.native templates — one-time
+# 2. Copy the .env.native templates
 cp app/Backend/.env.native.example app/Backend/.env.native
 cp app/Webapp/.env.native.example  app/Webapp/.env.native
 
@@ -25,24 +37,44 @@ cp app/Webapp/.env.native.example  app/Webapp/.env.native
 #    REDCAP_API_TOKEN is optional (without it, REDCap mirroring is skipped silently)
 nano app/Backend/.env.native
 
-# 4. Bootstrap the database (Postgres user + schema + alembic upgrade head) — one-time
+# 4. Bootstrap the database (Postgres user + schema + alembic upgrade head)
 bash scripts/init-db-native.sh
+```
 
-# 5. Drop one or more consultation .xlsx transcripts into the sibling AI repo's input dir
+### Phase A — Process transcripts (NLP container needed)
+
+Runs the NLP + AI pipelines on consultation `.xlsx` transcripts and persists the results to PostgreSQL. The NLP Docker container is required **only during this phase** — its lifecycle is owned by the pipeline command, not by the dashboard.
+
+```bash
+# 5. Drop transcript .xlsx files into the sibling AI repo's input dir
 mkdir -p ../AI_physician_patient_communication/data/input
 cp <your-transcript>.xlsx ../AI_physician_patient_communication/data/input/
 
-# 6. Start everything (NLP image load + webapp build + auto-pipeline + native backend)
-bash scripts/run-native.sh
-
-# 7. Verify in the browser
-#      http://localhost:3001       — Dashboard
-#      http://localhost:8000/docs  — API docs (Swagger)
+# 6. Run the pipeline — manages the NLP container lifecycle itself
+.venv/bin/python scripts/run-pipeline-standalone.py \
+    --dir ../AI_physician_patient_communication/data/input
 ```
 
-Steps 1–4 only run on the first deployment; steps 5–7 are the daily-use loop. Skipping step 3 leaves the webapp container without an `API_KEY` (every API call will return 401), and skipping step 5 leaves `data/input/` empty so the auto-pipeline silently does nothing.
+After Phase A finishes, the NLP container is no longer needed; Phase B proceeds against the persisted DB rows.
 
-**Full walkthrough**: [`docs/setup/DEPLOYMENT_NATIVE.md`](docs/setup/DEPLOYMENT_NATIVE.md) — covers prerequisites, the NLP OCI archive, the standalone pipeline runner (`scripts/run-pipeline-standalone.py`), DB verification helpers, and troubleshooting.
+### Phase B — Run the dashboard (NLP container NOT needed)
+
+Serves the pre-computed Phase A results to doctors and patients. The dashboard backend reads from PostgreSQL only; it never calls the NLP container at request time.
+
+```bash
+# 7. Start the dashboard — webapp container + native FastAPI backend
+bash scripts/run-native.sh
+
+# 8. Verify in the browser
+#    http://localhost:3001       — Dashboard
+#    http://localhost:8000/docs  — API docs (Swagger)
+```
+
+`run-native.sh` is deliberately narrow: it boots the webapp container and the native backend without touching the NLP container, so a missing or broken NLP image (e.g., a platform mismatch on a teammate's machine) does not block dashboard usage when Phase A has already populated the database.
+
+> **Refactor in progress.** A `refactor/decouple-nlp-from-dashboard-runtime` branch is moving the NLP container's compose entry out of `docker-compose-minimal.yml` and into the pipeline command's own lifecycle, so that the bullet "no NLP container needed" above becomes a hard guarantee at the deployment-artefact level rather than a convention. Until that refactor lands, the dashboard's `docker-compose-minimal.yml` still ships an `nlp-classifiers` service entry — you can safely ignore it for Phase B by starting only the webapp service: `docker compose -f docker-compose-minimal.yml up -d webapp`.
+
+**Full walkthrough**: [`docs/setup/DEPLOYMENT_NATIVE.md`](docs/setup/DEPLOYMENT_NATIVE.md) — covers prerequisites, the NLP OCI archive, the standalone pipeline runner, DB verification helpers, and troubleshooting.
 
 For the alternate full-Docker mode, see [`docs/setup/DEPLOYMENT_DOCKER.md`](docs/setup/DEPLOYMENT_DOCKER.md).
 
@@ -155,6 +187,7 @@ Active development is tracked here at a high level. Detailed plans, audits, and 
 
 ### Now (this sprint)
 
+- **Decouple the NLP container from the dashboard's deployment artefacts** — remove the `nlp-classifiers` service from `docker-compose-minimal.yml`, move its lifecycle into the pipeline command (Phase A only), and shrink `run-native.sh` to webapp + backend (Phase B only). Tracked on the `refactor/decouple-nlp-from-dashboard-runtime` branch.
 - **Drop `llm_pipeline_intermediate.sentence_text`** — fully derivable from `context` (regex-strip `<main>` markers, 100% redundant across all rows). Plan and impact map in [`dev_docs/SCHEMA_CLEANUP_LPI_SENTENCE_TEXT.md`](dev_docs/SCHEMA_CLEANUP_LPI_SENTENCE_TEXT.md).
 - **Manual smoke test** — verify the recent UI changes against the three patient fixtures end-to-end.
 - **REDCap mirror verification** — confirm follow-up survey submissions reach the active REDCap project with the correct field-level mapping.
