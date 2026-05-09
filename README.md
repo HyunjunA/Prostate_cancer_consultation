@@ -78,8 +78,6 @@ bash scripts/run-frontend-backend.sh
 
 **Full walkthrough**: [`docs/setup/DEPLOYMENT_NATIVE.md`](docs/setup/DEPLOYMENT_NATIVE.md) — covers prerequisites, the NLP OCI archive, the standalone pipeline runner, DB verification helpers, and troubleshooting.
 
-For the alternate full-Docker mode, see [`docs/setup/DEPLOYMENT_DOCKER.md`](docs/setup/DEPLOYMENT_DOCKER.md).
-
 ---
 
 ## Documentation

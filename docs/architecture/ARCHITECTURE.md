@@ -27,8 +27,6 @@ Three components are **independently restartable** (per the 2026-04-24 architect
 - Pipeline runs as CLI → does not need uvicorn.
 - Dashboard (uvicorn + webapp) runs without the pipeline → reads what is in DB.
 
-For the full Docker mode see [`../setup/DEPLOYMENT_DOCKER.md`](../setup/DEPLOYMENT_DOCKER.md) (legacy).
-
 ---
 
 ## Repo layout
