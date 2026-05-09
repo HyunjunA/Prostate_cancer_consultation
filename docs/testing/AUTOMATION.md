@@ -57,7 +57,7 @@ cd app/Backend
 pytest -m "not e2e" -q
 
 # Backend e2e against a local stack
-bash scripts/run-native.sh                   # spin up the stack
+bash scripts/run-frontend-backend.sh                   # spin up the stack
 cd app/Backend && pytest -m e2e -q
 
 # Webapp unit + lint

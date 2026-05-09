@@ -6,7 +6,7 @@
 #    docker compose -f app/Backend/docker-compose.yml up -d --build
 #
 #  Provided so users can ask "which mode am I in?" by looking at one
-#  script per mode (run-docker.sh vs run-native.sh).
+#  script per mode (run-docker.sh vs run-frontend-backend.sh).
 #
 #  Usage:
 #    bash scripts/run-docker.sh             # bring everything up

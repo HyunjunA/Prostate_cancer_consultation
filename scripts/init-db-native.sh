@@ -216,7 +216,7 @@ cat <<EOF
     psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DB -c "\\dt"
 
   Next steps:
-    bash scripts/run-backend-native.sh           # start native FastAPI
+    bash scripts/run-backend.sh           # start native FastAPI
     python scripts/run-ai-nlp-pipeline.py    # standalone pipeline run
 
 EOF

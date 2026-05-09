@@ -67,14 +67,14 @@ Serves the pre-computed Phase A results to doctors and patients. The dashboard b
 ```bash
 # 7. Back in this repo — start the dashboard (webapp container + native FastAPI backend)
 cd ../Prostate_cancer_consultation_dashboard
-bash scripts/run-native.sh
+bash scripts/run-frontend-backend.sh
 
 # 8. Verify in the browser
 #    http://localhost:3001       — Dashboard
 #    http://localhost:8000/docs  — API docs (Swagger)
 ```
 
-`run-native.sh` is deliberately narrow: it boots the webapp container and the native backend without touching the NLP container, so a missing or broken NLP image (e.g., a platform mismatch on a teammate's machine) does not block dashboard usage when Phase A has already populated the database.
+`run-frontend-backend.sh` is deliberately narrow: it boots the webapp container and the native backend without touching the NLP container, so a missing or broken NLP image (e.g., a platform mismatch on a teammate's machine) does not block dashboard usage when Phase A has already populated the database.
 
 **Full walkthrough**: [`docs/setup/DEPLOYMENT_NATIVE.md`](docs/setup/DEPLOYMENT_NATIVE.md) — covers prerequisites, the NLP OCI archive, the standalone pipeline runner, DB verification helpers, and troubleshooting.
 
@@ -189,7 +189,7 @@ Active development is tracked here at a high level. Detailed plans, audits, and 
 
 ### Now (this sprint)
 
-- **Decouple the NLP container from the dashboard's deployment artefacts** — remove the `nlp-classifiers` service from `docker-compose-minimal.yml`, move its lifecycle into the pipeline command (Phase A only), and shrink `run-native.sh` to webapp + backend (Phase B only). Tracked on the `refactor/decouple-nlp-from-dashboard-runtime` branch.
+- **Decouple the NLP container from the dashboard's deployment artefacts** — remove the `nlp-classifiers` service from `docker-compose-frontend.yml`, move its lifecycle into the pipeline command (Phase A only), and shrink `run-frontend-backend.sh` to webapp + backend (Phase B only). Tracked on the `refactor/decouple-nlp-from-dashboard-runtime` branch.
 - **Drop `llm_pipeline_intermediate.sentence_text`** — fully derivable from `context` (regex-strip `<main>` markers, 100% redundant across all rows). Plan and impact map in [`dev_docs/SCHEMA_CLEANUP_LPI_SENTENCE_TEXT.md`](dev_docs/SCHEMA_CLEANUP_LPI_SENTENCE_TEXT.md).
 - **Manual smoke test** — verify the recent UI changes against the three patient fixtures end-to-end.
 - **REDCap mirror verification** — confirm follow-up survey submissions reach the active REDCap project with the correct field-level mapping.

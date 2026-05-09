@@ -147,14 +147,14 @@ ls AI_physician_patient_communication/nlp-classifiers/r01-nlp-classifiers-docker
 
 #### Alternative: archive lives elsewhere on disk
 
-If you keep the archive in a different location, point `run-native.sh`
+If you keep the archive in a different location, point `run-frontend-backend.sh`
 to it via env var:
 
 ```bash
 export NLP_IMAGE_DIR=/abs/path/to/r01-nlp-classifiers-docker-image
 ```
 
-`run-native.sh` will load the image from that path on first run, then
+`run-frontend-backend.sh` will load the image from that path on first run, then
 the local Docker daemon caches it (subsequent runs skip the load).
 
 ### 1. Install native dependencies
@@ -198,7 +198,7 @@ POSTGRES_DB=prostatecancer_db_native
 DATABASE_URL=postgresql+asyncpg://prostatecancer_user:<above>@localhost:5433/prostatecancer_db_native
 DATABASE_URL_SYNC=postgresql+psycopg2://prostatecancer_user:<above>@localhost:5433/prostatecancer_db_native
 
-# NLP container is bound to 8888 in docker-compose-minimal.yml
+# NLP container is bound to 8888 in docker-compose-frontend.yml
 NLP_API_URL=http://localhost:8888
 
 API_KEY=<openssl rand -hex 32>
@@ -260,13 +260,13 @@ Both exit 0 on full pass.
 # If your NLP OCI archive is not at the default sibling path, point to it:
 export NLP_IMAGE_DIR=/abs/path/to/r01-nlp-classifiers-docker-image
 
-bash scripts/run-native.sh
+bash scripts/run-frontend-backend.sh
 ```
 
 This:
 1. Loads the NLP image into the local Docker daemon (skipped if already
    present)
-2. Brings up `nlp-classifiers` + `webapp` via `docker-compose-minimal.yml`
+2. Brings up `nlp-classifiers` + `webapp` via `docker-compose-frontend.yml`
 3. Waits for NLP healthcheck
 4. Runs `scripts/preflight-native.sh` — verifies postgres auth, NLP
    container `docker exec` stringi probe, alembic at head, redis ping.
@@ -278,7 +278,7 @@ Open:
 - Dashboard: http://localhost:3001
 - API docs:  http://localhost:8000/docs
 
-Stop with `Ctrl-C` (backend) and `docker compose -f docker-compose-minimal.yml down`
+Stop with `Ctrl-C` (backend) and `docker compose -f docker-compose-frontend.yml down`
 (containers).
 
 ### Place input transcripts
@@ -377,7 +377,7 @@ Dumps every NLP + AI stage with sample rows.
 ```bash
 # Stop native mode
 Ctrl-C                                                  # backend
-docker compose -f docker-compose-minimal.yml down       # NLP + webapp
+docker compose -f docker-compose-frontend.yml down       # NLP + webapp
 
 # Switch to Docker mode
 bash scripts/run-docker.sh up                            # full Docker stack
@@ -398,10 +398,10 @@ mode at a time.
 | Redis fails to bind :6379 | Some VS Code / Cursor extension is squatting on :6379 | `lsof -nP -iTCP:6379 -sTCP:LISTEN` to find the PID, `kill <pid>`, redis will pick up the port on next bootstrap |
 | `init-db-native.sh`: peer auth fails | Mac postgres uses OS user as superuser | Script auto-detects; if it still fails, run `createdb $(whoami)` first |
 | `init-db-native.sh`: CHANGE_ME error | placeholder still in `.env.native` | edit `POSTGRES_PASSWORD` |
-| Backend starts but `/health` says nlp=unhealthy | NLP Docker not running | `docker compose -f docker-compose-minimal.yml up -d` |
-| Webapp loads but UI shows "No patients found" | webapp container booted with empty `API_KEY` (compose interpolated `${API_KEY}` to empty) | confirm `.env.native` is sourced before `docker compose up`; `run-native.sh` does this automatically |
+| Backend starts but `/health` says nlp=unhealthy | NLP Docker not running | `docker compose -f docker-compose-frontend.yml up -d` |
+| Webapp loads but UI shows "No patients found" | webapp container booted with empty `API_KEY` (compose interpolated `${API_KEY}` to empty) | confirm `.env.native` is sourced before `docker compose up`; `run-frontend-backend.sh` does this automatically |
 | Standalone script: `No module named 'greenlet'` | sqlalchemy async lazy-imports greenlet | `.venv/bin/pip install greenlet` (already pinned in requirements.txt as of `1e3de47`) |
-| Webapp UI shows "No patients found" AND `curl /health` returns 500 AND `curl /docs` returns 200 | uvicorn workers have a stale module cache — sqlalchemy registered `_not_implemented` for greenlet at module-load time (before `pip install greenlet`). The pip install only helps brand-new Python processes; running workers keep the failed resolution. | **Restart uvicorn** (Ctrl-C the foreground process, then `bash scripts/run-backend-native.sh` again). General rule: after **any** `pip install` / `pip upgrade` against a venv whose uvicorn is already running, restart all workers. Pinning deps in `requirements.txt` prevents this scenario for fresh setups. |
+| Webapp UI shows "No patients found" AND `curl /health` returns 500 AND `curl /docs` returns 200 | uvicorn workers have a stale module cache — sqlalchemy registered `_not_implemented` for greenlet at module-load time (before `pip install greenlet`). The pip install only helps brand-new Python processes; running workers keep the failed resolution. | **Restart uvicorn** (Ctrl-C the foreground process, then `bash scripts/run-backend.sh` again). General rule: after **any** `pip install` / `pip upgrade` against a venv whose uvicorn is already running, restart all workers. Pinning deps in `requirements.txt` prevents this scenario for fresh setups. |
 | `kill <pid>` does not terminate a uvicorn process | The process is uninterruptible (stuck in a C extension or ignoring SIGTERM — observed for orphaned `--workers 1` instances) | `kill -9 <pid>` (SIGKILL). Confirm with `ps aux \| grep uvicorn` afterwards. |
 | Pipeline standalone: `pred_*` columns NULL | should be impossible after migration 006 + the persistence.py fix | open an issue with the offending analysis_id |
 
@@ -413,7 +413,7 @@ mode at a time.
 [Native — Mac/Linux host]
 ├─ postgresql@16     :5433
 ├─ redis             :6379
-├─ Backend FastAPI   :8000  (uvicorn via run-backend-native.sh)
+├─ Backend FastAPI   :8000  (uvicorn via run-backend.sh)
 └─ AI Pipeline       (CLI via run-ai-nlp-pipeline.py)
 
 [Docker — only 2]

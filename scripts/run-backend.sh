@@ -13,9 +13,9 @@
 #    4. exec uvicorn (or gunicorn in production-like mode)
 #
 #  Usage:
-#    bash scripts/run-backend-native.sh                # foreground (Ctrl-C to stop)
-#    bash scripts/run-backend-native.sh --reload       # dev: auto-reload on file change
-#    bash scripts/run-backend-native.sh --workers 4    # multi-worker (default 3)
+#    bash scripts/run-backend.sh                # foreground (Ctrl-C to stop)
+#    bash scripts/run-backend.sh --reload       # dev: auto-reload on file change
+#    bash scripts/run-backend.sh --workers 4    # multi-worker (default 3)
 #
 #  Reference: dev_docs/DEPLOYMENT_NATIVE_PLAN.md (Phase 3)
 # ============================================================================

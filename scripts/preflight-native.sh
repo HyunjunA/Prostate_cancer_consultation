@@ -91,8 +91,8 @@ NLP_CONTAINER="${STRINGI_DOCKER_CONTAINER:-prostatecancer-nlp-native}"
 
 if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$NLP_CONTAINER"; then
     fail "NLP container '$NLP_CONTAINER' not running.
-       Start it:  docker compose -f docker-compose-minimal.yml up -d
-       (Or use bash scripts/run-native.sh which auto-loads + starts it.)"
+       Start it:  docker compose -f docker-compose-frontend.yml up -d
+       (Or use bash scripts/run-frontend-backend.sh which auto-loads + starts it.)"
 fi
 ok "container $NLP_CONTAINER running"
 

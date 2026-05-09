@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # ============================================================================
-#  run-native.sh — dashboard entry point (Phase B)
+#  run-frontend-backend.sh — dashboard entry point (Phase B)
 #
 #  Brings up the dashboard's *read-time* stack:
 #    - Native postgres + redis (already running via brew services)
-#    - Docker webapp container       (docker-compose-minimal.yml)
+#    - Docker webapp container       (docker-compose-frontend.yml)
 #    - Native Backend FastAPI        (uvicorn, foreground)
 #
 #  The NLP classifier container is NOT touched here — it is a write-time
@@ -14,14 +14,14 @@
 #  request time, so this script does not depend on it being up.
 #
 #  Usage:
-#    bash scripts/run-native.sh                # foreground backend
-#    bash scripts/run-native.sh --reload       # dev hot-reload
-#    bash scripts/run-native.sh --skip-docker  # assume webapp already up
-#    bash scripts/run-native.sh --backend-only # skip docker entirely
+#    bash scripts/run-frontend-backend.sh                # foreground backend
+#    bash scripts/run-frontend-backend.sh --reload       # dev hot-reload
+#    bash scripts/run-frontend-backend.sh --skip-docker  # assume webapp already up
+#    bash scripts/run-frontend-backend.sh --backend-only # skip docker entirely
 #
 #  Stop:
 #    Ctrl-C        # stops backend
-#    docker compose -f docker-compose-minimal.yml down   # stops webapp
+#    docker compose -f docker-compose-frontend.yml down   # stops webapp
 #
 #  Process new transcripts (Phase A — separate command):
 #    .venv/bin/python scripts/run-ai-nlp-pipeline.py \
@@ -75,7 +75,7 @@ if [[ ! -f app/Webapp/.env.native && $BACKEND_ONLY -eq 0 ]]; then
     cp app/Webapp/.env.native.example app/Webapp/.env.native
 fi
 
-# Export the env vars docker-compose-minimal.yml interpolates (e.g. `${API_KEY}`).
+# Export the env vars docker-compose-frontend.yml interpolates (e.g. `${API_KEY}`).
 # Without this, compose substitutes empty strings — webapp boots without an
 # API key and every backend call fails (manifests in the UI as
 # "No patients found" / "Loading...").
@@ -93,7 +93,7 @@ fi
 if [[ $SKIP_DOCKER -eq 0 ]]; then
     section "Starting Docker (webapp only)"
 
-    docker compose -f docker-compose-minimal.yml up -d --pull never
+    docker compose -f docker-compose-frontend.yml up -d --pull never
 
     # Wait briefly for webapp to report healthy. Webapp boot is fast
     # (~5–10 s) so we cap the wait to 60 s rather than the 120 s we
@@ -119,4 +119,4 @@ fi
 
 # ── 2. Backend native (foreground) ──────────────────────────────────────────
 section "Starting native Backend"
-exec bash "$SCRIPT_DIR/run-backend-native.sh" ${BACKEND_ARGS[@]+"${BACKEND_ARGS[@]}"}
+exec bash "$SCRIPT_DIR/run-backend.sh" ${BACKEND_ARGS[@]+"${BACKEND_ARGS[@]}"}

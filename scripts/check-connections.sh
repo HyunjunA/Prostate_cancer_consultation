@@ -69,7 +69,7 @@ if curl -sf -m 3 "${NLP_URL}/ping" >/dev/null 2>&1; then
 elif curl -sf -m 3 "${NLP_URL}/" >/dev/null 2>&1; then
     pass "NLP classifiers reachable at $NLP_URL (no /ping endpoint)"
 else
-    fail "NLP NOT reachable at $NLP_URL — start Docker: docker compose -f docker-compose-minimal.yml up -d"
+    fail "NLP NOT reachable at $NLP_URL — start Docker: docker compose -f docker-compose-frontend.yml up -d"
 fi
 echo ""
 

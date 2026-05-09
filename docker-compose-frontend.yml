@@ -3,7 +3,7 @@
 #
 # This file owns ONLY the dashboard's read-time concerns: the Next.js
 # webapp container that browsers connect to. The native FastAPI backend,
-# PostgreSQL, and Redis run as host processes (see scripts/run-native.sh
+# PostgreSQL, and Redis run as host processes (see scripts/run-frontend-backend.sh
 # and scripts/setup-native-mac.sh).
 #
 # What is intentionally NOT here:
@@ -22,9 +22,9 @@
 #                     container.
 #
 # Usage:
-#   docker compose -f docker-compose-minimal.yml up -d
-#   docker compose -f docker-compose-minimal.yml logs -f webapp
-#   docker compose -f docker-compose-minimal.yml down
+#   docker compose -f docker-compose-frontend.yml up -d
+#   docker compose -f docker-compose-frontend.yml logs -f webapp
+#   docker compose -f docker-compose-frontend.yml down
 #
 # Reference: README.md "Quick Start — Native Deployment" (Phase A vs Phase B)
 # =============================================================================

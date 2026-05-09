@@ -160,7 +160,7 @@ cat <<EOF
     1. cp app/Backend/.env.native.example app/Backend/.env.native
        (then edit POSTGRES_PASSWORD, AZURE_OPENAI_*, API_KEY)
     2. bash scripts/init-db-native.sh     # bootstrap database
-    3. bash scripts/run-native.sh         # start everything
+    3. bash scripts/run-frontend-backend.sh         # start everything
     4. (separate terminal) source .venv/bin/activate &&
        python scripts/run-ai-nlp-pipeline.py --file ...
 

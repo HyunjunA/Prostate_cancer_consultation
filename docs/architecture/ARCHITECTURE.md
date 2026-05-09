@@ -37,7 +37,7 @@ For the full Docker mode see [`../setup/DEPLOYMENT_DOCKER.md`](../setup/DEPLOYME
 |---|---|
 | `app/Backend/` | FastAPI app, SQLAlchemy models, persistence modules, migrations |
 | `app/Webapp/` | Next.js 13 frontend (App Router) |
-| `scripts/` | `run-native.sh`, `init-db-native.sh`, `run-ai-nlp-pipeline.py`, etc. |
+| `scripts/` | `run-frontend-backend.sh`, `init-db-native.sh`, `run-ai-nlp-pipeline.py`, etc. |
 | `docs/` | This documentation |
 | `dev_docs/` | Internal development notes (mostly Korean) |
 | `meeting_notes/` | Meeting records (parent folder, project-wide) |

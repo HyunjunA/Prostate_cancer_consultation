@@ -139,7 +139,7 @@ DB writes are printed with a `[DB]` prefix so the operator can watch each table 
 
 ### Auto-run on backend start
 
-`scripts/run-native.sh` automatically processes every transcript in `OUTPUT_DIR` before launching uvicorn. Files that already produced a row in `transcript_analysis_log` are still re-processed (no dedup yet — see Known Limitations).
+`scripts/run-frontend-backend.sh` automatically processes every transcript in `OUTPUT_DIR` before launching uvicorn. Files that already produced a row in `transcript_analysis_log` are still re-processed (no dedup yet — see Known Limitations).
 
 ### Verification
 
