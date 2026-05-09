@@ -180,7 +180,25 @@ Installs and starts:
 calls `stringi` inside the NLP-classifiers Docker container via
 `docker exec`, which gives a 100% match with the reference pipeline.
 
-### 2. Configure environment
+### 2. Configure environment — TWO `.env` files (one per repo)
+
+The pipeline has been split into two phases that own their own
+runtime configuration:
+
+  - Phase B (this dashboard repo) reads `app/Backend/.env` for DB
+    credentials, Azure OpenAI keys, the API key the webapp uses, and
+    the REDCap survey-sync token.
+  - Phase A (the sibling AI repo) reads its own `.env` for the same
+    DB credentials and Azure keys *plus* the NLP container URL and
+    the transcript I/O paths.
+
+`DATABASE_URL` and `AZURE_OPENAI_*` are duplicated in both files by
+design — each side owns a copy of every variable it actually consumes,
+so neither phase has to reach into the other repo to start. Drift
+between the two values is a deployment concern, not an architectural
+one (see each `.env.example` for the rationale).
+
+#### 2a. Dashboard environment (Phase B)
 
 ```bash
 cp app/Backend/.env.example app/Backend/.env
@@ -200,26 +218,19 @@ DATABASE_URL_SYNC=postgresql+psycopg2://prostatecancer_user:<above>@localhost:54
 
 API_KEY=<openssl rand -hex 32>
 
-# Required for the AI sub-pipeline (omit / use --skip-ai for NLP only):
+# Required for the doctor "Try & Score" feature (Azure OpenAI direct call).
+# These same values must match the AI repo's .env in Step 2b — Phase A's
+# AI 5-substep also reads them.
 AZURE_OPENAI_ENDPOINT=https://YOUR-RESOURCE.openai.azure.com
 AZURE_OPENAI_KEY=<your key>
-# (AZURE_OPENAI_API_VERSION and AZURE_OPENAI_MODEL ship with working defaults
-#  in the template — change only if your Azure resource uses different values.)
 
-# Optional — REDCap iREDCap survey sync. With both URL and TOKEN set, every
-# patient survey submission also writes to iREDCap. Without them, submissions
-# save to local PostgreSQL only and the sync step is skipped silently.
+# Optional — REDCap iREDCap survey sync (Phase B only). With both URL
+# and TOKEN set, every patient survey submission also writes to iREDCap.
 REDCAP_API_URL=https://iredcap.csmc.edu/api/
 REDCAP_API_TOKEN=<your project API token>
 
 # Redis (defaults to native brew redis on the host)
 REDIS_URL=redis://localhost:6379/0
-
-# Pipeline I/O — relative paths, resolved against this repo's root by
-# config.py. Defaults point to the sibling AI repo so a fresh clone
-# needs no editing.
-TRANSCRIPTS_DIR=../AI_physician_patient_communication/data/input
-OUTPUT_DIR=../AI_physician_patient_communication/data/output
 
 # CORS — single-quote the JSON so `set -a; source` does not strip it
 CORS_ORIGINS='["http://localhost:3001","http://127.0.0.1:3001","http://host.docker.internal:3001"]'
@@ -227,6 +238,44 @@ CORS_ORIGINS='["http://localhost:3001","http://127.0.0.1:3001","http://host.dock
 
 `app/Webapp/.env` defaults are usable as-is
 (`NEXT_PUBLIC_API_URL=http://host.docker.internal:8000`).
+
+> Note: `NLP_API_URL`, `TRANSCRIPTS_DIR`, and `OUTPUT_DIR` are NOT in
+> the dashboard's `.env` — those are Phase A concerns and live in the
+> AI repo's `.env` (Step 2b below). The dashboard backend never calls
+> the NLP container at request time and never reads transcripts off
+> disk; surfacing those variables here would just create drift bait.
+
+#### 2b. AI repo environment (Phase A)
+
+```bash
+cp ../AI_physician_patient_communication/.env.example \
+   ../AI_physician_patient_communication/.env
+```
+
+Edit `../AI_physician_patient_communication/.env` and set:
+
+```env
+# DB target — must match the dashboard's DATABASE_URL above (Phase A
+# writes to the same database the dashboard reads).
+DATABASE_URL=postgresql+asyncpg://prostatecancer_user:<same as 2a>@localhost:5433/prostatecancer_db_native
+DATABASE_URL_SYNC=postgresql+psycopg2://prostatecancer_user:<same as 2a>@localhost:5433/prostatecancer_db_native
+
+# NLP classifier container (Phase A owns its lifecycle)
+NLP_API_URL=http://localhost:8888
+
+# Azure OpenAI — must match the dashboard's values above (the AI 5-substep
+# uses these credentials to call GPT-4o per domain).
+AZURE_OPENAI_ENDPOINT=https://YOUR-RESOURCE.openai.azure.com
+AZURE_OPENAI_KEY=<same as 2a>
+AZURE_OPENAI_API_VERSION=2024-08-01-preview
+AZURE_OPENAI_MODEL=gpt-4o
+
+# Pipeline I/O — relative paths, resolved against the AI repo's root.
+# Defaults work for the canonical layout (data/input/ for transcripts,
+# data/output/ for results).
+TRANSCRIPTS_DIR=data/input
+OUTPUT_DIR=data/output
+```
 
 ### 3. Bootstrap the database
 
