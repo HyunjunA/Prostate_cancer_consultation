@@ -1,23 +1,33 @@
 #!/usr/bin/env bash
 # ============================================================================
-#  run-native.sh — unified native-mode entry point (Phase 6)
+#  run-native.sh — dashboard entry point (Phase B)
 #
-#  Brings up the full native-mode stack:
+#  Brings up the dashboard's *read-time* stack:
 #    - Native postgres + redis (already running via brew services)
-#    - Docker NLP-classifiers + Docker webapp (docker-compose-minimal.yml)
-#    - Native Backend FastAPI (uvicorn, foreground)
+#    - Docker webapp container       (docker-compose-minimal.yml)
+#    - Native Backend FastAPI        (uvicorn, foreground)
+#
+#  The NLP classifier container is NOT touched here — it is a write-time
+#  asset of the AI pipeline (sibling AI_physician_patient_communication
+#  repo) and is started by scripts/run-pipeline-standalone.py during
+#  Phase A. Dashboard request handlers never call the NLP container at
+#  request time, so this script does not depend on it being up.
 #
 #  Usage:
 #    bash scripts/run-native.sh                # foreground backend
 #    bash scripts/run-native.sh --reload       # dev hot-reload
-#    bash scripts/run-native.sh --skip-docker  # assume webapp+nlp already up
+#    bash scripts/run-native.sh --skip-docker  # assume webapp already up
 #    bash scripts/run-native.sh --backend-only # skip docker entirely
 #
 #  Stop:
 #    Ctrl-C        # stops backend
-#    docker compose -f docker-compose-minimal.yml down   # stops webapp+nlp
+#    docker compose -f docker-compose-minimal.yml down   # stops webapp
 #
-#  Reference: dev_docs/DEPLOYMENT_NATIVE_PLAN.md (Phase 6)
+#  Process new transcripts (Phase A — separate command):
+#    .venv/bin/python scripts/run-pipeline-standalone.py \
+#      --dir ../AI_physician_patient_communication/data/input
+#
+#  Reference: README.md "Quick Start — Native Deployment" (Phase A vs Phase B)
 # ============================================================================
 set -euo pipefail
 
@@ -76,61 +86,37 @@ if [[ -f app/Backend/.env.native ]]; then
     set +a
 fi
 
-# ── 1. Start NLP + webapp Docker (unless skipped) ──────────────────────────
+# ── 1. Start webapp container (unless skipped) ─────────────────────────────
+# The dashboard's compose file only owns the webapp container now —
+# nlp-classifiers was moved to the AI pipeline's responsibility (see
+# scripts/run-pipeline-standalone.py).
 if [[ $SKIP_DOCKER -eq 0 ]]; then
-    section "Starting Docker (NLP + webapp only)"
-
-    # Load the NLP OCI archive into docker daemon if the image isn't there yet.
-    # The archive lives in the sibling AI_physician_patient_communication repo
-    # (where AI/NLP assets are kept, separate from dashboard infra).
-    NLP_IMAGE_DIR="${NLP_IMAGE_DIR:-$REPO_ROOT/../AI_physician_patient_communication/nlp-classifiers/r01-nlp-classifiers-docker-image}"
-    if [[ ! -d "$NLP_IMAGE_DIR" ]]; then
-        echo "✗ NLP OCI archive not found at $NLP_IMAGE_DIR" >&2
-        echo "  Set NLP_IMAGE_DIR env var or clone AI_physician_patient_communication." >&2
-        exit 1
-    fi
-    echo "  ▸ Loading NLP image from $NLP_IMAGE_DIR ..."
-    tar -cf /tmp/r01-nlp-classifiers.tar -C "$NLP_IMAGE_DIR" .
-    docker load -i /tmp/r01-nlp-classifiers.tar
-    rm -f /tmp/r01-nlp-classifiers.tar
-    echo "  ✓ NLP image loaded"
+    section "Starting Docker (webapp only)"
 
     docker compose -f docker-compose-minimal.yml up -d --pull never
-    echo "  Waiting for NLP healthcheck (up to 90s) ..."
 
-    DEADLINE=$((SECONDS + 120))
+    # Wait briefly for webapp to report healthy. Webapp boot is fast
+    # (~5–10 s) so we cap the wait to 60 s rather than the 120 s we
+    # used to wait for the NLP container.
+    echo "  Waiting for webapp healthcheck (up to 60s) ..."
+    DEADLINE=$((SECONDS + 60))
+    STATUS=missing
     while [[ $SECONDS -lt $DEADLINE ]]; do
-        STATUS=$(docker inspect --format '{{.State.Health.Status}}' prostatecancer-nlp-native 2>/dev/null || echo "missing")
+        STATUS=$(docker inspect --format '{{.State.Health.Status}}' prostatecancer-webapp-native 2>/dev/null || echo "missing")
         if [[ "$STATUS" == "healthy" ]]; then
-            echo "  ✓ NLP healthy"
+            echo "  ✓ webapp healthy"
             break
         fi
         sleep 3
     done
 
     if [[ "$STATUS" != "healthy" ]]; then
-        warn "NLP not healthy yet — proceeding anyway. Check: docker logs prostatecancer-nlp-native"
+        warn "webapp not healthy yet — proceeding anyway. Check: docker logs prostatecancer-webapp-native"
     fi
 else
     section "Skipping Docker (--skip-docker)"
 fi
 
-# ── 2. Auto-run pipeline on input transcripts ──────────────────────────────
-# Mirrors the Docker-mode behaviour where prestart.sh auto-processes any
-# xlsx in the transcript dir before the API is exposed. Failures are
-# non-fatal — the backend still starts so the dashboard is usable.
-INPUT_DIR="$REPO_ROOT/../AI_physician_patient_communication/data/input"
-# Use `find -print -quit` so a missing extension does not abort the test
-# the way `ls *.xlsx *.csv` would.
-if [[ -d "$INPUT_DIR" ]] && [[ -n "$(find "$INPUT_DIR" -maxdepth 1 \( -name '*.xlsx' -o -name '*.csv' \) -print -quit 2>/dev/null)" ]]; then
-    section "Auto-running pipeline on transcripts in $INPUT_DIR"
-    "$REPO_ROOT/.venv/bin/python" "$SCRIPT_DIR/run-pipeline-standalone.py" \
-        --dir "$INPUT_DIR" \
-        || warn "pipeline returned non-zero — backend will still start"
-else
-    section "No transcripts in $INPUT_DIR — skipping auto-pipeline"
-fi
-
-# ── 3. Backend native (foreground) ──────────────────────────────────────────
+# ── 2. Backend native (foreground) ──────────────────────────────────────────
 section "Starting native Backend"
 exec bash "$SCRIPT_DIR/run-backend-native.sh" ${BACKEND_ARGS[@]+"${BACKEND_ARGS[@]}"}
