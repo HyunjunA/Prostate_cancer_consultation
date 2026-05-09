@@ -245,7 +245,7 @@ async def process_single_file(
                 folder_name=stem,
                 output_path=str(output_dir),
             )
-            logger.info("  Output saved: %s/%s/ (nested format, output_test compatible)", output_dir, stem)
+            logger.info("  Output saved: %s/%s/", output_dir, stem)
         except Exception as e:
             # Disk export is non-fatal — DB save below still happens.
             logger.warning("  Output save failed (non-fatal): %s", e)
