@@ -95,7 +95,7 @@ if [[ $SKIP_DOCKER -eq 0 ]]; then
     rm -f /tmp/r01-nlp-classifiers.tar
     echo "  ✓ NLP image loaded"
 
-    docker compose -f docker-compose-minimal.yml up -d
+    docker compose -f docker-compose-minimal.yml up -d --pull never
     echo "  Waiting for NLP healthcheck (up to 90s) ..."
 
     DEADLINE=$((SECONDS + 120))
