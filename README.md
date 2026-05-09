@@ -41,28 +41,32 @@ nano app/Backend/.env.native
 bash scripts/init-db-native.sh
 ```
 
-### Phase A — Process transcripts (NLP container needed)
+### Phase A — Process transcripts (run from the AI repo)
 
-Runs the NLP + AI pipelines on consultation `.xlsx` transcripts and persists the results to PostgreSQL. The NLP Docker container is required **only during this phase** — its lifecycle is owned by the pipeline command, not by the dashboard.
+Runs the NLP + AI pipelines on consultation `.xlsx` transcripts and persists the results to PostgreSQL. The NLP Docker container is required **only during this phase** — its lifecycle is owned by the pipeline command (in the AI repo), not by the dashboard.
 
 ```bash
-# 5. Drop transcript .xlsx files into the sibling AI repo's input dir
-mkdir -p ../AI_physician_patient_communication/data/input
-cp <your-transcript>.xlsx ../AI_physician_patient_communication/data/input/
+# 5. Switch to the sibling AI repo and drop transcripts into its input dir
+cd ../AI_physician_patient_communication
+mkdir -p data/input
+cp <your-transcript>.xlsx data/input/
 
 # 6. Run the pipeline — manages the NLP container lifecycle itself
-.venv/bin/python scripts/run-pipeline-standalone.py \
-    --dir ../AI_physician_patient_communication/data/input
+../Prostate_cancer_consultation_dashboard/.venv/bin/python \
+    scripts/run-pipeline-standalone.py --dir data/input
 ```
 
-After Phase A finishes, the NLP container is no longer needed; Phase B proceeds against the persisted DB rows.
+The pipeline script lives in the AI repo (`scripts/run-pipeline-standalone.py`) alongside `docker-compose-pipeline.yml` for the NLP container — both are write-time concerns of the AI pipeline. The script still depends on the dashboard repo as a sibling clone for the persistence layer (DB models / FastAPI settings) and reuses the dashboard's Python venv.
+
+After Phase A finishes, the NLP container can be left running for repeat runs (default) or stopped explicitly with `--stop-nlp-after`. Phase B proceeds against the persisted DB rows regardless.
 
 ### Phase B — Run the dashboard (NLP container NOT needed)
 
 Serves the pre-computed Phase A results to doctors and patients. The dashboard backend reads from PostgreSQL only; it never calls the NLP container at request time.
 
 ```bash
-# 7. Start the dashboard — webapp container + native FastAPI backend
+# 7. Back in this repo — start the dashboard (webapp container + native FastAPI backend)
+cd ../Prostate_cancer_consultation_dashboard
 bash scripts/run-native.sh
 
 # 8. Verify in the browser
@@ -71,8 +75,6 @@ bash scripts/run-native.sh
 ```
 
 `run-native.sh` is deliberately narrow: it boots the webapp container and the native backend without touching the NLP container, so a missing or broken NLP image (e.g., a platform mismatch on a teammate's machine) does not block dashboard usage when Phase A has already populated the database.
-
-> **Refactor in progress.** A `refactor/decouple-nlp-from-dashboard-runtime` branch is moving the NLP container's compose entry out of `docker-compose-minimal.yml` and into the pipeline command's own lifecycle, so that the bullet "no NLP container needed" above becomes a hard guarantee at the deployment-artefact level rather than a convention. Until that refactor lands, the dashboard's `docker-compose-minimal.yml` still ships an `nlp-classifiers` service entry — you can safely ignore it for Phase B by starting only the webapp service: `docker compose -f docker-compose-minimal.yml up -d webapp`.
 
 **Full walkthrough**: [`docs/setup/DEPLOYMENT_NATIVE.md`](docs/setup/DEPLOYMENT_NATIVE.md) — covers prerequisites, the NLP OCI archive, the standalone pipeline runner, DB verification helpers, and troubleshooting.
 

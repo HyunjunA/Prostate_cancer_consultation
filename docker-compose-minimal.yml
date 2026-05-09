@@ -8,13 +8,18 @@
 #
 # What is intentionally NOT here:
 #   nlp-classifiers   The NLP classifier OCI is a write-time asset of the
-#                     sibling AI pipeline (see ../AI_physician_patient_communication/
-#                     and scripts/run-pipeline-standalone.py). Bundling it
-#                     here used to couple two unrelated lifecycles —
-#                     teammates who only wanted to view dashboard pages
-#                     were forced to also have a working NLP image. The
-#                     pipeline command now manages that container's
-#                     lifecycle itself; the dashboard never touches it.
+#                     sibling AI pipeline. Both the runner script and the
+#                     compose entry that manage its container lifecycle
+#                     live in the AI repo:
+#                       ../AI_physician_patient_communication/scripts/
+#                         run-pipeline-standalone.py
+#                       ../AI_physician_patient_communication/
+#                         docker-compose-pipeline.yml
+#                     Bundling NLP here used to couple two unrelated
+#                     lifecycles — teammates who only wanted to view
+#                     dashboard pages were forced to also have a working
+#                     NLP image. The dashboard now never touches that
+#                     container.
 #
 # Usage:
 #   docker compose -f docker-compose-minimal.yml up -d
