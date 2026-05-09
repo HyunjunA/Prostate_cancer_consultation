@@ -24,6 +24,7 @@ services:
   # ── NLP classifiers (Michael's image, single replica is fine for native) ──
   nlp-classifiers:
     image: r01-nlp-classifiers:latest
+    platform: linux/amd64
     container_name: prostatecancer-nlp-native
     ports:
       - "127.0.0.1:8888:8000"   # exposed to native backend on the host (8001 conflicts with VS Code on some setups)

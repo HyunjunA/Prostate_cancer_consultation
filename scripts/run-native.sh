@@ -83,19 +83,17 @@ if [[ $SKIP_DOCKER -eq 0 ]]; then
     # Load the NLP OCI archive into docker daemon if the image isn't there yet.
     # The archive lives in the sibling AI_physician_patient_communication repo
     # (where AI/NLP assets are kept, separate from dashboard infra).
-    if ! docker image inspect r01-nlp-classifiers:latest >/dev/null 2>&1; then
-        NLP_IMAGE_DIR="${NLP_IMAGE_DIR:-$REPO_ROOT/../AI_physician_patient_communication/nlp-classifiers/r01-nlp-classifiers-docker-image}"
-        if [[ ! -d "$NLP_IMAGE_DIR" ]]; then
-            echo "✗ NLP OCI archive not found at $NLP_IMAGE_DIR" >&2
-            echo "  Set NLP_IMAGE_DIR env var or clone AI_physician_patient_communication." >&2
-            exit 1
-        fi
-        echo "  ▸ Loading NLP image from $NLP_IMAGE_DIR ..."
-        tar -cf /tmp/r01-nlp-classifiers.tar -C "$NLP_IMAGE_DIR" .
-        docker load -i /tmp/r01-nlp-classifiers.tar
-        rm -f /tmp/r01-nlp-classifiers.tar
-        echo "  ✓ NLP image loaded"
+    NLP_IMAGE_DIR="${NLP_IMAGE_DIR:-$REPO_ROOT/../AI_physician_patient_communication/nlp-classifiers/r01-nlp-classifiers-docker-image}"
+    if [[ ! -d "$NLP_IMAGE_DIR" ]]; then
+        echo "✗ NLP OCI archive not found at $NLP_IMAGE_DIR" >&2
+        echo "  Set NLP_IMAGE_DIR env var or clone AI_physician_patient_communication." >&2
+        exit 1
     fi
+    echo "  ▸ Loading NLP image from $NLP_IMAGE_DIR ..."
+    tar -cf /tmp/r01-nlp-classifiers.tar -C "$NLP_IMAGE_DIR" .
+    docker load -i /tmp/r01-nlp-classifiers.tar
+    rm -f /tmp/r01-nlp-classifiers.tar
+    echo "  ✓ NLP image loaded"
 
     docker compose -f docker-compose-minimal.yml up -d
     echo "  Waiting for NLP healthcheck (up to 90s) ..."
