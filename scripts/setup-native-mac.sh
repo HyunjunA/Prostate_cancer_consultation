@@ -162,6 +162,6 @@ cat <<EOF
     2. bash scripts/init-db-native.sh     # bootstrap database
     3. bash scripts/run-native.sh         # start everything
     4. (separate terminal) source .venv/bin/activate &&
-       python scripts/run-pipeline-standalone.py --file ...
+       python scripts/run-ai-nlp-pipeline.py --file ...
 
 EOF

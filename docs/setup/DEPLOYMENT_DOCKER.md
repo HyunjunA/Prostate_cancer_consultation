@@ -71,7 +71,7 @@ Native and Docker modes use **different Postgres ports** (`5433` vs `5432`) so d
 
 - You want the Backend to hot-reload code changes without rebuilding a container
 - You want the DB to survive Docker recycles (native Postgres is independent)
-- You want to run the standalone pipeline (`scripts/run-pipeline-standalone.py`) against a stable DB
+- You want to run the standalone pipeline (`scripts/run-ai-nlp-pipeline.py`) against a stable DB
 
 When to prefer this Docker mode:
 - You want a one-command bring-up with no host-level dependency installs

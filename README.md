@@ -53,10 +53,10 @@ cp <your-transcript>.xlsx data/input/
 
 # 6. Run the pipeline — manages the NLP container lifecycle itself
 ../Prostate_cancer_consultation_dashboard/.venv/bin/python \
-    scripts/run-pipeline-standalone.py --dir data/input
+    scripts/run-ai-nlp-pipeline.py --dir data/input
 ```
 
-The pipeline script lives in the AI repo (`scripts/run-pipeline-standalone.py`) alongside `docker-compose-pipeline.yml` for the NLP container — both are write-time concerns of the AI pipeline. The script still depends on the dashboard repo as a sibling clone for the persistence layer (DB models / FastAPI settings) and reuses the dashboard's Python venv.
+The pipeline script lives in the AI repo (`scripts/run-ai-nlp-pipeline.py`) alongside `docker-compose-ai-nlp-pipeline.yml` for the NLP container — both are write-time concerns of the AI/NLP pipeline. The script still depends on the dashboard repo as a sibling clone for the persistence layer (DB models / FastAPI settings) and reuses the dashboard's Python venv.
 
 After Phase A finishes, the NLP container can be left running for repeat runs (default) or stopped explicitly with `--stop-nlp-after`. Phase B proceeds against the persisted DB rows regardless.
 

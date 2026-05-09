@@ -50,7 +50,7 @@ anything in the **second** list is generated for you and needs no action.
       (Step 0.5)
 - [ ] **Azure OpenAI** endpoint URL + API key — your organisation's
       Azure subscription. Required for the AI sub-pipeline; pass
-      `--skip-ai` to `run-pipeline-standalone.py` if you only want the
+      `--skip-ai` to `run-ai-nlp-pipeline.py` if you only want the
       NLP 7-step (no Azure call, no token cost)
 - [ ] **REDCap API token** (optional) — only if you want patient survey
       submissions to sync to iREDCap. Get from REDCap project page →
@@ -306,21 +306,21 @@ Quick check:
 ls "../AI_physician_patient_communication/data/input/"
 ```
 
-The next step (`run-pipeline-standalone.py`) reads from this folder.
+The next step (`run-ai-nlp-pipeline.py`) reads from this folder.
 
 ### Run the standalone pipeline (★ manager's primary requirement)
 
 Single transcript:
 
 ```bash
-.venv/bin/python scripts/run-pipeline-standalone.py \
+.venv/bin/python scripts/run-ai-nlp-pipeline.py \
     --file "../AI_physician_patient_communication/data/input/Input_Keystrokes REC 001 (SID 10).xlsx"
 ```
 
 Whole folder (every `.xlsx`/`.csv` inside, processed in sorted order):
 
 ```bash
-.venv/bin/python scripts/run-pipeline-standalone.py \
+.venv/bin/python scripts/run-ai-nlp-pipeline.py \
     --dir ../AI_physician_patient_communication/data/input
 ```
 
@@ -414,7 +414,7 @@ mode at a time.
 ├─ postgresql@16     :5433
 ├─ redis             :6379
 ├─ Backend FastAPI   :8000  (uvicorn via run-backend-native.sh)
-└─ AI Pipeline       (CLI via run-pipeline-standalone.py)
+└─ AI Pipeline       (CLI via run-ai-nlp-pipeline.py)
 
 [Docker — only 2]
 ├─ nlp-classifiers   :8888  (external NLP team's image, unavoidable)

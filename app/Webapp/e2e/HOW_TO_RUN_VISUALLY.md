@@ -34,7 +34,7 @@ modes documented here are strictly for human eyes.
    pipeline once on any sample transcript:
 
    ```bash
-   .venv/bin/python scripts/run-pipeline-standalone.py \
+   .venv/bin/python scripts/run-ai-nlp-pipeline.py \
      --file /path/to/sample.xlsx
    ```
 

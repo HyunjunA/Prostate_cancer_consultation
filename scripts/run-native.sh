@@ -9,7 +9,7 @@
 #
 #  The NLP classifier container is NOT touched here — it is a write-time
 #  asset of the AI pipeline (sibling AI_physician_patient_communication
-#  repo) and is started by scripts/run-pipeline-standalone.py during
+#  repo) and is started by scripts/run-ai-nlp-pipeline.py during
 #  Phase A. Dashboard request handlers never call the NLP container at
 #  request time, so this script does not depend on it being up.
 #
@@ -24,7 +24,7 @@
 #    docker compose -f docker-compose-minimal.yml down   # stops webapp
 #
 #  Process new transcripts (Phase A — separate command):
-#    .venv/bin/python scripts/run-pipeline-standalone.py \
+#    .venv/bin/python scripts/run-ai-nlp-pipeline.py \
 #      --dir ../AI_physician_patient_communication/data/input
 #
 #  Reference: README.md "Quick Start — Native Deployment" (Phase A vs Phase B)
@@ -89,7 +89,7 @@ fi
 # ── 1. Start webapp container (unless skipped) ─────────────────────────────
 # The dashboard's compose file only owns the webapp container now —
 # nlp-classifiers was moved to the AI pipeline's responsibility (see
-# scripts/run-pipeline-standalone.py).
+# scripts/run-ai-nlp-pipeline.py).
 if [[ $SKIP_DOCKER -eq 0 ]]; then
     section "Starting Docker (webapp only)"
 

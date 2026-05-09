@@ -20,7 +20,7 @@ Transcript (.xlsx / .csv)
 PostgreSQL (8 tables) + nested output folder
 ```
 
-Both stages run as one process via `pipeline_runner.py`; the standalone CLI `scripts/run-pipeline-standalone.py` invokes the same code path against the same DB without needing the FastAPI backend.
+Both stages run as one process via `pipeline_runner.py`; the standalone CLI `scripts/run-ai-nlp-pipeline.py` invokes the same code path against the same DB without needing the FastAPI backend.
 
 ---
 
@@ -112,7 +112,7 @@ Format matches `data/output_test/` (frozen R-pipeline reference) — used for by
 ### Standalone (manager validation path)
 
 ```bash
-.venv/bin/python scripts/run-pipeline-standalone.py \
+.venv/bin/python scripts/run-ai-nlp-pipeline.py \
     --file "../AI_physician_patient_communication/data/input/Input_Keystrokes REC 001 (SID 10).xlsx"
 ```
 

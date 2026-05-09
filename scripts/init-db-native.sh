@@ -217,6 +217,6 @@ cat <<EOF
 
   Next steps:
     bash scripts/run-backend-native.sh           # start native FastAPI
-    python scripts/run-pipeline-standalone.py    # standalone pipeline run
+    python scripts/run-ai-nlp-pipeline.py    # standalone pipeline run
 
 EOF
