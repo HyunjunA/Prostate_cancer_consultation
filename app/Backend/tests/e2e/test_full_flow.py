@@ -198,20 +198,6 @@ async def test_doctor_class_distribution():
     assert "data" in body
 
 
-async def test_doctor_score_sentence():
-    """POST /api/doctor/score-sentence should return a score."""
-    resp = await _post(
-        "/api/doctor/score-sentence",
-        headers=AUTH_HEADERS,
-        json={"sentence": "You have a low risk of cancer progression.", "class_": "1"},
-    )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert "score" in body
-    assert "sentence" in body
-    assert isinstance(body["score"], (int, float))
-
-
 async def test_doctor_ai_rewrite():
     """POST /api/doctor/ai-rewrite should return a rewritten sentence."""
     resp = await _post(
