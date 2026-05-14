@@ -59,7 +59,6 @@ The Backend imports the AI repo via `sys.path` insertion — both repos must be 
 | `auth/` | API-key auth backend, password hashing |
 | `core/` | Settings (typed env), structured logging |
 | `migrations/versions/` | Alembic 001–010 |
-| `archive/decoupled_pipeline_2026-05/` | Retired in-dashboard pipeline orchestrator (`pipeline_runner.py`, `ai_pipeline_service.py`, `nlp_classifier_client.py`, `routes_transcript.py`, `routes_nlp.py`, `sentence_classification_loader.py`). Kept for reference only; the orchestration moved to the AI repo's `main_complete_pipeline_db.py` |
 
 ---
 

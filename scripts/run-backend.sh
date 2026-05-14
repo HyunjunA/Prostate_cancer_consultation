@@ -82,15 +82,10 @@ source "$VENV_DIR/bin/activate"
 export R_HOME="${R_HOME:-$(R RHOME 2>/dev/null || true)}"
 
 # ── PYTHONPATH: sibling AI repo so backend can import ai_pipeline.* ─────────
-# Used by:
-#   - routes_doctor.py (Try & Score: from ai_pipeline.llm import call_llm
-#     and from ai_pipeline.utils.prompts import load_prompt — request-time
-#     single-sentence scoring and AI rewrite endpoints)
+# Used by routes_doctor.py for request-time Try & Score and AI Rewrite:
+#   from ai_pipeline.llm import call_llm
+#   from ai_pipeline.utils.prompts import load_prompt
 # Without this, those imports fail at request time and the route returns 503.
-# Note: the batch AI sub-pipeline (run_ai_pipeline) is no longer called
-# from this backend — it runs in the AI repo via main_complete_pipeline_db.py
-# (Phase A). See app/Backend/archive/decoupled_pipeline_2026-05/ for the
-# retired in-dashboard implementation (ai_pipeline_service.py, etc.).
 AI_REPO_DIR="$REPO_ROOT/../AI_physician_patient_communication"
 if [[ -d "$AI_REPO_DIR" ]]; then
     export PYTHONPATH="$AI_REPO_DIR${PYTHONPATH:+:$PYTHONPATH}"

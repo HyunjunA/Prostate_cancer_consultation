@@ -126,9 +126,9 @@ The backend lives at [`app/Backend/`](app/Backend/). Each concern has its own fi
 
 ### Pipeline write-side — DB persistence only
 
-The dashboard backend no longer orchestrates the NLP/AI pipeline; that
-moved to the AI repo's `main_complete_pipeline_db.py`. The dashboard
-just owns the **NLP-side** of the DB-write surface:
+NLP/AI pipeline orchestration lives in the AI repo's
+`main_complete_pipeline_db.py`. The dashboard owns the **NLP-side**
+of the DB-write surface:
 
 | File | Role |
 |---|---|
@@ -137,15 +137,9 @@ just owns the **NLP-side** of the DB-write surface:
 
 The **AI/LLM-side** writes (2 tables: `llm_pipeline_intermediate`,
 `llm_domain_scoring_and_summary`, plus the
-`transcript_analysis_log.processed=True` update) now live in the AI
+`transcript_analysis_log.processed=True` update) live in the AI
 repo's `db/persistence_helper.py` (`_save_ai_results` helper, called
-from `main_complete_pipeline_db.py`). The
-previous in-dashboard implementation (`pipeline_runner.py`,
-`ai_pipeline_service.py`, `nlp_classifier_client.py`,
-`sentence_classification_loader.py`, `routes_transcript.py`,
-`routes_nlp.py`) has been moved to
-`app/Backend/archive/decoupled_pipeline_2026-05/` — kept for reference
-but no longer wired into the running app.
+from `main_complete_pipeline_db.py`).
 
 ### App lifecycle and configuration
 

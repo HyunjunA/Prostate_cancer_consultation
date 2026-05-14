@@ -20,7 +20,7 @@ Transcript (.xlsx / .csv)
 PostgreSQL (8 tables) + nested output folder
 ```
 
-Both stages run as one process via `../AI_physician_patient_communication/main_complete_pipeline_db.py` (the canonical Phase A entry point in the sibling AI repo). It calls AI repo's own NLP and AI modules directly and writes to the same DB by importing the dashboard's `persistence.save_all()` cross-repo. The dashboard's old in-house orchestrator (`pipeline_runner.py`, `ai_pipeline_service.py`) has been moved to `app/Backend/archive/decoupled_pipeline_2026-05/` — kept for reference only, no longer wired into the running app.
+Both stages run as one process via `../AI_physician_patient_communication/main_complete_pipeline_db.py` (the canonical Phase A entry point in the sibling AI repo). It calls AI repo's own NLP and AI modules directly and writes to the same DB by importing the dashboard's `persistence.save_all()` cross-repo.
 
 ---
 
@@ -212,7 +212,6 @@ runner; the API-driven path reads them from request parameters.
 | AI/LLM module (in AI repo) | `../AI_physician_patient_communication/ai_pipeline/` |
 | NLP Docker image | OCI archive at `../AI_physician_patient_communication/nlp-classifiers/r01-nlp-classifiers-docker-image/` |
 | Reference data (frozen) | `../AI_physician_patient_communication/data/output_test/` |
-| Archived old orchestrator (reference only) | `app/Backend/archive/decoupled_pipeline_2026-05/{pipeline_runner,ai_pipeline_service,nlp_classifier_client,sentence_classification_loader}.py` |
 
 The Phase A entry point imports `persistence.save_all` and a few ORM models from the dashboard repo via `sys.path` insertion — no installation step is required when both repos are siblings.
 

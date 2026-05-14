@@ -80,12 +80,6 @@ async def client(db, monkeypatch):
     import redis_client
     monkeypatch.setattr(redis_client, "_redis", None)
 
-    # nlp_classifier_client + routes_nlp were moved to
-    # archive/decoupled_pipeline_2026-05/. The dashboard backend no longer
-    # holds an HTTP client to the NLP container, and routes_system stopped
-    # probing NLP earlier in this branch — so there is nothing here to
-    # monkey-patch any more. Phase A (AI repo) owns NLP at request time.
-
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac

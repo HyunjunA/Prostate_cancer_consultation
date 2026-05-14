@@ -23,12 +23,6 @@ Why each piece is here:
     - close_redis    : graceful shutdown so we don't leave the Redis
                        pool open when uvicorn is told to stop (e.g.
                        SIGTERM during a deploy).
-
-The dashboard used to also close an outbound HTTP client to the NLP
-service here. That client (nlp_classifier_client) has been moved to
-archive/decoupled_pipeline_2026-05/ — Phase A (AI repo) owns the NLP
-container at request time now, so the dashboard has no NLP pool to
-close on shutdown.
 """
 
 import logging
