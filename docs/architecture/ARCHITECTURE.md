@@ -7,25 +7,27 @@ High-level architecture of the COMPASS. For pipeline-step detail see [`../ml-pip
 ## Deployment topology (native, recommended)
 
 ```
-[Native — host]                              [Docker — only 2 containers]
-├── PostgreSQL 16    :5433  ───────────┐     ├── prostatecancer-nlp-native    :8888
-├── Redis (brew)     :6379             │     │     (R + 5 RF classifiers, third-party image)
-├── Backend FastAPI  :8000             │     └── prostatecancer-webapp-native :3001
-│   (uvicorn, native Python venv)      │           (Next.js 13 webapp)
-└── Pipeline CLI                       │
-    (scripts/run-ai-nlp-pipeline.py)
-                                       │
+[Native — host (this repo)]                  [Docker — Phase B containers]
+├── PostgreSQL 16    :5433  ───────────┐     └── prostatecancer-webapp-native :3001
+├── Redis (brew)     :6379             │           (Next.js 13 webapp)
+└── Backend FastAPI  :8000             │
+    (uvicorn, native Python venv)      │     [Docker — Phase A only]
+                                       │     └── prostatecancer-nlp-native    :8888
+[Sibling AI repo — Phase A CLI]        │           (R + 5 RF classifiers, third-party image,
+└── main_complete_pipeline_db.py       │            owned by the AI pipeline's compose file)
+    (in ../AI_physician_patient_communication, run only
+     when ingesting new transcripts)
+
 Webapp (Docker)  ──host.docker.internal:8000──→  Backend (native)
-Backend (native) ──localhost:8888────────────→   NLP (Docker)
 Backend (native) ──localhost:5433────────────→   Postgres (native)
 Pipeline CLI     ──localhost:5433────────────→   Postgres (native)
-Pipeline CLI     ──localhost:8888 + docker exec→ NLP (Docker)
+Pipeline CLI     ──localhost:8888 + docker exec→ NLP (Docker, Phase A only)
 ```
 
 Three components are **independently restartable** (per the 2026-04-24 architecture review):
 - DB lives outside any compose project → `docker compose down` never wipes data.
-- Pipeline runs as CLI → does not need uvicorn.
-- Dashboard (uvicorn + webapp) runs without the pipeline → reads what is in DB.
+- Pipeline runs as CLI in the sibling AI repo → does not need uvicorn, and the NLP container only has to be up during a Phase A run.
+- Dashboard (uvicorn + webapp) runs without the pipeline → reads what Phase A already wrote to DB; never calls the NLP container at request time.
 
 ---
 
@@ -35,7 +37,7 @@ Three components are **independently restartable** (per the 2026-04-24 architect
 |---|---|
 | `app/Backend/` | FastAPI app, SQLAlchemy models, persistence modules, migrations |
 | `app/Webapp/` | Next.js 13 frontend (App Router) |
-| `scripts/` | `run-frontend-backend.sh`, `init-db-native.sh`, `run-ai-nlp-pipeline.py`, etc. |
+| `scripts/` | `run-frontend-backend.sh`, `run-backend.sh`, `init-db-native.sh`, `setup-native-{mac,linux}.sh`, etc. (no in-repo pipeline runner — the Phase A entry point lives in the sibling AI repo) |
 | `docs/` | This documentation |
 | `dev_docs/` | Internal development notes (mostly Korean) |
 | `meeting_notes/` | Meeting records (parent folder, project-wide) |
@@ -51,31 +53,36 @@ The Backend imports the AI repo via `sys.path` insertion — both repos must be 
 |---|---|
 | `main.py` | FastAPI app, middleware, CORS, lifespan |
 | `db.py` | Async + sync engines, session factories |
-| `models.py` | SQLAlchemy ORM (17 tables) |
-| `pipeline_runner.py` | Orchestrates NLP 7-step (calls AI repo's `sentence_classification`) |
-| `persistence.py` | Persists NLP results to 6 tables |
-| `ai_pipeline_service.py` | Calls AI repo's `ai_pipeline.pipeline` + persists to 2 tables |
-| `nlp_classifier_client.py` | HTTP client for the NLP container's `/predict/{model}` endpoints |
-| `routes_*.py` | API routes — patient, doctor, surveys, transcript, NLP, admin, auth |
+| `models.py` | SQLAlchemy ORM (19 tables) |
+| `persistence.py` | Persists NLP results to 6 tables in one transaction (`save_all`). Called cross-repo by the AI repo's Phase A pipeline |
+| `routes_*.py` | API routes — patient, doctor, surveys, admin, system, track_* |
 | `auth/` | API-key auth backend, password hashing |
 | `core/` | Settings (typed env), structured logging |
-| `migrations/versions/` | Alembic 001–009 |
+| `migrations/versions/` | Alembic 001–010 |
+| `archive/decoupled_pipeline_2026-05/` | Retired in-dashboard pipeline orchestrator (`pipeline_runner.py`, `ai_pipeline_service.py`, `nlp_classifier_client.py`, `routes_transcript.py`, `routes_nlp.py`, `sentence_classification_loader.py`). Kept for reference only; the orchestration moved to the AI repo's `main_complete_pipeline_db.py` |
 
 ---
 
 ## Request flow (consultation → dashboard)
 
 ```
+[Phase A — write side, run from the sibling AI repo]
+
 1. Transcript (.xlsx) drops into AI_repo/data/input/
         │
-2. run-ai-nlp-pipeline.py picks it up
-        │   → pipeline_runner.run_pipeline()
-        │       ├─ NLP 7-step  (sentence_classification + nlp container)
-        │       │      → persistence.save_all()  → 6 tables
-        │       └─ AI 5-step   (ai_pipeline.pipeline, Azure OpenAI)
-        │              → ai_pipeline_service.run_ai_scoring_and_summary()  → 2 tables
-        │              → UPDATE transcript_analysis_log.processed = true
+2. ../AI_physician_patient_communication/main_complete_pipeline_db.py picks it up
+        │   → run_pipeline_for_file()
+        │       ├─ NLP Steps 0-5  (sentence_classification + nlp container)
+        │       ├─ AI  Steps 6-9  (ai_pipeline.pipeline, Azure OpenAI)
+        │       └─ Step 10        db/persistence_helper.persist_pipeline_results()
+        │              ├─ _save_nlp_results() → calls this repo's
+        │              │   persistence.save_all() cross-repo → 6 NLP tables
+        │              └─ _save_ai_results() → 2 LLM tables
+        │                  + UPDATE transcript_analysis_log.processed = true
+        │                  + UPDATE transcript_analysis_log.ai_overall_score
         │
+[Phase B — read side, this repo's dashboard]
+
 3. Webapp loads patient page
         │   → Next.js calls Backend at /api/patient/files, /api/patient/ai-summary, …
         │   → Backend reads from llm_domain_scoring_and_summary, patient_summary_domain
@@ -84,6 +91,11 @@ The Backend imports the AI repo via `sys.path` insertion — both repos must be 
 4. Patient submits survey
         │   → /api/surveys/* persists to survey_submission_log + behavior tables
         │   → optional REDCap sync (if REDCAP_API_TOKEN configured)
+        │
+5. Doctor uses Try & Score on the doctor dashboard
+        │   → /api/doctor/score-sentence or /api/doctor/ai-rewrite
+        │   → Backend imports ai_pipeline.llm cross-repo and calls Azure OpenAI
+        │     directly (request-time, no DB write)
 ```
 
 Doctor dashboard follows the same shape — reads from `llm_domain_scoring_and_summary` + `nlp_all_predictions`, writes to `doctor_behavior` + `doctor_rewrite_log`.

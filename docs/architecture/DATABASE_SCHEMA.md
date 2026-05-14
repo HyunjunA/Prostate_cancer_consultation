@@ -1,6 +1,6 @@
 # Database Schema
 
-PostgreSQL schema for the COMPASS. **17 application tables** in the `public` schema (plus `alembic_version` for migration tracking). Schema lives in `app/Backend/models.py` (SQLAlchemy ORM) and is bootstrapped via `app/Backend/database_schema.sql` + Alembic migrations 001–009.
+PostgreSQL schema for the COMPASS. **19 application tables** in the `public` schema (plus `alembic_version` for migration tracking). Schema lives in `app/Backend/models.py` (SQLAlchemy ORM) and is bootstrapped via `app/Backend/database_schema.sql` + Alembic migrations 001–010.
 
 Native deployment uses port `:5433`; Docker mode uses `:5432`.
 

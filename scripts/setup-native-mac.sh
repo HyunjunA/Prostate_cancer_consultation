@@ -160,8 +160,10 @@ cat <<EOF
     1. cp app/Backend/.env.example app/Backend/.env
        (then edit POSTGRES_PASSWORD, AZURE_OPENAI_*, API_KEY)
     2. bash scripts/init-db-native.sh     # bootstrap database
-    3. bash scripts/run-frontend-backend.sh         # start everything
-    4. (separate terminal) source .venv/bin/activate &&
-       python scripts/run-ai-nlp-pipeline.py --file ...
+    3. bash scripts/run-frontend-backend.sh         # start dashboard (Phase B)
+    4. (separate terminal — Phase A, run from the sibling AI repo)
+       cd ../AI_physician_patient_communication &&
+       ../Prostate_cancer_consultation_dashboard/.venv/bin/python \
+           main_complete_pipeline_db.py --dir data/input
 
 EOF

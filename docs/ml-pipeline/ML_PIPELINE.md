@@ -66,7 +66,7 @@ For each domain, the top-10 sentences plus ±3 context windows are passed throug
 | 4 — selection | Pick the most representative survivors |
 | 5 — reformat | Generate patient-friendly summary text |
 
-Implementation: `../AI_physician_patient_communication/ai_pipeline/pipeline.py` (sibling repo). The Phase A entry point (`main_complete_pipeline_db.py`) calls `run_ai_pipeline()` from this module directly after the NLP stage finishes; the resulting per-domain dict is then written to the LLM tables by an inline `_save_ai_to_db` helper in the same file.
+Implementation: `../AI_physician_patient_communication/ai_pipeline/pipeline.py` (sibling repo). The Phase A entry point (`main_complete_pipeline_db.py`) calls `run_ai_pipeline()` from this module directly after the NLP stage finishes; the resulting per-domain dict is then written to the LLM tables by the `_save_ai_results` helper in `../AI_physician_patient_communication/db/persistence_helper.py`.
 
 LLM: Azure OpenAI GPT-4o, configured via `AZURE_OPENAI_ENDPOINT` + `AZURE_OPENAI_KEY` + `AZURE_OPENAI_API_VERSION` (default `2024-08-01-preview`) + `AZURE_OPENAI_MODEL` (default `gpt-4o`).
 
@@ -78,8 +78,8 @@ All pipeline outputs land in PostgreSQL through two write paths:
 
 | Where the writes are issued | Tables | Stage |
 |---|---|---|
-| `app/Backend/persistence.py` (in this repo) — called cross-repo by Phase A's `_save_nlp_to_db` | `transcript_analysis_log`, `sentence_prediction`, `nlp_all_predictions`, `nlp_pipeline_intermediate`, `patient_summary`, `patient_summary_domain` | NLP |
-| `_save_ai_to_db` helper inside `main_complete_pipeline_db.py` (in the AI repo) | `llm_pipeline_intermediate`, `llm_domain_scoring_and_summary`, plus `transcript_analysis_log.ai_overall_score` UPDATE | AI |
+| `app/Backend/persistence.py` `save_all()` (in this repo) — called cross-repo by Phase A's `_save_nlp_results` helper in `../AI_physician_patient_communication/db/persistence_helper.py` | `transcript_analysis_log`, `sentence_prediction`, `nlp_all_predictions`, `nlp_pipeline_intermediate`, `patient_summary`, `patient_summary_domain` | NLP |
+| `_save_ai_results` helper in `../AI_physician_patient_communication/db/persistence_helper.py` (called from `main_complete_pipeline_db.py` after the AI 5-substep finishes) | `llm_pipeline_intermediate`, `llm_domain_scoring_and_summary`, plus `transcript_analysis_log.ai_overall_score` UPDATE | AI |
 
 See [`DATABASE_SCHEMA.md`](../architecture/DATABASE_SCHEMA.md) for column-level detail. Migration `009_widen_llm_text_columns` widens `estimate`/`treatment` columns to `TEXT` so longer LLM outputs do not overflow.
 
