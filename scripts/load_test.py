@@ -19,7 +19,7 @@ Usage (run a regular test against the local backend):
 Flags:
     --users N         Number of concurrent user sessions (default 10)
     --duration N      Total wall-clock seconds to keep firing (default 30)
-    --base-url URL    Backend base URL (default http://localhost:8000)
+    --base-url URL    Backend base URL (default http://localhost:18000)
     --include-try-score   Also exercise /api/doctor/score-sentence
                           (Azure OpenAI — burns quota; off by default)
     --target-patient ID   Use this patid (must exist in DB; default SID_10)
@@ -321,7 +321,7 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--users", type=int, default=10)
     p.add_argument("--duration", type=int, default=30, help="Seconds")
-    p.add_argument("--base-url", type=str, default="http://localhost:8000")
+    p.add_argument("--base-url", type=str, default="http://localhost:18000")
     p.add_argument("--target-patient", type=str, default="SID_10",
                    help="SID_10 / SID_14 / SID_15 — must exist in DB")
     p.add_argument("--include-try-score", action="store_true",

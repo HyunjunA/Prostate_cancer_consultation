@@ -10,7 +10,7 @@ High-level architecture of the COMPASS. For pipeline-step detail see [`../ml-pip
 [Native — host (this repo)]                  [Docker — Phase B containers]
 ├── PostgreSQL 16    :5433  ───────────┐     └── prostatecancer-webapp-native :3001
 ├── Redis (brew)     :6379             │           (Next.js 13 webapp)
-└── Backend FastAPI  :8000             │
+└── Backend FastAPI  :18000            │
     (uvicorn, native Python venv)      │     [Docker — Phase A only]
                                        │     └── prostatecancer-nlp-native    :8888
 [Sibling AI repo — Phase A CLI]        │           (R + 5 RF classifiers, third-party image,
@@ -18,7 +18,7 @@ High-level architecture of the COMPASS. For pipeline-step detail see [`../ml-pip
     (in ../AI_physician_patient_communication, run only
      when ingesting new transcripts)
 
-Webapp (Docker)  ──host.docker.internal:8000──→  Backend (native)
+Webapp (Docker)  ──host.docker.internal:18000─→  Backend (native)
 Backend (native) ──localhost:5433────────────→   Postgres (native)
 Pipeline CLI     ──localhost:5433────────────→   Postgres (native)
 Pipeline CLI     ──localhost:8888 + docker exec→ NLP (Docker, Phase A only)

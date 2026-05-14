@@ -128,7 +128,7 @@ graph TD
 
 ```mermaid
 graph LR
-    subgraph Backend["FastAPI Backend :8000"]
+    subgraph Backend["FastAPI Backend :18000"]
         DoctorAPI["/api/doctor/*<br/>files, sentences, rewrites<br/>scores, trajectory, ai-rewrite"]
         PatientAPI["/api/patient/*<br/>files, summaries, scoring"]
         SurveyAPI["/api/surveys/submit"]

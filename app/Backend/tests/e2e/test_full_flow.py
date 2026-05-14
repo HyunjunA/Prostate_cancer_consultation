@@ -45,7 +45,7 @@ if _load_dotenv is not None:
 # The pre-existing skipif guard below already keeps us from running when
 # the backend is not up, so this just needs a sensible value when it IS
 # reachable.
-BASE_URL = os.environ.get("E2E_BASE_URL", "http://localhost:8000")
+BASE_URL = os.environ.get("E2E_BASE_URL", "http://localhost:18000")
 API_KEY = os.environ.get("API_KEY", "")
 AUTH_HEADERS = {"X-API-Key": API_KEY}
 

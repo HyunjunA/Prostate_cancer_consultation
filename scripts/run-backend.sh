@@ -72,7 +72,7 @@ set -a
 source "$ENV_FILE"
 set +a
 
-PORT="${PORT_OVERRIDE:-${PORT:-8000}}"
+PORT="${PORT_OVERRIDE:-${PORT:-18000}}"
 
 # ── Activate venv ───────────────────────────────────────────────────────────
 # shellcheck disable=SC1091

@@ -71,7 +71,7 @@ bash scripts/run-frontend-backend.sh
 
 # 8. Verify in the browser
 #    http://localhost:3001       — Dashboard
-#    http://localhost:8000/docs  — API docs (Swagger)
+#    http://localhost:18000/docs — API docs (Swagger)
 ```
 
 `run-frontend-backend.sh` is deliberately narrow: it boots the webapp container and the native backend without touching the NLP container, so a missing or broken NLP image (e.g., a platform mismatch on a teammate's machine) does not block dashboard usage when Phase A has already populated the database.

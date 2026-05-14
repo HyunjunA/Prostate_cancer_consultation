@@ -266,7 +266,7 @@ CORS_ORIGINS='["http://localhost:3001","http://127.0.0.1:3001","http://host.dock
 ```
 
 `app/Webapp/.env` defaults are usable as-is
-(`NEXT_PUBLIC_API_URL=http://host.docker.internal:8000`).
+(`NEXT_PUBLIC_API_URL=http://host.docker.internal:18000`).
 
 > Note: `NLP_API_URL`, `TRANSCRIPTS_DIR`, and `OUTPUT_DIR` are NOT in
 > the dashboard's `.env` — those are Phase A concerns and live in the
@@ -448,12 +448,12 @@ What this does, in order:
 1. Starts the webapp container via `docker-compose-frontend.yml` (the only service in that file is the Next.js webapp).
 2. Waits up to 60 s for the webapp's healthcheck.
 3. Runs `scripts/preflight-native.sh` — verifies postgres auth, alembic at head, redis ping. You can also run it any time on its own with `bash scripts/preflight-native.sh`.
-4. Starts uvicorn against `main:app` on `0.0.0.0:8000` in the foreground.
+4. Starts uvicorn against `main:app` on `0.0.0.0:18000` in the foreground.
 
 Then open in a browser:
 
 - Dashboard: http://localhost:3001
-- API docs:  http://localhost:8000/docs
+- API docs:  http://localhost:18000/docs
 
 ### Stop the dashboard
 
@@ -516,12 +516,12 @@ The deployment is split across two repos that mirror the data flow:
 [Native — Mac/Linux host]
 ├─ postgresql@16     :5433
 ├─ redis             :6379
-└─ Backend FastAPI   :8000  (uvicorn via run-backend.sh)
+└─ Backend FastAPI   :18000 (uvicorn via run-backend.sh)
                             (reads from postgres, never calls NLP)
 [Docker — only 1]
 └─ webapp            :3001  (Next.js, started via docker-compose-frontend.yml)
 
-Webapp(Docker)   ──host.docker.internal:8000──→ Backend(native)
+Webapp(Docker)   ──host.docker.internal:18000─→ Backend(native)
 Backend(native)  ──localhost:5433──────────────→ Postgres(native)
 Pipeline(native) ──localhost:5433──────────────→ Postgres(native)
 Pipeline(native) ──localhost:8888──────────────→ NLP(Docker)
