@@ -46,8 +46,9 @@ independently:
 | macOS 12+ or Ubuntu/Debian 20+ | OS |
 | Homebrew (Mac) or apt (Linux) | https://brew.sh |
 | Docker Desktop | https://docker.com (only for NLP + webapp containers) |
+| `skopeo` | converts the multi-arch NLP image for the host arch at load time — installed automatically by the Step 1 setup script |
 | Source code (this repo + sibling `AI_physician_patient_communication`) | `git clone` |
-| **NLP OCI archive** (~632 MB) | obtained separately from your team's secure storage — see "0.5 Place the NLP OCI archive" below |
+| **NLP image archive** (~1.3 GB, multi-arch tar) | obtained separately from your team's secure storage — see "0.5 Place the NLP image archive" below |
 | **Azure OpenAI key + endpoint** | your organisation's Azure account (skip with `--skip-ai` for NLP-only runs) |
 | 8 GB RAM, 15 GB disk | host hardware |
 
@@ -73,9 +74,9 @@ anything in the **second** list is generated for you and needs no action.
 - [ ] Homebrew (Mac) or `apt` (Linux) available
 - [ ] Docker Desktop installed and running
 - [ ] **Source code** — both repos (URLs in Step 0)
-- [ ] **NLP OCI archive** (~632 MB) — obtained from your team's secure
-      storage; placed at
-      `AI_physician_patient_communication/nlp-classifiers/r01-nlp-classifiers-docker-image/`
+- [ ] **NLP image archive** (~1.3 GB, multi-arch tar) — obtained from
+      your team's secure storage; placed at
+      `AI_physician_patient_communication/nlp-classifiers/r01-nlp-classifiers-multi-arch.tar`
       (Step 0.5)
 - [ ] **Azure OpenAI** endpoint URL + API key — your organisation's
       Azure subscription. Required for the AI sub-pipeline; pass
@@ -101,6 +102,9 @@ anything in the **second** list is generated for you and needs no action.
   by `init-db-native.sh` (Step 3)
 - Python `.venv` + every pip dependency (incl. `greenlet`) — created
   by `setup-native-mac.sh` (Step 1)
+- `skopeo` — installed by `setup-native-mac.sh` /
+  `setup-native-linux.sh` (Step 1); required to load the multi-arch
+  NLP image
 - `port = 5433` in `postgresql.conf` — appended idempotently by
   `setup-native-mac.sh` so postgres@16 dodges the 5432 EDB collision
 
@@ -134,30 +138,26 @@ After this you should have:
 └─ AI_physician_patient_communication/       (AI repo — sentence_classification + ai_pipeline + data/)
 ```
 
-### 0.5 Place the NLP OCI archive
+### 0.5 Place the NLP image archive
 
-The NLP-classifiers Docker container is loaded from a ~632 MB OCI
-image archive that is **not** committed to git (gitignored — too
-large for plain git, would require LFS). After cloning, you must
+The NLP-classifiers Docker container is loaded from a ~1.3 GB
+**multi-arch OCI tar** (`linux/amd64` + `linux/arm64`) tracked via
+Git LFS (see `.gitattributes`). At load time the pipeline runner
+uses `skopeo` to extract the host-architecture image and convert it
+to a legacy docker-archive, then `docker load`s that — so the
+container runs natively on both Intel/AMD servers and Apple Silicon
+(no emulation), and it works even on Docker whose classic image
+store cannot `docker load` an OCI archive directly. `skopeo` is
+therefore required (installed automatically by the Step 1 setup
+script; `brew install skopeo` / `apt-get install skopeo` to add it
+manually).
+
+On a fresh clone **without** Git LFS the file lands as a small
+pointer and `docker load` fails. Install Git LFS before cloning, or
 obtain the archive separately and place it here:
 
 ```
-AI_physician_patient_communication/nlp-classifiers/r01-nlp-classifiers-docker-image/
-```
-
-#### Expected layout
-
-```
-r01-nlp-classifiers-docker-image/
-├─ blobs/
-│  └─ sha256/
-│     ├─ 1cfbf41ca0...   (~293 MB — main model layer)
-│     ├─ 60037af943...   (~211 MB — second model layer)
-│     ├─ b755216fb0...   (~60 MB)
-│     └─ ... (15+ other smaller layer files)
-├─ index.json
-├─ manifest.json
-└─ oci-layout
+AI_physician_patient_communication/nlp-classifiers/r01-nlp-classifiers-multi-arch.tar
 ```
 
 #### How to obtain
@@ -170,21 +170,22 @@ coordinate with your team to find where the current copy is kept.
 #### Verify
 
 ```bash
-ls AI_physician_patient_communication/nlp-classifiers/r01-nlp-classifiers-docker-image/
-# Should show: blobs  index.json  manifest.json  oci-layout
+ls -lh AI_physician_patient_communication/nlp-classifiers/r01-nlp-classifiers-multi-arch.tar
+# Should show a single ~1.3 GB file — not a few-hundred-byte Git LFS pointer
 ```
 
 #### Alternative: archive lives elsewhere on disk
 
-If you keep the archive in a different location, point `run-frontend-backend.sh`
-to it via env var:
+If you keep the archive in a different location, point the pipeline
+at it via env var (note: this is a **file** path, not a directory):
 
 ```bash
-export NLP_IMAGE_DIR=/abs/path/to/r01-nlp-classifiers-docker-image
+export NLP_IMAGE_TAR=/abs/path/to/r01-nlp-classifiers-multi-arch.tar
 ```
 
-`run-frontend-backend.sh` will load the image from that path on first run, then
-the local Docker daemon caches it (subsequent runs skip the load).
+`main_complete_pipeline_db.py` (Phase A) loads the image from that
+path on first run, then the local Docker daemon caches it (subsequent
+runs skip the load).
 
 ### 1. Install native dependencies
 
@@ -337,7 +338,7 @@ The script + compose file backing Phase A live in the AI repo:
 |---|---|
 | `main_complete_pipeline_db.py` | Pipeline runner (NLP 7-step + AI 5-substep) |
 | `docker-compose-ai-nlp-pipeline.yml` | NLP container lifecycle |
-| `nlp-classifiers/r01-nlp-classifiers-docker-image/` | OCI archive (image source) |
+| `nlp-classifiers/r01-nlp-classifiers-multi-arch.tar` | Multi-arch OCI tar (image source) |
 
 Phase A reads its DB credentials from the AI repo's own `.env` (set up in Step 2b above) — that file holds the same `DATABASE_URL` value as the dashboard's `.env`, so both phases write to and read from the same database. The dashboard's [One-time setup](#one-time-setup) must still be done before Phase A can write to the database (it is what creates the schema in Step 3).
 

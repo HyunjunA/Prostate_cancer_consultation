@@ -87,6 +87,10 @@ info "Installing redis-server ..."
 apt-get install -y -qq redis-server
 ok "redis-server installed"
 
+info "Installing skopeo ..."
+apt-get install -y -qq skopeo
+ok "skopeo installed"
+
 info "Installing python3.10 + venv ..."
 apt-get install -y -qq python3.10 python3.10-venv python3.10-dev python3-pip
 ok "python3.10 installed"

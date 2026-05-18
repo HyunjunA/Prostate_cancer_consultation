@@ -81,6 +81,7 @@ section "Step 1: Install brew packages"
 brew_ensure postgresql@16
 brew_ensure redis
 brew_ensure python@3.10
+brew_ensure skopeo
 
 # Add postgresql@16 to PATH for this script
 export PATH="$BREW_PREFIX/opt/postgresql@16/bin:$PATH"
