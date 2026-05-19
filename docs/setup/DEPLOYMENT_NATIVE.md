@@ -1,26 +1,25 @@
 # Native Deployment Guide
 
-> **Which branches to check out (fresh clones)**
+> **Which branch to check out (fresh clones)**
 >
-> The instructions below assume both repos are checked out on the
-> branches that carry this refactor. If you are setting up from a
-> brand-new clone, use these explicitly — the default `main` on the
-> Ivan-owned upstream of the AI repo does not yet contain
-> `main_complete_pipeline_db.py`:
+> Both repos must be on the branch that carries this refactor — the
+> branch whose AI repo contains `main_complete_pipeline_db.py` and
+> `nlp-classifiers/r01-nlp-classifiers-multi-arch.tar`. Branch names
+> differ across forks and upstreams (some upstream `main` branches
+> predate this refactor), so **confirm the exact branch with your
+> team** instead of assuming a name. Use that name as
+> `<deploy-branch>` everywhere below.
 >
-> - **AI repo** (`AI_physician_patient_communication`):
->   `refactor/decouple-nlp-from-dashboard-runtime`
-> - **Dashboard repo** (`Prostate_cancer_consultation_dashboard`):
->   `docs/fix-deployment-stale`
+> After cloning (Step 0), verify you landed on a branch that has the
+> required files — this check is the source of truth, not the branch
+> name:
 >
 > ```bash
-> # AI repo
-> cd AI_physician_patient_communication
-> git checkout refactor/decouple-nlp-from-dashboard-runtime
->
-> # Dashboard repo
-> cd ../Prostate_cancer_consultation_dashboard
-> git checkout docs/fix-deployment-stale
+> # in AI_physician_patient_communication/
+> ls main_complete_pipeline_db.py \
+>    nlp-classifiers/r01-nlp-classifiers-multi-arch.tar
+> # both must list — if either is missing, ask your team which
+> # branch to check out, then `git checkout <that-branch>`
 > ```
 
 End-to-end instructions for deploying the project with **only two Docker
@@ -45,6 +44,7 @@ independently:
 |---|---|
 | macOS 12+ or Ubuntu/Debian 20+ | OS |
 | Homebrew (Mac) or apt (Linux) | https://brew.sh |
+| **Git LFS** | https://git-lfs.com — install **and run `git lfs install` once** *before* Step 0 clone, so the 1.3 GB NLP image arrives as the real file, not a pointer |
 | Docker Desktop | https://docker.com (only for NLP + webapp containers) |
 | `skopeo` | converts the multi-arch NLP image for the host arch at load time — installed automatically by the Step 1 setup script |
 | Source code (this repo + sibling `AI_physician_patient_communication`) | `git clone` |
@@ -73,6 +73,9 @@ anything in the **second** list is generated for you and needs no action.
 - [ ] macOS 12+ or Ubuntu/Debian 20+ workstation with admin access
 - [ ] Homebrew (Mac) or `apt` (Linux) available
 - [ ] Docker Desktop installed and running
+- [ ] **Git LFS** installed and initialised (`git lfs install`)
+      **before** cloning — otherwise the NLP image archive clones as
+      a pointer and `docker load` fails (see Step 0.5)
 - [ ] **Source code** — both repos (URLs in Step 0)
 - [ ] **NLP image archive** (~1.3 GB, multi-arch tar) — obtained from
       your team's secure storage; placed at
@@ -117,14 +120,20 @@ runs end-to-end without external lookups.
 
 ### 0. Clone the two repos as siblings
 
+> **Install Git LFS first.** Run `git lfs install` **once** before the
+> clones below — the AI repo pulls a 1.3 GB LFS object (the NLP image);
+> without LFS it arrives as a small pointer and Step 0.5 / `docker
+> load` will fail. Replace `<deploy-branch>` with the branch your team
+> designates (see the branch note at the top of this guide).
+
 ```bash
 mkdir -p ~/your-workspace && cd ~/your-workspace
 
-git clone -b feat/native-deployment \
+git clone -b <deploy-branch> \
     https://github.com/HyunjunA/Prostate_cancer_consultation.git \
     Prostate_cancer_consultation_dashboard
 
-git clone -b feat/native-deployment \
+git clone -b <deploy-branch> \
     https://github.com/jifa83/AI_physician_patient_communication.git \
     AI_physician_patient_communication
 
@@ -136,6 +145,15 @@ After this you should have:
 ~/your-workspace/
 ├─ Prostate_cancer_consultation_dashboard/   (dashboard — backend + webapp + scripts)
 └─ AI_physician_patient_communication/       (AI repo — sentence_classification + ai_pipeline + data/)
+```
+
+Confirm you are on a branch that carries this refactor:
+
+```bash
+ls ../AI_physician_patient_communication/main_complete_pipeline_db.py \
+   ../AI_physician_patient_communication/nlp-classifiers/r01-nlp-classifiers-multi-arch.tar
+# both must list — if either is missing, check out the correct
+# branch in BOTH repos before continuing (see the branch note above)
 ```
 
 ### 0.5 Place the NLP image archive
@@ -205,6 +223,8 @@ Installs and starts:
   squat on 5432, and with our Docker mode which uses 5432)
 - Redis (port 6379)
 - Python 3.10 + `.venv/` with the backend's full requirements
+- `skopeo` — converts the multi-arch NLP image to a host-arch
+  docker-archive at Phase A load time
 
 **Note:** R/`stringi` is **not** installed natively. Sentence segmentation
 calls `stringi` inside the NLP-classifiers Docker container via
@@ -314,8 +334,8 @@ bash scripts/init-db-native.sh
 ```
 
 Creates the role + database, applies `app/Backend/database_schema.sql`,
-then runs `alembic upgrade head` (migrations 001–010). Verifies the 19
-expected tables are present.
+then runs `alembic upgrade head`. Verifies the 19 expected tables
+(+ `alembic_version`) are present.
 
 ### 4. (Optional) Sanity check
 
@@ -440,16 +460,31 @@ Back in this dashboard repo:
 
 ```bash
 cd /path/to/Prostate_cancer_consultation_dashboard
+```
 
+**First run (and after any `docker system prune`) — build the webapp
+image.** `run-frontend-backend.sh` starts the webapp with
+`up -d --pull never` and does **not** build it, so the image must
+already exist or the start fails with an image-not-found error:
+
+```bash
+docker compose -f docker-compose-frontend.yml build webapp
+```
+
+Then start everything:
+
+```bash
 bash scripts/run-frontend-backend.sh
 ```
 
 What this does, in order:
 
-1. Starts the webapp container via `docker-compose-frontend.yml` (the only service in that file is the Next.js webapp).
+1. Starts the webapp container via `docker-compose-frontend.yml`
+   (`up -d --pull never` — runs the image you built above; the only
+   service in that file is the Next.js webapp).
 2. Waits up to 60 s for the webapp's healthcheck.
 3. Runs `scripts/preflight-native.sh` — verifies postgres auth, alembic at head, redis ping. You can also run it any time on its own with `bash scripts/preflight-native.sh`.
-4. Starts uvicorn against `main:app` on `0.0.0.0:18000` in the foreground.
+4. Execs `scripts/run-backend.sh`, which starts uvicorn against `main:app` on `0.0.0.0:18000` in the foreground.
 
 Then open in a browser:
 
@@ -458,12 +493,7 @@ Then open in a browser:
 
 ### Stop the dashboard
 
-```bash
-Ctrl-C                                                   # stops the backend
-docker compose -f docker-compose-frontend.yml down       # stops the webapp container
-```
-
-The Phase A NLP container (if you left it running from a previous pipeline run) is untouched by either of those commands.
+See [Stopping the dashboard](#stopping-the-dashboard) below.
 
 ---
 
@@ -494,6 +524,7 @@ docker compose -f docker-compose-ai-nlp-pipeline.yml down
 | `init-db-native.sh`: peer auth fails | Mac postgres uses OS user as superuser | Script auto-detects; if it still fails, run `createdb $(whoami)` first |
 | `init-db-native.sh`: CHANGE_ME error | placeholder still in `.env` | edit `POSTGRES_PASSWORD` |
 | Phase A fails on Step 2 with `docker exec` / NLP-segmentation errors | The NLP container is not running. Phase A's `main_complete_pipeline_db.py` brings it up automatically by default; this only happens if you passed `--skip-nlp-startup` and never started the container. | Re-run without `--skip-nlp-startup`, or bring the NLP container up directly: `cd ../AI_physician_patient_communication && docker compose -f docker-compose-ai-nlp-pipeline.yml up -d`. The dashboard's `/health` does NOT report NLP status (Phase A owns that container), so do not look for an `nlp=...` field there. |
+| Phase B start fails: webapp won't start / "image not found" / `pull access denied` | Webapp image was never built — `run-frontend-backend.sh` uses `up -d --pull never` and does **not** build it | `docker compose -f docker-compose-frontend.yml build webapp`, then re-run (see Phase B → Start the dashboard) |
 | Webapp loads but UI shows "No patients found" | webapp container booted with empty `API_KEY` (compose interpolated `${API_KEY}` to empty) | confirm `.env` is sourced before `docker compose up`; `run-frontend-backend.sh` does this automatically |
 | Standalone script: `No module named 'greenlet'` | sqlalchemy async lazy-imports greenlet | `.venv/bin/pip install greenlet` (already pinned in requirements.txt as of `1e3de47`) |
 | Webapp UI shows "No patients found" AND `curl /health` returns 500 AND `curl /docs` returns 200 | uvicorn workers have a stale module cache — sqlalchemy registered `_not_implemented` for greenlet at module-load time (before `pip install greenlet`). The pip install only helps brand-new Python processes; running workers keep the failed resolution. | **Restart uvicorn** (Ctrl-C the foreground process, then `bash scripts/run-backend.sh` again). General rule: after **any** `pip install` / `pip upgrade` against a venv whose uvicorn is already running, restart all workers. Pinning deps in `requirements.txt` prevents this scenario for fresh setups. |
