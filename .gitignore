@@ -23,6 +23,9 @@ node_modules/
 .idea/
 .claude/
 
+# Harness (local AI agent workspace — not tracked in git)
+.harness/
+
 # Data files — NEVER commit
 data/
 *.csv
