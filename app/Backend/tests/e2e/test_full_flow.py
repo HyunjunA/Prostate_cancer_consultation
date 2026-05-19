@@ -45,7 +45,7 @@ if _load_dotenv is not None:
 # The pre-existing skipif guard below already keeps us from running when
 # the backend is not up, so this just needs a sensible value when it IS
 # reachable.
-BASE_URL = os.environ.get("E2E_BASE_URL", "http://localhost:8000")
+BASE_URL = os.environ.get("E2E_BASE_URL", "http://localhost:18000")
 API_KEY = os.environ.get("API_KEY", "")
 AUTH_HEADERS = {"X-API-Key": API_KEY}
 
@@ -196,20 +196,6 @@ async def test_doctor_class_distribution():
     body = resp.json()
     assert "total_files" in body
     assert "data" in body
-
-
-async def test_doctor_score_sentence():
-    """POST /api/doctor/score-sentence should return a score."""
-    resp = await _post(
-        "/api/doctor/score-sentence",
-        headers=AUTH_HEADERS,
-        json={"sentence": "You have a low risk of cancer progression.", "class_": "1"},
-    )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert "score" in body
-    assert "sentence" in body
-    assert isinstance(body["score"], (int, float))
 
 
 async def test_doctor_ai_rewrite():

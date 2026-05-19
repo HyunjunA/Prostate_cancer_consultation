@@ -429,7 +429,7 @@ The current load test (`test_100_doctors.py`) simulates 100 distinct doctors hit
 
 Prerequisites:
 
-- The Backend is reachable (default `http://localhost:8000`).
+- The Backend is reachable (default `http://localhost:18000`).
 - An `API_KEY` is available either as an environment variable or in `.env`.
 
 Run from repo root:
@@ -448,7 +448,7 @@ Tunable environment variables:
 
 | Variable                  | Default                  | Meaning                                              |
 | ------------------------- | ------------------------ | ---------------------------------------------------- |
-| `LOAD_TEST_BASE_URL`      | `http://localhost:8000`  | Where to send requests.                              |
+| `LOAD_TEST_BASE_URL`      | `http://localhost:18000` | Where to send requests.                              |
 | `LOAD_TEST_DOCTORS`       | `100`                    | Number of distinct simulated doctors.                |
 | `LOAD_TEST_CONCURRENCY`   | `100`                    | Max concurrent in-flight requests.                   |
 | `LOAD_TEST_GAP_MS`        | `0`                      | Delay between actions (0 = burst, 50 = realistic).   |

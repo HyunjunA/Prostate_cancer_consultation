@@ -23,8 +23,9 @@ Tables this module writes to:
 
 Tables this module DOES NOT write to:
     - llm_pipeline_intermediate, llm_domain_scoring_and_summary :
-      handled by the AI repo's main_complete_pipeline_db.py
-      (`_save_ai_to_db` helper) after the AI 5-substep finishes.
+      handled by the AI repo's db/persistence_helper.py
+      (`_save_ai_results` helper, called from
+      main_complete_pipeline_db.py) after the AI 5-substep finishes.
     - survey_submission_log, doctor_rewrite_log, behaviour tables :
       written by user-facing routes, not by the batch pipeline.
 """

@@ -25,7 +25,10 @@ The dashboard's deployment artefacts (this repo) manage **Phase B only**: Postgr
 Run these once on a fresh machine.
 
 ```bash
-# 1. Install native dependencies (Postgres 16, Redis, R, Python venv, Node)
+# 1. Install native dependencies (Postgres 16, Redis, Python 3.10 + venv)
+#    R and Node are NOT installed on the host:
+#      • R runs inside the NLP classifier container (called via docker exec)
+#      • Node runs inside the Webapp container (`docker compose build`)
 bash scripts/setup-native-mac.sh
 
 # 2. Copy the .env templates
@@ -71,7 +74,7 @@ bash scripts/run-frontend-backend.sh
 
 # 8. Verify in the browser
 #    http://localhost:3001       — Dashboard
-#    http://localhost:8000/docs  — API docs (Swagger)
+#    http://localhost:18000/docs — API docs (Swagger)
 ```
 
 `run-frontend-backend.sh` is deliberately narrow: it boots the webapp container and the native backend without touching the NLP container, so a missing or broken NLP image (e.g., a platform mismatch on a teammate's machine) does not block dashboard usage when Phase A has already populated the database.
@@ -106,9 +109,7 @@ The backend lives at [`app/Backend/`](app/Backend/). Each concern has its own fi
 | [`routes_patient.py`](app/Backend/routes_patient.py) | `/api/patient/...` | Patient first-visit + follow-up read paths, V37 cognition response upsert |
 | [`routes_doctor.py`](app/Backend/routes_doctor.py) | `/api/doctor/...` | Doctor dashboard reads, sentence rewrites, score trajectory |
 | [`routes_surveys.py`](app/Backend/routes_surveys.py) | `/api/surveys/...` | SDM / DCS / Risk / Satisfaction submissions + REDCap sync |
-| [`routes_transcript.py`](app/Backend/routes_transcript.py) | `/api/transcript/...` | Transcript upload, pipeline-trigger HTTP path |
-| [`routes_nlp.py`](app/Backend/routes_nlp.py) | `/api/nlp/...` | NLP classifier health, manual sentence classification |
-| [`routes_admin_pipeline.py`](app/Backend/routes_admin_pipeline.py) | `/api/admin/...` | Manual pipeline operations |
+| [`routes_admin_pipeline.py`](app/Backend/routes_admin_pipeline.py) | `/api/admin/...` | Pipeline DB-storage verification (HTTP mirror of `verify_pipeline_db.py`) |
 | [`routes_system.py`](app/Backend/routes_system.py) | `/health`, `/ready` | Health checks (unauthenticated) |
 | [`routes_track_patient_first.py`](app/Backend/routes_track_patient_first.py) | `/api/track/patient-first` | First-visit page behaviour events |
 | [`routes_track_patient_followup.py`](app/Backend/routes_track_patient_followup.py) | `/api/track/patient-followup` | Follow-up survey behaviour events |
@@ -122,28 +123,26 @@ The backend lives at [`app/Backend/`](app/Backend/). Each concern has its own fi
 | [`models.py`](app/Backend/models.py) | Single source of truth — all 19 SQLAlchemy ORM classes |
 | [`db.py`](app/Backend/db.py) | Async + sync engines, `get_db()` dependency |
 | [`persistence.py`](app/Backend/persistence.py) | NLP pipeline → 6 tables in one transaction (`save_all`) |
-| [`ai_pipeline_service.py`](app/Backend/ai_pipeline_service.py) | AI/LLM pipeline → 2 tables + `transcript_analysis_log.processed=True` |
 | [`init_db.py`](app/Backend/init_db.py) | Schema bootstrap (used by Docker entrypoint) |
 | [`inspect_pipeline_run.py`](app/Backend/inspect_pipeline_run.py) | CLI: dump pipeline outputs for one analysis |
 | [`migrations/versions/`](app/Backend/migrations/versions/) | Alembic 001–010 (10 migrations, all reversible) |
 
 ### Pipeline write-side — DB persistence only
 
-The dashboard backend no longer orchestrates the NLP/AI pipeline; that
-moved to the AI repo's `main_complete_pipeline_db.py`. The dashboard
-just owns the DB-write side:
+NLP/AI pipeline orchestration lives in the AI repo's
+`main_complete_pipeline_db.py`. The dashboard owns the **NLP-side**
+of the DB-write surface:
 
 | File | Role |
 |---|---|
-| [`persistence.py`](app/Backend/persistence.py) | `save_all()` writes the NLP-side rows in one transaction (called cross-repo by the AI repo's pipeline entry point) |
+| [`persistence.py`](app/Backend/persistence.py) | `save_all()` writes the NLP-side rows (6 tables) in one transaction — called cross-repo by the AI repo's pipeline entry point |
 | [`models.py`](app/Backend/models.py) | SQLAlchemy ORM definitions for every pipeline table — the schema source of truth |
 
-The previous orchestrator + NLP HTTP client (`pipeline_runner.py`,
-`ai_pipeline_service.py`, `nlp_classifier_client.py`,
-`sentence_classification_loader.py`, `routes_transcript.py`,
-`routes_nlp.py`) have been moved to
-`app/Backend/archive/decoupled_pipeline_2026-05/` — kept for reference
-but no longer wired into the running app.
+The **AI/LLM-side** writes (2 tables: `llm_pipeline_intermediate`,
+`llm_domain_scoring_and_summary`, plus the
+`transcript_analysis_log.processed=True` update) live in the AI
+repo's `db/persistence_helper.py` (`_save_ai_results` helper, called
+from `main_complete_pipeline_db.py`).
 
 ### App lifecycle and configuration
 
@@ -179,7 +178,7 @@ The `auth/` module is wired in but the login feature was dropped on 2026-05-07; 
 | [`tests/integration/`](app/Backend/tests/integration/) | End-to-end DB + route paths |
 | [`tests/factories.py`](app/Backend/tests/factories.py) | `TestDataFactory` for seeding |
 
-`pytest --collect-only` reports **630 tests**. Default run for local dev: `pytest -m "not e2e"` (skips load + e2e specs).
+`pytest --collect-only` reports **535 tests**. Default run for local dev: `pytest -m "not e2e"` (skips load + e2e specs).
 
 ---
 
@@ -191,7 +190,7 @@ Active development is tracked here at a high level. Detailed plans, audits, and 
 
 - **NLP container decoupled from dashboard deployment** — `nlp-classifiers` removed from `docker-compose-frontend.yml`; its lifecycle now lives with the pipeline command (Phase A only) in the AI repo. `run-frontend-backend.sh` shrank to webapp + backend (Phase B only) so the dashboard never touches the NLP container at request time.
 - **Env config split + `.env.native` → `.env` rename** — Phase A reads its runtime config from the AI repo's own `.env`; the dashboard's `.env` keeps only what Phase B actually consumes. `DATABASE_URL` and `AZURE_OPENAI_*` are duplicated by design (each side owns its copy). The legacy `.env.native` filename was retired across all 27 scripts/tests/docs in favour of plain `.env`.
-- **`/health` no longer probes NLP** — the dashboard backend's liveness probe reports only the components it actually depends on (DB + Redis); NLP is owned by Phase A and exposed separately at `/api/nlp/health` for callers that need it.
+- **`/health` no longer probes NLP** — the dashboard backend's liveness probe reports only the components it actually depends on (DB + Redis). NLP health is no longer exposed by the dashboard at all — callers that need it should hit the NLP container directly (the AI repo's pipeline runner manages the container lifecycle).
 - **V37 first-visit page** — slider state initialised at the slider's visible default so untouched sliders persist their displayed value (silent NULL bug fixed); per-section required-answer popup blocks Submit when the timeline radio is unanswered.
 - **Follow-up survey popups** — Next/Submit click on an unanswered question now opens a clear inline modal across all four sections (SDM / DCS / Risk Perception / Satisfaction). Duplicate inner section headers removed for a single source of truth.
 - **Three-patient deterministic end-to-end coverage** — Playwright walks every seeded patient (SID 10/14/15) in fixed order with backend round-trip assertions per patient.

@@ -17,7 +17,7 @@ Top-level catalog of all docs under `docs/`. Updated 2026-04-28.
 | Document | Use for |
 |---|---|
 | [`ARCHITECTURE.md`](architecture/ARCHITECTURE.md) | Deployment topology, repo layout, module map, request flow. |
-| [`DATABASE_SCHEMA.md`](architecture/DATABASE_SCHEMA.md) | All 17 tables — columns, FKs, table groups. |
+| [`DATABASE_SCHEMA.md`](architecture/DATABASE_SCHEMA.md) | All 19 tables — columns, FKs, table groups. |
 
 ---
 

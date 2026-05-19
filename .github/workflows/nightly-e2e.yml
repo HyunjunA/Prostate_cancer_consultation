@@ -182,12 +182,12 @@ jobs:
         # /health before letting pytest run.
         run: |
           PYTHONPATH="$PWD:$GITHUB_WORKSPACE/AI_physician_patient_communication" \
-            python -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1 \
+            python -m uvicorn main:app --host 0.0.0.0 --port 18000 --workers 1 \
             > /tmp/uvicorn.log 2>&1 &
           echo "uvicorn pid=$!" >> $GITHUB_STEP_SUMMARY
           # Wait up to 60s for /health.
           for _ in $(seq 1 60); do
-            if curl -sfo /dev/null http://localhost:8000/health; then
+            if curl -sfo /dev/null http://localhost:18000/health; then
               echo "✓ backend ready" >> $GITHUB_STEP_SUMMARY
               exit 0
             fi
@@ -327,11 +327,11 @@ jobs:
         # collide with the e2e job's upload.
         run: |
           PYTHONPATH="$PWD:$GITHUB_WORKSPACE/AI_physician_patient_communication" \
-            python -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1 \
+            python -m uvicorn main:app --host 0.0.0.0 --port 18000 --workers 1 \
             > /tmp/uvicorn-playwright.log 2>&1 &
           echo "uvicorn pid=$!" >> $GITHUB_STEP_SUMMARY
           for _ in $(seq 1 60); do
-            if curl -sfo /dev/null http://localhost:8000/health; then
+            if curl -sfo /dev/null http://localhost:18000/health; then
               echo "✓ backend ready" >> $GITHUB_STEP_SUMMARY
               exit 0
             fi
@@ -369,10 +369,10 @@ jobs:
         env:
           # The Webapp's Next.js Route Handlers (api/backend/[...path])
           # need to know where the FastAPI backend is. Defaults to
-          # localhost:8000 in code; pin it explicitly so a future
+          # localhost:18000 in code; pin it explicitly so a future
           # rename of that fallback can't silently break CI.
-          NEXT_PUBLIC_API_URL: "http://localhost:8000"
-          BACKEND_API_URL: "http://localhost:8000"
+          NEXT_PUBLIC_API_URL: "http://localhost:18000"
+          BACKEND_API_URL: "http://localhost:18000"
         run: npm run build
 
       - name: Start Webapp in background
@@ -381,8 +381,8 @@ jobs:
         # port, fail loud if it doesn't come up. The Playwright spec
         # uses PLAYWRIGHT_BASE_URL=http://localhost:3000.
         env:
-          NEXT_PUBLIC_API_URL: "http://localhost:8000"
-          BACKEND_API_URL: "http://localhost:8000"
+          NEXT_PUBLIC_API_URL: "http://localhost:18000"
+          BACKEND_API_URL: "http://localhost:18000"
           PORT: "3000"
         run: |
           npm run start > /tmp/webapp.log 2>&1 &

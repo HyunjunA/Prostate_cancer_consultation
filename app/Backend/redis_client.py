@@ -21,11 +21,6 @@ What Redis is used for in this backend:
                                    is already shared so adding them
                                    will not require a new client.
 
-The previous "cache NLP classifier responses" use case went away when
-nlp_classifier_client was moved to archive/decoupled_pipeline_2026-05/
-— the dashboard backend no longer talks to the NLP container at
-request time, so there is nothing classifier-shaped left to cache.
-
 Why module-level state instead of a class:
     The Redis client is a singleton per process. Wrapping it in a class
     would just add ceremony (RedisService.get_instance()) without

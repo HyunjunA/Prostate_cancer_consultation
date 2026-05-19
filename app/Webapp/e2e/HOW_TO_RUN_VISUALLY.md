@@ -13,7 +13,7 @@ modes documented here are strictly for human eyes.
 ## Prerequisites (one-time)
 
 1. **Run the full stack locally.** The specs hit a real backend at
-   `:8000` and a real Webapp at `:3000` (or `:3001` behind nginx —
+   `:18000` and a real Webapp at `:3000` (or `:3001` behind nginx —
    pick one). Easiest way: `bash scripts/run-frontend-backend.sh` from the
    repo root, which spins up Postgres, Redis, the NLP container,
    the FastAPI backend, and the Webapp in dev mode.
@@ -30,12 +30,13 @@ modes documented here are strictly for human eyes.
 3. **Confirm the backend has at least one patient.** Most specs
    self-discover whatever is in `/api/backend/patient/files`; the
    ones that need a record will *skip cleanly* if the database is
-   empty rather than fail. To populate, run the standalone
-   pipeline once on any sample transcript:
+   empty rather than fail. To populate, run the Phase A pipeline
+   (in the sibling AI repo) on any sample transcript:
 
    ```bash
-   .venv/bin/python scripts/run-ai-nlp-pipeline.py \
-     --file /path/to/sample.xlsx
+   cd ../../../AI_physician_patient_communication
+   ../Prostate_cancer_consultation_dashboard/.venv/bin/python \
+     main_complete_pipeline_db.py --file /path/to/sample.xlsx
    ```
 
 4. **`.env` should hold the real `API_KEY`.** The Playwright

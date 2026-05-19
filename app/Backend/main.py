@@ -56,14 +56,6 @@ from routes_track_doctor import router as track_doctor_router
 from routes_track_patient_first import router as track_patient_first_router
 from routes_track_patient_followup import router as track_patient_followup_router
 from routes_track_recordings import router as track_recordings_router
-# routes_transcript / routes_nlp have been moved to
-# archive/decoupled_pipeline_2026-05/ — they were dormant (the webapp does
-# not call any of their endpoints) and they pulled in pipeline_runner +
-# ai_pipeline_service + nlp_classifier_client, which are now owned by the
-# AI repo's main_complete_pipeline_db.py. Keeping these routers wired up
-# here would re-introduce the cross-repo coupling we just removed.
-# routes_admin_pipeline stayed put — it only does DB read queries and
-# does not depend on any of the archived files.
 
 # Apply the standard logging config (level + format) BEFORE create_app()
 # runs so the FastAPI startup banner and lifespan hooks get the same

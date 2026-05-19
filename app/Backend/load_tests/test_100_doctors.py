@@ -34,7 +34,7 @@ import aiohttp
 
 # ── Config ───────────────────────────────────────────────────────────────────
 
-BASE_URL = os.getenv("LOAD_TEST_BASE_URL", "http://localhost:8000")
+BASE_URL = os.getenv("LOAD_TEST_BASE_URL", "http://localhost:18000")
 NUM_DOCTORS = int(os.getenv("LOAD_TEST_DOCTORS", "100"))
 CONCURRENCY = int(os.getenv("LOAD_TEST_CONCURRENCY", "100"))
 PATIENT_FILE = "Input_Keystrokes REC 001 (SID 10).xlsx"

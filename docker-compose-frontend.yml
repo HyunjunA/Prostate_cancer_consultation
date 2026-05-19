@@ -8,11 +8,12 @@
 #
 # What is intentionally NOT here:
 #   nlp-classifiers   The NLP classifier OCI is a write-time asset of the
-#                     sibling AI/NLP pipeline. Both the runner script and
-#                     the compose entry that manage its container
-#                     lifecycle live in the AI repo:
-#                       ../AI_physician_patient_communication/scripts/
-#                         run-ai-nlp-pipeline.py
+#                     sibling AI/NLP pipeline. Its container lifecycle is
+#                     managed by the AI repo's Phase A pipeline entry
+#                     point, which brings the container up itself via
+#                     utils/nlp_container.ensure_running():
+#                       ../AI_physician_patient_communication/
+#                         main_complete_pipeline_db.py
 #                       ../AI_physician_patient_communication/
 #                         docker-compose-ai-nlp-pipeline.yml
 #                     Bundling NLP here used to couple two unrelated
@@ -38,12 +39,12 @@ services:
       dockerfile: Dockerfile
     container_name: prostatecancer-webapp-native
     env_file:
-      - app/Webapp/.env       # NEXT_PUBLIC_API_URL=http://host.docker.internal:8000
+      - app/Webapp/.env       # NEXT_PUBLIC_API_URL=http://host.docker.internal:18000
     environment:
       NODE_ENV: production
       # Server-only env vars (host.docker.internal lets the container reach
       # the native uvicorn backend on the Mac/Linux host).
-      BACKEND_URL: http://host.docker.internal:8000
+      BACKEND_URL: http://host.docker.internal:18000
       API_KEY: ${API_KEY}
     extra_hosts:
       # Linux: docker doesn't auto-resolve host.docker.internal — declare it.

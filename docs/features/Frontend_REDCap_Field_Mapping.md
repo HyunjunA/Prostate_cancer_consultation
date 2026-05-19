@@ -763,7 +763,7 @@ async def import_to_redcap_record(record_id, import_data):
 
 ```http
 ### Test SDM Survey Submission
-POST http://localhost:8000/api/surveys/submit
+POST http://localhost:18000/api/surveys/submit
 Content-Type: application/json
 
 {
@@ -779,7 +779,7 @@ Content-Type: application/json
 }
 
 ### Verify in REDCap
-GET http://localhost:8000/api/surveys/redcap/records/TEST_PATIENT_001
+GET http://localhost:18000/api/surveys/redcap/records/TEST_PATIENT_001
 ```
 
 ### 7.2 Expected Console Output

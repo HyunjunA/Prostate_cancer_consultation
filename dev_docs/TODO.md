@@ -319,13 +319,14 @@ The Webapp Playwright e2e suite landed with three deep specs that drive the actu
 
 ```yaml
 - name: Seed fixture data via pipeline
-  working-directory: app/Backend
+  working-directory: ../AI_physician_patient_communication
   env:
     AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
     AZURE_OPENAI_KEY: ${{ secrets.AZURE_OPENAI_KEY }}
   run: |
-    python ../../scripts/run-ai-nlp-pipeline.py \
-      --file tests/fixtures/sample_transcript.xlsx
+    ../Prostate_cancer_consultation_dashboard/.venv/bin/python \
+      main_complete_pipeline_db.py \
+      --file ../Prostate_cancer_consultation_dashboard/app/Backend/tests/fixtures/sample_transcript.xlsx
 ```
 
 **Open decisions.**
