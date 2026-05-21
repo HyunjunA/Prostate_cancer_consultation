@@ -811,11 +811,10 @@ const InstructionsBox: React.FC<InstructionsBoxProps> = ({ isDark }) => {
               </span>
               <span>
                 Use <strong>Next</strong> to open each category's question
-                screen. <strong>Answer the questions</strong> about that
-                category and click <strong>Submit</strong>. If you need
-                to revisit the summary or supporting sentences, they
-                remain available on the same screen, and you can{" "}
-                <strong>rate how helpful</strong> the summary was.
+                screen and <strong>answer the questions</strong> about
+                that category, then click <strong>Submit</strong>. If you
+                need to revisit the summary or supporting sentences, they
+                remain available on the same screen.
               </span>
             </p>
             <p className="flex items-start gap-2">
