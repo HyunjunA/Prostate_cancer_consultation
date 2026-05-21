@@ -907,6 +907,13 @@ const TopicCard: React.FC<TopicCardProps> = ({
   const topicId = topicName.replace(/\s+/g, "");
   const colors = TOPIC_COLORS[topicName] || TOPIC_COLORS["Cancer Prognosis"];
 
+  // [V38] Local toggle for the AI-Generated Summary section, matching the
+  // collapsible "View/Hide relevant sentences from your visit" pattern.
+  // Defaults to expanded so the AI summary — the core artifact patients
+  // are evaluating — is always visible on entry; the patient can collapse
+  // it on demand.
+  const [showAiSummary, setShowAiSummary] = React.useState<boolean>(true);
+
   // [V37] Cancer Prognosis (Experimental arm) — three additional questions
   // are rendered directly below the AI Summary for this topic only. Other
   // topics ignore these state slots. Local state only; backend persistence
@@ -1236,34 +1243,57 @@ const TopicCard: React.FC<TopicCardProps> = ({
             isDark ? "bg-slate-900/40" : "bg-gray-50/50",
           )}
         >
-          {/* [V35] AI Summary Text — visually distinct from consultation excerpts */}
-          <div
-            className={cx(
-              "p-3 sm:p-4 lg:p-5 rounded-2xl mb-6 border-l-4",
-              isDark
-                ? "bg-violet-950/30 border-l-violet-500 border-y border-r border-violet-500/20"
-                : "bg-gradient-to-r from-violet-50 to-indigo-50 border-l-violet-500 border-y border-r border-violet-200/50 shadow-sm",
-            )}
-          >
-            <div className="flex items-center gap-2 mb-3">
-              <Sparkles size={14} className={isDark ? "text-violet-400" : "text-violet-500"} />
-              <span
-                className={cx(
-                  "text-xs font-bold uppercase tracking-wider",
-                  isDark ? "text-violet-400" : "text-violet-600",
-                )}
-              >
-                AI-Generated Summary
-              </span>
-            </div>
-            <p
+          {/* [V38] AI-Generated Summary — collapsible to match the
+              "View/Hide relevant sentences from your visit" toggle.
+              Same button chrome (rounded-xl, neutral border/bg, icon
+              + label + chevron) so the card now has a consistent
+              pattern across both expandable sections. The expanded
+              content keeps the V35 violet card so AI provenance is
+              still visually distinct from consultation text. */}
+          <div className="mb-6">
+            <button
+              type="button"
+              onClick={() => setShowAiSummary((v) => !v)}
+              data-track-proximity={`AiSummaryToggle_${topicId}`}
               className={cx(
-                "text-base leading-relaxed",
-                isDark ? "text-slate-300" : "text-gray-700",
+                "w-full flex items-center justify-between gap-2 px-3 py-3 sm:px-4 sm:py-3.5 lg:px-5 lg:py-4 rounded-xl text-sm font-semibold transition-all duration-200",
+                isDark
+                  ? "bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700"
+                  : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200 shadow-sm hover:shadow",
               )}
             >
-              {aiSummary}
-            </p>
+              <div className="flex items-center gap-2">
+                <Sparkles size={16} className="opacity-70" />
+                <span>
+                  {showAiSummary ? "Hide" : "View"} AI-Generated Summary
+                </span>
+              </div>
+              {showAiSummary ? (
+                <ChevronUp size={16} />
+              ) : (
+                <ChevronDown size={16} />
+              )}
+            </button>
+
+            {showAiSummary && (
+              <div
+                className={cx(
+                  "mt-4 p-3 sm:p-4 lg:p-5 rounded-2xl border-l-4",
+                  isDark
+                    ? "bg-violet-950/30 border-l-violet-500 border-y border-r border-violet-500/20"
+                    : "bg-gradient-to-r from-violet-50 to-indigo-50 border-l-violet-500 border-y border-r border-violet-200/50 shadow-sm",
+                )}
+              >
+                <p
+                  className={cx(
+                    "text-base leading-relaxed",
+                    isDark ? "text-slate-300" : "text-gray-700",
+                  )}
+                >
+                  {aiSummary}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* [V37] Cancer Prognosis — Experimental arm sub-questions
