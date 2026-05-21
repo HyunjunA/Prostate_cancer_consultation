@@ -1318,6 +1318,16 @@ const TopicCard: React.FC<TopicCardProps> = ({
                   : "bg-white border-gray-200",
               )}
             >
+              {/* [V38] Shared preamble — shown once per domain instead of
+                  repeated in every question (meeting item 6-4). */}
+              <p
+                className={cx(
+                  "text-sm font-semibold",
+                  isDark ? "text-slate-200" : "text-gray-800",
+                )}
+              >
+                The AI summary from your consultation is above.
+              </p>
               {/* (1) VAS — risk of dying WITHOUT treatment */}
               <div>
                 <p
@@ -1326,8 +1336,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
                     isDark ? "text-slate-300" : "text-gray-700",
                   )}
                 >
-                  <span className="font-semibold">(1)</span> The AI summary
-                  from your consultation is above. Based on the AI summary
+                  <span className="font-semibold">(1)</span> Based on the AI summary
                   and/or what you remember from your consultation, what is
                   your understanding of the risk of dying of cancer{" "}
                   <strong>without treatment</strong>?
@@ -1427,8 +1436,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
                     isDark ? "text-slate-300" : "text-gray-700",
                   )}
                 >
-                  <span className="font-semibold">(2)</span> The AI summary
-                  from your consultation is above. Based on the AI summary
+                  <span className="font-semibold">(2)</span> Based on the AI summary
                   and/or what you remember from your consultation, what is
                   your understanding of the risk of dying of cancer{" "}
                   <strong>with treatment</strong>?
@@ -1509,8 +1517,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
                     isDark ? "text-slate-300" : "text-gray-700",
                   )}
                 >
-                  <span className="font-semibold">(3)</span> The AI summary
-                  from your consultation is above. Based on the AI summary
+                  <span className="font-semibold">(3)</span> Based on the AI summary
                   and/or what you remember from your consultation, over
                   what time period was the risk of cancer death quoted
                   (choose one)?
@@ -1598,6 +1605,16 @@ const TopicCard: React.FC<TopicCardProps> = ({
                   : "bg-white border-gray-200",
               )}
             >
+              {/* [V38] Shared preamble — shown once per domain instead of
+                  repeated in every question (meeting item 6-4). */}
+              <p
+                className={cx(
+                  "text-sm font-semibold",
+                  isDark ? "text-slate-200" : "text-gray-800",
+                )}
+              >
+                The AI summary from your consultation is above.
+              </p>
               {/* (1) Radio — projected life expectancy */}
               <div>
                 <p
@@ -1606,8 +1623,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
                     isDark ? "text-slate-300" : "text-gray-700",
                   )}
                 >
-                  <span className="font-semibold">(1)</span> The AI summary
-                  from your consultation is above. Based on the AI summary
+                  <span className="font-semibold">(1)</span> Based on the AI summary
                   and/or what you remember from your consultation, what is
                   your understanding of your projected life expectancy?
                 </p>
@@ -1678,8 +1694,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
                     isDark ? "text-slate-300" : "text-gray-700",
                   )}
                 >
-                  <span className="font-semibold">(2)</span> The AI summary
-                  from your consultation is above. Based on the AI summary
+                  <span className="font-semibold">(2)</span> Based on the AI summary
                   and/or what you remember from your consultation, what
                   factors were considered by your doctor in making this
                   estimate?{" "}
@@ -1777,6 +1792,16 @@ const TopicCard: React.FC<TopicCardProps> = ({
                   : "bg-white border-gray-200",
               )}
             >
+              {/* [V38] Shared preamble — shown once per domain instead of
+                  repeated in every question (meeting item 6-4). */}
+              <p
+                className={cx(
+                  "text-sm font-semibold",
+                  isDark ? "text-slate-200" : "text-gray-800",
+                )}
+              >
+                The AI summary from your consultation is above.
+              </p>
               {/* (1) VAS — likelihood of returning to baseline */}
               <div>
                 <p
@@ -1785,8 +1810,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
                     isDark ? "text-slate-300" : "text-gray-700",
                   )}
                 >
-                  <span className="font-semibold">(1)</span> The AI summary
-                  of your consultation is above. Based on the AI summary
+                  <span className="font-semibold">(1)</span> Based on the AI summary
                   and/or what you remember from your consultation, how
                   likely is it that you will return to your{" "}
                   <strong>
@@ -1871,8 +1895,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
                     isDark ? "text-slate-300" : "text-gray-700",
                   )}
                 >
-                  <span className="font-semibold">(2)</span> The AI summary
-                  of your consultation is above. Based on the AI summary
+                  <span className="font-semibold">(2)</span> Based on the AI summary
                   and/or what you remember from your consultation, over
                   what time period was this risk quoted?
                 </p>
@@ -1943,8 +1966,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
                     isDark ? "text-slate-300" : "text-gray-700",
                   )}
                 >
-                  <span className="font-semibold">(3)</span> The AI summary
-                  from your consultation is above. Based on the AI summary
+                  <span className="font-semibold">(3)</span> Based on the AI summary
                   and/or what you remember from your consultation, what
                   factors were considered by your doctor in making this
                   estimate?{" "}
@@ -2042,6 +2064,16 @@ const TopicCard: React.FC<TopicCardProps> = ({
                   : "bg-white border-gray-200",
               )}
             >
+              {/* [V38] Shared preamble — shown once per domain instead of
+                  repeated in every question (meeting item 6-4). */}
+              <p
+                className={cx(
+                  "text-sm font-semibold",
+                  isDark ? "text-slate-200" : "text-gray-800",
+                )}
+              >
+                The AI summary from your consultation is above.
+              </p>
               {/* (1) VAS — risk of urinary incontinence */}
               <div>
                 <p
@@ -2050,8 +2082,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
                     isDark ? "text-slate-300" : "text-gray-700",
                   )}
                 >
-                  <span className="font-semibold">(1)</span> The AI summary
-                  from your consultation is above. Based on the AI summary
+                  <span className="font-semibold">(1)</span> Based on the AI summary
                   and/or what you remember from your consultation, what is
                   your understanding of your{" "}
                   <strong>risk of urinary incontinence</strong>?
@@ -2133,8 +2164,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
                     isDark ? "text-slate-300" : "text-gray-700",
                   )}
                 >
-                  <span className="font-semibold">(2)</span> The AI summary
-                  from your consultation is above. Based on the AI summary
+                  <span className="font-semibold">(2)</span> Based on the AI summary
                   and/or what you remember from your consultation, over
                   what timeline was this risk quoted?
                 </p>
@@ -2205,8 +2235,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
                     isDark ? "text-slate-300" : "text-gray-700",
                   )}
                 >
-                  <span className="font-semibold">(3)</span> The AI summary
-                  from your consultation is above. Based on the AI summary
+                  <span className="font-semibold">(3)</span> Based on the AI summary
                   and/or what you remember from your consultation, what
                   factors were considered by your doctor in making this
                   estimate?{" "}
@@ -2305,6 +2334,16 @@ const TopicCard: React.FC<TopicCardProps> = ({
                   : "bg-white border-gray-200",
               )}
             >
+              {/* [V38] Shared preamble — shown once per domain instead of
+                  repeated in every question (meeting item 6-4). */}
+              <p
+                className={cx(
+                  "text-sm font-semibold",
+                  isDark ? "text-slate-200" : "text-gray-800",
+                )}
+              >
+                The AI summary from your consultation is above.
+              </p>
               {/* (1) VAS — risk of irritative lower urinary tract sx */}
               <div>
                 <p
@@ -2313,8 +2352,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
                     isDark ? "text-slate-300" : "text-gray-700",
                   )}
                 >
-                  <span className="font-semibold">(1)</span> The AI summary
-                  from your consultation is above. Based on the AI summary
+                  <span className="font-semibold">(1)</span> Based on the AI summary
                   and/or what you remember from your consultation, what is
                   your understanding of your{" "}
                   <strong>
@@ -2470,8 +2508,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
                     isDark ? "text-slate-300" : "text-gray-700",
                   )}
                 >
-                  <span className="font-semibold">(3)</span> The AI summary
-                  from your consultation is above. Based on the AI summary
+                  <span className="font-semibold">(3)</span> Based on the AI summary
                   and/or what you remember from your consultation, what
                   factors were considered by your doctor in making this
                   estimate?{" "}
