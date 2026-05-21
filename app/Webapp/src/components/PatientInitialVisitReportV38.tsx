@@ -3268,19 +3268,6 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
     }
   };
 
-  // Submission Progress calculation — counts topics for which the patient
-  // has clicked the per-domain Submit button.
-  const submissionProgress = useMemo(() => {
-    const submitted = TOPIC_ORDER.filter(
-      (topic) => submittedDomains[topic],
-    ).length;
-    return {
-      submitted,
-      total: TOPIC_ORDER.length,
-      percentage: Math.round((submitted / TOPIC_ORDER.length) * 100),
-    };
-  }, [submittedDomains]);
-
   // Print Styles
   useEffect(() => {
     const style = document.createElement("style");
@@ -3639,66 +3626,10 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
         <HelpfulnessLegend isDark={isDarkMode} />
         */}
 
-        {/* Submission Progress Indicator.
-            [V38] Hidden on Overview (screen 0) — the Overview has no
-            answering UI so a "X / 5 submitted" tracker is misleading
-            there. Shown on per-domain screens (1-5) so the patient can
-            see overall progress while answering. */}
-        {currentScreen !== 0 && (
-          <div
-            className={cx(
-              "mb-4 sm:mb-6 lg:mb-8 p-4 sm:p-5 lg:p-6 rounded-2xl border",
-              isDarkMode
-                ? "bg-slate-900/50 border-slate-800/50"
-                : "bg-white/80 border-gray-200/50 shadow-lg shadow-gray-500/5",
-            )}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <span
-                className={cx(
-                  "text-base font-bold",
-                  isDarkMode ? "text-white" : "text-gray-800",
-                )}
-              >
-                Submission Progress
-              </span>
-              <span
-                className={cx(
-                  "text-sm font-bold px-4 py-1.5 rounded-full",
-                  submissionProgress.percentage === 100
-                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400"
-                    : isDarkMode
-                      ? "bg-slate-800 text-slate-400"
-                      : "bg-gray-100 text-gray-600",
-                )}
-              >
-                {submissionProgress.submitted} / {submissionProgress.total}
-              </span>
-            </div>
-            <div
-              className={cx(
-                "w-full h-3 rounded-full overflow-hidden",
-                isDarkMode ? "bg-slate-800" : "bg-gray-200",
-              )}
-            >
-              <div
-                className={cx(
-                  "h-full rounded-full transition-all duration-700 ease-out",
-                  submissionProgress.percentage === 100
-                    ? "bg-gradient-to-r from-emerald-400 to-teal-500"
-                    : "bg-gradient-to-r from-indigo-500 to-violet-500",
-                )}
-                style={{ width: `${submissionProgress.percentage}%` }}
-              />
-            </div>
-            {submissionProgress.percentage === 100 && (
-              <p className="mt-4 text-sm font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
-                <CheckCircle2 size={18} />
-                Thank you for submitting all topics!
-              </p>
-            )}
-          </div>
-        )}
+        {/* [V38] Submission Progress indicator removed across all screens
+            per user request — the wizard's top progress bar already shows
+            the patient's position, and per-card "Submitted ✓" feedback
+            covers per-domain status. */}
 
         {/* Topic Cards — V38 wizard: render all 5 always (state preserved
             via display:none) so answers entered on one domain screen survive
