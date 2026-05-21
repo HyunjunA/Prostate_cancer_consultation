@@ -2974,6 +2974,31 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentScreen]);
 
+  // [V38] On the Overview screen open the "View relevant sentences" panel
+  // for each topic by default — patients should see the underlying
+  // sentences without having to click each card open. A topic is only
+  // auto-opened when the user has not yet touched its toggle on this
+  // session (its state is still undefined). If they explicitly close it,
+  // the close is respected on subsequent Overview entries until the next
+  // data reload. Gated on apiLoading so the auto-open happens AFTER
+  // loadSummaryData resets showEvidenceStates to {}.
+  useEffect(() => {
+    if (currentScreen !== 0) return;
+    if (apiLoading) return;
+    setShowEvidenceStates((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const t of TOPIC_ORDER) {
+        if (next[t] === undefined) {
+          next[t] = true;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentScreen, apiLoading]);
+
   // [V37] After mount-time GET resolves, mark any domain that already
   // has a persisted row as submitted so the progress indicator and
   // each card's button reflect the patient's prior session.
