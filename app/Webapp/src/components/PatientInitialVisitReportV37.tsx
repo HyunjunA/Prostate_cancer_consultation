@@ -3423,11 +3423,11 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
               isDarkMode ? "text-violet-300" : "text-violet-700",
             )}
           >
-            <span className="font-semibold">COM</span>MUNICATION OF{" "}
-            <span className="font-semibold">P</span>ROSTATE C
-            <span className="font-semibold">A</span>NCER{" "}
-            <span className="font-semibold">S</span>HARED DECISION
-            <span className="font-semibold">S</span>
+            <span className="font-semibold">Com</span>munication of{" "}
+            <span className="font-semibold">P</span>rognosis,{" "}
+            <span className="font-semibold">A</span>lternatives, and{" "}
+            <span className="font-semibold">S</span>ide Effects for{" "}
+            <span className="font-semibold">S</span>hared Decision Making
           </p>
         </div>
 

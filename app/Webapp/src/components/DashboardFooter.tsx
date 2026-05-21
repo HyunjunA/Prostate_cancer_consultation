@@ -40,7 +40,7 @@ export const DashboardFooter: React.FC = () => {
             R01 Prostate Cancer Communication Study, Cedars-Sinai
           </span>
           <span className="hidden sm:inline">
-            COMPASS — COMmunication of Prostate cAncer Shared decisionS
+            COMPASS — COMmunication of Prostate cAncer Shared deciSionS
             {" · "}
             R01 Prostate Cancer Communication Study, Cedars-Sinai Medical Center
           </span>
