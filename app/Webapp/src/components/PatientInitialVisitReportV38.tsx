@@ -1305,6 +1305,151 @@ const TopicCard: React.FC<TopicCardProps> = ({
             )}
           </div>
 
+          {/* [V38] Relevant sentences toggle — moved here (directly under
+              the AI summary toggle) per the 2026-05-21 layout request, so
+              both review panels sit together above the questions. */}
+          <div className="mb-6">
+            <button
+              type="button"
+              onClick={onToggleEvidence}
+              data-track-proximity={`EvidenceToggle_${topicId}`}
+              className={cx(
+                "w-full flex items-center justify-between gap-2 px-3 py-3 sm:px-4 sm:py-3.5 lg:px-5 lg:py-4 rounded-xl text-sm font-semibold transition-all duration-200",
+                isDark
+                  ? "bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700"
+                  : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200 shadow-sm hover:shadow",
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <MessageSquareText size={16} className="opacity-70" />
+                <span>
+                  {showEvidence ? "Hide" : "View"} relevant sentences from
+                  your visit
+                </span>
+              </div>
+              {showEvidence ? (
+                <ChevronUp size={16} />
+              ) : (
+                <ChevronDown size={16} />
+              )}
+            </button>
+
+            {showEvidence && (
+              <div
+                data-track-proximity={`EvidenceContent_${topicId}`}
+                className="mt-4 space-y-3"
+              >
+                <h4
+                  className={cx(
+                    "text-xs font-bold uppercase tracking-wider px-1",
+                    isDark ? "text-slate-500" : "text-gray-400",
+                  )}
+                >
+                  From your consultation
+                </h4>
+                {aiSourceSentence ? (
+                  <div
+                    className={cx(
+                      "p-4 rounded-xl border-l-4 transition-all duration-200",
+                      isDark
+                        ? "bg-indigo-900/20 border-l-violet-500 border-y border-r border-violet-700/30"
+                        : "bg-violet-50/50 border-l-violet-500 border-y border-r border-violet-200",
+                    )}
+                  >
+                    <p
+                      className={cx(
+                        "text-sm leading-relaxed italic",
+                        isDark ? "text-slate-300" : "text-gray-600",
+                      )}
+                    >
+                      &ldquo;
+                      {aiSourceContext && aiSourceContext.includes("<main>") ? (
+                        <>
+                          {aiSourceContext.split("<main>").map((part, pidx) => {
+                            if (pidx === 0) return <span key={pidx}>{part}</span>;
+                            const [highlighted, rest] = part.split("</main>");
+                            return (
+                              <span key={pidx}>
+                                <span
+                                  className={cx(
+                                    "font-bold underline",
+                                    isDark ? "text-cyan-300" : "text-cyan-700",
+                                  )}
+                                >
+                                  {highlighted}
+                                </span>
+                                {rest}
+                              </span>
+                            );
+                          })}
+                        </>
+                      ) : (
+                        aiSourceSentence
+                      )}
+                      &rdquo;
+                    </p>
+                  </div>
+                ) : extractedSentences && extractedSentences.length > 0 ? (
+                  extractedSentences.slice(0, 3).map((item, idx) => (
+                    <div
+                      key={idx}
+                      className={cx(
+                        "p-4 rounded-xl border-l-4 transition-all duration-200",
+                        isDark
+                          ? "bg-slate-800/50 border-l-indigo-500 border-y border-r border-slate-700/50"
+                          : "bg-white border-l-indigo-500 border-y border-r border-gray-100 shadow-sm",
+                      )}
+                    >
+                      <p
+                        className={cx(
+                          "text-sm leading-relaxed italic",
+                          isDark ? "text-slate-300" : "text-gray-600",
+                        )}
+                      >
+                        &ldquo;
+                        {item.context && item.context.includes("<main>") ? (
+                          <>
+                            {item.context.split("<main>").map((part, pidx) => {
+                              if (pidx === 0) return <span key={pidx}>{part}</span>;
+                              const [highlighted, rest] = part.split("</main>");
+                              return (
+                                <span key={pidx}>
+                                  <span
+                                    className={cx(
+                                      "font-bold underline",
+                                      isDark ? "text-cyan-300" : "text-cyan-700",
+                                    )}
+                                  >
+                                    {highlighted}
+                                  </span>
+                                  {rest}
+                                </span>
+                              );
+                            })}
+                          </>
+                        ) : (
+                          item.sentence
+                        )}
+                        &rdquo;
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <div
+                    className={cx(
+                      "p-4 rounded-xl text-sm text-center",
+                      isDark
+                        ? "bg-slate-800/50 text-slate-500 border border-slate-700/50"
+                        : "bg-gray-50 text-gray-400 border border-gray-200/50",
+                    )}
+                  >
+                    Relevant sentences will appear here once connected to the analysis pipeline.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* [V37] Cancer Prognosis — Experimental arm sub-questions
               Sits directly under the AI Summary so the wording
               ("the AI summary from your consultation is above") is
@@ -2637,151 +2782,6 @@ const TopicCard: React.FC<TopicCardProps> = ({
           </div>
 
           */}
-
-          {/* [V33] Evidence Sentences — moved UP to where star rating used to be */}
-          {/* Tim: "in the area where the star ratings is now" */}
-          {/* Always show the toggle button, even when no sentences available yet */}
-          <div className="mb-6">
-            <button
-              type="button"
-              onClick={onToggleEvidence}
-              data-track-proximity={`EvidenceToggle_${topicId}`}
-              className={cx(
-                "w-full flex items-center justify-between gap-2 px-3 py-3 sm:px-4 sm:py-3.5 lg:px-5 lg:py-4 rounded-xl text-sm font-semibold transition-all duration-200",
-                isDark
-                  ? "bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700"
-                  : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200 shadow-sm hover:shadow",
-              )}
-            >
-              <div className="flex items-center gap-2">
-                <MessageSquareText size={16} className="opacity-70" />
-                <span>
-                  {showEvidence ? "Hide" : "View"} relevant sentences from
-                  your visit
-                </span>
-              </div>
-              {showEvidence ? (
-                <ChevronUp size={16} />
-              ) : (
-                <ChevronDown size={16} />
-              )}
-            </button>
-
-            {showEvidence && (
-              <div
-                data-track-proximity={`EvidenceContent_${topicId}`}
-                className="mt-4 space-y-3"
-              >
-                <h4
-                  className={cx(
-                    "text-xs font-bold uppercase tracking-wider px-1",
-                    isDark ? "text-slate-500" : "text-gray-400",
-                  )}
-                >
-                  From your consultation
-                </h4>
-                {aiSourceSentence ? (
-                  <div
-                    className={cx(
-                      "p-4 rounded-xl border-l-4 transition-all duration-200",
-                      isDark
-                        ? "bg-indigo-900/20 border-l-violet-500 border-y border-r border-violet-700/30"
-                        : "bg-violet-50/50 border-l-violet-500 border-y border-r border-violet-200",
-                    )}
-                  >
-                    <p
-                      className={cx(
-                        "text-sm leading-relaxed italic",
-                        isDark ? "text-slate-300" : "text-gray-600",
-                      )}
-                    >
-                      &ldquo;
-                      {aiSourceContext && aiSourceContext.includes("<main>") ? (
-                        <>
-                          {aiSourceContext.split("<main>").map((part, pidx) => {
-                            if (pidx === 0) return <span key={pidx}>{part}</span>;
-                            const [highlighted, rest] = part.split("</main>");
-                            return (
-                              <span key={pidx}>
-                                <span
-                                  className={cx(
-                                    "font-bold underline",
-                                    isDark ? "text-cyan-300" : "text-cyan-700",
-                                  )}
-                                >
-                                  {highlighted}
-                                </span>
-                                {rest}
-                              </span>
-                            );
-                          })}
-                        </>
-                      ) : (
-                        aiSourceSentence
-                      )}
-                      &rdquo;
-                    </p>
-                  </div>
-                ) : extractedSentences && extractedSentences.length > 0 ? (
-                  extractedSentences.slice(0, 3).map((item, idx) => (
-                    <div
-                      key={idx}
-                      className={cx(
-                        "p-4 rounded-xl border-l-4 transition-all duration-200",
-                        isDark
-                          ? "bg-slate-800/50 border-l-indigo-500 border-y border-r border-slate-700/50"
-                          : "bg-white border-l-indigo-500 border-y border-r border-gray-100 shadow-sm",
-                      )}
-                    >
-                      <p
-                        className={cx(
-                          "text-sm leading-relaxed italic",
-                          isDark ? "text-slate-300" : "text-gray-600",
-                        )}
-                      >
-                        &ldquo;
-                        {item.context && item.context.includes("<main>") ? (
-                          <>
-                            {item.context.split("<main>").map((part, pidx) => {
-                              if (pidx === 0) return <span key={pidx}>{part}</span>;
-                              const [highlighted, rest] = part.split("</main>");
-                              return (
-                                <span key={pidx}>
-                                  <span
-                                    className={cx(
-                                      "font-bold underline",
-                                      isDark ? "text-cyan-300" : "text-cyan-700",
-                                    )}
-                                  >
-                                    {highlighted}
-                                  </span>
-                                  {rest}
-                                </span>
-                              );
-                            })}
-                          </>
-                        ) : (
-                          item.sentence
-                        )}
-                        &rdquo;
-                      </p>
-                    </div>
-                  ))
-                ) : (
-                  <div
-                    className={cx(
-                      "p-4 rounded-xl text-sm text-center",
-                      isDark
-                        ? "bg-slate-800/50 text-slate-500 border border-slate-700/50"
-                        : "bg-gray-50 text-gray-400 border border-gray-200/50",
-                    )}
-                  >
-                    Relevant sentences will appear here once connected to the analysis pipeline.
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
 
           {/* Helpfulness Rating — relocated above to sit right under AI Summary. */}
 
