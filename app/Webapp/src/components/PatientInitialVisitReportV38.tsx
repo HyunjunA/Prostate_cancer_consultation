@@ -865,6 +865,14 @@ interface TopicCardProps {
    * to true to keep V37 call-sites behaving unchanged.
    */
   showQuestions?: boolean;
+  /**
+   * [V38] Whether the AI-Generated Summary panel is expanded. Lifted
+   * to the parent so the wizard can enforce per-screen defaults (open
+   * on Overview, closed on per-domain). Defaults to true so existing
+   * V37 call-sites continue to render the summary inline.
+   */
+  showAiSummary?: boolean;
+  onToggleAiSummary?: () => void;
   /** Server-side persisted row, used to prefill state on mount. */
   prefill?: FirstVisitResponseRead | null;
   /**
@@ -901,6 +909,8 @@ const TopicCard: React.FC<TopicCardProps> = ({
   isSubmitted,
   onSubmit,
   showQuestions = true,
+  showAiSummary = true,
+  onToggleAiSummary,
   prefill,
   onSave,
   isDark,
@@ -912,13 +922,6 @@ const TopicCard: React.FC<TopicCardProps> = ({
 }) => {
   const topicId = topicName.replace(/\s+/g, "");
   const colors = TOPIC_COLORS[topicName] || TOPIC_COLORS["Cancer Prognosis"];
-
-  // [V38] Local toggle for the AI-Generated Summary section, matching the
-  // collapsible "View/Hide relevant sentences from your visit" pattern.
-  // Defaults to expanded so the AI summary — the core artifact patients
-  // are evaluating — is always visible on entry; the patient can collapse
-  // it on demand.
-  const [showAiSummary, setShowAiSummary] = React.useState<boolean>(true);
 
   // [V37] Cancer Prognosis (Experimental arm) — three additional questions
   // are rendered directly below the AI Summary for this topic only. Other
@@ -1259,7 +1262,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
           <div className="mb-6">
             <button
               type="button"
-              onClick={() => setShowAiSummary((v) => !v)}
+              onClick={() => onToggleAiSummary?.()}
               data-track-proximity={`AiSummaryToggle_${topicId}`}
               className={cx(
                 "w-full flex items-center justify-between gap-2 px-3 py-3 sm:px-4 sm:py-3.5 lg:px-5 lg:py-4 rounded-xl text-sm font-semibold transition-all duration-200",
@@ -2944,6 +2947,12 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
   const [showEvidenceStates, setShowEvidenceStates] = useState<
     Record<string, boolean>
   >({});
+  // [V38] Per-topic toggle for the AI-Generated Summary panel. Lifted
+  // from TopicCard so the wizard can enforce per-screen defaults via
+  // the currentScreen useEffect below.
+  const [showAiSummaryStates, setShowAiSummaryStates] = useState<
+    Record<string, boolean>
+  >({});
   // Rating state management
   const [ratings, setRatings] = useState<Record<string, number>>({});
 
@@ -3010,28 +3019,34 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentScreen]);
 
-  // [V38] On the Overview screen open the "View relevant sentences" panel
-  // for each topic by default — patients should see the underlying
-  // sentences without having to click each card open. A topic is only
-  // auto-opened when the user has not yet touched its toggle on this
-  // session (its state is still undefined). If they explicitly close it,
-  // the close is respected on subsequent Overview entries until the next
-  // data reload. Gated on apiLoading so the auto-open happens AFTER
-  // loadSummaryData resets showEvidenceStates to {}.
+  // [V38] Per-screen defaults for the AI-Generated Summary and Relevant
+  // Sentences toggles. The patient gets a consistent baseline each time
+  // they navigate:
+  //   Overview (screen 0): both panels OPEN for all topics so the entire
+  //     report can be skimmed at once.
+  //   Per-domain (screens 1-5): both panels CLOSED for the active topic
+  //     so the questions are the visual focus; the patient can still
+  //     re-open either toggle while on that screen if they want to
+  //     re-check the summary or sentences.
+  // The reset fires on every currentScreen change, so manual toggles
+  // are session-only — leaving and re-entering a screen restores the
+  // default. Gated on apiLoading so the writes happen after the
+  // loadSummaryData reset of showEvidenceStates to {}.
   useEffect(() => {
-    if (currentScreen !== 0) return;
     if (apiLoading) return;
-    setShowEvidenceStates((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      for (const t of TOPIC_ORDER) {
-        if (next[t] === undefined) {
-          next[t] = true;
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
+    if (currentScreen === 0) {
+      setShowEvidenceStates(() =>
+        Object.fromEntries(TOPIC_ORDER.map((t) => [t, true])),
+      );
+      setShowAiSummaryStates(() =>
+        Object.fromEntries(TOPIC_ORDER.map((t) => [t, true])),
+      );
+    } else {
+      const topic = TOPIC_ORDER[currentScreen - 1];
+      if (!topic) return;
+      setShowEvidenceStates((prev) => ({ ...prev, [topic]: false }));
+      setShowAiSummaryStates((prev) => ({ ...prev, [topic]: false }));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentScreen, apiLoading]);
 
@@ -3302,6 +3317,16 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
         metadata: { topic, summary_rating_at_expand: ratings[topic] || null },
       });
     }
+  };
+
+  /**
+   * [V38] AI-Generated Summary toggle. Mirrors handleToggleEvidence so
+   * both expandable sections behave consistently; state lives in the
+   * parent so the wizard's currentScreen useEffect can enforce per-
+   * screen defaults (open on Overview, closed on per-domain).
+   */
+  const handleToggleAiSummary = (topic: string) => {
+    setShowAiSummaryStates((prev) => ({ ...prev, [topic]: !prev[topic] }));
   };
 
   // Print Styles
@@ -3778,6 +3803,8 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
                   onToggleExpand={() => handleToggleExpand(topic)}
                   showEvidence={showEvidenceStates[topic] || false}
                   onToggleEvidence={() => handleToggleEvidence(topic)}
+                  showAiSummary={showAiSummaryStates[topic] ?? true}
+                  onToggleAiSummary={() => handleToggleAiSummary(topic)}
                   isSubmitted={!!submittedDomains[topic]}
                   onSubmit={() => handleSubmitDomain(topic)}
                   showQuestions={showQuestions}
