@@ -99,6 +99,8 @@ import {
   Info,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   Sparkles,
   FileText,
   MessageSquareText,
@@ -848,6 +850,15 @@ interface TopicCardProps {
   onToggleEvidence: () => void;
   isSubmitted: boolean;
   onSubmit: () => void;
+  /**
+   * [V38] When false, the per-domain question UI (VAS sliders, radios,
+   * factor multi-select) and the Submit button are hidden — the card
+   * shows only the AI summary, helpfulness rating, and the "View
+   * relevant sentences" toggle. Used on the wizard's Overview screen
+   * so all 5 cards can be browsed without an answering UI. Defaults
+   * to true to keep V37 call-sites behaving unchanged.
+   */
+  showQuestions?: boolean;
   /** Server-side persisted row, used to prefill state on mount. */
   prefill?: FirstVisitResponseRead | null;
   /**
@@ -883,6 +894,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
   onToggleEvidence,
   isSubmitted,
   onSubmit,
+  showQuestions = true,
   prefill,
   onSave,
   isDark,
@@ -1258,7 +1270,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
               Sits directly under the AI Summary so the wording
               ("the AI summary from your consultation is above") is
               true. Other topics skip this block entirely. */}
-          {topicName === "Cancer Prognosis" && (
+          {showQuestions && topicName === "Cancer Prognosis" && (
             <div
               className={cx(
                 "p-4 sm:p-5 rounded-xl border mb-6 space-y-6",
@@ -1538,7 +1550,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
               (1) Single-select radio across 5 lifetime ranges.
               (2) Multi-select factor checklist — patients can mark any
               combination of items. */}
-          {topicName === "Life Expectancy" && (
+          {showQuestions && topicName === "Life Expectancy" && (
             <div
               className={cx(
                 "p-4 sm:p-5 rounded-xl border mb-6 space-y-6",
@@ -1717,7 +1729,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
               (1) VAS slider — likelihood of returning to baseline ED.
               (2) Single-select radio — 5 time-period options.
               (3) Multi-select factor checklist (any subset of 5). */}
-          {topicName === "Erectile Dysfunction" && (
+          {showQuestions && topicName === "Erectile Dysfunction" && (
             <div
               className={cx(
                 "p-4 sm:p-5 rounded-xl border mb-6 space-y-6",
@@ -1982,7 +1994,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
               (1) VAS slider — risk of urinary incontinence.
               (2) Single-select radio — 5 timeline options.
               (3) Multi-select factor checklist (any subset of 5). */}
-          {topicName === "Urinary Incontinence" && (
+          {showQuestions && topicName === "Urinary Incontinence" && (
             <div
               className={cx(
                 "p-4 sm:p-5 rounded-xl border mb-6 space-y-6",
@@ -2245,7 +2257,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
               (1) VAS slider — risk of irritative lower urinary tract sx.
               (2) Single-select radio — 5 timeline options.
               (3) Multi-select factor checklist (any subset of 5). */}
-          {topicName === "Irritative Urinary Symptoms" && (
+          {showQuestions && topicName === "Irritative Urinary Symptoms" && (
             <div
               className={cx(
                 "p-4 sm:p-5 rounded-xl border mb-6 space-y-6",
@@ -2700,26 +2712,29 @@ const TopicCard: React.FC<TopicCardProps> = ({
           {/* Per-domain Submit button. Marks this topic as completed in the
               parent's submittedDomains map so Submission Progress can advance.
               Re-clicking after submission is allowed: inputs stay editable
-              and the button label switches to an "Update" affordance. */}
-          <div className="mt-6">
-            <button
-              type="button"
-              onClick={handleSubmitClick}
-              data-track-proximity={`SubmitTopic_${topicId}`}
-              className={cx(
-                "w-full px-6 py-3 rounded-xl text-sm font-bold transition-all duration-200 border-2",
-                isSubmitted
-                  ? isDark
-                    ? "bg-emerald-900/30 text-emerald-300 border-emerald-600 hover:bg-emerald-900/40"
-                    : "bg-emerald-50 text-emerald-700 border-emerald-400 hover:bg-emerald-100"
-                  : isDark
-                    ? "bg-indigo-600 text-white border-indigo-500 hover:bg-indigo-500 shadow-lg shadow-indigo-500/30"
-                    : "bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-500/30",
-              )}
-            >
-              {isSubmitted ? "Submitted ✓ — Click to update" : "Submit"}
-            </button>
-          </div>
+              and the button label switches to an "Update" affordance.
+              [V38] Hidden when showQuestions=false (Overview screen). */}
+          {showQuestions && (
+            <div className="mt-6">
+              <button
+                type="button"
+                onClick={handleSubmitClick}
+                data-track-proximity={`SubmitTopic_${topicId}`}
+                className={cx(
+                  "w-full px-6 py-3 rounded-xl text-sm font-bold transition-all duration-200 border-2",
+                  isSubmitted
+                    ? isDark
+                      ? "bg-emerald-900/30 text-emerald-300 border-emerald-600 hover:bg-emerald-900/40"
+                      : "bg-emerald-50 text-emerald-700 border-emerald-400 hover:bg-emerald-100"
+                    : isDark
+                      ? "bg-indigo-600 text-white border-indigo-500 hover:bg-indigo-500 shadow-lg shadow-indigo-500/30"
+                      : "bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-500/30",
+                )}
+              >
+                {isSubmitted ? "Submitted ✓ — Click to update" : "Submit"}
+              </button>
+            </div>
+          )}
         </div>
         )}
       </div>
@@ -2903,6 +2918,61 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
   const [submittedDomains, setSubmittedDomains] = useState<
     Record<string, boolean>
   >({});
+
+  // [V38] Wizard navigation state (2026-05-19 meeting item 6-2 multi-screen rework).
+  // Screen 0 is Overview (5 cards, no questions UI). Screens 1-5 each show a
+  // single domain's full card with questions. Visibility is toggled with
+  // display:none on each card wrapper so per-domain state stays mounted —
+  // submitted answers survive Back/Next navigation without a refetch.
+  const STEP_KEYS = ["overview", "cp", "le", "ed", "inc", "ius"] as const;
+  const SCREEN_LABELS = [
+    "Overview",
+    "Cancer Prognosis",
+    "Life Expectancy",
+    "Erectile Dysfunction",
+    "Urinary Incontinence",
+    "Irritative Urinary Symptoms",
+  ] as const;
+  const TOTAL_SCREENS = STEP_KEYS.length;
+  const [currentScreen, setCurrentScreen] = useState<number>(0);
+
+  // [V38] Hydrate currentScreen from ?step= on mount.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const step = params.get("step");
+    if (!step) return;
+    const idx = STEP_KEYS.indexOf(step as (typeof STEP_KEYS)[number]);
+    if (idx >= 0 && idx < TOTAL_SCREENS) setCurrentScreen(idx);
+    // STEP_KEYS / TOTAL_SCREENS are constants; mount-only effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // [V38] Mirror currentScreen back to ?step= so refresh / share preserves
+  // position. Uses replaceState so it does not push to browser history on
+  // every Next click.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    params.set("step", STEP_KEYS[currentScreen]);
+    const next = `${window.location.pathname}?${params.toString()}`;
+    window.history.replaceState(null, "", next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentScreen]);
+
+  // [V38] On per-domain screens (1-5) auto-expand the active card so the
+  // patient does not have to click into it. Overview (screen 0) keeps the
+  // V37 default (first topic expanded, others collapsed) so the user can
+  // browse via the dropdowns as requested in the meeting notes.
+  useEffect(() => {
+    if (currentScreen === 0) return;
+    const topic = TOPIC_ORDER[currentScreen - 1];
+    if (!topic) return;
+    setExpandedTopics((prev) =>
+      prev[topic] ? prev : { ...prev, [topic]: true },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentScreen]);
 
   // [V37] After mount-time GET resolves, mark any domain that already
   // has a persisted row as submitted so the progress indicator and
@@ -3439,6 +3509,53 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
           </p>
         </div>
 
+        {/* [V38] Wizard progress bar — 6 screens (Overview + 5 domains) */}
+        <div
+          className={cx(
+            "mb-4 sm:mb-6 lg:mb-8 p-4 sm:p-5 lg:p-6 rounded-2xl border",
+            isDarkMode
+              ? "bg-slate-900/50 border-slate-800/50"
+              : "bg-white/80 border-gray-200/50 shadow-lg shadow-gray-500/5",
+          )}
+          data-track-proximity="WizardProgress"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <span
+              className={cx(
+                "text-base font-bold",
+                isDarkMode ? "text-white" : "text-gray-800",
+              )}
+            >
+              Step {currentScreen + 1} of {TOTAL_SCREENS}: {SCREEN_LABELS[currentScreen]}
+            </span>
+            <span
+              className={cx(
+                "text-sm font-bold px-4 py-1.5 rounded-full",
+                isDarkMode
+                  ? "bg-slate-800 text-slate-400"
+                  : "bg-gray-100 text-gray-600",
+              )}
+            >
+              {currentScreen + 1} / {TOTAL_SCREENS}
+            </span>
+          </div>
+          <div className="flex gap-1.5">
+            {Array.from({ length: TOTAL_SCREENS }).map((_, i) => (
+              <div
+                key={i}
+                className={cx(
+                  "h-2 flex-1 rounded-full transition-colors duration-300",
+                  i <= currentScreen
+                    ? "bg-gradient-to-r from-indigo-500 to-violet-500"
+                    : isDarkMode
+                      ? "bg-slate-800"
+                      : "bg-gray-200",
+                )}
+              />
+            ))}
+          </div>
+        </div>
+
         {/* Header */}
         <div className="text-center mb-6 sm:mb-8 lg:mb-12">
           <div className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 lg:w-20 lg:h-20 rounded-3xl mb-6 bg-gradient-to-br from-indigo-500 to-violet-600 shadow-2xl shadow-indigo-500/30">
@@ -3552,43 +3669,139 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
           )}
         </div>
 
-        {/* Topic Cards - All 5 dimensions displayed, collapsed by default */}
+        {/* Topic Cards — V38 wizard: render all 5 always (state preserved
+            via display:none) so answers entered on one domain screen survive
+            Back/Next navigation. Visibility per screen:
+              screen 0 (Overview): all 5 visible
+              screens 1-5: only the matching domain visible */}
         <div className="space-y-4">
           {TOPIC_ORDER.map((topic, index) => {
             const topicData = consultationTopics[topic];
+            const isVisible =
+              currentScreen === 0 || index + 1 === currentScreen;
+            // Overview (screen 0) shows all 5 cards with the question UI
+            // hidden. Per-domain screens (1-5) show the matching card with
+            // questions enabled.
+            const showQuestions = currentScreen !== 0;
             return (
-              <TopicCard
+              <div
                 key={topic}
-                topicName={topic}
-                topicIndex={index}
-                aiSummary={topicData?.aiSummary || "Summary not available."}
-                extractedSentences={topicData?.extractedSentences || []}
-                aiSourceSentence={aiSourceByTopic[topic]}
-                aiSourceContext={topicData?.aiSourceContext || null}
-                rating={ratings[topic] || 0}
-                onRatingChange={(rating) => handleRatingChange(topic, rating)}
-                isExpanded={expandedTopics[topic] || false}
-                onToggleExpand={() => handleToggleExpand(topic)}
-                showEvidence={showEvidenceStates[topic] || false}
-                onToggleEvidence={() => handleToggleEvidence(topic)}
-                isSubmitted={!!submittedDomains[topic]}
-                onSubmit={() => handleSubmitDomain(topic)}
-                prefill={firstVisit.responses[TOPIC_TO_DOMAIN[topic]] ?? null}
-                onSave={(payload) =>
-                  firstVisit
-                    .saveDomain(TOPIC_TO_DOMAIN[topic], payload)
-                    .then(() => undefined)
-                }
-                isDark={isDarkMode}
-                patientId={currentSpeaker}
-                visitId={visitId}
-                trackFile={currentFile}
-                trackSpeaker={currentSpeaker}
-                trackDomain={TOPIC_TO_DOMAIN[topic]}
-              />
+                style={{ display: isVisible ? "block" : "none" }}
+              >
+                <TopicCard
+                  topicName={topic}
+                  topicIndex={index}
+                  aiSummary={topicData?.aiSummary || "Summary not available."}
+                  extractedSentences={topicData?.extractedSentences || []}
+                  aiSourceSentence={aiSourceByTopic[topic]}
+                  aiSourceContext={topicData?.aiSourceContext || null}
+                  rating={ratings[topic] || 0}
+                  onRatingChange={(rating) => handleRatingChange(topic, rating)}
+                  isExpanded={expandedTopics[topic] || false}
+                  onToggleExpand={() => handleToggleExpand(topic)}
+                  showEvidence={showEvidenceStates[topic] || false}
+                  onToggleEvidence={() => handleToggleEvidence(topic)}
+                  isSubmitted={!!submittedDomains[topic]}
+                  onSubmit={() => handleSubmitDomain(topic)}
+                  showQuestions={showQuestions}
+                  prefill={firstVisit.responses[TOPIC_TO_DOMAIN[topic]] ?? null}
+                  onSave={(payload) =>
+                    firstVisit
+                      .saveDomain(TOPIC_TO_DOMAIN[topic], payload)
+                      .then(() => undefined)
+                  }
+                  isDark={isDarkMode}
+                  patientId={currentSpeaker}
+                  visitId={visitId}
+                  trackFile={currentFile}
+                  trackSpeaker={currentSpeaker}
+                  trackDomain={TOPIC_TO_DOMAIN[topic]}
+                />
+              </div>
             );
           })}
         </div>
+
+        {/* [V38] Wizard navigation — Back / Next.
+            Next is gated on the current domain having been Submitted (per
+            the 2026-05-19 6-2 design: answers → Submit → Next). On Overview
+            (screen 0) Next is always enabled. On the last screen (ius)
+            Next is disabled because there is nowhere to advance to. */}
+        {(() => {
+          const currentTopic =
+            currentScreen > 0 ? TOPIC_ORDER[currentScreen - 1] : null;
+          const isLastScreen = currentScreen >= TOTAL_SCREENS - 1;
+          const needsSubmit =
+            currentTopic !== null && !submittedDomains[currentTopic];
+          const nextDisabled = isLastScreen || needsSubmit;
+          return (
+            <div
+              className={cx(
+                "mt-6 sm:mt-8 flex items-center justify-between gap-3 p-4 rounded-2xl border",
+                isDarkMode
+                  ? "bg-slate-900/50 border-slate-800/50"
+                  : "bg-white/80 border-gray-200/50 shadow-lg shadow-gray-500/5",
+              )}
+            >
+              <button
+                type="button"
+                disabled={currentScreen === 0}
+                onClick={() =>
+                  setCurrentScreen((s) => Math.max(0, s - 1))
+                }
+                data-track-proximity="WizardBack"
+                className={cx(
+                  "inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 border",
+                  currentScreen === 0
+                    ? isDarkMode
+                      ? "bg-slate-800/40 text-slate-600 border-slate-800 cursor-not-allowed"
+                      : "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                    : isDarkMode
+                      ? "bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700"
+                      : "bg-white text-gray-700 border-gray-200 shadow-sm hover:bg-gray-50",
+                )}
+              >
+                <ChevronLeft size={16} />
+                Back
+              </button>
+
+              <span
+                className={cx(
+                  "hidden sm:inline text-xs sm:text-sm text-center px-2",
+                  needsSubmit
+                    ? isDarkMode
+                      ? "text-amber-300"
+                      : "text-amber-700"
+                    : isDarkMode
+                      ? "text-slate-400"
+                      : "text-gray-500",
+                )}
+              >
+                {needsSubmit
+                  ? "Submit this section to continue"
+                  : SCREEN_LABELS[currentScreen]}
+              </span>
+
+              <button
+                type="button"
+                disabled={nextDisabled}
+                onClick={() =>
+                  setCurrentScreen((s) => Math.min(TOTAL_SCREENS - 1, s + 1))
+                }
+                data-track-proximity="WizardNext"
+                className={cx(
+                  "inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 border text-white",
+                  nextDisabled
+                    ? "bg-gray-300 dark:bg-slate-700 border-transparent cursor-not-allowed"
+                    : "bg-gradient-to-r from-indigo-500 to-violet-500 border-transparent shadow hover:from-indigo-600 hover:to-violet-600",
+                )}
+              >
+                Next
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          );
+        })()}
 
         {/* Footer */}
         {/* <div
