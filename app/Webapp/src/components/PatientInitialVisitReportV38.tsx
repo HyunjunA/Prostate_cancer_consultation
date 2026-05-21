@@ -799,8 +799,9 @@ const InstructionsBox: React.FC<InstructionsBoxProps> = ({ isDark }) => {
                 1
               </span>
               <span>
-                Click on each topic below to expand and read the{" "}
-                <strong>AI-generated summary</strong> of that discussion.
+                Browse the <strong>Overview</strong> to read each{" "}
+                <strong>AI-generated summary</strong> together with the
+                supporting sentences from your visit.
               </span>
             </p>
             <p className="flex items-start gap-2">
@@ -808,8 +809,10 @@ const InstructionsBox: React.FC<InstructionsBoxProps> = ({ isDark }) => {
                 2
               </span>
               <span>
-                <strong>Rate each summary</strong> by selecting how helpful
-                it was for understanding your consultation.
+                Use <strong>Next</strong> to step through each topic. On
+                every topic screen, <strong>rate how helpful</strong> the
+                summary was, <strong>answer the questions</strong>, then
+                click <strong>Submit</strong>.
               </span>
             </p>
             <p className="flex items-start gap-2">
@@ -817,8 +820,9 @@ const InstructionsBox: React.FC<InstructionsBoxProps> = ({ isDark }) => {
                 3
               </span>
               <span>
-                Optionally, click <strong>"View relevant sentences"</strong> to
-                see original conversation excerpts that support the summary.
+                Move between screens with <strong>Back / Next</strong>.
+                Your progress is shown on the right side (or at the top
+                on mobile).
               </span>
             </p>
           </div>
