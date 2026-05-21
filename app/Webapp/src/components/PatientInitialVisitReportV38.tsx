@@ -799,9 +799,10 @@ const InstructionsBox: React.FC<InstructionsBoxProps> = ({ isDark }) => {
                 1
               </span>
               <span>
-                Browse the <strong>Overview</strong> to read each{" "}
-                <strong>AI-generated summary</strong> together with the
-                supporting sentences from your visit.
+                On the <strong>Overview</strong>, click each category card
+                to <strong>open it</strong> and review the{" "}
+                <strong>AI-generated summary</strong> and the supporting
+                sentences from your visit.
               </span>
             </p>
             <p className="flex items-start gap-2">
@@ -809,10 +810,12 @@ const InstructionsBox: React.FC<InstructionsBoxProps> = ({ isDark }) => {
                 2
               </span>
               <span>
-                Use <strong>Next</strong> to step through each topic. On
-                every topic screen, <strong>rate how helpful</strong> the
-                summary was, <strong>answer the questions</strong>, then
-                click <strong>Submit</strong>.
+                Use <strong>Next</strong> to open each category's question
+                screen. <strong>Answer the questions</strong> about that
+                category and click <strong>Submit</strong>. If you need
+                to revisit the summary or supporting sentences, they
+                remain available on the same screen, and you can{" "}
+                <strong>rate how helpful</strong> the summary was.
               </span>
             </p>
             <p className="flex items-start gap-2">
