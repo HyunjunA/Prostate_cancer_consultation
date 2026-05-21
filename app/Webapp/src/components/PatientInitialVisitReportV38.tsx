@@ -3521,20 +3521,24 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
           </p>
         </div>
 
-        {/* [V38] Wizard progress bar — 6 screens (Overview + 5 domains) */}
+        {/* [V38] Wizard progress — mobile / tablet (≤lg-1).
+            Horizontal bar that floats at the top of the viewport while
+            scrolling via `sticky top-0`. On desktop (≥lg) this is hidden
+            and the floating right sidebar (rendered just below) takes
+            over with a richer vertical step list. */}
         <div
           className={cx(
-            "mb-4 sm:mb-6 lg:mb-8 p-4 sm:p-5 lg:p-6 rounded-2xl border",
+            "lg:hidden sticky top-0 z-30 mb-4 sm:mb-6 p-4 sm:p-5 rounded-2xl border backdrop-blur-md",
             isDarkMode
-              ? "bg-slate-900/50 border-slate-800/50"
-              : "bg-white/80 border-gray-200/50 shadow-lg shadow-gray-500/5",
+              ? "bg-slate-900/85 border-slate-800/60"
+              : "bg-white/90 border-gray-200/70 shadow-sm",
           )}
           data-track-proximity="WizardProgress"
         >
           <div className="flex items-center justify-between mb-3">
             <span
               className={cx(
-                "text-base font-bold",
+                "text-sm sm:text-base font-bold",
                 isDarkMode ? "text-white" : "text-gray-800",
               )}
             >
@@ -3542,7 +3546,7 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
             </span>
             <span
               className={cx(
-                "text-sm font-bold px-4 py-1.5 rounded-full",
+                "text-xs sm:text-sm font-bold px-3 py-1 rounded-full",
                 isDarkMode
                   ? "bg-slate-800 text-slate-400"
                   : "bg-gray-100 text-gray-600",
@@ -3567,6 +3571,81 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
             ))}
           </div>
         </div>
+
+        {/* [V38] Wizard progress — desktop (≥lg).
+            Floating right-side vertical step list, fixed to viewport so
+            the patient always sees where they are without consuming
+            content space at the top. Display-only (no click-to-jump)
+            per the 2026-05-19 meeting decision: navigation is Back/Next
+            only. Submitted domains carry a ✓ check mark. */}
+        <aside
+          aria-label="Wizard progress"
+          className="hidden lg:block fixed right-6 top-24 z-30 w-56"
+          data-track-proximity="WizardProgress"
+        >
+          <div
+            className={cx(
+              "rounded-2xl border p-4 backdrop-blur-md",
+              isDarkMode
+                ? "bg-slate-900/85 border-slate-800/60 shadow-lg shadow-black/30"
+                : "bg-white/90 border-gray-200/70 shadow-lg shadow-gray-500/10",
+            )}
+          >
+            <div
+              className={cx(
+                "text-[11px] font-semibold uppercase tracking-wider mb-3",
+                isDarkMode ? "text-slate-400" : "text-gray-500",
+              )}
+            >
+              Step {currentScreen + 1} of {TOTAL_SCREENS}
+            </div>
+            <ol className="space-y-1.5">
+              {SCREEN_LABELS.map((label, i) => {
+                const isCurrent = i === currentScreen;
+                const topic = i > 0 ? TOPIC_ORDER[i - 1] : null;
+                const isDone = topic ? !!submittedDomains[topic] : false;
+                return (
+                  <li
+                    key={i}
+                    aria-current={isCurrent ? "step" : undefined}
+                    className={cx(
+                      "flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-sm transition-colors",
+                      isCurrent
+                        ? isDarkMode
+                          ? "bg-violet-500/15 text-violet-100 font-semibold"
+                          : "bg-violet-50 text-violet-900 font-semibold"
+                        : isDone
+                          ? isDarkMode
+                            ? "text-emerald-300"
+                            : "text-emerald-700"
+                          : isDarkMode
+                            ? "text-slate-500"
+                            : "text-gray-500",
+                    )}
+                  >
+                    <span
+                      className={cx(
+                        "inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold shrink-0",
+                        isCurrent
+                          ? "bg-gradient-to-r from-indigo-500 to-violet-500 text-white shadow"
+                          : isDone
+                            ? isDarkMode
+                              ? "bg-emerald-500/20 text-emerald-300"
+                              : "bg-emerald-100 text-emerald-700"
+                            : isDarkMode
+                              ? "bg-slate-800 text-slate-500"
+                              : "bg-gray-100 text-gray-500",
+                      )}
+                    >
+                      {isDone ? "✓" : i + 1}
+                    </span>
+                    <span className="leading-tight">{label}</span>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        </aside>
 
         {/* Header */}
         <div className="text-center mb-6 sm:mb-8 lg:mb-12">
