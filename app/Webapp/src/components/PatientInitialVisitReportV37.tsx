@@ -3481,19 +3481,6 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
           </div> */}
         </div>
 
-        {/* [V35] Disclaimer — feedback 2-8 */}
-        <div
-          className={cx(
-            "mb-4 sm:mb-6 px-3 sm:px-5 py-3 sm:py-4 rounded-2xl border text-center text-sm",
-            isDarkMode
-              ? "bg-amber-500/10 border-amber-500/20 text-amber-300/90"
-              : "bg-amber-50 border-amber-200/60 text-amber-800",
-          )}
-        >
-          <Info size={16} className="inline-block mr-2 -mt-0.5 opacity-70" />
-          This report is informational only and is in no way grading your physician.
-        </div>
-
         {/* Instructions */}
         <InstructionsBox isDark={isDarkMode} />
 
