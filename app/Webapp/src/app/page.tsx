@@ -466,6 +466,7 @@ export default function Home() {
                             >
                               First Visit
                             </button>
+                            {/* Follow-up entry button (restored 2026-05-22). */}
                             <button
                               onClick={() => handlePatientSelect(file, "followup")}
                               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
