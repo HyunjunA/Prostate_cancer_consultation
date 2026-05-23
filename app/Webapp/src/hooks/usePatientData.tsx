@@ -292,7 +292,10 @@ export const usePatientData = () => {
   // 9) Get Evidence Sentences by Class
   const fetchSentencesByClass = async (
     file: string,
-    top_n: number = 7
+    // 10 so every AI-summary source sentence is within the evidence window
+    // the "From your consultation" highlight matches against (some sources
+    // rank as low as #10 by NLP pred_score — e.g. SID 14 ED radiation).
+    top_n: number = 10
   ): Promise<any | null> => {
     try {
       const params = new URLSearchParams({ top_n: top_n.toString() });
