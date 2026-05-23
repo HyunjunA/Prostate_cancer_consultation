@@ -48,6 +48,7 @@ from auth.base import AuthUser
 from db import get_db
 from models import (
     DoctorRewriteLog,
+    PatientFirstVisitAnswer,
     PatientFirstVisitResponses,
     PatientSummary,
     PatientSummaryDomain,
@@ -1010,3 +1011,153 @@ async def upsert_first_visit_response(
     await db.commit()
     await db.refresh(record)
     return _row_to_read(record)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# First-visit ANSWERS — row-per-question (question_id) successor to the
+# fixed-column responses endpoints above. Table: patient_first_visit_answer
+# (migration 014). The active V38 page uses these; the responses endpoints
+# above remain for the legacy V37 page.
+# ──────────────────────────────────────────────────────────────────────────────
+
+FieldLiteral = Literal["vas", "timeline", "factors"]
+
+
+class AnswerItem(BaseModel):
+    """One question's answer. `value` is interpreted per `field`."""
+
+    question_id: str = Field(..., min_length=1, max_length=100)
+    field: FieldLiteral
+    # vas -> int 0-100, timeline -> str, factors -> list[str]. Stored as JSONB.
+    value: Any = None
+
+    @field_validator("value")
+    @classmethod
+    def _value_matches_field(cls, v, info):
+        field = info.data.get("field")
+        if field == "vas":
+            if not isinstance(v, int) or isinstance(v, bool) or not (0 <= v <= 100):
+                raise ValueError("vas value must be an int in 0..100")
+        elif field == "timeline":
+            if not isinstance(v, str) or len(v) > 50:
+                raise ValueError("timeline value must be a string (<=50 chars)")
+        elif field == "factors":
+            if not isinstance(v, list) or not all(isinstance(x, str) for x in v):
+                raise ValueError("factors value must be a list of strings")
+        return v
+
+
+class FirstVisitAnswersUpsert(BaseModel):
+    """Body for PUT /api/patient/first-visit-answers — one domain's answers."""
+
+    file: str = Field(..., min_length=1, max_length=255)
+    speaker: str = Field(..., min_length=1, max_length=100)
+    domain: DomainLiteral
+    answers: List[AnswerItem] = Field(..., min_length=1, max_length=50)
+
+    @field_validator("answers")
+    @classmethod
+    def _factors_match_domain(cls, answers, info):
+        domain = info.data.get("domain")
+        for a in answers:
+            if a.field == "factors":
+                if domain == "cp":
+                    raise ValueError("cp domain does not support factors")
+                allowed = _FACTOR_WHITELIST.get(domain, set())
+                invalid = [f for f in (a.value or []) if f not in allowed]
+                if invalid:
+                    raise ValueError(f"invalid factors for {domain}: {invalid}")
+        return answers
+
+
+class AnswerRead(BaseModel):
+    """One persisted answer row."""
+
+    question_id: str
+    field: str
+    value: Any
+    submitted_at: str  # ISO8601
+
+
+class FirstVisitAnswersGet(BaseModel):
+    """GET response — answers nested by domain, then by question_id.
+
+    All five domain keys are always present (empty dict if nothing submitted
+    for that domain) so the frontend can index directly.
+    """
+
+    responses: Dict[DomainLiteral, Dict[str, AnswerRead]]
+
+
+@router.get(
+    "/api/patient/first-visit-answers/{file}/{speaker}",
+    response_model=FirstVisitAnswersGet,
+)
+async def get_first_visit_answers(
+    file: str,
+    speaker: str,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Return all first-visit answers for one patient, nested domain -> question_id."""
+    await check_patient_access(file, user, db)
+
+    stmt = select(PatientFirstVisitAnswer).where(
+        PatientFirstVisitAnswer.file == file,
+        PatientFirstVisitAnswer.speaker == speaker,
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+
+    by_domain: Dict[str, Dict[str, AnswerRead]] = {d: {} for d in _DOMAIN_ORDER}
+    for row in rows:
+        by_domain.setdefault(row.domain, {})[row.question_id] = AnswerRead(
+            question_id=row.question_id,
+            field=row.field,
+            value=row.value,
+            submitted_at=row.submitted_at.isoformat(),
+        )
+    return FirstVisitAnswersGet(responses=by_domain)
+
+
+@router.put(
+    "/api/patient/first-visit-answers",
+    response_model=FirstVisitAnswersGet,
+)
+async def upsert_first_visit_answers(
+    body: FirstVisitAnswersUpsert,
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Upsert one domain's answers (one row per question_id).
+
+    Called when the patient clicks Submit on a domain card. Each answer is
+    upserted by (file, speaker, domain, question_id); re-Submits overwrite the
+    matching rows and reset their submitted_at. Returns the full answer set for
+    the patient so the caller can refresh its cache.
+    """
+    await check_patient_access(body.file, user, db)
+
+    for a in body.answers:
+        stmt = select(PatientFirstVisitAnswer).where(
+            PatientFirstVisitAnswer.file == body.file,
+            PatientFirstVisitAnswer.speaker == body.speaker,
+            PatientFirstVisitAnswer.domain == body.domain,
+            PatientFirstVisitAnswer.question_id == a.question_id,
+        )
+        record = (await db.execute(stmt)).scalars().first()
+        if record:
+            record.field = a.field
+            record.value = a.value
+            record.submitted_at = func.now()
+        else:
+            db.add(PatientFirstVisitAnswer(
+                file=body.file,
+                speaker=body.speaker,
+                domain=body.domain,
+                question_id=a.question_id,
+                field=a.field,
+                value=a.value,
+            ))
+
+    await db.commit()
+    return await get_first_visit_answers(body.file, body.speaker, db, user)
