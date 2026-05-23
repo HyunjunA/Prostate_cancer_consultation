@@ -240,6 +240,13 @@ Paraphrased outgoing reply that anchors the upcoming-tasks section below:
 - **Branch note**: Do **not** edit on `main`. Stash / commit the 6 in-flight changes first, then branch `fix/remove-patient-disclaimer` (or similar).
 - **Status**: confirmed, not started — small task, can be slotted opportunistically once branch is clean.
 
+### 8. Connect patient first-visit questions to the REDCap project  *(NEW — 2026-05-22)*
+- **Problem**: The per-category questions on the patient first-visit page (cp/le/ed/inc/ius — VAS sliders, timeline radio, factor multi-select) are **not connected to the REDCap project**, and those question fields **do not yet exist in the REDCap project**.
+- **Action**: Work with the **collaborator** to define/add the corresponding fields in REDCap, then map dashboard answers ↔ REDCap fields.
+- **Context**: Answers are now stored row-per-question in `patient_first_visit_answer` (migration 014), keyed by `question_id`. This long format matches REDCap's field model — aligning REDCap field names with the `question_id`s makes the mapping straightforward.
+- **Related docs**: `docs/features/Frontend_REDCap_Field_Mapping.md` (existing follow-up survey mapping — add the first-visit question rows the same way).
+- **Status**: open, not started — coordination item (needs collaborator + REDCap access).
+
 ---
 
 ## Priority order
@@ -251,6 +258,7 @@ Updated 2026-05-19 — new top-priority item from this round's feedback override
 4. Visual cue on "View relevant sentences" toggle — small UX tweak (Feedback Item 3; Task 5 in this doc).
 5. Track VAS slider interactions on admin page — ties into Admin Page work (Feedback Item 4; Task 6 in this doc; may be folded into Task 2).
 6. Disclaimer removal — small, opportunistic (Feedback Item 1; Task 7 in this doc).
+7. Connect first-visit questions to REDCap — coordination item, needs collaborator + REDCap access (Task 8 in this doc).
 
 ## Open questions to clarify with reporter
 - Scope of disclaimer removal: Patient First Visit only, or all report views (Follow-up, Doctor) too?

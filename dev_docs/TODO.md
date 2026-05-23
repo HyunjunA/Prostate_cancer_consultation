@@ -2,7 +2,81 @@
 
 > Consolidated list of outstanding items, organized by priority.  
 > Target: **Production level**  
-> Last updated: 2026-05-08
+> Last updated: 2026-05-22
+
+---
+
+## REDCap integration — patient first-visit questions (coordination)
+
+- [ ] **Connect patient first-visit questions to the REDCap project** —
+      the per-category questions on the patient first-visit page
+      (cp/le/ed/inc/ius — VAS sliders, timeline radio, factor multi-select)
+      are **not connected to REDCap**, and those fields **do not yet exist in
+      the REDCap project**. Work with the **collaborator** to define/add the
+      fields in REDCap and map dashboard answers ↔ REDCap fields.
+      Answers are stored row-per-question in `patient_first_visit_answer`
+      (migration 014), keyed by `question_id`; this long format matches
+      REDCap's field model, so aligning REDCap field names with the
+      `question_id`s keeps the mapping simple. See
+      `docs/features/Frontend_REDCap_Field_Mapping.md` (extend it with the
+      first-visit question rows). _Added 2026-05-22; coordination item — needs
+      collaborator + REDCap access._
+
+---
+
+## Desktop app packaging + fresh native deployment (roadmap)
+
+> Goal: run the two repos — `AI_physician_patient_communication` (NLP + AI
+> pipeline + nlp-classifiers) and `Prostate_cancer_consultation_dashboard`
+> (FastAPI backend + Next.js webapp + Postgres + Redis) — as a single
+> **desktop application** a non-developer can launch (double-click), with PHI
+> kept local. _Added 2026-05-22._
+
+**What must be bundled / managed today**
+- Frontend: Next.js 13 (currently a Docker `webapp` container on `:3001`).
+- Backend: FastAPI / uvicorn (`:18000`) + Redis.
+- DB: native Postgres 16 (`:5433`).
+- NLP: `r01-nlp-classifiers` Docker image (R random forests) — write-time asset.
+- AI pipeline: Azure OpenAI GPT-4o (needs network + API key).
+
+**Packaging options**
+- **A) Electron / Tauri shell + local-service orchestrator** — the app starts
+  Postgres + uvicorn + the built Next.js server, then opens a window at
+  localhost. NLP/AI still need Docker or remote. True "app" feel.
+- **B) One-click launcher** (`.command` / `.app` / menu-bar) that runs the
+  existing native scripts and opens the browser. Lightest, fastest to ship;
+  not a packaged binary.
+- **C) Full offline bundle** — embed Python (PyInstaller), embed Postgres (or
+  move single-user to SQLite via the existing `JSONB_COMPAT` path), replace the
+  NLP Docker image with a bundled scorer, make Azure optional. Largest effort.
+
+**Key challenges**
+- NLP runs in Docker (R) — the main blocker for a "no Docker" desktop app.
+- Azure OpenAI needs network + a secret — offline mode needs a local LLM or
+  precomputed outputs.
+- Postgres-flavored code/migrations (e.g. migration 014 `to_jsonb`) would need
+  a compat pass before SQLite single-user mode is viable.
+- Secrets (API keys, DB creds) move to OS keychain / app config.
+- Cross-platform: collaborator machines may be Mac and/or Windows.
+
+**Phased path (recommended)**
+- **Phase 0 — Fresh native deployment (near-term).** A reliable from-scratch
+  bring-up: one bootstrap script (init DB → migrate → start backend → start
+  webapp) plus a **teardown/reset** script (stop containers, clear caches,
+  optional `--wipe-db` gated behind explicit confirmation). Makes "run on a
+  fresh machine" repeatable. *(This is the "fresh native deployment" request.)*
+- **Phase 1 — One-click launcher (Option B)** wrapping the native scripts —
+  quick win for non-dev collaborators.
+- **Phase 2 — Electron/Tauri shell (Option A)** for a real app window + managed
+  service lifecycle.
+- **Phase 3 (optional) — Offline bundle (Option C)** only if offline / no-Docker
+  is a hard requirement (largest effort: NLP + LLM).
+
+**Open questions (must answer before building)**
+- Must it be fully offline / no Docker? (decides whether NLP + Azure get replaced)
+- Target OS — Mac only, or Windows too?
+- Single-user (SQLite acceptable) or shared/multi-user (keep Postgres)?
+- Who installs it — collaborator self-install, or pre-provisioned machine?
 
 ---
 
