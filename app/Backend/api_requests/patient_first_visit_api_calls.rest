@@ -1,0 +1,144 @@
+############################################################################
+# Patient First-Visit page — every API call it actually makes
+#
+# Source: app/Webapp/src/components/PatientInitialVisitReportV38.tsx
+#   data hooks: usePatientData (fetchSummaryDetail / fetchAISummary /
+#               fetchSentencesByClass / updateSingleClassScore),
+#               useFirstVisitAnswers (GET/PUT first-visit-answers),
+#   tracking:   track.ts trackFirst -> POST /api/track/patient-first
+#               trackingManager -> POST /api/tracking/events (legacy, parallel)
+#
+# The webapp calls these via the proxy /api/backend/<path> (which injects
+# X-API-Key server-side). This file hits the native backend directly on
+# :18000 with the same X-API-Key (read from app/Backend/.env).
+#
+# Use with the VS Code "REST Client" extension → "Send Request".
+############################################################################
+
+@base    = http://localhost:18000
+@json    = application/json
+@api_key = {{$dotenv API_KEY}}
+
+# ---- Patient selector ----------------------------------------------------
+# Values must match patient_summary(file, speaker) EXACTLY. Note SID 10 has
+# "REC 001" (with a space); SID 14/15 have "REC001" (no space).
+# To switch patient: comment the active @file/@speaker pair, uncomment another.
+#
+#   SID 10  total_sentences=428  ai_overall_score=3.0
+#   SID 14  total_sentences=424  ai_overall_score=3.6
+#   SID 15  total_sentences=122  ai_overall_score=3.33
+
+# --- active: SID 14 ---
+@file    = Input_Keystrokes REC001 (SID 14).xlsx
+@speaker = Patient_Input_Keystrokes REC001 (SID 14)
+
+# --- SID 10 (uncomment to use) ---
+# @file    = Input_Keystrokes REC 001 (SID 10).xlsx
+# @speaker = Patient_Input_Keystrokes REC 001 (SID 10)
+
+# --- SID 15 (uncomment to use) ---
+# @file    = Input_Keystrokes REC001 (SID 15).xlsx
+# @speaker = Patient_Input_Keystrokes REC001 (SID 15)
+
+
+############################################################################
+# SECTION 1 — READS (populate the page on mount)
+# Fired in parallel by V38's data effect (Promise.all).
+############################################################################
+
+### 1) Per-domain summary + saved helpfulness ratings   [usePatientData.fetchSummaryDetail]
+#    Drives: each domain card's fallback summary + star rating state.
+GET {{base}}/api/patient/summaries/{{file}}/{{speaker}}
+X-API-Key: {{api_key}}
+
+### 2) AI-generated summary (GPT-4o)   [usePatientData.fetchAISummary]
+#    Drives: "AI-Generated Summary" (reformat_sentence) AND
+#            "From your consultation" (source_sentence + source_context with <main>).
+#    Table: llm_domain_scoring_and_summary
+GET {{base}}/api/patient/ai-summary/{{file}}
+X-API-Key: {{api_key}}
+
+### 3) NLP top-N sentences + context   [usePatientData.fetchSentencesByClass, top_n=10]
+#    Table: sentence_prediction (by_class: cp/le/ed/inc/ius, each {sentence, context, pred_score}).
+#    NOTE: since Branch 2 was removed, V38 no longer renders these; still fetched.
+GET {{base}}/api/patient/sentences/{{file}}?top_n=10
+X-API-Key: {{api_key}}
+
+### 4) Prefill previously-submitted answers   [useFirstVisitAnswers GET]
+#    Table: patient_first_visit_answer (nested domain -> question_id).
+#    Drives: hydration of VAS / timeline / factor inputs on mount.
+GET {{base}}/api/patient/first-visit-answers/{{file}}/{{speaker}}
+X-API-Key: {{api_key}}
+
+
+############################################################################
+# SECTION 2 — WRITES (fired on patient interaction)
+############################################################################
+
+### 5) Save helpfulness rating (per domain)   [usePatientData.updateSingleClassScore -> PUT /scoring]
+#    Writes: patient_summary_domain.patient_scoring
+PUT {{base}}/api/patient/scoring
+X-API-Key: {{api_key}}
+Content-Type: {{json}}
+
+{
+  "file": "{{file}}",
+  "speaker": "{{speaker}}",
+  "domain": "ed",
+  "patient_scoring": 4
+}
+
+### 6) Submit a domain's answers   [useFirstVisitAnswers.saveDomain -> PUT /first-visit-answers]
+#    Writes: patient_first_visit_answer (one row per question_id; re-Submit overwrites)
+PUT {{base}}/api/patient/first-visit-answers
+X-API-Key: {{api_key}}
+Content-Type: {{json}}
+
+{
+  "file": "{{file}}",
+  "speaker": "{{speaker}}",
+  "domain": "ed",
+  "answers": [
+    { "question_id": "ed_baseline_return", "field": "vas", "value": 60 },
+    { "question_id": "ed_timeline", "field": "timeline", "value": "6 months after treatment" },
+    { "question_id": "ed_factors", "field": "factors", "value": ["Age"] }
+  ]
+}
+
+### 7) Behavior event (Pattern A)   [track.ts trackFirst -> POST /track/patient-first]
+#    Writes: patient_first_behavior. event_type one of:
+#    page_view | topic_open/close | evidence_open/close | summary_open/close
+#    | rating_click | slider_moved | answer_changed | domain_submitted | session_end
+POST {{base}}/api/track/patient-first
+X-API-Key: {{api_key}}
+Content-Type: {{json}}
+
+{
+  "session_id": "sess-rest-test",
+  "file": "{{file}}",
+  "speaker": "{{speaker}}",
+  "events": [
+    {
+      "event_type": "summary_open",
+      "domain": "ed",
+      "metadata": { "topic": "Erectile Dysfunction", "screen": "ed" },
+      "client_timestamp": "2026-05-22T12:00:00Z"
+    }
+  ]
+}
+
+### 8) Legacy parallel behavior tracking   [trackingManager -> POST /tracking/events]
+#    V38 ALSO fires this older tracker alongside Pattern A. Body shape is the
+#    legacy TrackingEvent batch — see app/Webapp/src/api/trackingApi.ts.
+#    (Kept here for completeness; Pattern A in #7 is the primary path.)
+# POST {{base}}/api/tracking/events
+# X-API-Key: {{api_key}}
+# Content-Type: {{json}}
+#
+# { "events": [ /* legacy TrackingEvent objects */ ] }
+
+
+############################################################################
+# Quick all-in-one check (run #1–#4 to see exactly what V38 displays):
+#   1 summaries → 2 ai-summary → 3 sentences → 4 first-visit-answers
+############################################################################

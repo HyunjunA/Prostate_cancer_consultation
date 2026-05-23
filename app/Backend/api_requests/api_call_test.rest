@@ -5,7 +5,8 @@
 # from the nearest .env file. No edits to this file or to .vscode/ needed —
 # the .env is already gitignored, so the secret stays local.
 
-@base = http://localhost:8000
+# Native deployment runs uvicorn on :18000 (legacy Docker mode used :8000).
+@base = http://localhost:18000
 @json = application/json
 @api_key = {{$dotenv API_KEY}}
 
@@ -123,6 +124,24 @@ X-API-Key: {{api_key}}
 ### Get AI summary for specific patient (SID-14)
 ### If AI summary not available, returns source="fallback_rewriter" with empty domains
 GET {{base}}/api/patient/ai-summary/Input_Keystrokes REC001 (SID 14).xlsx
+X-API-Key: {{api_key}}
+
+
+############################################################
+### 5b) "View relevant sentences from your visit" — the DB copy of
+###     step5_context/top10_with_context.xlsx (table: sentence_prediction).
+###     Each item: sentence + context (context has <main>...</main> with the
+###     focus sentence wrapped, plus the surrounding ±N sentences).
+###     This is exactly what the patient "From your consultation" box reads.
+###     by_class keys: cp / le / ed / inc / ius.
+############################################################
+
+### SID-14 — all domains' top-N sentences WITH full context
+GET {{base}}/api/patient/sentences/Input_Keystrokes REC001 (SID 14).xlsx
+X-API-Key: {{api_key}}
+
+### SID-10 (compare)
+GET {{base}}/api/patient/sentences/Input_Keystrokes REC 001 (SID 10).xlsx
 X-API-Key: {{api_key}}
 
 
