@@ -60,7 +60,9 @@ router = APIRouter(
 EventType = Literal[
     "page_view", "topic_open", "topic_close",
     "evidence_open", "evidence_close",
-    "rating_click", "session_end",
+    "summary_open", "summary_close",
+    "rating_click", "slider_moved", "answer_changed", "domain_submitted",
+    "session_end",
 ]
 Domain = Literal["cp", "le", "ed", "inc", "ius"]
 
@@ -90,9 +92,39 @@ class PatientFirstEvent(BaseModel):
         if self.event_type == "rating_click":
             if self.domain is None or self.rating is None:
                 raise ValueError("rating_click requires both domain and rating")
-        if self.event_type in ("topic_open", "topic_close", "evidence_open", "evidence_close"):
+        if self.event_type in (
+            "topic_open", "topic_close",
+            "evidence_open", "evidence_close",
+            "summary_open", "summary_close",
+        ):
             if self.domain is None:
                 raise ValueError(f"{self.event_type} requires domain")
+        #   - slider_moved : domain mandatory, plus metadata.slider_name so
+        #     the aggregator can tell which of a domain's sliders was touched
+        #     (Cancer Prognosis has two). The event firing AT ALL is the
+        #     "answered vs left at default 50" signal.
+        if self.event_type == "slider_moved":
+            if self.domain is None:
+                raise ValueError("slider_moved requires domain")
+            if not self.metadata.get("slider_name"):
+                raise ValueError("slider_moved requires metadata.slider_name")
+        #   - domain_submitted : one event per Submit click, carrying a
+        #     snapshot of that domain's answers (timeline / factors / vas) in
+        #     metadata. domain is mandatory so the admin can attribute the
+        #     submission; the metadata shape is free-form (stored verbatim).
+        #     Re-submits produce additional rows — that IS the submit history.
+        if self.event_type == "domain_submitted":
+            if self.domain is None:
+                raise ValueError("domain_submitted requires domain")
+        #   - answer_changed : fired each time a non-slider question (timeline
+        #     radio / factor multi-select) changes. domain mandatory, plus
+        #     metadata.field ("timeline" | "factors") so the aggregator can
+        #     group each question's change history separately.
+        if self.event_type == "answer_changed":
+            if self.domain is None:
+                raise ValueError("answer_changed requires domain")
+            if not self.metadata.get("field"):
+                raise ValueError("answer_changed requires metadata.field")
         return self
 
 
@@ -288,15 +320,88 @@ async def aggregate_by_session(
         s["total_events"] += 1
 
         if r.domain:
-            d = s["by_domain"].setdefault(r.domain, {"open": 0, "close": 0, "evidence_open": 0, "evidence_close": 0})
+            d = s["by_domain"].setdefault(r.domain, {"open": 0, "close": 0, "evidence_open": 0, "evidence_close": 0, "summary_open": 0, "summary_close": 0, "topic_by_screen": {}, "evidence_by_screen": {}, "summary_by_screen": {}, "sliders": [], "slider_history": {}, "answer_history": {}, "rating_history": {}, "submissions": []})
+            # The page (wizard screen) a panel toggle happened on. The same card
+            # renders on Overview and on its domain detail screen, so this is
+            # what tells "opened evidence on Overview" from "...on the cp page".
+            screen = (r.event_metadata or {}).get("screen") or "unknown"
             if r.event_type == "topic_open":
                 d["open"] += 1
+                d["topic_by_screen"].setdefault(screen, {"open": 0, "close": 0})["open"] += 1
             elif r.event_type == "topic_close":
                 d["close"] += 1
+                d["topic_by_screen"].setdefault(screen, {"open": 0, "close": 0})["close"] += 1
             elif r.event_type == "evidence_open":
                 d["evidence_open"] += 1
+                d["evidence_by_screen"].setdefault(screen, {"open": 0, "close": 0})["open"] += 1
             elif r.event_type == "evidence_close":
                 d["evidence_close"] += 1
+                d["evidence_by_screen"].setdefault(screen, {"open": 0, "close": 0})["close"] += 1
+            elif r.event_type == "summary_open":
+                d["summary_open"] += 1
+                d["summary_by_screen"].setdefault(screen, {"open": 0, "close": 0})["open"] += 1
+            elif r.event_type == "summary_close":
+                d["summary_close"] += 1
+                d["summary_by_screen"].setdefault(screen, {"open": 0, "close": 0})["close"] += 1
+            elif r.event_type == "slider_moved":
+                # `sliders`: distinct slider names the patient touched at all
+                # — the admin compares this against the known slider set per
+                # domain to show answered vs left-at-default.
+                # `slider_history`: every committed value per slider, in
+                # client_timestamp order (rows already arrive ASC). This is
+                # the full change trajectory, including re-edits after Submit,
+                # so analysis can reconstruct 50 -> 70 -> 65 and count revisions.
+                meta = r.event_metadata or {}
+                # Key by question_id (unified across all question types); fall
+                # back to slider_name for older rows that predate question_id.
+                # For sliders the two are equal, so the admin's DOMAIN_SLIDERS
+                # comparison is unaffected.
+                qid = meta.get("question_id") or meta.get("slider_name")
+                if qid:
+                    if qid not in d["sliders"]:
+                        d["sliders"].append(qid)
+                    d["slider_history"].setdefault(qid, []).append({
+                        "value": meta.get("value"),
+                        "ts": r.client_timestamp.isoformat() if r.client_timestamp else None,
+                    })
+            elif r.event_type == "answer_changed":
+                # Per-selection change history for the non-slider questions, in
+                # client_timestamp order. Keyed by metadata.question_id so two
+                # questions of the same type in one domain stay separate (the
+                # frontend defaults the id to "{domain}_{field}", but a second
+                # question of the same type can pass its own id). `field`
+                # ("timeline" / "factors") is kept on each entry for display:
+                # timeline carries `value`, factors the full `factors` snapshot.
+                meta = r.event_metadata or {}
+                field = meta.get("field")
+                qid = meta.get("question_id") or (f"{r.domain}_{field}" if field else None)
+                if qid:
+                    d["answer_history"].setdefault(qid, []).append({
+                        "field": field,
+                        "value": meta.get("value"),
+                        "factors": meta.get("factors"),
+                        "ts": r.client_timestamp.isoformat() if r.client_timestamp else None,
+                    })
+            elif r.event_type == "rating_click" and r.rating is not None:
+                # Per-question rating history, keyed by metadata.question_id
+                # (default "{domain}_helpfulness"). Distinguishes multiple
+                # rating questions in one domain; the session-level `ratings`
+                # map below keeps the last value per domain for the summary ★.
+                meta = r.event_metadata or {}
+                qid = meta.get("question_id") or f"{r.domain}_helpfulness"
+                d["rating_history"].setdefault(qid, []).append({
+                    "value": r.rating,
+                    "ts": r.client_timestamp.isoformat() if r.client_timestamp else None,
+                })
+            elif r.event_type == "domain_submitted":
+                # One entry per Submit click, in time order. metadata.answers is
+                # the question_id-keyed snapshot the patient submitted that time
+                # (list of {question_id, field, value}); re-submits append
+                # further entries so the admin sees the full submission history.
+                d["submissions"].append({
+                    "answers": (r.event_metadata or {}).get("answers", []),
+                    "ts": r.client_timestamp.isoformat() if r.client_timestamp else None,
+                })
 
         if r.event_type == "rating_click" and r.domain and r.rating is not None:
             # Last-write-wins within a session: a patient might re-rate

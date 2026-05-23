@@ -32,11 +32,72 @@ interface EventRow {
   client_timestamp: string | null;
 }
 
+interface SliderHistoryPoint {
+  value: number | null;
+  ts: string | null;
+}
+
+interface AnswerHistoryPoint {
+  // "timeline" | "factors" — kept per entry because answer_history is now
+  // keyed by question_id, not by field.
+  field: string | null;
+  // timeline changes carry `value`; factor changes carry the full `factors`
+  // snapshot after the toggle.
+  value: string | null;
+  factors: string[] | null;
+  ts: string | null;
+}
+
+interface RatingHistoryPoint {
+  value: number | null;
+  ts: string | null;
+}
+
+interface SubmittedAnswer {
+  question_id: string;
+  field: string;
+  value: number | string | string[] | null;
+}
+
+interface SubmissionSnapshot {
+  // Question_id-keyed snapshot the patient submitted (one entry per question).
+  answers: SubmittedAnswer[];
+  ts: string | null;
+}
+
 interface DomainAgg {
   open: number;
   close: number;
   evidence_open: number;
   evidence_close: number;
+  // "View relevant sentences" vs "View AI-Generated Summary" panel toggles,
+  // counted separately so the two behaviors are distinguishable.
+  summary_open: number;
+  summary_close: number;
+  // Same counts broken down by the page (wizard screen) they happened on,
+  // e.g. { overview: {open:1, close:1}, cp: {open:1, close:0} }.
+  topic_by_screen?: Record<string, { open: number; close: number }>;
+  summary_by_screen?: Record<string, { open: number; close: number }>;
+  evidence_by_screen?: Record<string, { open: number; close: number }>;
+  // Distinct VAS slider names the patient actually moved in this session
+  // (backend /aggregate). Compared against DOMAIN_SLIDERS to show how many
+  // of a domain's sliders were answered vs left at the default of 50.
+  sliders?: string[];
+  // Full committed-value trajectory per slider, in time order — every value
+  // the patient settled on, including re-edits after Submit. Lets the admin
+  // see 50 → 70 → 65 and count how many times an answer was revised.
+  slider_history?: Record<string, SliderHistoryPoint[]>;
+  // One entry per Submit click, in time order. Each holds the answer snapshot
+  // submitted that time; re-submits after editing append further entries, so
+  // this is the per-domain submission history.
+  submissions?: SubmissionSnapshot[];
+  // Per-selection change history for the non-slider questions, keyed by
+  // question_id (e.g. "ed_timeline", "ed_factors"), in time order. Keying by
+  // question_id keeps multiple same-type questions in one domain apart.
+  answer_history?: Record<string, AnswerHistoryPoint[]>;
+  // Per-question rating history, keyed by question_id (e.g. "cp_helpfulness"),
+  // in time order. Distinguishes multiple rating questions in one domain.
+  rating_history?: Record<string, RatingHistoryPoint[]>;
 }
 
 interface AggregateSession {
@@ -57,6 +118,80 @@ const DOMAIN_LABEL: Record<string, string> = {
   inc: "Urinary Incontinence",
   ius: "Irritative Urinary Symptoms",
 };
+
+// VAS sliders rendered per domain in the first-visit report. Used to show
+// how many of a domain's sliders the patient actually moved (answered) vs
+// left at the default of 50. Life Expectancy has no slider. Must mirror the
+// slider_name values emitted by PatientInitialVisitReportV38.
+const DOMAIN_SLIDERS: Record<string, string[]> = {
+  cp: ["cp_risk_without_treatment", "cp_risk_with_treatment"],
+  ed: ["ed_baseline_return"],
+  inc: ["inc_risk"],
+  ius: ["ius_risk"],
+};
+
+// Build a human-readable trajectory string for the cell tooltip, e.g.
+//   cp_risk_without_treatment: 50 → 70 → 65
+// One line per slider the patient committed at least once.
+function fmtSliderHistory(
+  history?: Record<string, SliderHistoryPoint[]>,
+): string {
+  if (!history) return "";
+  return Object.entries(history)
+    .map(([name, points]) => `${name}: ${points.map((p) => p.value).join(" → ")}`)
+    .join("\n");
+}
+
+// Build a human-readable submission history for the cell tooltip, e.g.
+//   #1 (2:00:00 PM): timeline=5-10 years, factors=[age]
+//   #2 (2:05:00 PM): timeline=10-15 years, factors=[age, comorbidity]
+// One line per Submit click, in time order.
+function fmtSubmissions(subs?: SubmissionSnapshot[]): string {
+  if (!subs || subs.length === 0) return "";
+  return subs
+    .map((s, i) => {
+      const parts = (s.answers ?? []).map((a) => {
+        const v = Array.isArray(a.value) ? `[${a.value.join(", ")}]` : String(a.value);
+        return `${a.question_id}=${v}`;
+      });
+      const when = s.ts ? new Date(s.ts).toLocaleTimeString() : "—";
+      return `#${i + 1} (${when}): ${parts.join(", ") || "—"}`;
+    })
+    .join("\n");
+}
+
+// Build a per-field change-history string for the cell tooltip, e.g.
+//   timeline: 1-2 years → 3-5 years
+//   factors: [age] → [age, smoking]
+// One line per field, values in time order.
+function fmtAnswerHistory(
+  history?: Record<string, AnswerHistoryPoint[]>,
+): string {
+  if (!history) return "";
+  return Object.entries(history)
+    .map(([field, points]) => {
+      const seq = points
+        .map((p) =>
+          p.factors != null ? `[${p.factors.join(", ")}]` : String(p.value),
+        )
+        .join(" → ");
+      return `${field}: ${seq}`;
+    })
+    .join("\n");
+}
+
+// Build a per-question rating-history string for the ★ tooltip, e.g.
+//   cp_helpfulness: 3 → 4
+//   cp_clarity: 5
+// One line per rating question, values in time order.
+function fmtRatingHistory(
+  history?: Record<string, RatingHistoryPoint[]>,
+): string {
+  if (!history) return "";
+  return Object.entries(history)
+    .map(([qid, points]) => `${qid}: ${points.map((p) => p.value).join(" → ")}`)
+    .join("\n");
+}
 
 function fmtDate(s: string | null): string {
   if (!s) return "—";
@@ -109,40 +244,46 @@ export default function AdminTrackingPatientFirst() {
     }
   };
 
-  useEffect(() => { reloadSessions(); /* eslint-disable-next-line */ }, []);
-
-  // Fetch event detail when a session is selected
-  useEffect(() => {
+  // Fetch event detail for the currently selected session (null = clear).
+  const reloadEvents = async () => {
     if (!selectedSession) {
       setEvents([]);
       return;
     }
-    (async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/backend/track/patient-first/session/${encodeURIComponent(selectedSession)}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        setEvents(data.events || []);
-      } catch (e) {
-        setError(`Failed to load events: ${e}`);
-      }
-    })();
-  }, [selectedSession]);
+    try {
+      const res = await fetch(`${API_BASE}/api/backend/track/patient-first/session/${encodeURIComponent(selectedSession)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setEvents(data.events || []);
+    } catch (e) {
+      setError(`Failed to load events: ${e}`);
+    }
+  };
 
-  // Fetch aggregate when fileFilter changes
-  useEffect(() => {
+  // Fetch the per-session aggregate for the active file filter (none = clear).
+  const reloadAggregate = async () => {
     if (!fileFilter) { setAggregate(null); return; }
-    (async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/backend/track/patient-first/aggregate?file=${encodeURIComponent(fileFilter)}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        setAggregate(data.sessions || []);
-      } catch (e) {
-        setError(`Failed to load aggregate: ${e}`);
-      }
-    })();
-  }, [fileFilter]);
+    try {
+      const res = await fetch(`${API_BASE}/api/backend/track/patient-first/aggregate?file=${encodeURIComponent(fileFilter)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setAggregate(data.sessions || []);
+    } catch (e) {
+      setError(`Failed to load aggregate: ${e}`);
+    }
+  };
+
+  // Refresh button — pull the latest for every panel at once. Without this,
+  // each panel only refetches on its own trigger (mount / session-select /
+  // filter-change), so newly-arrived events stay invisible until a full page
+  // reload. reloadSessions drives the spinner; the other two run alongside.
+  const reloadAll = async () => {
+    await Promise.all([reloadSessions(), reloadAggregate(), reloadEvents()]);
+  };
+
+  useEffect(() => { reloadSessions(); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { reloadEvents(); /* eslint-disable-next-line */ }, [selectedSession]);
+  useEffect(() => { reloadAggregate(); /* eslint-disable-next-line */ }, [fileFilter]);
 
   const totalCount = useMemo(() => sessions.reduce((sum, s) => sum + s.event_count, 0), [sessions]);
 
@@ -170,7 +311,7 @@ export default function AdminTrackingPatientFirst() {
             />
           </div>
           <button
-            onClick={reloadSessions}
+            onClick={reloadAll}
             disabled={loading}
             className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 disabled:opacity-50"
           >
@@ -234,6 +375,14 @@ export default function AdminTrackingPatientFirst() {
                   </div>
                   <div className="text-slate-700 mt-0.5">
                     {e.domain && <span className="inline-block bg-slate-100 px-2 py-0.5 rounded mr-2">{e.domain}</span>}
+                    {/* Page (wizard screen) the action happened on — Overview vs
+                        the per-category detail page. Surfaced as a chip so "where"
+                        is visible at a glance, not buried in the metadata JSON. */}
+                    {typeof e.metadata?.screen === "string" && (
+                      <span className="inline-block bg-violet-100 text-violet-700 px-2 py-0.5 rounded mr-2">
+                        📄 {e.metadata.screen}
+                      </span>
+                    )}
                     {e.rating != null && <span className="inline-block bg-amber-100 px-2 py-0.5 rounded mr-2">★ {e.rating}</span>}
                     {e.device_type && <span className="text-slate-500">{e.device_type}</span>}
                   </div>
@@ -278,14 +427,115 @@ export default function AdminTrackingPatientFirst() {
                         const ag = s.by_domain[d];
                         const r = s.ratings[d];
                         if (!ag && r == null) return <td key={d} className="px-3 py-2 text-center text-slate-300">—</td>;
+                        const expectedSliders = DOMAIN_SLIDERS[d] ?? [];
+                        const slidersMoved = ag?.sliders?.length ?? 0;
+                        const sliderColor =
+                          slidersMoved === 0
+                            ? "text-slate-400"
+                            : slidersMoved === expectedSliders.length
+                              ? "text-emerald-600"
+                              : "text-amber-600";
+                        // Re-edits = commits beyond the first touch of each
+                        // slider. Total committed values minus distinct sliders.
+                        const totalCommits = Object.values(
+                          ag?.slider_history ?? {},
+                        ).reduce((n, pts) => n + pts.length, 0);
+                        const revisions = Math.max(0, totalCommits - slidersMoved);
+                        const trajectory = fmtSliderHistory(ag?.slider_history);
+                        // Each Submit click for this domain (re-submits included).
+                        const submissions = ag?.submissions ?? [];
+                        // Per-selection changes to the timeline / factor questions.
+                        const answerHistory = ag?.answer_history ?? {};
+                        const answerChanges = Object.values(answerHistory).reduce(
+                          (n, pts) => n + pts.length,
+                          0,
+                        );
+                        // Per-question rating history (multiple rating questions
+                        // per domain are kept apart by question_id).
+                        const ratingHistory = ag?.rating_history ?? {};
+                        const ratingQuestions = Object.keys(ratingHistory).length;
                         return (
                           <td key={d} className="px-3 py-2 text-center">
                             {ag && (
-                              <div className="text-slate-700">
-                                {ag.open}↑ {ag.close}↓
+                              <div className="text-slate-700" title="Topic card open/close, broken down by page">
+                                <div>{ag.open}↑ {ag.close}↓</div>
+                                {Object.entries(ag.topic_by_screen ?? {}).map(([sc, c]) => (
+                                  <div key={sc} className="text-[10px] text-slate-500 ml-3">
+                                    {sc}: {c.open}↑ {c.close}↓
+                                  </div>
+                                ))}
                               </div>
                             )}
-                            {r != null && <div className="text-amber-600">★{r}</div>}
+                            {ag && (ag.summary_open > 0 || ag.summary_close > 0) && (
+                              <div className="text-blue-600" title="View AI-Generated Summary — open/close, broken down by page">
+                                <div>📄 {ag.summary_open}↑ {ag.summary_close}↓</div>
+                                {Object.entries(ag.summary_by_screen ?? {}).map(([sc, c]) => (
+                                  <div key={sc} className="text-[10px] text-blue-500 ml-3">
+                                    {sc}: {c.open}↑ {c.close}↓
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {ag && (ag.evidence_open > 0 || ag.evidence_close > 0) && (
+                              <div className="text-cyan-600" title="View relevant sentences — open/close, broken down by page">
+                                <div>👁 {ag.evidence_open}↑ {ag.evidence_close}↓</div>
+                                {Object.entries(ag.evidence_by_screen ?? {}).map(([sc, c]) => (
+                                  <div key={sc} className="text-[10px] text-cyan-500 ml-3">
+                                    {sc}: {c.open}↑ {c.close}↓
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {r != null && (
+                              <div
+                                className="text-amber-600"
+                                title={
+                                  ratingQuestions > 0
+                                    ? `Rating history (per question):\n${fmtRatingHistory(ratingHistory)}`
+                                    : undefined
+                                }
+                              >
+                                ★{r}
+                                {ratingQuestions > 1 && (
+                                  <span className="ml-1 text-amber-500">×{ratingQuestions}</span>
+                                )}
+                              </div>
+                            )}
+                            {ag && expectedSliders.length > 0 && (
+                              <div
+                                className={sliderColor}
+                                title={
+                                  `Sliders moved: ${(ag.sliders ?? []).join(", ") || "none (left at default 50)"}` +
+                                  (trajectory ? `\n\nTrajectory:\n${trajectory}` : "")
+                                }
+                              >
+                                🎚 {slidersMoved}/{expectedSliders.length}
+                                {revisions > 0 && (
+                                  <span
+                                    className="ml-1 text-sky-600"
+                                    title={`${revisions} re-edit${revisions === 1 ? "" : "s"} after first touch`}
+                                  >
+                                    ↻{revisions}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            {answerChanges > 0 && (
+                              <div
+                                className="text-teal-600"
+                                title={`Answer changes (each selection):\n${fmtAnswerHistory(answerHistory)}`}
+                              >
+                                📝 {answerChanges}
+                              </div>
+                            )}
+                            {submissions.length > 0 && (
+                              <div
+                                className="text-violet-600"
+                                title={`Submissions (each Submit click):\n${fmtSubmissions(submissions)}`}
+                              >
+                                📥 {submissions.length}
+                              </div>
+                            )}
                           </td>
                         );
                       })}

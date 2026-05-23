@@ -51,7 +51,12 @@ export type PatientFirstEventType =
   | "topic_close"
   | "evidence_open"
   | "evidence_close"
+  | "summary_open"
+  | "summary_close"
   | "rating_click"
+  | "slider_moved"
+  | "answer_changed"
+  | "domain_submitted"
   | "session_end";
 
 export type PatientFollowupEventType =
