@@ -74,11 +74,12 @@ import React, {
   useCallback,
 } from "react";
 import { usePatientData } from "@/hooks/usePatientData";
-import { useFirstVisitResponses } from "@/hooks/useFirstVisitResponses";
+import { useFirstVisitAnswers } from "@/hooks/useFirstVisitAnswers";
 import {
-  FirstVisitResponseRead,
-  FirstVisitResponseUpsert,
-} from "@/api/firstVisitApi";
+  AnswerItem,
+  DomainAnswers,
+} from "@/api/firstVisitAnswersApi";
+import { QID, fieldQuestionId } from "@/lib/firstVisitQuestions";
 import { usePatientId } from "@/stores/usePatientId";
 import { useFileId } from "@/stores/useFileId";
 import { sendTrackingEvents } from "@/api/trackingApi";
@@ -615,6 +616,12 @@ interface HelpfulnessRatingProps {
   trackFile?: string;
   trackSpeaker?: string;
   trackDomain?: Domain;
+  // Stable per-question id, written to metadata.question_id so the aggregator
+  // can tell apart multiple rating questions in the same domain. Defaults to
+  // "{domain}_helpfulness" (today there is one rating per domain).
+  questionId?: string;
+  // The wizard page (screen) this rating is on, written to metadata.screen.
+  screen?: string;
 }
 
 const HelpfulnessRating: React.FC<HelpfulnessRatingProps> = React.memo(({
@@ -626,6 +633,8 @@ const HelpfulnessRating: React.FC<HelpfulnessRatingProps> = React.memo(({
   trackFile,
   trackSpeaker,
   trackDomain,
+  questionId,
+  screen,
 }) => {
   return (
     // flex-nowrap forces all 5 buttons onto a single row; whitespace-nowrap on
@@ -658,7 +667,11 @@ const HelpfulnessRating: React.FC<HelpfulnessRatingProps> = React.memo(({
                     event_type: "rating_click",
                     domain: trackDomain,
                     rating: i,
-                    metadata: { rating_meaning: HELPFULNESS_LABELS[i] },
+                    metadata: {
+                      rating_meaning: HELPFULNESS_LABELS[i],
+                      question_id: questionId ?? `${trackDomain}_helpfulness`,
+                      screen,
+                    },
                   });
                 }
               }
@@ -873,24 +886,26 @@ interface TopicCardProps {
    */
   showAiSummary?: boolean;
   onToggleAiSummary?: () => void;
-  /** Server-side persisted row, used to prefill state on mount. */
-  prefill?: FirstVisitResponseRead | null;
+  /** Server-side persisted answers for this domain (keyed by question_id),
+   * used to prefill state on mount. */
+  prefill?: DomainAnswers | null;
   /**
-   * Persistence callback. Called with the per-domain payload built from
-   * local state when the patient clicks Submit. If it resolves, the
-   * parent will call onSubmit() to flip the submittedDomains flag; if
-   * it rejects, the flag stays unchanged so progress reflects the
-   * server-confirmed state only.
+   * Persistence callback. Called with this domain's answers (one entry per
+   * question_id) when the patient clicks Submit. If it resolves, the parent
+   * will call onSubmit() to flip the submittedDomains flag; if it rejects,
+   * the flag stays unchanged so progress reflects the server-confirmed state.
    */
-  onSave?: (
-    payload: Omit<FirstVisitResponseUpsert, "file" | "speaker">,
-  ) => Promise<void>;
+  onSave?: (answers: AnswerItem[]) => Promise<void>;
   isDark?: boolean;
   patientId?: string;
   visitId?: string;
   trackFile?: string;
   trackSpeaker?: string;
   trackDomain?: Domain;
+  /** The wizard page (screen) this card is rendered on — written to
+   * metadata.screen on every event from this card so the admin can tell which
+   * page an action happened on (Overview vs the per-category detail). */
+  trackScreen?: string;
 }
 
 const TopicCard: React.FC<TopicCardProps> = ({
@@ -919,9 +934,60 @@ const TopicCard: React.FC<TopicCardProps> = ({
   trackFile,
   trackSpeaker,
   trackDomain,
+  trackScreen,
 }) => {
   const topicId = topicName.replace(/\s+/g, "");
   const colors = TOPIC_COLORS[topicName] || TOPIC_COLORS["Cancer Prognosis"];
+
+  // [V38] Slider-interaction tracking. Each `slider_moved` event records one
+  // settled value the patient committed: its slider_name, the value, and (via
+  // trackFirst's client_timestamp) when. The behavior log therefore holds the
+  // full change history — including re-edits AFTER Submit — so analysis can
+  // reconstruct the trajectory (e.g. 50 → 70 → 65) and count revisions. The
+  // "answered vs left at default 50" signal still falls out of this: any
+  // slider_moved event at all means the patient touched that slider.
+  //
+  // Fired from the slider's onValueCommit (drag end / keyboard commit / track
+  // click), NOT onValueChange, so a single drag yields one event per settle
+  // instead of one per pixel.
+  const trackSliderCommit = (sliderName: string, value: number) => {
+    if (!trackFile || !trackSpeaker || !trackDomain) return;
+    trackFirst(trackFile, trackSpeaker, {
+      event_type: "slider_moved",
+      domain: trackDomain,
+      // question_id unifies the slider with every other question type; for
+      // sliders it equals slider_name. slider_name is kept for backward
+      // compatibility (validation + older rows / the "answered" signal).
+      metadata: { slider_name: sliderName, question_id: sliderName, value, screen: trackScreen },
+    });
+  };
+
+  // [V38] Per-selection tracking for the non-slider questions. Sliders and the
+  // helpfulness rating already emit an event on each interaction; this does the
+  // same for the timeline radio and the factor multi-select, so every question
+  // type records its change history. `field` is "timeline" (carries `value`)
+  // or "factors" (carries the full `factors` snapshot after the toggle).
+  const trackAnswerChange = (
+    field: "timeline" | "factors",
+    extra: { value?: string; factors?: string[] },
+    // Stable per-question id. Defaults to "{domain}_{field}" (today there is
+    // one timeline + one factors question per domain). To place a second
+    // question of the same type in a domain, pass a distinct id here and the
+    // aggregator keeps the two apart.
+    questionId?: string,
+  ) => {
+    if (!trackFile || !trackSpeaker || !trackDomain) return;
+    trackFirst(trackFile, trackSpeaker, {
+      event_type: "answer_changed",
+      domain: trackDomain,
+      metadata: {
+        field,
+        question_id: questionId ?? fieldQuestionId(trackDomain, field),
+        screen: trackScreen,
+        ...extra,
+      },
+    });
+  };
 
   // [V37] Cancer Prognosis (Experimental arm) — three additional questions
   // are rendered directly below the AI Summary for this topic only. Other
@@ -949,11 +1015,11 @@ const TopicCard: React.FC<TopicCardProps> = ({
   );
   const [leFactors, setLeFactors] = React.useState<string[]>([]);
   const toggleLeFactor = (factor: string) => {
-    setLeFactors((prev) =>
-      prev.includes(factor)
-        ? prev.filter((f) => f !== factor)
-        : [...prev, factor],
-    );
+    const next = leFactors.includes(factor)
+      ? leFactors.filter((f) => f !== factor)
+      : [...leFactors, factor];
+    setLeFactors(next);
+    trackAnswerChange("factors", { factors: next });
   };
 
   // [V37] Erectile Dysfunction (Experimental arm) — three questions:
@@ -966,11 +1032,11 @@ const TopicCard: React.FC<TopicCardProps> = ({
   const [edTimePeriod, setEdTimePeriod] = React.useState<string | null>(null);
   const [edFactors, setEdFactors] = React.useState<string[]>([]);
   const toggleEdFactor = (factor: string) => {
-    setEdFactors((prev) =>
-      prev.includes(factor)
-        ? prev.filter((f) => f !== factor)
-        : [...prev, factor],
-    );
+    const next = edFactors.includes(factor)
+      ? edFactors.filter((f) => f !== factor)
+      : [...edFactors, factor];
+    setEdFactors(next);
+    trackAnswerChange("factors", { factors: next });
   };
 
   // [V37] Urinary Incontinence (Experimental arm) — three questions:
@@ -981,11 +1047,11 @@ const TopicCard: React.FC<TopicCardProps> = ({
   const [incTimeline, setIncTimeline] = React.useState<string | null>(null);
   const [incFactors, setIncFactors] = React.useState<string[]>([]);
   const toggleIncFactor = (factor: string) => {
-    setIncFactors((prev) =>
-      prev.includes(factor)
-        ? prev.filter((f) => f !== factor)
-        : [...prev, factor],
-    );
+    const next = incFactors.includes(factor)
+      ? incFactors.filter((f) => f !== factor)
+      : [...incFactors, factor];
+    setIncFactors(next);
+    trackAnswerChange("factors", { factors: next });
   };
 
   // [V37] Irritative Urinary Symptoms (Experimental arm) — three Qs:
@@ -996,11 +1062,11 @@ const TopicCard: React.FC<TopicCardProps> = ({
   const [iusTimeline, setIusTimeline] = React.useState<string | null>(null);
   const [iusFactors, setIusFactors] = React.useState<string[]>([]);
   const toggleIusFactor = (factor: string) => {
-    setIusFactors((prev) =>
-      prev.includes(factor)
-        ? prev.filter((f) => f !== factor)
-        : [...prev, factor],
-    );
+    const next = iusFactors.includes(factor)
+      ? iusFactors.filter((f) => f !== factor)
+      : [...iusFactors, factor];
+    setIusFactors(next);
+    trackAnswerChange("factors", { factors: next });
   };
 
   // [V37] Per-domain Submit-time validation popup. VAS sliders default
@@ -1011,86 +1077,105 @@ const TopicCard: React.FC<TopicCardProps> = ({
     missing: string[];
   }>({ open: false, missing: [] });
 
-  // [V37] Hydrate the per-domain state slots from the server's last
-  // persisted row exactly once — when prefill arrives non-null. Each
-  // domain only touches its own slots; cp ignores factors etc.
+  // [V38] Hydrate the per-domain state slots from the server's persisted
+  // answers exactly once — when prefill arrives non-null. prefill is keyed by
+  // question_id; each helper pulls the value for one question with the right
+  // type. Each domain only touches its own slots.
   const hasHydrated = React.useRef(false);
   React.useEffect(() => {
     if (hasHydrated.current || !prefill) return;
     hasHydrated.current = true;
+    const numOf = (qid: string): number | null => {
+      const v = prefill[qid]?.value;
+      return typeof v === "number" ? v : null;
+    };
+    const strOf = (qid: string): string | null => {
+      const v = prefill[qid]?.value;
+      return typeof v === "string" ? v : null;
+    };
+    const arrOf = (qid: string): string[] | null => {
+      const v = prefill[qid]?.value;
+      return Array.isArray(v) ? (v as string[]) : null;
+    };
     switch (trackDomain) {
-      case "cp":
-        if (prefill.vas_primary != null) setCpRiskWithoutTreatment(prefill.vas_primary);
-        if (prefill.vas_secondary != null) setCpRiskWithTreatment(prefill.vas_secondary);
-        if (prefill.timeline) setCpTimePeriod(prefill.timeline);
+      case "cp": {
+        const a = numOf(QID.cp.riskWithoutTreatment); if (a != null) setCpRiskWithoutTreatment(a);
+        const b = numOf(QID.cp.riskWithTreatment); if (b != null) setCpRiskWithTreatment(b);
+        const t = strOf(QID.cp.timeline); if (t) setCpTimePeriod(t);
         break;
-      case "le":
-        if (prefill.timeline) setLeProjectedLE(prefill.timeline);
-        if (prefill.factors) setLeFactors(prefill.factors);
+      }
+      case "le": {
+        const t = strOf(QID.le.timeline); if (t) setLeProjectedLE(t);
+        const f = arrOf(QID.le.factors); if (f) setLeFactors(f);
         break;
-      case "ed":
-        if (prefill.vas_primary != null) setEdBaselineReturn(prefill.vas_primary);
-        if (prefill.timeline) setEdTimePeriod(prefill.timeline);
-        if (prefill.factors) setEdFactors(prefill.factors);
+      }
+      case "ed": {
+        const a = numOf(QID.ed.baselineReturn); if (a != null) setEdBaselineReturn(a);
+        const t = strOf(QID.ed.timeline); if (t) setEdTimePeriod(t);
+        const f = arrOf(QID.ed.factors); if (f) setEdFactors(f);
         break;
-      case "inc":
-        if (prefill.vas_primary != null) setIncRisk(prefill.vas_primary);
-        if (prefill.timeline) setIncTimeline(prefill.timeline);
-        if (prefill.factors) setIncFactors(prefill.factors);
+      }
+      case "inc": {
+        const a = numOf(QID.inc.risk); if (a != null) setIncRisk(a);
+        const t = strOf(QID.inc.timeline); if (t) setIncTimeline(t);
+        const f = arrOf(QID.inc.factors); if (f) setIncFactors(f);
         break;
-      case "ius":
-        if (prefill.vas_primary != null) setIusRisk(prefill.vas_primary);
-        if (prefill.timeline) setIusTimeline(prefill.timeline);
-        if (prefill.factors) setIusFactors(prefill.factors);
+      }
+      case "ius": {
+        const a = numOf(QID.ius.risk); if (a != null) setIusRisk(a);
+        const t = strOf(QID.ius.timeline); if (t) setIusTimeline(t);
+        const f = arrOf(QID.ius.factors); if (f) setIusFactors(f);
         break;
+      }
     }
   }, [prefill, trackDomain]);
 
-  // [V37] Build the per-domain payload for the PUT body. Returns only
-  // the fields relevant for that domain so the backend's exclude_unset
-  // semantic preserves untouched columns on subsequent re-Submits.
-  const buildSubmitPayload = (): Omit<
-    FirstVisitResponseUpsert,
-    "file" | "speaker"
-  > | null => {
+  // [V38] Build this domain's answers (one entry per question_id) for the PUT
+  // body. Each question carries its question_id + field, so the backend stores
+  // one row per question and re-Submits overwrite the matching rows. VAS values
+  // are always included (default 50 is what the patient saw); timeline only
+  // when set (required, validated before submit); factors always for domains
+  // that have them, so clearing all selections persists as an empty list.
+  const buildAnswers = (): AnswerItem[] => {
+    const out: AnswerItem[] = [];
+    const vas = (qid: string, v: number | null) => {
+      if (v != null) out.push({ question_id: qid, field: "vas", value: v });
+    };
+    const timeline = (qid: string, v: string | null) => {
+      if (v != null) out.push({ question_id: qid, field: "timeline", value: v });
+    };
+    const factors = (qid: string, v: string[]) => {
+      out.push({ question_id: qid, field: "factors", value: v });
+    };
     switch (trackDomain) {
       case "cp":
-        return {
-          domain: "cp",
-          vas_primary: cpRiskWithoutTreatment,
-          vas_secondary: cpRiskWithTreatment,
-          timeline: cpTimePeriod,
-        };
+        vas(QID.cp.riskWithoutTreatment, cpRiskWithoutTreatment);
+        vas(QID.cp.riskWithTreatment, cpRiskWithTreatment);
+        timeline(QID.cp.timeline, cpTimePeriod);
+        break;
       case "le":
-        return {
-          domain: "le",
-          timeline: leProjectedLE,
-          factors: leFactors.length ? leFactors : null,
-        };
+        timeline(QID.le.timeline, leProjectedLE);
+        factors(QID.le.factors, leFactors);
+        break;
       case "ed":
-        return {
-          domain: "ed",
-          vas_primary: edBaselineReturn,
-          timeline: edTimePeriod,
-          factors: edFactors.length ? edFactors : null,
-        };
+        vas(QID.ed.baselineReturn, edBaselineReturn);
+        timeline(QID.ed.timeline, edTimePeriod);
+        factors(QID.ed.factors, edFactors);
+        break;
       case "inc":
-        return {
-          domain: "inc",
-          vas_primary: incRisk,
-          timeline: incTimeline,
-          factors: incFactors.length ? incFactors : null,
-        };
+        vas(QID.inc.risk, incRisk);
+        timeline(QID.inc.timeline, incTimeline);
+        factors(QID.inc.factors, incFactors);
+        break;
       case "ius":
-        return {
-          domain: "ius",
-          vas_primary: iusRisk,
-          timeline: iusTimeline,
-          factors: iusFactors.length ? iusFactors : null,
-        };
+        vas(QID.ius.risk, iusRisk);
+        timeline(QID.ius.timeline, iusTimeline);
+        factors(QID.ius.factors, iusFactors);
+        break;
       default:
-        return null;
+        return [];
     }
+    return out;
   };
 
   // [V37] Per-domain required-field check. Returns the user-facing
@@ -1138,13 +1223,24 @@ const TopicCard: React.FC<TopicCardProps> = ({
       onSubmit();
       return;
     }
-    const payload = buildSubmitPayload();
-    if (!payload) {
+    const answers = buildAnswers();
+    if (answers.length === 0) {
       onSubmit();
       return;
     }
     try {
-      await onSave(payload);
+      await onSave(answers);
+      // [V38] Record one domain_submitted behavior event per successful
+      // Submit, carrying the question_id-keyed answer snapshot persisted this
+      // time. This makes each Submit — and each re-Submit after editing — show
+      // up in the admin as its own row, alongside the final answers.
+      if (trackFile && trackSpeaker && trackDomain) {
+        trackFirst(trackFile, trackSpeaker, {
+          event_type: "domain_submitted",
+          domain: trackDomain,
+          metadata: { answers, screen: trackScreen },
+        });
+      }
       onSubmit();
     } catch {
       // Hook surfaces the error; the card stays in its un-submitted
@@ -1389,51 +1485,6 @@ const TopicCard: React.FC<TopicCardProps> = ({
                       &rdquo;
                     </p>
                   </div>
-                ) : extractedSentences && extractedSentences.length > 0 ? (
-                  extractedSentences.slice(0, 3).map((item, idx) => (
-                    <div
-                      key={idx}
-                      className={cx(
-                        "p-4 rounded-xl border-l-4 transition-all duration-200",
-                        isDark
-                          ? "bg-slate-800/50 border-l-indigo-500 border-y border-r border-slate-700/50"
-                          : "bg-white border-l-indigo-500 border-y border-r border-gray-100 shadow-sm",
-                      )}
-                    >
-                      <p
-                        className={cx(
-                          "text-sm leading-relaxed italic",
-                          isDark ? "text-slate-300" : "text-gray-600",
-                        )}
-                      >
-                        &ldquo;
-                        {item.context && item.context.includes("<main>") ? (
-                          <>
-                            {item.context.split("<main>").map((part, pidx) => {
-                              if (pidx === 0) return <span key={pidx}>{part}</span>;
-                              const [highlighted, rest] = part.split("</main>");
-                              return (
-                                <span key={pidx}>
-                                  <span
-                                    className={cx(
-                                      "font-bold underline",
-                                      isDark ? "text-cyan-300" : "text-cyan-700",
-                                    )}
-                                  >
-                                    {highlighted}
-                                  </span>
-                                  {rest}
-                                </span>
-                              );
-                            })}
-                          </>
-                        ) : (
-                          item.sentence
-                        )}
-                        &rdquo;
-                      </p>
-                    </div>
-                  ))
                 ) : (
                   <div
                     className={cx(
@@ -1536,8 +1587,9 @@ const TopicCard: React.FC<TopicCardProps> = ({
                       max={100}
                       step={1}
                       value={[cpRiskWithoutTreatment ?? 50]}
-                      onValueChange={(v) =>
-                        setCpRiskWithoutTreatment(v[0] ?? 0)
+                      onValueChange={(v) => setCpRiskWithoutTreatment(v[0] ?? 0)}
+                      onValueCommit={(v) =>
+                        trackSliderCommit(QID.cp.riskWithoutTreatment, v[0] ?? 0)
                       }
                       aria-label="Risk of dying of cancer without treatment, 0 to 100"
                     />
@@ -1621,8 +1673,9 @@ const TopicCard: React.FC<TopicCardProps> = ({
                       max={100}
                       step={1}
                       value={[cpRiskWithTreatment ?? 50]}
-                      onValueChange={(v) =>
-                        setCpRiskWithTreatment(v[0] ?? 0)
+                      onValueChange={(v) => setCpRiskWithTreatment(v[0] ?? 0)}
+                      onValueCommit={(v) =>
+                        trackSliderCommit(QID.cp.riskWithTreatment, v[0] ?? 0)
                       }
                       aria-label="Risk of dying of cancer with treatment, 0 to 100"
                     />
@@ -1700,7 +1753,10 @@ const TopicCard: React.FC<TopicCardProps> = ({
                         name={`cpTimePeriod_${topicId}`}
                         value={opt.value}
                         checked={cpTimePeriod === opt.value}
-                        onChange={() => setCpTimePeriod(opt.value)}
+                        onChange={() => {
+                          setCpTimePeriod(opt.value);
+                          trackAnswerChange("timeline", { value: opt.value });
+                        }}
                         className="sr-only"
                       />
                       <span
@@ -1798,7 +1854,10 @@ const TopicCard: React.FC<TopicCardProps> = ({
                         name={`leProjectedLE_${topicId}`}
                         value={opt}
                         checked={leProjectedLE === opt}
-                        onChange={() => setLeProjectedLE(opt)}
+                        onChange={() => {
+                          setLeProjectedLE(opt);
+                          trackAnswerChange("timeline", { value: opt });
+                        }}
                         className="sr-only"
                       />
                       <span
@@ -2001,6 +2060,9 @@ const TopicCard: React.FC<TopicCardProps> = ({
                       step={1}
                       value={[edBaselineReturn ?? 50]}
                       onValueChange={(v) => setEdBaselineReturn(v[0] ?? 0)}
+                      onValueCommit={(v) =>
+                        trackSliderCommit(QID.ed.baselineReturn, v[0] ?? 0)
+                      }
                       aria-label="Likelihood of returning to baseline erectile function, 0 to 100"
                     />
                   </div>
@@ -2070,7 +2132,10 @@ const TopicCard: React.FC<TopicCardProps> = ({
                         name={`edTimePeriod_${topicId}`}
                         value={opt}
                         checked={edTimePeriod === opt}
-                        onChange={() => setEdTimePeriod(opt)}
+                        onChange={() => {
+                          setEdTimePeriod(opt);
+                          trackAnswerChange("timeline", { value: opt });
+                        }}
                         className="sr-only"
                       />
                       <span
@@ -2270,6 +2335,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
                       step={1}
                       value={[incRisk ?? 50]}
                       onValueChange={(v) => setIncRisk(v[0] ?? 0)}
+                      onValueCommit={(v) => trackSliderCommit(QID.inc.risk, v[0] ?? 0)}
                       aria-label="Risk of urinary incontinence, 0 to 100"
                     />
                   </div>
@@ -2339,7 +2405,10 @@ const TopicCard: React.FC<TopicCardProps> = ({
                         name={`incTimeline_${topicId}`}
                         value={opt}
                         checked={incTimeline === opt}
-                        onChange={() => setIncTimeline(opt)}
+                        onChange={() => {
+                          setIncTimeline(opt);
+                          trackAnswerChange("timeline", { value: opt });
+                        }}
                         className="sr-only"
                       />
                       <span
@@ -2543,6 +2612,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
                       step={1}
                       value={[iusRisk ?? 50]}
                       onValueChange={(v) => setIusRisk(v[0] ?? 0)}
+                      onValueCommit={(v) => trackSliderCommit(QID.ius.risk, v[0] ?? 0)}
                       aria-label="Risk of irritative lower urinary tract symptoms, 0 to 100"
                     />
                   </div>
@@ -2612,7 +2682,10 @@ const TopicCard: React.FC<TopicCardProps> = ({
                         name={`iusTimeline_${topicId}`}
                         value={opt}
                         checked={iusTimeline === opt}
-                        onChange={() => setIusTimeline(opt)}
+                        onChange={() => {
+                          setIusTimeline(opt);
+                          trackAnswerChange("timeline", { value: opt });
+                        }}
                         className="sr-only"
                       />
                       <span
@@ -2768,6 +2841,8 @@ const TopicCard: React.FC<TopicCardProps> = ({
               trackFile={trackFile}
               trackSpeaker={trackSpeaker}
               trackDomain={trackDomain}
+              questionId={trackDomain ? QID[trackDomain].helpfulness : undefined}
+              screen={trackScreen}
             />
             {rating === 0 && (
               <p
@@ -2975,7 +3050,7 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
   // [V37] Persistence — fetch any previously-submitted answers on mount
   // so the page restores after reload, and expose saveDomain() for the
   // per-domain Submit click in TopicCard.
-  const firstVisit = useFirstVisitResponses(currentFile, currentSpeaker);
+  const firstVisit = useFirstVisitAnswers(currentFile, currentSpeaker);
 
   // First topic (Cancer Prognosis) expanded by default, rest collapsed
   const [expandedTopics, setExpandedTopics] = useState<Record<string, boolean>>(
@@ -3095,7 +3170,10 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
     const initial: Record<string, boolean> = {};
     for (const topic of TOPIC_ORDER) {
       const domain = TOPIC_TO_DOMAIN[topic];
-      if (domain && firstVisit.responses[domain]) {
+      // responses[domain] is always present ({} when nothing submitted) — a
+      // domain counts as submitted only once it has at least one answer.
+      const answers = domain ? firstVisit.responses[domain] : undefined;
+      if (answers && Object.keys(answers).length > 0) {
         initial[topic] = true;
       }
     }
@@ -3174,10 +3252,11 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
     loadSummaryData();
   }, [currentFile, currentSpeaker, fileId, patientId]);
 
-  // Build AI summary + source sentence lookups by topic name
-  const { aiSummaryByTopic, aiSourceByTopic } = useMemo(() => {
+  // Build AI summary + source-sentence + source-context lookups by topic.
+  const { aiSummaryByTopic, aiSourceByTopic, aiSourceContextByTopic } = useMemo(() => {
     const summaryMap: Record<string, string> = {};
     const sourceMap: Record<string, string> = {};
+    const sourceCtxMap: Record<string, string> = {};
     if (aiSummaryData?.domains) {
       const domainToTopic: Record<string, string> = {
         "Cancer Prognosis": "Cancer Prognosis",
@@ -3194,25 +3273,28 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
         } else if (d.reformat_sentence) {
           summaryMap[topic] = d.reformat_sentence;
         }
-        // source_sentence: the focus sentence GPT-4o picked. We use this as a
-        // lookup key against sentence_prediction.context (which carries
-        // <main>...</main>) so the patient view can bold+underline the focus
-        // sentence inside its surrounding ±N-sentence window.
+        // First treatment's source per topic. source_context now carries the
+        // <main>...</main> markers (persistence stores the marked context), so
+        // the patient view highlights the focus sentence directly from it — no
+        // need to re-match against sentence_prediction.
         if (d.source_sentence && !sourceMap[topic]) {
           sourceMap[topic] = d.source_sentence;
         }
+        if (d.source_context && !sourceCtxMap[topic]) {
+          sourceCtxMap[topic] = d.source_context;
+        }
       }
     }
-    return { aiSummaryByTopic: summaryMap, aiSourceByTopic: sourceMap };
+    return {
+      aiSummaryByTopic: summaryMap,
+      aiSourceByTopic: sourceMap,
+      aiSourceContextByTopic: sourceCtxMap,
+    };
   }, [aiSummaryData]);
 
-  // Derived Data
-  // For each topic we also resolve aiSourceContext: the sentence_prediction.context
-  // entry whose plain `sentence` matches the AI pipeline's focus sentence. That
-  // context carries <main>...</main> tags around the focus sentence so the
-  // TopicCard can render it with bold+underline highlighting. Falls back to
-  // null when no matching evidence row exists (the card then shows the plain
-  // focus sentence unchanged).
+  // Derived Data — aiSourceContext now comes straight from the AI summary's
+  // source_context (persisted WITH <main>...</main> markers). No matching
+  // against sentence_prediction is needed.
   const consultationTopics = useMemo(() => {
     const topics: Record<
       string,
@@ -3223,14 +3305,6 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
       }
     > = {};
 
-    const lookupContext = (topicName: string): string | null => {
-      const focus = aiSourceByTopic[topicName];
-      if (!focus) return null;
-      const evidence = evidenceSentences[topicName] || [];
-      const match = evidence.find((e) => e.sentence === focus);
-      return match?.context ?? null;
-    };
-
     if (summaryData?.summary?.classes) {
       summaryData.summary.classes.forEach((cls: ClassSummary) => {
         const topicName = CLASS_TO_TOPIC_MAP[cls.class_name];
@@ -3239,7 +3313,7 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
           const aiText = aiSummaryByTopic[topicName];
           topics[topicName] = {
             aiSummary: aiText || cls.summary || "Summary not available.",
-            aiSourceContext: lookupContext(topicName),
+            aiSourceContext: aiSourceContextByTopic[topicName] ?? null,
             extractedSentences: evidenceSentences[topicName] || [],
           };
         }
@@ -3251,14 +3325,14 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
         const aiText = aiSummaryByTopic[topic];
         topics[topic] = {
           aiSummary: aiText || "Summary not available for this topic.",
-          aiSourceContext: lookupContext(topic),
+          aiSourceContext: aiSourceContextByTopic[topic] ?? null,
           extractedSentences: evidenceSentences[topic] || [],
         };
       }
     });
 
     return topics;
-  }, [summaryData, evidenceSentences, aiSummaryByTopic, aiSourceByTopic]);
+  }, [summaryData, evidenceSentences, aiSummaryByTopic, aiSourceContextByTopic]);
 
   // Event Handlers
 
@@ -3317,7 +3391,7 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
       trackFirst(currentFile, currentSpeaker, {
         event_type: isCurrentlyExpanded ? "topic_close" : "topic_open",
         domain,
-        metadata: { topic },
+        metadata: { topic, screen: STEP_KEYS[currentScreen] },
       });
     }
   };
@@ -3351,7 +3425,11 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
       trackFirst(currentFile, currentSpeaker, {
         event_type: isCurrentlyShown ? "evidence_close" : "evidence_open",
         domain,
-        metadata: { topic, summary_rating_at_expand: ratings[topic] || null },
+        metadata: {
+          topic,
+          screen: STEP_KEYS[currentScreen],
+          summary_rating_at_expand: ratings[topic] || null,
+        },
       });
     }
   };
@@ -3363,7 +3441,20 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
    * screen defaults (open on Overview, closed on per-domain).
    */
   const handleToggleAiSummary = (topic: string) => {
+    const isCurrentlyShown = showAiSummaryStates[topic];
     setShowAiSummaryStates((prev) => ({ ...prev, [topic]: !prev[topic] }));
+
+    // [V38] Track the AI-summary panel toggle, mirroring evidence. screen
+    // records which page (Overview vs the domain detail) it happened on, so
+    // the same card on two screens is distinguishable.
+    const domain = TOPIC_TO_DOMAIN[topic];
+    if (domain) {
+      trackFirst(currentFile, currentSpeaker, {
+        event_type: isCurrentlyShown ? "summary_close" : "summary_open",
+        domain,
+        metadata: { topic, screen: STEP_KEYS[currentScreen] },
+      });
+    }
   };
 
   // Print Styles
@@ -3846,10 +3937,8 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
                   onSubmit={() => handleSubmitDomain(topic)}
                   showQuestions={showQuestions}
                   prefill={firstVisit.responses[TOPIC_TO_DOMAIN[topic]] ?? null}
-                  onSave={(payload) =>
-                    firstVisit
-                      .saveDomain(TOPIC_TO_DOMAIN[topic], payload)
-                      .then(() => undefined)
+                  onSave={(answers) =>
+                    firstVisit.saveDomain(TOPIC_TO_DOMAIN[topic], answers)
                   }
                   isDark={isDarkMode}
                   patientId={currentSpeaker}
@@ -3857,6 +3946,7 @@ const PatientReportFirstVisitV38: React.FC<PatientReportProps> = ({
                   trackFile={currentFile}
                   trackSpeaker={currentSpeaker}
                   trackDomain={TOPIC_TO_DOMAIN[topic]}
+                  trackScreen={STEP_KEYS[currentScreen]}
                 />
               </div>
             );
