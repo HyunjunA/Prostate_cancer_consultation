@@ -29,6 +29,15 @@ ENV_FILE="$BACKEND_DIR/.env"
 
 cd "$REPO_ROOT"
 
+# postgres@16 is brew keg-only on macOS — its bin dir is not in PATH by
+# default, so pg_isready/psql/createdb fail with "not on PATH" unless the
+# user edited ~/.zshrc per brew's caveat. Prepend it idempotently so the
+# script works straight out of setup-native-mac.sh without shell edits.
+if [[ "$(uname -s)" == "Darwin" ]] && command -v brew >/dev/null 2>&1; then
+    PG_BIN="$(brew --prefix postgresql@16 2>/dev/null)/bin"
+    [[ -d "$PG_BIN" && ":$PATH:" != *":$PG_BIN:"* ]] && export PATH="$PG_BIN:$PATH"
+fi
+
 # ── Pretty print ────────────────────────────────────────────────────────────
 section() { echo ""; echo "==============================================================="; echo "  $1"; echo "==============================================================="; }
 info()    { echo "  ▸ $1"; }

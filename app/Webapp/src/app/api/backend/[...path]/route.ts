@@ -1,3 +1,8 @@
+// URL convention: this proxy auto-prepends "/api/" to the captured path.
+// So a request to "/api/backend/patient/files" forwards to
+// "${BACKEND_URL}/api/patient/files". Callers (client components and ad-hoc
+// curl alike) must NOT include a leading "api/" in the path segment after
+// "/api/backend/" or the resulting URL becomes "/api/api/..." (404).
 import { NextRequest, NextResponse } from "next/server";
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";

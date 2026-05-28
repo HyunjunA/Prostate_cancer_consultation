@@ -27,6 +27,13 @@ BACKEND_DIR="$REPO_ROOT/app/Backend"
 VENV_DIR="$REPO_ROOT/.venv"
 ENV_FILE="$BACKEND_DIR/.env"
 
+# postgres@16 is brew keg-only on macOS — prepend its bin to PATH so the
+# child preflight-native.sh's pg_isready/psql work without user shell edits.
+if [[ "$(uname -s)" == "Darwin" ]] && command -v brew >/dev/null 2>&1; then
+    PG_BIN="$(brew --prefix postgresql@16 2>/dev/null)/bin"
+    [[ -d "$PG_BIN" && ":$PATH:" != *":$PG_BIN:"* ]] && export PATH="$PG_BIN:$PATH"
+fi
+
 # ── Defaults / arg parsing ──────────────────────────────────────────────────
 WORKERS=3
 RELOAD=0

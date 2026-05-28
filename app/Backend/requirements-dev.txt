@@ -1,5 +1,6 @@
 # Dev/test dependencies — NOT included in production Docker image.
 # Install locally: pip install -r requirements.txt -r requirements-dev.txt
+# (setup-native-mac.sh / setup-native-linux.sh install this file as well.)
 
 pytest==9.0.2
 pytest-asyncio==1.3.0
@@ -7,3 +8,4 @@ pytest-cov==7.0.0
 httpx==0.28.1                    # also in requirements.txt (shared)
 aiosqlite==0.22.1                # async SQLite for test DB
 respx==0.22.0                    # httpx mock
+ruff==0.15.15                    # lint — invoked by .git/hooks/pre-push

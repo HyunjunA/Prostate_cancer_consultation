@@ -32,6 +32,13 @@ PG_PORT="${POSTGRES_PORT:-5433}"
 RD_HOST="${REDIS_HOST:-localhost}"
 RD_PORT="${REDIS_PORT:-6379}"
 
+# postgres@16 is brew keg-only on macOS — prepend its bin to PATH so
+# pg_isready/psql work without requiring users to edit ~/.zshrc.
+if [[ "$(uname -s)" == "Darwin" ]] && command -v brew >/dev/null 2>&1; then
+    PG_BIN="$(brew --prefix postgresql@16 2>/dev/null)/bin"
+    [[ -d "$PG_BIN" && ":$PATH:" != *":$PG_BIN:"* ]] && export PATH="$PG_BIN:$PATH"
+fi
+
 # ── Pretty print ────────────────────────────────────────────────────────────
 GREEN="\033[92m"; RED="\033[91m"; YELLOW="\033[93m"; BOLD="\033[1m"; RESET="\033[0m"
 PASS_COUNT=0

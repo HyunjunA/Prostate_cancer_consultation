@@ -18,6 +18,13 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="$REPO_ROOT/app/Backend/.env"
 VENV_DIR="$REPO_ROOT/.venv"
 
+# postgres@16 is brew keg-only on macOS — prepend its bin to PATH so
+# pg_isready/psql work without requiring users to edit ~/.zshrc.
+if [[ "$(uname -s)" == "Darwin" ]] && command -v brew >/dev/null 2>&1; then
+    PG_BIN="$(brew --prefix postgresql@16 2>/dev/null)/bin"
+    [[ -d "$PG_BIN" && ":$PATH:" != *":$PG_BIN:"* ]] && export PATH="$PG_BIN:$PATH"
+fi
+
 GREEN="\033[92m"; RED="\033[91m"; YELLOW="\033[93m"; BOLD="\033[1m"; RESET="\033[0m"
 PASS=0; FAIL=0
 pass() { echo -e "  ${GREEN}[PASS]${RESET} $1"; PASS=$((PASS+1)); }
@@ -63,13 +70,17 @@ echo ""
 
 # ── 3. NLP classifiers (Docker) ─────────────────────────────────────────────
 echo "─── 3. NLP classifiers ───"
-NLP_URL="${NLP_API_URL:-http://localhost:8001}"
+# Default port matches docker-compose-ai-nlp-pipeline.yml in the sibling
+# AI repo (8888). Phase A owns this container's lifecycle; Phase B does
+# not call it at request time, so a missing container is a WARN, not a
+# FAIL — it only blocks Phase A pipeline runs.
+NLP_URL="${NLP_API_URL:-http://localhost:8888}"
 if curl -sf -m 3 "${NLP_URL}/ping" >/dev/null 2>&1; then
     pass "NLP classifiers reachable at $NLP_URL"
 elif curl -sf -m 3 "${NLP_URL}/" >/dev/null 2>&1; then
     pass "NLP classifiers reachable at $NLP_URL (no /ping endpoint)"
 else
-    fail "NLP NOT reachable at $NLP_URL — start Docker: docker compose -f docker-compose-frontend.yml up -d"
+    warn "NLP not reachable at $NLP_URL — required only for Phase A pipeline runs (Phase A's main_complete_pipeline_db.py brings it up automatically)"
 fi
 echo ""
 
@@ -77,19 +88,36 @@ echo ""
 echo "─── 4. Azure OpenAI ──────"
 if [[ -z "${AZURE_OPENAI_ENDPOINT:-}" || -z "${AZURE_OPENAI_KEY:-}" || "${AZURE_OPENAI_KEY:-}" == "YOUR_KEY_HERE" ]]; then
     warn "AZURE_OPENAI_* not configured — AI sub-pipeline will be skipped"
+elif [[ -z "${AZURE_OPENAI_MODEL:-}" ]]; then
+    warn "AZURE_OPENAI_MODEL (deployment name) not set — can only verify endpoint reachability, not key or deployment name"
 else
-    # Minimal call: list deployments (or whatever GET works)
-    HTTP=$(curl -s -o /dev/null -m 5 -w "%{http_code}" -H "api-key: $AZURE_OPENAI_KEY" \
-           "${AZURE_OPENAI_ENDPOINT}/openai/deployments?api-version=${AZURE_OPENAI_API_VERSION:-2024-08-01-preview}" 2>/dev/null || echo "000")
-    if [[ "$HTTP" == "200" ]]; then
-        pass "Azure OpenAI reachable + key valid (HTTP 200)"
-    elif [[ "$HTTP" == "401" || "$HTTP" == "403" ]]; then
-        fail "Azure OpenAI rejected key (HTTP $HTTP — wrong key?)"
-    elif [[ "$HTTP" == "000" ]]; then
-        fail "Azure OpenAI unreachable (check endpoint URL or network)"
-    else
-        warn "Azure OpenAI returned HTTP $HTTP (unusual but key may still work)"
-    fi
+    # Probe the actual inference endpoint the pipeline uses, not the
+    # management /openai/deployments list (which inference-only keys
+    # legitimately 404 on). One token in + one token out (~$0.00006 on
+    # GPT-4o) — cheap enough to be routine and catches all the real
+    # failure modes:
+    #   200 = key + deployment + api version all valid
+    #   400 = bad api version / payload
+    #   401/403 = key rejected
+    #   404 = deployment name (AZURE_OPENAI_MODEL) wrong
+    #   429 = key works but quota exhausted
+    ENDPOINT="${AZURE_OPENAI_ENDPOINT%/}"  # strip trailing slash → no // in URL
+    API_VERSION="${AZURE_OPENAI_API_VERSION:-2024-08-01-preview}"
+    URL="${ENDPOINT}/openai/deployments/${AZURE_OPENAI_MODEL}/chat/completions?api-version=${API_VERSION}"
+    HTTP=$(curl -s -o /dev/null -m 10 -w "%{http_code}" \
+           -X POST -H "Content-Type: application/json" -H "api-key: $AZURE_OPENAI_KEY" \
+           -d '{"messages":[{"role":"user","content":"."}],"max_tokens":1}' \
+           "$URL" 2>/dev/null || echo "000")
+    case "$HTTP" in
+        200) pass "Azure OpenAI chat/completions reachable + key + deployment '$AZURE_OPENAI_MODEL' all valid" ;;
+        401|403) fail "Azure OpenAI rejected key (HTTP $HTTP — check AZURE_OPENAI_KEY)" ;;
+        404) fail "Azure OpenAI deployment '$AZURE_OPENAI_MODEL' not found (HTTP 404 — check AZURE_OPENAI_MODEL matches a deployment on $ENDPOINT)" ;;
+        400) fail "Azure OpenAI rejected request (HTTP 400 — likely AZURE_OPENAI_API_VERSION='$API_VERSION' not supported by this resource)" ;;
+        429) warn "Azure OpenAI quota exhausted (HTTP 429 — key works but rate-limited; pipeline will be slow or fail)" ;;
+        000) fail "Azure OpenAI unreachable (no response — check AZURE_OPENAI_ENDPOINT='$ENDPOINT' and network)" ;;
+        5*) warn "Azure OpenAI returned HTTP $HTTP — server-side issue, key likely fine" ;;
+        *)  warn "Azure OpenAI returned HTTP $HTTP — unexpected, treat as soft pass" ;;
+    esac
 fi
 echo ""
 

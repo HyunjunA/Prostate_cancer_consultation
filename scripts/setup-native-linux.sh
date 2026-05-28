@@ -133,6 +133,15 @@ info "Installing backend requirements ..."
 run_as_owner "source '$VENV_DIR/bin/activate' && pip install --quiet --upgrade pip && pip install --quiet -r '$BACKEND_DIR/requirements.txt'"
 ok "Backend requirements installed (rpy2 NOT included — segmentation uses docker exec)"
 
+# Dev/test deps (pytest, ruff, ...) — needed by .git/hooks/pre-push and
+# by `pytest -m "not e2e"`. Same venv so the pre-push hook works without
+# a separate install step.
+if [[ -f "$BACKEND_DIR/requirements-dev.txt" ]]; then
+    info "Installing dev requirements (pytest, ruff, ...) ..."
+    run_as_owner "source '$VENV_DIR/bin/activate' && pip install --quiet -r '$BACKEND_DIR/requirements-dev.txt'"
+    ok "Dev requirements installed"
+fi
+
 # ── Step 4: Final summary ───────────────────────────────────────────────────
 section "Setup complete"
 

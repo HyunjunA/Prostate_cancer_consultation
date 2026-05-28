@@ -27,6 +27,13 @@ BACKEND_DIR="$REPO_ROOT/app/Backend"
 VENV_DIR="$REPO_ROOT/.venv"
 ENV_FILE="$BACKEND_DIR/.env"
 
+# postgres@16 is brew keg-only on macOS — prepend its bin to PATH so
+# pg_isready/psql work without requiring users to edit ~/.zshrc.
+if [[ "$(uname -s)" == "Darwin" ]] && command -v brew >/dev/null 2>&1; then
+    PG_BIN="$(brew --prefix postgresql@16 2>/dev/null)/bin"
+    [[ -d "$PG_BIN" && ":$PATH:" != *":$PG_BIN:"* ]] && export PATH="$PG_BIN:$PATH"
+fi
+
 # ── Pretty print ────────────────────────────────────────────────────────────
 section() { echo ""; echo "===  $1"; }
 ok()      { echo "  ✓ $1"; }
@@ -84,27 +91,31 @@ else
     warn "redis-cli not on PATH — skipped"
 fi
 
-# ── Step 3: NLP-classifiers container + docker exec stringi probe ──────────
-section "NLP-classifiers container (provides R + stringi via docker exec)"
+# ── Step 3: NLP-classifiers container (Phase A only — soft check) ──────────
+# Phase A's pipeline runner (main_complete_pipeline_db.py in the sibling
+# AI repo) owns this container's lifecycle and uses docker exec into it
+# for R/stringi segmentation. Phase B's backend reads from Postgres only
+# and never calls the container at request time, so its absence does NOT
+# block dashboard startup — it only means Phase A pipeline runs will fail
+# until the container is brought up.
+section "NLP-classifiers container (Phase A only — soft check)"
 
 NLP_CONTAINER="${STRINGI_DOCKER_CONTAINER:-prostatecancer-nlp-native}"
 
 if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$NLP_CONTAINER"; then
-    fail "NLP container '$NLP_CONTAINER' not running.
-       Start it:  docker compose -f docker-compose-frontend.yml up -d
-       (Or use bash scripts/run-frontend-backend.sh which auto-loads + starts it.)"
+    warn "NLP container '$NLP_CONTAINER' not running — dashboard will start fine; Phase A pipeline runs will fail until it is up (the AI repo's main_complete_pipeline_db.py brings it up automatically)"
+else
+    ok "container $NLP_CONTAINER running"
+    PROBE=$(docker exec "$NLP_CONTAINER" Rscript -e \
+        'cat(sprintf("stringi=%s ICU=%s",
+                     packageVersion("stringi"),
+                     stringi::stri_info()$ICU.version))' 2>/dev/null || echo "")
+    if [[ -n "$PROBE" ]]; then
+        ok "docker exec stringi probe OK ($PROBE)"
+    else
+        warn "docker exec stringi probe failed — segmentation will fail when Phase A runs"
+    fi
 fi
-ok "container $NLP_CONTAINER running"
-
-# Probe stringi via docker exec — the same call segmentation.py will make
-PROBE=$(docker exec "$NLP_CONTAINER" Rscript -e \
-    'cat(sprintf("stringi=%s ICU=%s",
-                 packageVersion("stringi"),
-                 stringi::stri_info()$ICU.version))' 2>/dev/null || echo "")
-if [[ -z "$PROBE" ]]; then
-    fail "docker exec stringi probe failed — segmentation will not work"
-fi
-ok "docker exec stringi probe OK ($PROBE)"
 
 # ── Step 4: Alembic migration head ──────────────────────────────────────────
 section "Alembic migration check"
