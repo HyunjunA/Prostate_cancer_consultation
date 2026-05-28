@@ -8,9 +8,9 @@ Developed at Cedars-Sinai Medical Center as part of the R01 Prostate Cancer Comm
 
 ---
 
-## Quick Start — Native Deployment (recommended)
+## Native Deployment
 
-> ⚠️ **Deploying for the first time? Start with [`docs/setup/DEPLOYMENT_NATIVE.md`](docs/setup/DEPLOYMENT_NATIVE.md)** — that document is the canonical, step-by-step procedure with the full prerequisites list (Docker Desktop, Git LFS, the NLP image archive, Azure OpenAI credentials), the input-transcripts layout, and a troubleshooting table. The Quick Start below is a TL;DR for readers already familiar with the deployment; it intentionally omits prerequisites and edge cases.
+> ⚠️ **All deployment instructions live in [`docs/setup/DEPLOYMENT_NATIVE.md`](docs/setup/DEPLOYMENT_NATIVE.md).** That document is the canonical, step-by-step procedure: full prerequisites (Docker Desktop, Git LFS, NLP image archive, Azure OpenAI credentials), per-step env-file edits for both repos, Phase A pipeline invocation, Phase B startup, and a troubleshooting table. **Always defer to that document.** Inline command snippets in older copies of this README, in screenshots, or in chat transcripts drift from reality and have misled deployers in the past — they have been removed from this README on purpose.
 
 The deployment is split into two **independent phases** that mirror the real data flow:
 
@@ -20,68 +20,7 @@ Phase B   :  Browser ← Webapp ← Backend ← PostgreSQL DB
                                               (no NLP container needed)
 ```
 
-The dashboard's deployment artefacts (this repo) manage **Phase B only**: PostgreSQL, Redis, the FastAPI backend, and the webapp container. The **NLP classifier container is owned by the sibling AI pipeline repo** and is only required during Phase A — bundling it into the dashboard's startup would couple two unrelated lifecycles. (The two repos must already be cloned as siblings; see [`docs/setup/DEPLOYMENT_NATIVE.md`](docs/setup/DEPLOYMENT_NATIVE.md) for the clone commands.)
-
-### One-time setup
-
-Run these once on a fresh machine.
-
-```bash
-# 1. Install native dependencies (Postgres 16, Redis, Python 3.10 + venv)
-#    R and Node are NOT installed on the host:
-#      • R runs inside the NLP classifier container (called via docker exec)
-#      • Node runs inside the Webapp container (`docker compose build`)
-bash scripts/setup-native-mac.sh
-
-# 2. Copy the .env templates
-cp app/Backend/.env.example app/Backend/.env
-cp app/Webapp/.env.example  app/Webapp/.env
-
-# 3. Edit app/Backend/.env and fill in at least:
-#      POSTGRES_PASSWORD, API_KEY, AZURE_OPENAI_API_KEY
-#    REDCAP_API_TOKEN is optional (without it, REDCap mirroring is skipped silently)
-nano app/Backend/.env
-
-# 4. Bootstrap the database (Postgres user + schema + alembic upgrade head)
-bash scripts/init-db-native.sh
-```
-
-### Phase A — Process transcripts (run from the AI repo)
-
-Runs the NLP + AI pipelines on consultation `.xlsx` transcripts and persists the results to PostgreSQL. The NLP Docker container is required **only during this phase** — its lifecycle is owned by the pipeline command (in the AI repo), not by the dashboard.
-
-```bash
-# 5. Switch to the sibling AI repo and drop transcripts into its input dir
-cd ../AI_physician_patient_communication
-mkdir -p data/input
-cp <your-transcript>.xlsx data/input/
-
-# 6. Run the pipeline — manages the NLP container lifecycle itself
-../Prostate_cancer_consultation_dashboard/.venv/bin/python \
-    main_complete_pipeline_db.py --dir data/input
-```
-
-The pipeline entry point lives at the AI repo's root (`main_complete_pipeline_db.py`) alongside `docker-compose-ai-nlp-pipeline.yml` for the NLP container — both are write-time concerns of the AI/NLP pipeline. It depends on this dashboard repo as a sibling clone for the persistence layer (DB models + `core/settings.get_settings()` for the database URL) and reuses the dashboard's Python venv.
-
-After Phase A finishes, the NLP container can be left running for repeat runs (default) or stopped explicitly with `--stop-nlp-after`. Phase B proceeds against the persisted DB rows regardless.
-
-### Phase B — Run the dashboard (NLP container NOT needed)
-
-Serves the pre-computed Phase A results to doctors and patients. The dashboard backend reads from PostgreSQL only; it never calls the NLP container at request time.
-
-```bash
-# 7. Back in this repo — start the dashboard (webapp container + native FastAPI backend)
-cd ../Prostate_cancer_consultation_dashboard
-bash scripts/run-frontend-backend.sh
-
-# 8. Verify in the browser
-#    http://localhost:3001       — Dashboard
-#    http://localhost:18000/docs — API docs (Swagger)
-```
-
-`run-frontend-backend.sh` is deliberately narrow: it boots the webapp container and the native backend without touching the NLP container, so a missing or broken NLP image (e.g., a platform mismatch on a teammate's machine) does not block dashboard usage when Phase A has already populated the database.
-
-**Full walkthrough**: [`docs/setup/DEPLOYMENT_NATIVE.md`](docs/setup/DEPLOYMENT_NATIVE.md) — covers prerequisites, the NLP OCI archive, the standalone pipeline runner, DB verification helpers, and troubleshooting.
+The dashboard's deployment artefacts (this repo) manage **Phase B only**: PostgreSQL, Redis, the FastAPI backend, and the webapp container. The **NLP classifier container is owned by the sibling AI pipeline repo** and is only required during Phase A — bundling it into the dashboard's startup would couple two unrelated lifecycles. The two repos must already be cloned as siblings before deployment begins.
 
 ---
 
@@ -127,7 +66,7 @@ The backend lives at [`app/Backend/`](app/Backend/). Each concern has its own fi
 | [`persistence.py`](app/Backend/persistence.py) | NLP pipeline → 6 tables in one transaction (`save_all`) |
 | [`init_db.py`](app/Backend/init_db.py) | Schema bootstrap (used by Docker entrypoint) |
 | [`inspect_pipeline_run.py`](app/Backend/inspect_pipeline_run.py) | CLI: dump pipeline outputs for one analysis |
-| [`migrations/versions/`](app/Backend/migrations/versions/) | Alembic 001–010 (10 migrations, all reversible) |
+| [`migrations/versions/`](app/Backend/migrations/versions/) | Alembic 001–015 (15 migrations, all reversible) |
 
 ### Pipeline write-side — DB persistence only
 
@@ -180,7 +119,7 @@ The `auth/` module is wired in but the login feature was dropped on 2026-05-07; 
 | [`tests/integration/`](app/Backend/tests/integration/) | End-to-end DB + route paths |
 | [`tests/factories.py`](app/Backend/tests/factories.py) | `TestDataFactory` for seeding |
 
-`pytest --collect-only` reports **535 tests**. Default run for local dev: `pytest -m "not e2e"` (skips load + e2e specs).
+`pytest --collect-only` reports **562 tests**. Default run for local dev: `pytest -m "not e2e"` (skips load + e2e specs).
 
 ---
 
