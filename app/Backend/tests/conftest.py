@@ -106,3 +106,7 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "e2e: end-to-end tests requiring Docker")
     config.addinivalue_line("markers", "integration: integration tests")
     config.addinivalue_line("markers", "slow: slow-running tests")
+    config.addinivalue_line(
+        "markers",
+        "live: hits the real REDCap API; skipped unless REDCAP_API_URL/TOKEN are available",
+    )
