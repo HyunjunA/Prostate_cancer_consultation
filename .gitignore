@@ -35,6 +35,7 @@ data/
 # Backend runtime data
 app/Backend/logs/
 logs/
+*.log
 app/Backend/uploads/
 app/Backend/data/
 Processed_Data_DB.csv
