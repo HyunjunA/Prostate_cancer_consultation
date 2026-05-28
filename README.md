@@ -10,6 +10,8 @@ Developed at Cedars-Sinai Medical Center as part of the R01 Prostate Cancer Comm
 
 ## Quick Start — Native Deployment (recommended)
 
+> ⚠️ **Deploying for the first time? Start with [`docs/setup/DEPLOYMENT_NATIVE.md`](docs/setup/DEPLOYMENT_NATIVE.md)** — that document is the canonical, step-by-step procedure with the full prerequisites list (Docker Desktop, Git LFS, the NLP image archive, Azure OpenAI credentials), the input-transcripts layout, and a troubleshooting table. The Quick Start below is a TL;DR for readers already familiar with the deployment; it intentionally omits prerequisites and edge cases.
+
 The deployment is split into two **independent phases** that mirror the real data flow:
 
 ```
