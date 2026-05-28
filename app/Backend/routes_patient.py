@@ -1119,6 +1119,182 @@ async def get_first_visit_answers(
     return FirstVisitAnswersGet(responses=by_domain)
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# First-visit answers -> REDCap "post_risk_perception_2" sync
+# ──────────────────────────────────────────────────────────────────────────────
+# The first-visit page (PatientInitialVisitReportV38) collects the same 14
+# inputs that the REDCap "post_risk_perception_2" instrument stores, but the two
+# systems use different identifiers:
+#   - domain codes differ:  inc -> ui,  ius -> il  (cp/le/ed are identical)
+#   - radio / factor answers are stored as TEXT here but as numeric CHOICE CODES
+#     in REDCap.
+# This block translates at the boundary so neither side has to be renamed.
+
+# question_id -> REDCap field name. The domain-name differences (inc->ui,
+# ius->il) are absorbed here, so no prefix arithmetic is needed elsewhere.
+_FV_QUESTION_TO_REDCAP_FIELD: Dict[str, str] = {
+    "cp_risk_without_treatment": "cp_1_rp_v2",
+    "cp_risk_with_treatment":    "cp_2_rp_v2",
+    "cp_timeline":               "cp_3_rp_v2",
+    "le_timeline":               "le_1_rp_v2",
+    "le_factors":                "le_2_rp_v2",
+    "ed_baseline_return":        "ed_1_rp_v2",
+    "ed_timeline":               "ed_2_rp_v2",
+    "ed_factors":                "ed_3_rp_v2",
+    "inc_risk":                  "ui_1_rp_v2",
+    "inc_timeline":              "ui_2_rp_v2",
+    "inc_factors":               "ui_3_rp_v2",
+    "ius_risk":                  "il_1_rp_v2",
+    "ius_timeline":              "il_2_rp_v2",
+    "ius_factors":               "il_3_rp_v2",
+}
+
+# timeline TEXT -> REDCap choice code. Order matches the live REDCap
+# instrument's choice order exactly (verified against project PID 14791).
+_FV_TIMELINE_CODES: Dict[str, Dict[str, str]] = {
+    "cp_timeline": {
+        "Over my lifetime": "1",
+        "Over next 5 years": "2",
+        "Over next 5-10 years": "3",
+        "Over next 11-15 years": "4",
+        "Over next 16-20 years": "5",
+        "Over next 20-30 years": "6",
+    },
+    "le_timeline": {
+        "Less than 5 years": "1",
+        "5-10 years": "2",
+        "11-15 years": "3",
+        "16-20 years": "4",
+        "More than 20 years": "5",
+    },
+    "ed_timeline": {
+        "3 months after treatment": "1",
+        "6 months after treatment": "2",
+        "12 months after treatment": "3",
+        "24 months after treatment": "4",
+        "Lifetime": "5",
+    },
+    "inc_timeline": {
+        "3 months": "1",
+        "6 months": "2",
+        "9 months": "3",
+        "1 year": "4",
+        "2 years": "5",
+    },
+    "ius_timeline": {
+        "1 month": "1",
+        "3-6 months": "2",
+        "1 year": "3",
+        "2 years": "4",
+        "Lifetime": "5",
+    },
+}
+
+# factor TEXT -> REDCap choice code. le has its own option set; ed/inc/ius share
+# one. factors is a multi-select in the UI but a single radio in REDCap, so we
+# send the FIRST selected factor (see _fv_answer_to_redcap).
+_FV_FACTOR_CODES: Dict[str, Dict[str, str]] = {
+    "le_factors": {
+        "Tumor grade": "1",
+        "Age": "2",
+        "Marital status": "3",
+        "Health conditions or comorbidities": "4",
+        "Tumor stage": "5",
+    },
+    "ed_factors": {
+        "Tumor grade": "1",
+        "Age": "2",
+        "Tumor stage": "3",
+        "Health conditions or comorbidities": "4",
+        "Baseline function": "5",
+    },
+}
+_FV_FACTOR_CODES["inc_factors"] = _FV_FACTOR_CODES["ed_factors"]
+_FV_FACTOR_CODES["ius_factors"] = _FV_FACTOR_CODES["ed_factors"]
+
+_REDCAP_POST_RISK_2_COMPLETE_FIELD = "post_risk_perception_2_complete"
+
+
+def _fv_answer_to_redcap(question_id: str, field: str, value: Any):
+    """Translate one first-visit answer to a (redcap_field, redcap_value) pair.
+
+    Returns None when the answer cannot/should not be synced: an unmapped
+    question_id, a blank value, or a text option missing from the code table.
+    """
+    redcap_field = _FV_QUESTION_TO_REDCAP_FIELD.get(question_id)
+    if not redcap_field:
+        return None
+
+    if field == "vas":
+        if value is None:
+            return None
+        return redcap_field, str(int(value))
+
+    if field == "timeline":
+        code = _FV_TIMELINE_CODES.get(question_id, {}).get(value)
+        return (redcap_field, code) if code else None
+
+    if field == "factors":
+        # UI multi-select -> single REDCap radio: send the first selection.
+        if not isinstance(value, list) or not value:
+            return None
+        code = _FV_FACTOR_CODES.get(question_id, {}).get(value[0])
+        return (redcap_field, code) if code else None
+
+    return None
+
+
+async def _sync_first_visit_answers_to_redcap(record_id: str, answers) -> None:
+    """Best-effort mirror of one domain's first-visit answers into the REDCap
+    'post_risk_perception_2' instrument.
+
+    Never raises: REDCap being down or misconfigured must not break the primary
+    DB write. record_id matches the existing survey flow, which uses the patient
+    'speaker' as the REDCap record identifier.
+    """
+    if not (REDCAP_API_URL and REDCAP_API_TOKEN):
+        logger.info("REDCap not configured; skipping post_risk_perception_2 sync")
+        return
+
+    fields: Dict[str, str] = {}
+    for a in answers:
+        mapped = _fv_answer_to_redcap(a.question_id, a.field, a.value)
+        if mapped:
+            fields[mapped[0]] = mapped[1]
+
+    if not fields:
+        return
+
+    fields[_REDCAP_POST_RISK_2_COMPLETE_FIELD] = "2"  # mark instrument complete (green)
+    record = {"record_id": record_id, **fields}
+    payload = {
+        "token": REDCAP_API_TOKEN,
+        "content": "record",
+        "format": "json",
+        "type": "flat",
+        "overwriteBehavior": "normal",
+        "returnContent": "count",
+        "returnFormat": "json",
+        "data": json.dumps([record]),
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(REDCAP_API_URL, data=payload)
+        if resp.status_code == 200:
+            logger.info(
+                "REDCap post_risk_perception_2 sync ok: record_id=%s fields=%s",
+                record_id, list(fields.keys()),
+            )
+        else:
+            logger.warning(
+                "REDCap post_risk_perception_2 sync failed: record_id=%s status=%s body=%s",
+                record_id, resp.status_code, resp.text[:300],
+            )
+    except Exception as exc:  # noqa: BLE001 - best-effort mirror, never fatal
+        logger.warning("REDCap post_risk_perception_2 sync error: %s", exc)
+
+
 @router.put(
     "/api/patient/first-visit-answers",
     response_model=FirstVisitAnswersGet,
@@ -1160,4 +1336,9 @@ async def upsert_first_visit_answers(
             ))
 
     await db.commit()
+
+    # Best-effort mirror to REDCap "post_risk_perception_2" (never breaks the DB
+    # write). record_id follows the existing survey flow: the patient 'speaker'.
+    await _sync_first_visit_answers_to_redcap(body.speaker, body.answers)
+
     return await get_first_visit_answers(body.file, body.speaker, db, user)

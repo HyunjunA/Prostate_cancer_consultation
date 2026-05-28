@@ -113,6 +113,7 @@ INSTRUMENT_MAP = {
     "sdm": "shared_decision_making",
     "dcs": "decisional_conflict_scale",
     "risk_perception": "risk_perception",
+    "risk_perception_2": "post_risk_perception_2",
     "satisfaction": "patient_satisfaction",
     "questions": "patient_questions"
 }
@@ -127,6 +128,7 @@ SURVEY_COMPLETE_FIELDS = {
     "dcs": "decisional_conflict_survey_complete",
     "sdm": "shared_decision_making_sdm_complete",
     "risk_perception": "risk_perception_complete",
+    "risk_perception_2": "post_risk_perception_2_complete",
     "satisfaction": "patient_satisfaction_complete",
 }
 
@@ -170,6 +172,26 @@ FRONTEND_TO_REDCAP_MAPPING = {
         "erectileDysfunctionRisk": "risk_percept_3_3",
         "urinaryIncontinenceRisk": "risk_percept_4_4",
         "irritativeUrinaryRisk": "risk_percep_5_5",
+    },
+    # Post Risk Perception 2 (instrument: post_risk_perception_2, 14 fields).
+    # Frontend keys are identical to the REDCap field names (1:1 pass-through):
+    # sliders carry a 0-100 integer, radios carry the REDCap choice code (1-N),
+    # so no value transformation is needed (see transform_value).
+    "risk_perception_2": {
+        "cp_1_rp_v2": "cp_1_rp_v2",   # slider 0-100
+        "cp_2_rp_v2": "cp_2_rp_v2",   # slider 0-100
+        "cp_3_rp_v2": "cp_3_rp_v2",   # radio 1-6 (timeline)
+        "le_1_rp_v2": "le_1_rp_v2",   # radio 1-5 (life expectancy range)
+        "le_2_rp_v2": "le_2_rp_v2",   # radio 1-5 (most influential factor)
+        "ed_1_rp_v2": "ed_1_rp_v2",   # slider 0-100
+        "ed_2_rp_v2": "ed_2_rp_v2",   # radio 1-5 (timeline)
+        "ed_3_rp_v2": "ed_3_rp_v2",   # radio 1-5 (most influential factor)
+        "ui_1_rp_v2": "ui_1_rp_v2",   # slider 0-100
+        "ui_2_rp_v2": "ui_2_rp_v2",   # radio 1-5 (timeline)
+        "ui_3_rp_v2": "ui_3_rp_v2",   # radio 1-5 (most influential factor)
+        "il_1_rp_v2": "il_1_rp_v2",   # slider 0-100
+        "il_2_rp_v2": "il_2_rp_v2",   # radio 1-5 (timeline)
+        "il_3_rp_v2": "il_3_rp_v2",   # radio 1-5 (most influential factor)
     },
     "satisfaction": {
         "feedbackText": "pt_satisfaction",
@@ -1405,6 +1427,7 @@ class REDCapImportData(BaseModel):
     decisional_conflict_survey_complete: Optional[str] = None
     shared_decision_making_sdm_complete: Optional[str] = None
     risk_perception_complete: Optional[str] = None
+    post_risk_perception_2_complete: Optional[str] = None
     patient_satisfaction_complete: Optional[str] = None
 
     # Decisional Conflict Survey (16 fields) - Optional
@@ -1437,6 +1460,23 @@ class REDCapImportData(BaseModel):
     risk_percept_3_3: Optional[str] = None
     risk_percept_4_4: Optional[str] = None
     risk_percep_5_5: Optional[str] = None
+
+    # Post Risk Perception 2 (14 fields) - Optional
+    # Sliders carry a 0-100 integer; radios carry the REDCap choice code (1-N).
+    cp_1_rp_v2: Optional[str] = None
+    cp_2_rp_v2: Optional[str] = None
+    cp_3_rp_v2: Optional[str] = None
+    le_1_rp_v2: Optional[str] = None
+    le_2_rp_v2: Optional[str] = None
+    ed_1_rp_v2: Optional[str] = None
+    ed_2_rp_v2: Optional[str] = None
+    ed_3_rp_v2: Optional[str] = None
+    ui_1_rp_v2: Optional[str] = None
+    ui_2_rp_v2: Optional[str] = None
+    ui_3_rp_v2: Optional[str] = None
+    il_1_rp_v2: Optional[str] = None
+    il_2_rp_v2: Optional[str] = None
+    il_3_rp_v2: Optional[str] = None
 
     # Patient Satisfaction (1 field) - Optional
     pt_satisfaction: Optional[str] = None
@@ -1550,6 +1590,7 @@ async def import_to_redcap_record(
         dcs_count = sum(1 for k in data_dict.keys() if k.startswith('dcs') and not k.endswith('_complete'))
         sdm_count = sum(1 for k in data_dict.keys() if k.startswith('sdm') and not k.endswith('_complete'))
         risk_count = sum(1 for k in data_dict.keys() if k.startswith('risk') and not k.endswith('_complete'))
+        risk2_count = sum(1 for k in data_dict.keys() if k.endswith('_rp_v2'))
         sat_count = sum(1 for k in data_dict.keys() if k.startswith('pt_') and not k.endswith('_complete'))
 
         # ═══════════════════════════════════════════════════════════════════
@@ -1569,6 +1610,10 @@ async def import_to_redcap_record(
             redcap_record['risk_perception_complete'] = '2'
             print("[AUTO-COMPLETE] [OK] risk_perception_complete = '2' (Green)")
 
+        if risk2_count > 0 and 'post_risk_perception_2_complete' not in data_dict:
+            redcap_record['post_risk_perception_2_complete'] = '2'
+            print("[AUTO-COMPLETE] [OK] post_risk_perception_2_complete = '2' (Green)")
+
         if sat_count > 0 and 'patient_satisfaction_complete' not in data_dict:
             redcap_record['patient_satisfaction_complete'] = '2'
             print("[AUTO-COMPLETE] [OK] patient_satisfaction_complete = '2' (Green)")
@@ -1578,6 +1623,7 @@ async def import_to_redcap_record(
         print(f"   • DCS fields: {dcs_count}")
         print(f"   • SDM fields: {sdm_count}")
         print(f"   • Risk Perception fields: {risk_count}")
+        print(f"   • Risk Perception 2 fields: {risk2_count}")
         print(f"   • Satisfaction fields: {sat_count}")
 
         if is_longitudinal:
