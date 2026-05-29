@@ -57,7 +57,7 @@ class TestHealthEndpoint:
 
     @pytest.mark.asyncio
     async def test_health_does_not_include_nlp(self, client):
-        """NLP is owned by the AI repo (Phase A); the dashboard's /health
+        """NLP is owned by the AI repo (Phase 2); the dashboard's /health
         must not surface a component this process does not depend on."""
         resp = await client.get("/health")
         data = resp.json()

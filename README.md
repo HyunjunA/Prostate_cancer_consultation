@@ -10,17 +10,17 @@ Developed at Cedars-Sinai Medical Center as part of the R01 Prostate Cancer Comm
 
 ## Native Deployment
 
-> ⚠️ **All deployment instructions live in [`docs/setup/DEPLOYMENT_NATIVE.md`](docs/setup/DEPLOYMENT_NATIVE.md).** That document is the canonical, step-by-step procedure: full prerequisites (Docker Desktop, Git LFS, NLP image archive, Azure OpenAI credentials), per-step env-file edits for both repos, Phase A pipeline invocation, Phase B startup, and a troubleshooting table. **Always defer to that document.** Inline command snippets in older copies of this README, in screenshots, or in chat transcripts drift from reality and have misled deployers in the past — they have been removed from this README on purpose.
+> ⚠️ **All deployment instructions live in [`docs/setup/DEPLOYMENT_NATIVE.md`](docs/setup/DEPLOYMENT_NATIVE.md).** That document is the canonical, step-by-step procedure: full prerequisites (Docker Desktop, Git LFS, NLP image archive, Azure OpenAI credentials), per-step env-file edits for both repos, Phase 1 startup, Phase 2 pipeline invocation, and a troubleshooting table. **Always defer to that document.** Inline command snippets in older copies of this README, in screenshots, or in chat transcripts drift from reality and have misled deployers in the past — they have been removed from this README on purpose.
 
 The deployment is split into two **independent phases** that mirror the real data flow:
 
 ```
-Phase A   :  transcript → Pipeline → NLP Container → PostgreSQL DB
-Phase B   :  Browser ← Webapp ← Backend ← PostgreSQL DB
-                                              (no NLP container needed)
+Phase 1 — Dashboard & Database (infrastructure)  :  Browser ← Webapp ← Backend ← PostgreSQL DB
+                                                                                  (no NLP container needed)
+Phase 2 — Transcript Processing (NLP + AI → DB)  :  transcript → Pipeline → NLP Container → PostgreSQL DB
 ```
 
-The dashboard's deployment artefacts (this repo) manage **Phase B only**: PostgreSQL, Redis, the FastAPI backend, and the webapp container. The **NLP classifier container is owned by the sibling AI pipeline repo** and is only required during Phase A — bundling it into the dashboard's startup would couple two unrelated lifecycles. The two repos must already be cloned as siblings before deployment begins.
+Phase 1 must come first: it stands up the infrastructure (PostgreSQL, Redis, the FastAPI backend, and the webapp container) that Phase 2 writes into. The dashboard's deployment artefacts (this repo) manage **Phase 1 only**. The **NLP classifier container is owned by the sibling AI pipeline repo** and is only required during Phase 2 — bundling it into the dashboard's startup would couple two unrelated lifecycles. The two repos must already be cloned as siblings before deployment begins.
 
 ---
 
@@ -129,8 +129,8 @@ Active development is tracked here at a high level. Detailed plans, audits, and 
 
 ### Just shipped (May 2026)
 
-- **NLP container decoupled from dashboard deployment** — `nlp-classifiers` removed from `docker-compose-frontend.yml`; its lifecycle now lives with the pipeline command (Phase A only) in the AI repo. `run-frontend-backend.sh` shrank to webapp + backend (Phase B only) so the dashboard never touches the NLP container at request time.
-- **Env config split + `.env.native` → `.env` rename** — Phase A reads its runtime config from the AI repo's own `.env`; the dashboard's `.env` keeps only what Phase B actually consumes. `DATABASE_URL` and `AZURE_OPENAI_*` are duplicated by design (each side owns its copy). The legacy `.env.native` filename was retired across all 27 scripts/tests/docs in favour of plain `.env`.
+- **NLP container decoupled from dashboard deployment** — `nlp-classifiers` removed from `docker-compose-frontend.yml`; its lifecycle now lives with the pipeline command (Phase 2 only) in the AI repo. `run-frontend-backend.sh` shrank to webapp + backend (Phase 1 only) so the dashboard never touches the NLP container at request time.
+- **Env config split + `.env.native` → `.env` rename** — Phase 2 reads its runtime config from the AI repo's own `.env`; the dashboard's `.env` keeps only what Phase 1 actually consumes. `DATABASE_URL` and `AZURE_OPENAI_*` are duplicated by design (each side owns its copy). The legacy `.env.native` filename was retired across all 27 scripts/tests/docs in favour of plain `.env`.
 - **`/health` no longer probes NLP** — the dashboard backend's liveness probe reports only the components it actually depends on (DB + Redis). NLP health is no longer exposed by the dashboard at all — callers that need it should hit the NLP container directly (the AI repo's pipeline runner manages the container lifecycle).
 - **V37 first-visit page** — slider state initialised at the slider's visible default so untouched sliders persist their displayed value (silent NULL bug fixed); per-section required-answer popup blocks Submit when the timeline radio is unanswered.
 - **Follow-up survey popups** — Next/Submit click on an unanswered question now opens a clear inline modal across all four sections (SDM / DCS / Risk Perception / Satisfaction). Duplicate inner section headers removed for a single source of truth.

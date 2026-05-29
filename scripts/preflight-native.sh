@@ -91,19 +91,19 @@ else
     warn "redis-cli not on PATH — skipped"
 fi
 
-# ── Step 3: NLP-classifiers container (Phase A only — soft check) ──────────
-# Phase A's pipeline runner (main_complete_pipeline_db.py in the sibling
+# ── Step 3: NLP-classifiers container (Phase 2 only — soft check) ──────────
+# Phase 2's pipeline runner (main_complete_pipeline_db.py in the sibling
 # AI repo) owns this container's lifecycle and uses docker exec into it
-# for R/stringi segmentation. Phase B's backend reads from Postgres only
+# for R/stringi segmentation. Phase 1's backend reads from Postgres only
 # and never calls the container at request time, so its absence does NOT
-# block dashboard startup — it only means Phase A pipeline runs will fail
+# block dashboard startup — it only means Phase 2 pipeline runs will fail
 # until the container is brought up.
-section "NLP-classifiers container (Phase A only — soft check)"
+section "NLP-classifiers container (Phase 2 only — soft check)"
 
 NLP_CONTAINER="${STRINGI_DOCKER_CONTAINER:-prostatecancer-nlp-native}"
 
 if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$NLP_CONTAINER"; then
-    warn "NLP container '$NLP_CONTAINER' not running — dashboard will start fine; Phase A pipeline runs will fail until it is up (the AI repo's main_complete_pipeline_db.py brings it up automatically)"
+    warn "NLP container '$NLP_CONTAINER' not running — dashboard will start fine; Phase 2 pipeline runs will fail until it is up (the AI repo's main_complete_pipeline_db.py brings it up automatically)"
 else
     ok "container $NLP_CONTAINER running"
     PROBE=$(docker exec "$NLP_CONTAINER" Rscript -e \
@@ -113,7 +113,7 @@ else
     if [[ -n "$PROBE" ]]; then
         ok "docker exec stringi probe OK ($PROBE)"
     else
-        warn "docker exec stringi probe failed — segmentation will fail when Phase A runs"
+        warn "docker exec stringi probe failed — segmentation will fail when Phase 2 runs"
     fi
 fi
 

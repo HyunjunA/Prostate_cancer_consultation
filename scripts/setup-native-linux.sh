@@ -161,8 +161,8 @@ cat <<EOF
     1. cp app/Backend/.env.example app/Backend/.env
        (then edit POSTGRES_PASSWORD, AZURE_OPENAI_*, API_KEY)
     2. bash scripts/init-db-native.sh
-    3. bash scripts/run-frontend-backend.sh           # dashboard (Phase B)
-    4. Phase A — run from the sibling AI repo:
+    3. bash scripts/run-frontend-backend.sh           # dashboard (Phase 1)
+    4. Phase 2 — run from the sibling AI repo:
        cd ../AI_physician_patient_communication &&
        ../Prostate_cancer_consultation_dashboard/.venv/bin/python \
            main_complete_pipeline_db.py --dir data/input

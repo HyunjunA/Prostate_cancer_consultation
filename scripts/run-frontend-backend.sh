@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-#  run-frontend-backend.sh — dashboard entry point (Phase B)
+#  run-frontend-backend.sh — dashboard entry point (Phase 1)
 #
 #  Brings up the dashboard's *read-time* stack:
 #    - Native postgres + redis (already running via brew services)
@@ -10,7 +10,7 @@
 #  The NLP classifier container is NOT touched here — it is a write-time
 #  asset of the AI pipeline (sibling AI_physician_patient_communication
 #  repo) and is started by the AI repo's main_complete_pipeline_db.py
-#  during Phase A. Dashboard request handlers never call the NLP
+#  during Phase 2. Dashboard request handlers never call the NLP
 #  container at request time, so this script does not depend on it
 #  being up.
 #
@@ -24,12 +24,12 @@
 #    Ctrl-C        # stops backend
 #    docker compose -f docker-compose-frontend.yml down   # stops webapp
 #
-#  Process new transcripts (Phase A — separate command, run from the AI repo):
+#  Process new transcripts (Phase 2 — separate command, run from the AI repo):
 #    cd ../AI_physician_patient_communication
 #    ../Prostate_cancer_consultation_dashboard/.venv/bin/python \
 #        main_complete_pipeline_db.py --dir data/input
 #
-#  Reference: README.md "Quick Start — Native Deployment" (Phase A vs Phase B)
+#  Reference: README.md "Quick Start — Native Deployment" (Phase 2 vs Phase 1)
 # ============================================================================
 set -euo pipefail
 

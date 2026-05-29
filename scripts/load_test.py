@@ -24,8 +24,8 @@ Flags:
                           (Azure OpenAI — burns quota; off by default)
     --target-patient ID   Use this patid (must exist in DB; default SID_10)
 
-The script does NOT touch Phase A (no NLP container calls, no
-transcript processing). It exercises only Phase B's request surface,
+The script does NOT touch Phase 2 (no NLP container calls, no
+transcript processing). It exercises only Phase 1's request surface,
 which is what real concurrent users hit.
 """
 

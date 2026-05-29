@@ -30,7 +30,7 @@ modes documented here are strictly for human eyes.
 3. **Confirm the backend has at least one patient.** Most specs
    self-discover whatever is in `/api/backend/patient/files`; the
    ones that need a record will *skip cleanly* if the database is
-   empty rather than fail. To populate, run the Phase A pipeline
+   empty rather than fail. To populate, run the Phase 2 pipeline
    (in the sibling AI repo) on any sample transcript:
 
    ```bash

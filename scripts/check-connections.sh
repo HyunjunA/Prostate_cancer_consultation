@@ -71,16 +71,16 @@ echo ""
 # ── 3. NLP classifiers (Docker) ─────────────────────────────────────────────
 echo "─── 3. NLP classifiers ───"
 # Default port matches docker-compose-ai-nlp-pipeline.yml in the sibling
-# AI repo (8888). Phase A owns this container's lifecycle; Phase B does
+# AI repo (8888). Phase 2 owns this container's lifecycle; Phase 1 does
 # not call it at request time, so a missing container is a WARN, not a
-# FAIL — it only blocks Phase A pipeline runs.
+# FAIL — it only blocks Phase 2 pipeline runs.
 NLP_URL="${NLP_API_URL:-http://localhost:8888}"
 if curl -sf -m 3 "${NLP_URL}/ping" >/dev/null 2>&1; then
     pass "NLP classifiers reachable at $NLP_URL"
 elif curl -sf -m 3 "${NLP_URL}/" >/dev/null 2>&1; then
     pass "NLP classifiers reachable at $NLP_URL (no /ping endpoint)"
 else
-    warn "NLP not reachable at $NLP_URL — required only for Phase A pipeline runs (Phase A's main_complete_pipeline_db.py brings it up automatically)"
+    warn "NLP not reachable at $NLP_URL — required only for Phase 2 pipeline runs (Phase 2's main_complete_pipeline_db.py brings it up automatically)"
 fi
 echo ""
 

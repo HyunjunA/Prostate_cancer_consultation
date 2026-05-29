@@ -225,8 +225,8 @@ cat <<EOF
     psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DB -c "\\dt"
 
   Next steps:
-    bash scripts/run-frontend-backend.sh    # dashboard (Phase B)
-    # Phase A — run from the sibling AI repo:
+    bash scripts/run-frontend-backend.sh    # dashboard (Phase 1)
+    # Phase 2 — run from the sibling AI repo:
     cd ../AI_physician_patient_communication && \
         ../Prostate_cancer_consultation_dashboard/.venv/bin/python \
         main_complete_pipeline_db.py --dir data/input

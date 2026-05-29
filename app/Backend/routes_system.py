@@ -76,8 +76,8 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     working (uncached) when Redis is gone.
 
     The NLP classifier container is intentionally NOT probed here. The
-    AI pipeline repo (Phase A) owns that container's lifecycle, and the
-    dashboard backend (Phase B) does not call it at request time — the
+    AI pipeline repo (Phase 2) owns that container's lifecycle, and the
+    dashboard backend (Phase 1) does not call it at request time — the
     webapp reads pipeline results from the database, not from the NLP
     service. Reporting NLP status from this endpoint would surface a
     component that this process does not actually depend on.
