@@ -439,7 +439,35 @@ ls ../AI_physician_patient_communication/data/input/
 
 Switch to the AI repo and run the pipeline from there. The dashboard's Python venv is reused so you don't need a second one.
 
-Single transcript:
+**Continuous drop-folder watch mode (recommended for ongoing operation).**
+Start it once: it processes everything already in `data/input/`, then keeps
+watching and automatically processes any **new** `.xlsx`/`.csv` you drop in
+later — writing each to PostgreSQL and archiving it (`data/input/` →
+`data/archive/`). Runs until `Ctrl-C`:
+
+```bash
+cd ../AI_physician_patient_communication
+
+bash run-pipeline-watch.sh            # NLP + AI; add --skip-ai for NLP-only
+```
+
+`run-pipeline-watch.sh` simply launches `main_complete_pipeline_db.py` with no
+`--file`/`--dir` flag — that is the drop-folder watch mode. It reuses the
+dashboard venv automatically (override with `PIPELINE_PYTHON=...` if your venv
+lives elsewhere).
+
+**One-shot — process the whole folder, then exit.** Every `.xlsx`/`.csv` in
+`data/input/`, in sorted order; a failure on one file is logged and the run
+continues with the next:
+
+```bash
+cd ../AI_physician_patient_communication
+
+../Prostate_cancer_consultation_dashboard/.venv/bin/python \
+    main_complete_pipeline_db.py --dir data/input
+```
+
+**Single transcript only:**
 
 ```bash
 cd ../AI_physician_patient_communication
@@ -449,14 +477,10 @@ cd ../AI_physician_patient_communication
     --file "data/input/Input_Keystrokes REC 001 (SID 10).xlsx"
 ```
 
-Whole folder (every `.xlsx`/`.csv` inside, processed in sorted order):
-
-```bash
-cd ../AI_physician_patient_communication
-
-../Prostate_cancer_consultation_dashboard/.venv/bin/python \
-    main_complete_pipeline_db.py --dir data/input
-```
+> Pick by workflow: **watch** (standing — auto-processes new drops) · **`--dir`**
+> (batch the current folder once, then exit) · **`--file`** (exactly one file).
+> Watch and `--dir` both process everything already in `data/input/`; `--file`
+> processes only the named file.
 
 Every database INSERT is printed with a `[DB]` prefix so you can watch each table grow as the pipeline runs:
 
