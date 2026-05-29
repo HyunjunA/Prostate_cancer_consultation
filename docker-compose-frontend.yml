@@ -45,7 +45,9 @@ services:
       # Server-only env vars (host.docker.internal lets the container reach
       # the native uvicorn backend on the Mac/Linux host).
       BACKEND_URL: http://host.docker.internal:18000
-      API_KEY: ${API_KEY}
+      # API_KEY comes from env_file (app/Webapp/.env) — NOT a ${API_KEY} shell
+      # interpolation, which injected an EMPTY key whenever `docker compose up`
+      # was run without first sourcing app/Backend/.env (blank dashboard).
     extra_hosts:
       # Linux: docker doesn't auto-resolve host.docker.internal — declare it.
       - "host.docker.internal:host-gateway"

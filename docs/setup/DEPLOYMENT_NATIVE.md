@@ -448,13 +448,29 @@ later — writing each to PostgreSQL and archiving it (`data/input/` →
 ```bash
 cd ../AI_physician_patient_communication
 
-bash run-pipeline-watch.sh            # NLP + AI; add --skip-ai for NLP-only
+bash run-pipeline-watch.sh            # REMOTE by default (NLP via server gateway); add --skip-ai for NLP-only
 ```
 
-`run-pipeline-watch.sh` simply launches `main_complete_pipeline_db.py` with no
-`--file`/`--dir` flag — that is the drop-folder watch mode. It reuses the
-dashboard venv automatically (override with `PIPELINE_PYTHON=...` if your venv
-lives elsewhere).
+**`run-pipeline-watch.sh` now defaults to REMOTE mode** — it launches
+`main_complete_pipeline_db_api.py --config config_remote.yaml --skip-nlp-startup`,
+so segmentation + classification go to the **server gateway** (URL in
+`config_remote.yaml`'s `model_uri`) and **no local NLP container is needed**.
+Remote mode needs `NLP_GATEWAY_API_KEY` (auto-read from
+`AI_physician_patient_communication/nlp_classifier_server/gateway/.env` if present),
+`ai_pipeline/.env` for the AI step, and a reachable server. The DB write is
+unchanged (dashboard venv + `DATABASE_URL`). See the AI repo's README
+"Remote Classifier (No Local Docker)" and `nlp_classifier_server/`.
+
+**Local-container mode** — the local-Docker flow this doc otherwise describes
+(`main_complete_pipeline_db.py`, which manages the NLP container itself) — is now
+opt-in via `PIPELINE_REMOTE=0`:
+
+```bash
+cd ../AI_physician_patient_communication
+PIPELINE_REMOTE=0 bash run-pipeline-watch.sh        # NLP via the local container
+```
+
+It reuses the dashboard venv automatically (override with `PIPELINE_PYTHON=...`).
 
 **One-shot — process the whole folder, then exit.** Every `.xlsx`/`.csv` in
 `data/input/`, in sorted order; a failure on one file is logged and the run
