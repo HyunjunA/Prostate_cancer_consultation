@@ -68,6 +68,35 @@ The backend lives at [`app/Backend/`](app/Backend/). Each concern has its own fi
 | [`inspect_pipeline_run.py`](app/Backend/inspect_pipeline_run.py) | CLI: dump pipeline outputs for one analysis |
 | [`migrations/versions/`](app/Backend/migrations/versions/) | Alembic 001–015 (15 migrations, all reversible) |
 
+#### Inspecting the database with DBeaver
+
+For a visual look at the live data — e.g. the `llm_domain_scoring_and_summary`
+rows behind the patient first-visit summaries — connect with
+[DBeaver](https://dbeaver.io/) (free, cross-platform). Create a new
+**PostgreSQL** connection:
+
+| Field | Value |
+|---|---|
+| Host | `localhost` |
+| Port | `5433` |
+| Database | `prostatecancer_db_native` |
+| Username | `prostatecancer_user` |
+| Password | from `app/Backend/.env` (`DATABASE_URL`) — never commit it |
+
+Then expand **Tables** and browse e.g. `transcript_analysis_log`,
+`sentence_prediction`, `llm_domain_scoring_and_summary`, or run SQL such as:
+
+```sql
+SELECT domain, treatment, ai_score, reformat_sentence
+FROM llm_domain_scoring_and_summary
+WHERE patient_id = 'SID_21'
+ORDER BY domain;
+```
+
+Native mode binds PostgreSQL to `127.0.0.1:5433` (localhost only), so DBeaver
+must run on the same machine as the database. The CLI alternative is
+[`inspect_pipeline_run.py`](app/Backend/inspect_pipeline_run.py) above.
+
 ### Pipeline write-side — DB persistence only
 
 NLP/AI pipeline orchestration lives in the AI repo's
