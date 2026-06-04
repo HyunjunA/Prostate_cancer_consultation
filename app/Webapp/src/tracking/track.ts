@@ -20,6 +20,17 @@
 
 let _activeSessionId: string | null = null;
 
+// Session-level entry mode for the first-visit page: "report" (1st visit) or
+// "survey" (2nd visit). Set once per mount via setFirstMode() so every
+// trackFirst event in the session carries it without threading it through
+// each call site. null until set (older callers / pre-split).
+let _activeFirstMode: "report" | "survey" | null = null;
+
+/** Tag the active first-visit session as report (1st) or survey (2nd). */
+export function setFirstMode(mode: "report" | "survey"): void {
+  _activeFirstMode = mode;
+}
+
 function _generate(): string {
   const ts = Date.now();
   const rand = Math.random().toString(36).substring(2, 13);
@@ -33,6 +44,7 @@ export function startSession(): string {
 
 export function endSession(): void {
   _activeSessionId = null;
+  _activeFirstMode = null;
 }
 
 function getSessionId(): string {
@@ -169,6 +181,7 @@ export async function trackFirst(
     session_id: getSessionId(),
     file,
     speaker,
+    mode: _activeFirstMode,
     events: [fullEvent],
   });
 }
