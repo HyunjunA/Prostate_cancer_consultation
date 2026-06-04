@@ -30,7 +30,8 @@ import PatientConsultationReports from "@/components/PatientConsultationReports"
 // import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV33";
 // import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV37";
 // import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV38";
-import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV39";
+// import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV39";
+import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV40";
 
 // // These below components are the one with feedback from Dr. Timothy
 // Modified but not the version where one question appears per page.
@@ -302,7 +303,11 @@ export default function Home() {
     }
   }, [currentView]);
 
-  const handlePatientSelect = (file: string, visit: "first" | "followup") => {
+  const handlePatientSelect = (
+    file: string,
+    visit: "first" | "followup",
+    survey = false,
+  ) => {
     const stem = file.replace(/\.(xlsx|csv)$/i, "");
     const speaker = `Patient_${stem}`;
     // Navigate with URL parameters (same format as before)
@@ -311,6 +316,8 @@ export default function Home() {
       patid: speaker,
       visit: visit,
     });
+    // Survey mode = second-visit questionnaire screen (first-visit only).
+    if (survey) params.set("mode", "survey");
     window.location.href = `/?${params.toString()}`;
   };
 
@@ -370,7 +377,8 @@ export default function Home() {
             <p className={`mt-1 text-sm ${
               isDarkMode ? "text-slate-400" : "text-slate-500"
             }`}>
-              Select a patient to view their consultation report.
+              Pick a patient, then an entry point: 1st · Report (read-only AI
+              summary), 1st · Survey (questionnaire), or Follow-up.
             </p>
           </div>
 
@@ -459,13 +467,26 @@ export default function Home() {
                           <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={() => handlePatientSelect(file, "first")}
+                              title="First visit — AI summary report (read-only)"
                               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
                                 isDarkMode
                                   ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 hover:text-blue-300 border border-blue-500/20"
                                   : "bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 border border-blue-100"
                               }`}
                             >
-                              First Visit
+                              1st · Report
+                            </button>
+                            {/* Survey entry = first visit with mode=survey. */}
+                            <button
+                              onClick={() => handlePatientSelect(file, "first", true)}
+                              title="First visit — survey questionnaire (mode=survey)"
+                              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                                isDarkMode
+                                  ? "bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 hover:text-violet-300 border border-violet-500/20"
+                                  : "bg-violet-50 text-violet-700 hover:bg-violet-100 hover:text-violet-800 border border-violet-100"
+                              }`}
+                            >
+                              1st · Survey
                             </button>
                             {/* Follow-up entry button (restored 2026-05-22). */}
                             <button
