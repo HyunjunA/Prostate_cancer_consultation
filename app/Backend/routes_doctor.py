@@ -476,6 +476,20 @@ async def get_doctor_files(
     )
     rows = (await db.execute(stmt)).all()
 
+    # Per-file consult date. NOTE: there is no real visit date in the schema yet;
+    # this is the AI pipeline's processing timestamp (earliest created_at of the
+    # LLM scoring rows) — the SAME source the /scores/trajectory X-axis uses, so
+    # the table date and the graph stay aligned. Swap this to the de-identified
+    # (±7-day shifted) visit date once the de-id pipeline provides it.
+    from models import LLMDomainScoringAndSummary
+
+    date_stmt = select(
+        LLMDomainScoringAndSummary.source_filename.label("file"),
+        func.min(LLMDomainScoringAndSummary.created_at).label("consult_date"),
+    ).group_by(LLMDomainScoringAndSummary.source_filename)
+    date_rows = (await db.execute(date_stmt)).all()
+    date_map = {r.file: r.consult_date for r in date_rows}
+
     # Build file list — pick the speaker with most sentences per file
     file_map: dict = {}
     for row in rows:
@@ -487,7 +501,15 @@ async def get_doctor_files(
     # Return both formats: "files" (legacy list) + "file_details" (with speaker)
     files = list(file_map.keys())
     file_details = [
-        {"file": f, "speaker": info["speaker"], "sentence_count": info["count"]}
+        {
+            "file": f,
+            "speaker": info["speaker"],
+            "sentence_count": info["count"],
+            # Processing timestamp used as a stand-in visit date (see note above).
+            "consult_date": (
+                date_map[f].isoformat() if date_map.get(f) else None
+            ),
+        }
         for f, info in file_map.items()
     ]
 

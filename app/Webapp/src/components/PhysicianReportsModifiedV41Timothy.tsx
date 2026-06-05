@@ -1663,6 +1663,76 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
 // - Summary cards moved to top-right 1/3 (Google Scholar style)
 // - Main space reserved for trajectory graph + patient list
 // ═══════════════════════════════════════════════════════════
+
+// Shared body for a trajectory point's details, reused by both the hover
+// tooltip (quick preview) and the click-pinned resizable panel.
+const TrajectoryPointDetail: React.FC<{
+  item: any;
+  isDarkMode: boolean;
+  viewMode?: "average" | "individual";
+}> = ({ item, isDarkMode, viewMode = "average" }) => {
+  const type = item.eventType === "rewrite" ? "Rewrite" : "Consultation";
+  const details = item.patientsDetail ?? [];
+  // Long patient ids truncate with an ellipsis; hovering one expands it in
+  // place (wraps to the full id) via CSS only. In-place expansion — instead of
+  // a positioned bubble — has no viewport-edge clipping and needs no JS; it
+  // stays inside the stable custom hover tooltip, which has its own max-width.
+  return (
+    <>
+      <div className="font-semibold mb-1">
+        {item.fullTimestamp?.substring(0, 19)} | {type}
+      </div>
+      {viewMode === "individual" ? (
+        <>
+          <div className="mb-1" style={{ color: "#06b6d4" }}>
+            Consultation score:{" "}
+            <span className="font-bold">
+              {(item.individual ?? item.score).toFixed(2)}
+            </span>
+          </div>
+          <div className="flex text-xs mb-1">
+            <span className="opacity-70 mr-1 shrink-0">Patient:</span>
+            <span className="truncate max-w-[180px] hover:max-w-none hover:whitespace-normal hover:overflow-visible hover:break-words cursor-default">
+              {(item.file || "").replace(/\.xlsx$/i, "")}
+            </span>
+          </div>
+        </>
+      ) : (
+        <div className="mb-2" style={{ color: "#06b6d4" }}>
+          Cumulative Avg:{" "}
+          <span className="font-bold">{item.score.toFixed(2)}</span>
+          <span className="ml-1 opacity-70">({item.patientsCount} patients)</span>
+        </div>
+      )}
+      {viewMode !== "individual" && details.length > 0 && (
+        <>
+          <div
+            className="text-xs font-medium mb-1 pt-1 border-t"
+            style={{ borderColor: isDarkMode ? "#334155" : "#e2e8f0" }}
+          >
+            Individual Patient Scores:
+          </div>
+          <div className="space-y-0.5">
+            {details.map((p: { file: string; overall_score: number }) => {
+              const shortId = p.file.replace(/\.xlsx$/i, "");
+              return (
+                <div key={p.file} className="flex justify-between text-xs">
+                  <span className="truncate mr-2 max-w-[160px] hover:max-w-none hover:whitespace-normal hover:overflow-visible hover:break-words cursor-default">
+                    {shortId}
+                  </span>
+                  <span className="font-mono font-semibold whitespace-nowrap">
+                    {p.overall_score.toFixed(2)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </>
+  );
+};
+
 const DashboardViewV2: React.FC<DashboardViewProps> = ({
   isDarkMode,
   patients,
@@ -1734,17 +1804,83 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
       const label = ts
         ? `${String(ts.getMonth() + 1).padStart(2, "0")}/${String(ts.getDate()).padStart(2, "0")} ${String(ts.getHours()).padStart(2, "0")}:${String(ts.getMinutes()).padStart(2, "0")}`
         : "N/A";
+      // Individual mode: this consultation's OWN overall score (its own row in
+      // patients_detail), NOT the running cumulative average.
+      const own = (item.patients_detail ?? []).find(
+        (p: any) => p.file === item.file,
+      )?.overall_score;
       return {
         time: label,
         fullTimestamp: item.timestamp,
         eventType: item.event_type,
         file: item.file,
         score: item.overall_score ?? 0,
+        individual: own ?? item.overall_score ?? 0,
         patientsCount: item.patients_count,
         patientsDetail: item.patients_detail ?? [],
       };
     });
   }, [trajectoryData]);
+
+  // Chart mode: "average" = cumulative running average (default),
+  // "individual" = each consultation's own score (non-cumulative).
+  const [viewMode, setViewMode] = useState<"average" | "individual">("average");
+
+  // Custom hover tooltip — a stable tooltip we fully control. recharts' own
+  // tooltip follows the cursor and re-renders on every mousemove, so a long
+  // patient name inside it can't be hovered to reveal it. This one opens on dot
+  // hover, stays while the cursor is over the dot OR the tooltip (hover-bridge),
+  // and auto-hides otherwise — so its native `title` reveal works reliably.
+  const [hovered, setHovered] = useState<
+    { item: any; cx: number; cy: number } | null
+  >(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const chartBoxRef = useRef<HTMLDivElement>(null);
+  const showTip = (item: any, cx: number, cy: number) => {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    setHovered({ item, cx, cy });
+  };
+  const scheduleHide = () => {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    hideTimer.current = setTimeout(() => setHovered(null), 180);
+  };
+
+  // Patient table column sorting. Default: patient (SID) ascending, matching
+  // the existing numeric SID order.
+  const [sortKey, setSortKey] = useState<"patient" | "date" | "score">(
+    "patient",
+  );
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const toggleSort = (key: "patient" | "date" | "score") => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+  const sidNum = (id: string) => {
+    const m = id.match(/(\d+)/);
+    return m ? parseInt(m[1], 10) : 0;
+  };
+  const sortedPatients = useMemo(() => {
+    const arr = [...filteredPatients];
+    arr.sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "patient") {
+        cmp = sidNum(a.id) - sidNum(b.id);
+      } else if (sortKey === "date") {
+        cmp = (a.consultationDate || "").localeCompare(b.consultationDate || "");
+      } else {
+        cmp = (a.overallScore || 0) - (b.overallScore || 0);
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return arr;
+  }, [filteredPatients, sortKey, sortDir]);
+  // Caret shown in a column header: ▲/▼ when active, faint ↕ otherwise.
+  const sortCaret = (key: "patient" | "date" | "score") =>
+    sortKey === key ? (sortDir === "asc" ? "▲" : "▼") : "↕";
 
   return (
     <div className="space-y-6">
@@ -1775,7 +1911,7 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
         <div
           data-tour="trajectory-chart"
           className={cx(
-            "flex-1 md:w-3/4 rounded-xl border p-4 sm:p-5 lg:p-6 min-h-[220px] flex flex-col",
+            "relative flex-1 md:w-3/4 rounded-xl border p-4 sm:p-5 lg:p-6 min-h-[220px] flex flex-col",
             isDarkMode
               ? "bg-slate-800/60 border-slate-700"
               : "bg-white border-slate-200 shadow-sm",
@@ -1790,17 +1926,31 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
             >
               Overall Quality of Risk Communication Score Trajectory
             </h2>
-            <span
-              className={cx(
-                "text-xs",
-                isDarkMode ? "text-slate-500" : "text-slate-400",
-              )}
+            {/* Mode toggle: cumulative average vs each consultation's own score */}
+            <div
+              className="inline-flex rounded-md border overflow-hidden text-xs"
+              style={{ borderColor: isDarkMode ? "#475569" : "#cbd5e1" }}
             >
-              Score over time
-            </span>
+              {(["average", "individual"] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setViewMode(m)}
+                  className={cx(
+                    "px-2.5 py-1 capitalize transition-colors",
+                    viewMode === m
+                      ? "bg-cyan-600 text-white"
+                      : isDarkMode
+                        ? "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                        : "bg-white text-slate-600 hover:bg-slate-50",
+                  )}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
           </div>
           {/* B-2: Overall score trajectory line chart */}
-          <div className="flex-1 min-h-[180px]">
+          <div ref={chartBoxRef} className="relative flex-1 min-h-[180px]">
             {chartData.length === 0 ? (
               <div className="flex-1 flex items-center justify-center h-full">
                 <p className={cx("text-sm", isDarkMode ? "text-slate-500" : "text-slate-400")}>
@@ -1842,82 +1992,72 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                     fill: isDarkMode ? "#64748b" : "#94a3b8",
                   }}
                 />
-                <Tooltip
-                  content={({ active, payload }) => {
-                    if (!active || !payload?.length) return null;
-                    const item = payload[0].payload;
-                    const type = item.eventType === "rewrite" ? "Rewrite" : "Consultation";
-                    const details = item.patientsDetail ?? [];
-                    return (
-                      <div
-                        className="rounded-lg border p-3 shadow-lg max-h-[300px] overflow-y-auto"
-                        style={{
-                          backgroundColor: isDarkMode ? "#1e293b" : "#ffffff",
-                          borderColor: isDarkMode ? "#334155" : "#e2e8f0",
-                          color: isDarkMode ? "#e2e8f0" : "#1e293b",
-                          fontSize: 12,
-                          minWidth: 220,
-                        }}
-                      >
-                        <div className="font-semibold mb-1">
-                          {item.fullTimestamp?.substring(0, 19)} | {type}
-                        </div>
-                        <div className="mb-2" style={{ color: "#06b6d4" }}>
-                          Cumulative Avg: <span className="font-bold">{item.score.toFixed(2)}</span>
-                          <span className="ml-1 opacity-70">({item.patientsCount} patients)</span>
-                        </div>
-                        {details.length > 0 && (
-                          <>
-                            <div
-                              className="text-xs font-medium mb-1 pt-1 border-t"
-                              style={{ borderColor: isDarkMode ? "#334155" : "#e2e8f0" }}
-                            >
-                              Individual Patient Scores:
-                            </div>
-                            <div className="space-y-0.5">
-                              {details.map((p: { file: string; overall_score: number }) => {
-                                const shortId = p.file.replace(/\.xlsx$/i, "");
-                                return (
-                                  <div
-                                    key={p.file}
-                                    className="flex justify-between text-xs"
-                                  >
-                                    <span className="truncate mr-2 max-w-[160px]" title={shortId}>
-                                      {shortId}
-                                    </span>
-                                    <span className="font-mono font-semibold whitespace-nowrap">
-                                      {p.overall_score.toFixed(2)}
-                                    </span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    );
-                  }}
-                />
+                {/* recharts Tooltip intentionally removed — replaced by the
+                    custom hover tooltip below (rendered outside the chart). */}
                 <Line
                   type="monotone"
-                  dataKey="score"
+                  dataKey={viewMode === "individual" ? "individual" : "score"}
                   stroke="#06b6d4"
                   strokeWidth={2}
-                  dot={{
-                    r: 5,
-                    fill: "#06b6d4",
-                    stroke: isDarkMode ? "#1e293b" : "#ffffff",
-                    strokeWidth: 2,
+                  // Custom dots drive the hover tooltip. A wide transparent
+                  // hit-circle makes the small dots easy to hover.
+                  dot={(props: any) => {
+                    const { cx, cy, index, payload } = props;
+                    if (cx == null || cy == null) return <g key={index} />;
+                    const active = hovered?.item === payload;
+                    return (
+                      <g
+                        key={index}
+                        onMouseEnter={() => showTip(payload, cx, cy)}
+                        onMouseLeave={scheduleHide}
+                      >
+                        <circle cx={cx} cy={cy} r={12} fill="transparent" />
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r={active ? 7 : 5}
+                          fill="#06b6d4"
+                          stroke={isDarkMode ? "#1e293b" : "#ffffff"}
+                          strokeWidth={2}
+                        />
+                      </g>
+                    );
                   }}
-                  activeDot={{
-                    r: 7,
-                    fill: "#06b6d4",
-                    stroke: isDarkMode ? "#1e293b" : "#ffffff",
-                    strokeWidth: 2,
-                  }}
+                  activeDot={false}
                 />
               </LineChart>
             </ResponsiveContainer>
+            )}
+            {hovered && (
+              <div
+                data-testid="trajectory-hover-tooltip"
+                className="absolute z-30 rounded-lg border p-3 shadow-lg overflow-auto"
+                style={{
+                  left: hovered.cx,
+                  top: hovered.cy,
+                  transform:
+                    hovered.cx > (chartBoxRef.current?.clientWidth ?? 360) / 2
+                      ? "translate(calc(-100% - 14px), -50%)"
+                      : "translate(14px, -50%)",
+                  minWidth: 220,
+                  maxWidth: "min(80vw, 300px)",
+                  maxHeight: 280,
+                  backgroundColor: isDarkMode ? "#1e293b" : "#ffffff",
+                  borderColor: isDarkMode ? "#334155" : "#e2e8f0",
+                  color: isDarkMode ? "#e2e8f0" : "#1e293b",
+                  fontSize: 12,
+                }}
+                onMouseEnter={() => {
+                  if (hideTimer.current) clearTimeout(hideTimer.current);
+                }}
+                onMouseLeave={scheduleHide}
+              >
+                <TrajectoryPointDetail
+                  item={hovered.item}
+                  isDarkMode={isDarkMode}
+                  viewMode={viewMode}
+                />
+              </div>
             )}
           </div>
         </div>
@@ -2066,6 +2206,19 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
           />
         </div>
 
+        {/* D-10: dates are a processing-time stand-in, not the real visit date. */}
+        <div
+          className={cx(
+            "px-6 py-2 text-xs border-b",
+            isDarkMode
+              ? "bg-slate-800/40 border-slate-700 text-slate-400"
+              : "bg-amber-50/60 border-slate-200 text-slate-500",
+          )}
+        >
+          ⓘ Dates shown are processing timestamps and may not match the actual
+          consultation date.
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full" style={{ tableLayout: "fixed" }}>
             <thead>
@@ -2077,25 +2230,52 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                     : "bg-slate-50/50 border-slate-200 text-slate-500",
                 )}
               >
-                <th className="px-6 py-3 text-left font-semibold" style={{ width: "35%" }}>
-                  Patient
+                <th className="px-6 py-3 text-left font-semibold" style={{ width: "26%" }}>
+                  <button
+                    onClick={() => toggleSort("patient")}
+                    className="inline-flex items-center gap-1 uppercase tracking-wider hover:opacity-80"
+                  >
+                    Patient
+                    <span className="text-[10px] opacity-70">
+                      {sortCaret("patient")}
+                    </span>
+                  </button>
                 </th>
-                <th className="px-6 py-3 text-left font-semibold" style={{ width: "35%" }}>
-                  Overall Score
+                <th className="px-6 py-3 text-left font-semibold" style={{ width: "22%" }}>
+                  <button
+                    onClick={() => toggleSort("date")}
+                    className="inline-flex items-center gap-1 uppercase tracking-wider hover:opacity-80"
+                  >
+                    Date
+                    <span className="text-[10px] opacity-70">
+                      {sortCaret("date")}
+                    </span>
+                  </button>
                 </th>
-                <th className="px-6 py-3 text-center font-semibold" style={{ width: "30%" }}>
+                <th className="px-6 py-3 text-left font-semibold" style={{ width: "30%" }}>
+                  <button
+                    onClick={() => toggleSort("score")}
+                    className="inline-flex items-center gap-1 uppercase tracking-wider hover:opacity-80"
+                  >
+                    Overall Score
+                    <span className="text-[10px] opacity-70">
+                      {sortCaret("score")}
+                    </span>
+                  </button>
+                </th>
+                <th className="px-6 py-3 text-center font-semibold" style={{ width: "22%" }}>
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody
-              key={`tbody-${scoreBand}-${search}`}
+              key={`tbody-${scoreBand}-${search}-${sortKey}-${sortDir}`}
               className={cx(
                 "divide-y",
                 isDarkMode ? "divide-slate-700/50" : "divide-slate-100",
               )}
             >
-              {filteredPatients.map((patient) => {
+              {sortedPatients.map((patient) => {
                 const hasScore = patient.overallScore != null && patient.overallScore > 0;
                 return (
                 <tr
@@ -2130,7 +2310,35 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                       {patient.id}
                     </div>
                   </td>
-                  <td className="px-6 py-3.5" style={{ width: "35%" }}>
+                  <td className="px-6 py-3.5" style={{ width: "22%" }}>
+                    <div
+                      className={cx(
+                        "text-sm",
+                        isDarkMode ? "text-slate-300" : "text-slate-700",
+                      )}
+                    >
+                      {patient.consultationDate
+                        ? new Date(patient.consultationDate).toLocaleDateString(
+                            undefined,
+                            { year: "numeric", month: "short", day: "numeric" },
+                          )
+                        : "—"}
+                    </div>
+                    {patient.consultationDate && (
+                      <div
+                        className={cx(
+                          "text-xs",
+                          isDarkMode ? "text-slate-500" : "text-slate-400",
+                        )}
+                      >
+                        {new Date(patient.consultationDate).toLocaleTimeString(
+                          undefined,
+                          { hour: "2-digit", minute: "2-digit" },
+                        )}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-6 py-3.5" style={{ width: "30%" }}>
                     <div className="flex items-center gap-2.5">
                       <span
                         className={cx(
@@ -2201,7 +2409,7 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                       "px-6 py-10 text-center text-sm",
                       isDarkMode ? "text-slate-500" : "text-slate-400",
                     )}
-                    colSpan={3}
+                    colSpan={4}
                   >
                     {search || scoreBand !== "ALL"
                       ? "No matching reports. Try clearing filters."
@@ -3499,6 +3707,9 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   const [selectedFile, setSelectedFile] = useState<string>("");
   const [selectedSpeaker, setSelectedSpeaker] = useState<string>("");
   const [fileSpeakerMap, setFileSpeakerMap] = useState<Record<string, string>>({});
+  // file -> consult date (ISO). Stand-in: the AI processing timestamp from the
+  // backend until the de-id pipeline supplies the real (±7-day shifted) date.
+  const [fileDateMap, setFileDateMap] = useState<Record<string, string>>({});
   const [patients, setPatients] = useState<PatientRow[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<PatientRow | null>(
     null,
@@ -3763,10 +3974,19 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       // Build file→speaker map from API response
       if (result?.file_details?.length > 0) {
         const map: Record<string, string> = {};
-        result.file_details.forEach((fd: { file: string; speaker: string }) => {
-          map[fd.file] = fd.speaker;
-        });
+        const dateMap: Record<string, string> = {};
+        result.file_details.forEach(
+          (fd: {
+            file: string;
+            speaker: string;
+            consult_date?: string | null;
+          }) => {
+            map[fd.file] = fd.speaker;
+            if (fd.consult_date) dateMap[fd.file] = fd.consult_date;
+          },
+        );
         setFileSpeakerMap(map);
+        setFileDateMap(dateMap);
 
         // Set default speaker from first file
         const useAutoDetect = !doctorId || doctorId === "auto";
@@ -3814,7 +4034,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           id,
           name: `Patient ${id}`,
           fileName,
-          consultationDate: new Date().toISOString().split("T")[0],
+          consultationDate: fileDateMap[fileName] ?? "",
           status: "completed",
           overallScore: 0,
           topics: {} as Record<TopicName, TopicData>,
@@ -3837,7 +4057,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       // Fetch scores for all patients (no speaker filter — speakers vary per file)
       fetchScoreAverage(undefined, undefined, undefined);
     }
-  }, [files, selectedSpeaker]);
+  }, [files, selectedSpeaker, fileDateMap]);
 
   // ═══════════════════════════════════════════════════════════
   // Auto-select patient when fileId is provided via URL (once only)
