@@ -4075,7 +4075,9 @@ const PatientReportFirstVisitV40: React.FC<PatientReportProps> = ({
               isDarkMode ? "text-white" : "text-gray-900",
             )}
           >
-            Your Consultation Summary
+            {/* [V40 / A-1] Survey screen reads "Survey" so the title matches
+                the task (answering questions), not just viewing a summary. */}
+            {surveyMode ? "Your Consultation Survey" : "Your Consultation Summary"}
           </h1>
           <p
             className={cx(
