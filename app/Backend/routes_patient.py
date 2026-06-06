@@ -32,7 +32,7 @@ Related modules:
 
 import json
 import logging
-from typing import Optional, List, Dict, Any, Literal
+from typing import Optional, List, Dict, Any, Literal, Tuple
 from collections import defaultdict
 
 import httpx
@@ -1191,8 +1191,9 @@ _FV_TIMELINE_CODES: Dict[str, Dict[str, str]] = {
 }
 
 # factor TEXT -> REDCap choice code. le has its own option set; ed/inc/ius share
-# one. factors is a multi-select in the UI but a single radio in REDCap, so we
-# send the FIRST selected factor (see _fv_answer_to_redcap).
+# one. factors is a multi-select: every selected factor is sent to REDCap using
+# the checkbox import format `field___<code>` = "1" (see _fv_answer_to_redcap).
+# The REDCap target field must be a CHECKBOX for this format to be accepted.
 _FV_FACTOR_CODES: Dict[str, Dict[str, str]] = {
     "le_factors": {
         "Tumor grade": "1",
@@ -1215,33 +1216,47 @@ _FV_FACTOR_CODES["ius_factors"] = _FV_FACTOR_CODES["ed_factors"]
 _REDCAP_POST_RISK_2_COMPLETE_FIELD = "post_risk_perception_2_complete"
 
 
-def _fv_answer_to_redcap(question_id: str, field: str, value: Any):
-    """Translate one first-visit answer to a (redcap_field, redcap_value) pair.
+def _fv_answer_to_redcap(question_id: str, field: str, value: Any) -> List[Tuple[str, str]]:
+    """Translate one first-visit answer into REDCap (field, value) pairs.
 
-    Returns None when the answer cannot/should not be synced: an unmapped
+    Returns a list of (redcap_field, redcap_value) pairs:
+      - vas / timeline map to a single pair.
+      - a multi-select "factors" answer maps to ONE pair per selected factor,
+        using REDCap's checkbox import format (``field___<code>`` = "1").
+
+    Returns [] when the answer cannot/should not be synced: an unmapped
     question_id, a blank value, or a text option missing from the code table.
+
+    NOTE: the factors branch requires the REDCap target field to be a CHECKBOX.
+    A single radio field rejects the ``field___<code>`` import format.
     """
     redcap_field = _FV_QUESTION_TO_REDCAP_FIELD.get(question_id)
     if not redcap_field:
-        return None
+        return []
 
     if field == "vas":
         if value is None:
-            return None
-        return redcap_field, str(int(value))
+            return []
+        return [(redcap_field, str(int(value)))]
 
     if field == "timeline":
         code = _FV_TIMELINE_CODES.get(question_id, {}).get(value)
-        return (redcap_field, code) if code else None
+        return [(redcap_field, code)] if code else []
 
     if field == "factors":
-        # UI multi-select -> single REDCap radio: send the first selection.
-        if not isinstance(value, list) or not value:
-            return None
-        code = _FV_FACTOR_CODES.get(question_id, {}).get(value[0])
-        return (redcap_field, code) if code else None
+        # UI multi-select -> REDCap checkbox: one `field___<code>` = "1" per
+        # selected factor. Unknown options are skipped.
+        if not isinstance(value, list):
+            return []
+        codes = _FV_FACTOR_CODES.get(question_id, {})
+        pairs: List[Tuple[str, str]] = []
+        for factor in value:
+            code = codes.get(factor)
+            if code:
+                pairs.append((f"{redcap_field}___{code}", "1"))
+        return pairs
 
-    return None
+    return []
 
 
 async def _sync_first_visit_answers_to_redcap(record_id: str, answers) -> None:
@@ -1258,9 +1273,8 @@ async def _sync_first_visit_answers_to_redcap(record_id: str, answers) -> None:
 
     fields: Dict[str, str] = {}
     for a in answers:
-        mapped = _fv_answer_to_redcap(a.question_id, a.field, a.value)
-        if mapped:
-            fields[mapped[0]] = mapped[1]
+        for redcap_field, redcap_value in _fv_answer_to_redcap(a.question_id, a.field, a.value):
+            fields[redcap_field] = redcap_value
 
     if not fields:
         return

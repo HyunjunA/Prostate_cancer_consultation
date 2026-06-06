@@ -86,14 +86,14 @@ class TestVas:
         ("ius_risk", "il_1_rp_v2"),
     ])
     def test_vas_passthrough(self, qid, field):
-        assert _fv_answer_to_redcap(qid, "vas", 42) == (field, "42")
+        assert _fv_answer_to_redcap(qid, "vas", 42) == [(field, "42")]
 
     def test_vas_bounds(self):
-        assert _fv_answer_to_redcap("cp_risk_without_treatment", "vas", 0) == ("cp_1_rp_v2", "0")
-        assert _fv_answer_to_redcap("cp_risk_without_treatment", "vas", 100) == ("cp_1_rp_v2", "100")
+        assert _fv_answer_to_redcap("cp_risk_without_treatment", "vas", 0) == [("cp_1_rp_v2", "0")]
+        assert _fv_answer_to_redcap("cp_risk_without_treatment", "vas", 100) == [("cp_1_rp_v2", "100")]
 
     def test_vas_none_skipped(self):
-        assert _fv_answer_to_redcap("cp_risk_without_treatment", "vas", None) is None
+        assert _fv_answer_to_redcap("cp_risk_without_treatment", "vas", None) == []
 
 
 # ── timeline TEXT -> code (order-sensitive, per domain) ────────────────────────
@@ -114,40 +114,50 @@ class TestTimeline:
     ])
     def test_timeline_text_to_code(self, qid, text, expected):
         field = EXPECTED_FIELD_MAP[qid]
-        assert _fv_answer_to_redcap(qid, "timeline", text) == (field, expected)
+        assert _fv_answer_to_redcap(qid, "timeline", text) == [(field, expected)]
 
     def test_unknown_timeline_option_skipped(self):
-        assert _fv_answer_to_redcap("cp_timeline", "timeline", "not a real option") is None
+        assert _fv_answer_to_redcap("cp_timeline", "timeline", "not a real option") == []
 
 
-# ── factor multi-select -> first code ──────────────────────────────────────────
+# ── factor multi-select -> one checkbox pair per selected factor ───────────────
 
 class TestFactors:
     def test_single_factor(self):
-        assert _fv_answer_to_redcap("ed_factors", "factors", ["Baseline function"]) == ("ed_3_rp_v2", "5")
+        assert _fv_answer_to_redcap("ed_factors", "factors", ["Baseline function"]) == [("ed_3_rp_v2___5", "1")]
 
-    def test_multi_select_sends_first(self):
-        # First selection wins; the rest is dropped (REDCap radio is single).
-        assert _fv_answer_to_redcap("le_factors", "factors", ["Marital status", "Age"]) == ("le_2_rp_v2", "3")
-        assert _fv_answer_to_redcap("le_factors", "factors", ["Age", "Marital status"]) == ("le_2_rp_v2", "2")
+    def test_multi_select_sends_all(self):
+        # Every selection is emitted as its own checkbox pair, preserving order.
+        assert _fv_answer_to_redcap("le_factors", "factors", ["Marital status", "Age"]) == [
+            ("le_2_rp_v2___3", "1"),
+            ("le_2_rp_v2___2", "1"),
+        ]
+        assert _fv_answer_to_redcap("le_factors", "factors", ["Age", "Marital status"]) == [
+            ("le_2_rp_v2___2", "1"),
+            ("le_2_rp_v2___3", "1"),
+        ]
 
     def test_inc_ius_factor_codes(self):
-        assert _fv_answer_to_redcap("inc_factors", "factors", ["Tumor stage"]) == ("ui_3_rp_v2", "3")
-        assert _fv_answer_to_redcap("ius_factors", "factors", ["Age"]) == ("il_3_rp_v2", "2")
+        assert _fv_answer_to_redcap("inc_factors", "factors", ["Tumor stage"]) == [("ui_3_rp_v2___3", "1")]
+        assert _fv_answer_to_redcap("ius_factors", "factors", ["Age"]) == [("il_3_rp_v2___2", "1")]
+
+    def test_unknown_factor_dropped_others_kept(self):
+        # Unknown options are skipped; valid ones still come through.
+        assert _fv_answer_to_redcap("le_factors", "factors", ["Bogus", "Age"]) == [("le_2_rp_v2___2", "1")]
 
     def test_empty_factor_list_skipped(self):
-        assert _fv_answer_to_redcap("le_factors", "factors", []) is None
+        assert _fv_answer_to_redcap("le_factors", "factors", []) == []
 
     def test_non_list_factor_skipped(self):
-        assert _fv_answer_to_redcap("le_factors", "factors", "Age") is None
+        assert _fv_answer_to_redcap("le_factors", "factors", "Age") == []
 
     def test_unknown_factor_option_skipped(self):
-        assert _fv_answer_to_redcap("le_factors", "factors", ["Bogus"]) is None
+        assert _fv_answer_to_redcap("le_factors", "factors", ["Bogus"]) == []
 
 
 # ── unmapped question ───────────────────────────────────────────────────────────
 
 class TestUnmapped:
     def test_unmapped_question_id(self):
-        assert _fv_answer_to_redcap("cp_helpfulness", "vas", 5) is None
-        assert _fv_answer_to_redcap("totally_unknown", "vas", 5) is None
+        assert _fv_answer_to_redcap("cp_helpfulness", "vas", 5) == []
+        assert _fv_answer_to_redcap("totally_unknown", "vas", 5) == []

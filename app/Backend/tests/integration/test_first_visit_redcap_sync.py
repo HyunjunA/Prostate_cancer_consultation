@@ -5,7 +5,7 @@ These exercise the real HTTP endpoint (in-memory SQLite + ASGI client) and mock
 only the outbound REDCap call via respx, asserting:
   - a domain Submit POSTs the correctly mapped/coded fields to REDCap,
   - the inc->ui / ius->il rename appears in the payload,
-  - multi-select factors send only the first value,
+  - multi-select factors send every selection as a `field___<code>`=1 checkbox pair,
   - REDCap being disabled makes NO outbound call,
   - a REDCap failure never breaks the primary DB write (best-effort mirror).
 """
@@ -78,7 +78,7 @@ async def test_cp_submit_posts_mapped_payload(client, patient_row, api_headers, 
 @pytest.mark.integration
 @pytest.mark.asyncio
 @respx.mock
-async def test_factor_multiselect_sends_first_only(client, patient_row, api_headers, enable_redcap):
+async def test_factor_multiselect_sends_all(client, patient_row, api_headers, enable_redcap):
     route = respx.post(FAKE_REDCAP_URL).mock(return_value=httpx.Response(200, json={"count": 1}))
 
     resp = await client.put(URL_PUT, headers=api_headers, json={
@@ -91,8 +91,11 @@ async def test_factor_multiselect_sends_first_only(client, patient_row, api_head
 
     assert resp.status_code == 200, resp.text
     record = _posted_record(route)
-    assert record["le_1_rp_v2"] == "4"   # "16-20 years" -> 4
-    assert record["le_2_rp_v2"] == "2"   # first factor "Age" -> 2 (Tumor stage dropped)
+    assert record["le_1_rp_v2"] == "4"        # "16-20 years" -> 4
+    # Both selected factors are sent as checkbox options (Age -> 2, Tumor stage -> 5).
+    assert record["le_2_rp_v2___2"] == "1"
+    assert record["le_2_rp_v2___5"] == "1"
+    assert "le_2_rp_v2" not in record         # no plain radio field anymore
 
 
 @pytest.mark.integration
@@ -114,8 +117,8 @@ async def test_inc_domain_rename_in_payload(client, patient_row, api_headers, en
     record = _posted_record(route)
     # inc -> ui in REDCap; the dashboard-side "inc_*" names must not leak.
     assert record["ui_1_rp_v2"] == "20"
-    assert record["ui_2_rp_v2"] == "2"   # "6 months" -> 2
-    assert record["ui_3_rp_v2"] == "3"   # "Tumor stage" -> 3 (ed/inc/ius table)
+    assert record["ui_2_rp_v2"] == "2"        # "6 months" -> 2
+    assert record["ui_3_rp_v2___3"] == "1"    # "Tumor stage" -> 3 (ed/inc/ius table), checkbox option
     assert not any(k.startswith("inc_") for k in record)
 
 

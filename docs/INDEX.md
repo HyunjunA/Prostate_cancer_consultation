@@ -36,6 +36,7 @@ Top-level catalog of all docs under `docs/`. Updated 2026-04-28.
 | [`Frontend_REDCap_Field_Mapping.md`](features/Frontend_REDCap_Field_Mapping.md) | Frontend field → REDCap variable mapping. |
 | [`Concurrent_REDCap_API_Access_Management.md`](features/Concurrent_REDCap_API_Access_Management.md) | REDCap concurrent-access design. |
 | [`REDCap_Instruments_Fields_Documentation.md`](features/REDCap_Instruments_Fields_Documentation.md) | REDCap instruments and fields reference. |
+| [`REDCap_Factors_MultiSelect_Issue.md`](features/REDCap_Factors_MultiSelect_Issue.md) | Known issue + fix plan: first-visit "factors" multi-select saves only one value to REDCap (REDCap radio vs UI checkbox mismatch). |
 | [`REDCap_AI_Workflow_Ella.md`](features/REDCap_AI_Workflow_Ella.md) | AI workflow design context. |
 | [`redcap-dashboard-integration-idea.md`](features/redcap-dashboard-integration-idea.md) | Integration design notes. |
 | [`PATIENT_INTERFACE.md`](features/PATIENT_INTERFACE.md) | Patient page validation checklist. |
