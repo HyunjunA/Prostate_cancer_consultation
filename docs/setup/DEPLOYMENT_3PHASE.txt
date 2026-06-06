@@ -122,9 +122,12 @@
      TRANSCRIPTS_DIR     data/input
      OUTPUT_DIR          data/output
 
-   NOTE: the Phase 2 AI scoring substep does NOT read Azure creds from this file
-   -- it reads them from ai_pipeline/.env (see 2.5). The AZURE_OPENAI_* keys that
-   ship in this template are unused by the pipeline; leave them blank.
+   NOTE on AZURE_OPENAI_* here: the pipeline loads THIS root .env at startup, so
+   these keys feed the "AZURE_OPENAI_*: configured" startup check AND act as a
+   fallback for the AI scoring call. The AI substep then loads ai_pipeline/.env
+   with override=True (see 2.5), so ai_pipeline/.env WINS when it sets them.
+   Net: put the real Azure creds in at least one of the two -- ai_pipeline/.env
+   takes precedence; using the same values in both is simplest.
 
  ---------------------------------------------------------------------------
  2.4  ../AI_physician_patient_communication/nlp_classifier_server/gateway/.env

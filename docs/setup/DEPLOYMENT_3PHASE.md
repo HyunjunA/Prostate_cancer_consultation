@@ -53,7 +53,7 @@ Generate secrets with `openssl rand -hex 32` (API_KEY) / `-hex 16` (DB password)
 **Values that must match across files**
 - `API_KEY` : `app/Backend/.env` == `app/Webapp/.env` (mismatch ⇒ blank dashboard / "No patients found").
 - `DATABASE_URL` (+`_SYNC`, user/pw/db) : `app/Backend/.env` == AI repo `.env`.
-- `AZURE_OPENAI_*` : two **consumers** — `app/Backend/.env` (doctor Try & Score) and `ai_pipeline/.env` (Phase 2 AI substep). Each has its own file; use the same Azure resource. The AI substep reads **only** `ai_pipeline/.env` (not the AI repo root `.env`).
+- `AZURE_OPENAI_*` : two **consumers** — `app/Backend/.env` (doctor Try & Score) and the Phase 2 AI substep. Use the same Azure resource. Precedence for the Phase 2 AI call: `ai_pipeline/.env` **overrides** the AI repo root `.env` (loaded with `override=True`); the root `.env` is still read at startup (it feeds the "AZURE_OPENAI_*: configured" check) and acts as a **fallback**. Set the real creds in at least one — `ai_pipeline/.env` wins.
 
 > Full variable-by-variable walkthrough with copy-paste `cp` commands and the
 > exact expected script output is in the companion **`DEPLOYMENT_3PHASE.txt`**.
@@ -402,7 +402,7 @@ run-frontend-backend.sh  ==  run-webapp.sh (Phase 3)  +  run-backend.sh (Phase 1
 | Preflight `⚠ NLP container not running` | **Normal** in REMOTE mode — the dashboard does not need it. |
 | Phase 2 gateway returns 401 | `NLP_GATEWAY_API_KEY` missing/wrong in `nlp_classifier_server/gateway/.env`. |
 | Phase 2 ran but dashboard still empty | Transcripts not staged into AI repo `data/input/`, or the LOCAL container path was used. Re-stage and run via `run-pipeline-watch.sh`. |
-| Phase 2 finishes NLP but AI scores are null | `AZURE_OPENAI_*` not set in `ai_pipeline/.env` (the AI substep reads that file, **not** the AI repo root `.env`). |
+| Phase 2 finishes NLP but AI scores are null | `AZURE_OPENAI_*` not set where the AI call reads them. Precedence: `ai_pipeline/.env` overrides the AI repo root `.env` — set them in `ai_pipeline/.env` (or the root `.env`, which is the fallback). |
 | Doctor "Try & Score" returns 503 | `AZURE_OPENAI_*` placeholders not replaced in `app/Backend/.env`. |
 
 ## See also
