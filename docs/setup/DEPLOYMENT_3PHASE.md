@@ -35,6 +35,31 @@ each other — run either, both, or neither.
 
 ---
 
+## Environment variables (one-time, before Phase 0)
+
+There are **five** env files. Copy each `*.example` to its live name and fill in
+the values. The live files are **gitignored** — never commit real secrets.
+Generate secrets with `openssl rand -hex 32` (API_KEY) / `-hex 16` (DB password).
+
+| # | File | Holds | Key variables |
+|---|---|---|---|
+| 2.1 | `app/Backend/.env` | dashboard backend | `DATABASE_URL`(+`_SYNC`), `POSTGRES_PASSWORD` (!), `API_KEY` (!), `AZURE_OPENAI_*` (!) (Try & Score), `CORS_ORIGINS`, `REDCAP_*` (optional) |
+| 2.2 | `app/Webapp/.env` | webapp → backend | `NEXT_PUBLIC_API_URL=http://host.docker.internal:18000`, `API_KEY` (!) **must equal 2.1** |
+| 2.3 | AI repo `.env` | pipeline DB + local NLP | `DATABASE_URL`(+`_SYNC`) **same DB as 2.1**, `NLP_API_URL` (local only), `TRANSCRIPTS_DIR`, `OUTPUT_DIR` |
+| 2.4 | AI repo `nlp_classifier_server/gateway/.env` | Phase 2 gateway secret | `NLP_GATEWAY_API_KEY` (!) — auto-read by `run-pipeline-watch.sh` |
+| 2.5 | AI repo `ai_pipeline/.env` | Phase 2 AI substep Azure | `AZURE_OPENAI_ENDPOINT` (!), `AZURE_OPENAI_KEY` (!) — `config.yaml` loads this with `override=True` |
+| (+) | AI repo `config_remote.yaml` | gateway URL (in git) | `model_uri: "http://10.226.8.205:18080"` |
+
+**Values that must match across files**
+- `API_KEY` : `app/Backend/.env` == `app/Webapp/.env` (mismatch ⇒ blank dashboard / "No patients found").
+- `DATABASE_URL` (+`_SYNC`, user/pw/db) : `app/Backend/.env` == AI repo `.env`.
+- `AZURE_OPENAI_*` : two **consumers** — `app/Backend/.env` (doctor Try & Score) and `ai_pipeline/.env` (Phase 2 AI substep). Each has its own file; use the same Azure resource. The AI substep reads **only** `ai_pipeline/.env` (not the AI repo root `.env`).
+
+> Full variable-by-variable walkthrough with copy-paste `cp` commands and the
+> exact expected script output is in the companion **`DEPLOYMENT_3PHASE.txt`**.
+
+---
+
 ## Phase 0 — Fresh deployment (initial install / reset)
 
 Do this only for a **first install** or a deliberate **clean reset**. For a
@@ -92,6 +117,25 @@ bash app/Backend/scripts/setup-native-mac.sh            # macOS
 # Linux:
 sudo bash app/Backend/scripts/setup-native-linux.sh
 ```
+
+**Expected output** (abridged — a banner per step + a `✓` per item):
+```text
+=== Step 0: Detect environment
+  ✓ brew present at /opt/homebrew/bin/brew
+  ✓ Docker Desktop running
+=== Step 1: Install brew packages
+  ✓ postgresql@16 installed            (or "already installed")
+  ✓ set port = 5433 in postgresql.conf
+=== Step 2: Start postgresql@16 and redis services
+  ✓ postgresql@16 started               (or "already running")
+  ✓ redis started
+=== Step 3: Python venv + backend requirements
+  ✓ .venv created
+  ✓ Backend requirements installed (rpy2 NOT included — segmentation uses docker exec)
+  ✓ Dev requirements installed
+=== Setup complete
+```
+A `✗` line aborts the script — read it; it names the exact thing to fix.
 
 On a brand-new machine you also need the env files in place (preserved across a
 teardown) — see **`DEPLOYMENT_NATIVE.md`**: `app/Backend/.env`, `app/Webapp/.env`,
@@ -155,6 +199,29 @@ is a no-op — skip straight to 1-b.
 cd Prostate_cancer_consultation_dashboard
 bash app/Backend/scripts/init-db-native.sh    # -> empty DB + full schema (alembic head)
 ```
+
+**Expected output** (abridged — 6 steps, each a banner + `✓`):
+```text
+=== Step 0: Sanity checks
+  ✓ env loaded: db=prostatecancer_db_native user=prostatecancer_user host=localhost:5433
+=== Step 1: postgres reachability
+  ✓ postgres listening on localhost:5433
+=== Step 2: Pick bootstrap superuser
+  ✓ Using superuser: <your-os-user>
+=== Step 3: Create role + database
+  ✓ role 'prostatecancer_user' created        (or "already exists")
+  ✓ database 'prostatecancer_db_native' created
+=== Step 4: Confirm app-user connection
+  ✓ app credentials work
+=== Step 5a: Apply database_schema.sql
+  ✓ database_schema.sql applied
+=== Step 5b: alembic upgrade head
+  ✓ alembic upgrade head complete
+  ▸ Current alembic revision (after):  016 (head)
+=== Step 6: Verify schema
+  ✓ Schema has 19 tables (>= 19 expected)
+```
+
 > For a truly fresh DB, DROP it first — see Phase 0b. `init-db-native.sh` does
 > NOT drop an existing database.
 
@@ -171,6 +238,33 @@ bash app/Backend/scripts/run-backend.sh                 # foreground (Ctrl-C to 
 # detached (avoids idle SIGTERM in some shells / agents):
 nohup bash app/Backend/scripts/run-backend.sh > /tmp/backend.log 2>&1 & disown
 ```
+
+**Expected output** (abridged — preflight runs first, then the uvicorn banner):
+```text
+=== PostgreSQL reachability + auth
+  ✓ postgres listening on localhost:5433
+  ✓ postgres auth OK (prostatecancer_user@prostatecancer_db_native)
+=== Redis reachability
+  ✓ redis responds PONG
+=== NLP-classifiers container (Phase 2 only — soft check)
+  ⚠ NLP container 'prostatecancer-nlp-native' not running — dashboard will
+    start fine; Phase 2 runs need it.        <-- THIS WARNING IS NORMAL in
+                                                 REMOTE mode (no local container)
+=== Alembic migration check
+  ✓ alembic at head: 016...
+  ✓ preflight passed
+===============================================================
+  Backend FastAPI (native) starting
+===============================================================
+  host:     0.0.0.0
+  port:     18000
+  workers:  3
+  app:      main:app
+  Open: http://localhost:18000/docs
+INFO:     Uvicorn running on http://0.0.0.0:18000 (Press CTRL+C to quit)
+INFO:     Application startup complete.      <-- backend is ready
+```
+In detached mode the banner goes to `/tmp/backend.log` — watch it with `tail -f /tmp/backend.log`.
 
 **Verify**
 ```bash
@@ -204,6 +298,18 @@ bash scripts/run-pipeline-watch.sh --dir data/input # batch the current folder o
 # LOCAL container instead of the gateway:
 PIPELINE_REMOTE=0 bash scripts/run-pipeline-watch.sh
 ```
+
+**Expected output** (abridged — the wrapper prints its mode, then the pipeline runs):
+```text
+▸ Starting drop-folder WATCH mode (Ctrl-C to stop).
+  Drop .xlsx/.csv into data/input/ — each is processed and archived automatically.
+  Mode: REMOTE — config_remote.yaml (NLP via the server gateway; no local container).
+✓ NLP gateway:  http://10.226.8.205:18080
+Tokenizer: remote HTTP → http://10.226.8.205:18080/segment
+... per-file logs: segmentation -> classification -> AI scoring -> DB write ...
+```
+The `WATCH mode` banner prints even with `--dir`; with `--dir` it still processes
+`data/input` once and then exits rather than watching.
 
 **Prerequisites (REMOTE / gateway mode)**
 - `NLP_GATEWAY_API_KEY` set (auto-read from `nlp_classifier_server/gateway/.env`); otherwise the gateway returns 401.
@@ -246,6 +352,18 @@ bash app/Webapp/scripts/run-webapp.sh --build          # rebuild the image first
                                                        #   or the first run after a teardown removed it)
 ```
 
+**Expected output** (abridged):
+```text
+=== Building webapp image ===              (only with --build; ~5-10 min)
+=== Starting Docker (webapp only) ===
+  Waiting for webapp healthcheck (up to 60s) ...
+  ✓ webapp healthy
+  Webapp up:  http://localhost:3001
+  (Patient/doctor data needs the backend — Phase 1: bash app/Backend/scripts/run-backend.sh)
+```
+If you see `⚠ webapp not healthy yet` it usually still works — check
+`docker logs prostatecancer-webapp-native`.
+
 > After a full teardown the webapp Docker image is gone, so the **first** Phase 3
 > run must use `--build`. Subsequent runs can drop it (the image is reused).
 
@@ -274,6 +392,20 @@ webapp after a UI change, or run the backend with `--reload`).
 run-frontend-backend.sh  ==  run-webapp.sh (Phase 3)  +  run-backend.sh (Phase 1)
 ```
 
+## Troubleshooting (quick)
+
+| Symptom | Cause → Fix |
+|---|---|
+| "No patients found" / blank dashboard | `app/Webapp/.env` `API_KEY` ≠ `app/Backend/.env` `API_KEY`. Make them equal, restart Phase 3. |
+| Backend won't start: "Python venv missing" | Run Phase 0a (`setup-native-*.sh`) — it creates `.venv`. |
+| `init-db-native.sh`: "CHANGE_ME" error | `POSTGRES_PASSWORD` still a placeholder in `app/Backend/.env`. |
+| Preflight `⚠ NLP container not running` | **Normal** in REMOTE mode — the dashboard does not need it. |
+| Phase 2 gateway returns 401 | `NLP_GATEWAY_API_KEY` missing/wrong in `nlp_classifier_server/gateway/.env`. |
+| Phase 2 ran but dashboard still empty | Transcripts not staged into AI repo `data/input/`, or the LOCAL container path was used. Re-stage and run via `run-pipeline-watch.sh`. |
+| Phase 2 finishes NLP but AI scores are null | `AZURE_OPENAI_*` not set in `ai_pipeline/.env` (the AI substep reads that file, **not** the AI repo root `.env`). |
+| Doctor "Try & Score" returns 503 | `AZURE_OPENAI_*` placeholders not replaced in `app/Backend/.env`. |
+
 ## See also
+- `docs/setup/DEPLOYMENT_3PHASE.txt` — the copy-paste runbook twin of this guide (same phases, with per-variable env setup + expected script output inline).
 - `docs/setup/DEPLOYMENT_NATIVE.md` — full one-time setup + the bundled flow.
 - AI repo `nlp_classifier_server/README.md`, `DEPLOY.md` — operating the gateway server itself.
