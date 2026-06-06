@@ -9,6 +9,11 @@ extend-exclude = [
     ".venv",
     "archive",
     "migrations/versions",
+    # Standalone ops/CLI scripts relocated here from the repo-root scripts/
+    # dir (DB inspection, bootstrap). They use compact CLI idioms (e.g.
+    # semicolon-separated color constants) and were never in the app lint
+    # scope; keep them excluded so the move doesn't force a rewrite.
+    "scripts",
 ]
 
 [tool.ruff.lint]
