@@ -165,7 +165,8 @@ cat <<EOF
     3. bash scripts/run-frontend-backend.sh           # dashboard (Phase 1)
     4. Phase 2 — run from the sibling AI repo:
        cd ../AI_physician_patient_communication &&
-       ../Prostate_cancer_consultation_dashboard/.venv/bin/python \
-           main_complete_pipeline_db.py --dir data/input
+           bash scripts/run-pipeline-watch.sh --dir data/input
+       # REMOTE gateway is the default. Do NOT call main_complete_pipeline_db.py
+       # directly — that uses the LOCAL NLP container and bypasses the gateway.
 
 EOF

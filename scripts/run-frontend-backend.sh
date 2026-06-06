@@ -26,10 +26,11 @@
 #
 #  Process new transcripts (Phase 2 — separate command, run from the AI repo):
 #    cd ../AI_physician_patient_communication
-#    ../Prostate_cancer_consultation_dashboard/.venv/bin/python \
-#        main_complete_pipeline_db.py --dir data/input
+#    bash scripts/run-pipeline-watch.sh --dir data/input
+#    # REMOTE gateway is the default. Do NOT call main_complete_pipeline_db.py
+#    # directly — that uses the LOCAL NLP container and bypasses the gateway.
 #
-#  Reference: README.md "Quick Start — Native Deployment" (Phase 2 vs Phase 1)
+#  Reference: docs/setup/DEPLOYMENT_3PHASE.md (Phase 1 vs Phase 2 vs Phase 3)
 # ============================================================================
 set -euo pipefail
 

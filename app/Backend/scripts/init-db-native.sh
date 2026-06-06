@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-#  Native PostgreSQL bootstrap (Phase 2)
+#  Native PostgreSQL bootstrap (Phase 1-a: create DB + migrate to head)
 #
 #  - Creates the postgres role (if missing) and sets its password
 #  - Creates the database (if missing)
@@ -17,7 +17,7 @@
 #  Usage:
 #    bash app/Backend/scripts/init-db-native.sh
 #
-#  Reference: dev_docs/DEPLOYMENT_NATIVE_PLAN.md (Phase 2)
+#  Reference: docs/setup/DEPLOYMENT_3PHASE.md (Phase 1-a)
 # ============================================================================
 set -euo pipefail
 
@@ -227,9 +227,10 @@ cat <<EOF
 
   Next steps:
     bash scripts/run-frontend-backend.sh    # dashboard (Phase 1)
-    # Phase 2 — run from the sibling AI repo:
+    # Phase 2 — run from the sibling AI repo (REMOTE gateway is the default):
     cd ../AI_physician_patient_communication && \
-        ../Prostate_cancer_consultation_dashboard/.venv/bin/python \
-        main_complete_pipeline_db.py --dir data/input
+        bash scripts/run-pipeline-watch.sh --dir data/input
+    # Do NOT call main_complete_pipeline_db.py directly — that path uses the
+    # LOCAL NLP container (localhost:8888) and bypasses the gateway.
 
 EOF
