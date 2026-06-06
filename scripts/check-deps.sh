@@ -2,7 +2,7 @@
 # ============================================================================
 #  Native deployment — dependency checker (macOS + Linux)
 #
-#  Verifies every component installed by setup-native-{mac,linux}.sh and
+#  Verifies every component installed by app/Backend/scripts/setup-native-{mac,linux}.sh and
 #  the NLP-classifiers Docker container that segmentation.py relies on.
 #
 #  Usage:
@@ -157,14 +157,14 @@ if [[ "$FAIL_COUNT" -eq 0 ]]; then
     echo -e "  ${GREEN}${BOLD}PASS${RESET}  $PASS_COUNT/$TOTAL checks passed"
     echo ""
     echo "  Native environment is ready. Next:"
-    echo "    bash scripts/init-db-native.sh    # bootstrap database (if not done)"
+    echo "    bash app/Backend/scripts/init-db-native.sh    # bootstrap database (if not done)"
     echo "    bash scripts/run-frontend-backend.sh        # start everything"
     exit 0
 else
     echo -e "  ${RED}${BOLD}FAIL${RESET}  $PASS_COUNT/$TOTAL passed, $FAIL_COUNT failed"
     echo ""
     echo "  Re-run the appropriate setup script:"
-    echo "    bash scripts/setup-native-mac.sh   # macOS"
-    echo "    sudo bash scripts/setup-native-linux.sh   # Linux"
+    echo "    bash app/Backend/scripts/setup-native-mac.sh   # macOS"
+    echo "    sudo bash app/Backend/scripts/setup-native-linux.sh   # Linux"
     exit 1
 fi

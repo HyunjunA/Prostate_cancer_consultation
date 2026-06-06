@@ -149,14 +149,14 @@ cd ../AI_physician_patient_communication
 
 That entry point owns the NLP container lifecycle (loads the OCI image if missing, brings the container up via `docker-compose-ai-nlp-pipeline.yml`, waits for healthcheck) and orchestrates NLP + AI directly by calling AI repo's own modules. Files that already produced a row in `transcript_analysis_log` are still re-processed (no dedup yet — see Known Limitations).
 
-The dashboard's Phase 1 start scripts (`scripts/run-frontend-backend.sh`, `scripts/run-backend.sh`) no longer touch the pipeline or the NLP container — they only start the webapp and backend, which read the rows Phase 2 wrote.
+The dashboard's Phase 1 start scripts (`scripts/run-frontend-backend.sh`, `app/Backend/scripts/run-backend.sh`) no longer touch the pipeline or the NLP container — they only start the webapp and backend, which read the rows Phase 2 wrote.
 
 ### Verification
 
 ```bash
-.venv/bin/python scripts/verify_db.py                   # all analyses, all 7 checks
-.venv/bin/python scripts/verify_db.py --analysis-id 5   # one analysis
-.venv/bin/python scripts/show.py --patient-id SID_10    # detailed dump
+.venv/bin/python app/Backend/scripts/verify_db.py                   # all analyses, all 7 checks
+.venv/bin/python app/Backend/scripts/verify_db.py --analysis-id 5   # one analysis
+.venv/bin/python app/Backend/scripts/show.py --patient-id SID_10    # detailed dump
 ```
 
 Exit code 0 = pass.

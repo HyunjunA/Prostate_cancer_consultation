@@ -297,7 +297,7 @@ Network or 5xx errors surface through the hook's `error` state. The Submit butto
 
 The codebase uses Alembic (versions in `app/Backend/migrations/versions/`). The current head is `009_widen_llm_text_columns`. This work introduces `010_add_patient_first_visit_responses`.
 
-`database_schema.sql` is the **001 baseline** snapshot and is **not** edited for new work. Migrations 002–009 already evolve the schema past that snapshot; 010 continues the same pattern. The bootstrap script `scripts/init-db-native.sh` runs `database_schema.sql` first and then `alembic upgrade head`, so a fresh install applies the baseline plus every migration in order.
+`database_schema.sql` is the **001 baseline** snapshot and is **not** edited for new work. Migrations 002–009 already evolve the schema past that snapshot; 010 continues the same pattern. The bootstrap script `app/Backend/scripts/init-db-native.sh` runs `database_schema.sql` first and then `alembic upgrade head`, so a fresh install applies the baseline plus every migration in order.
 
 `upgrade()` creates the table and the index. `downgrade()` drops them. The integration test suite exercises both directions to keep the migration reversible.
 

@@ -12,8 +12,8 @@
 #  That avoids the R 4.5 + Apple clang 17 stringi compile bug entirely.
 #
 #  Usage:
-#    chmod +x scripts/setup-native-mac.sh
-#    bash scripts/setup-native-mac.sh
+#    chmod +x app/Backend/scripts/setup-native-mac.sh
+#    bash app/Backend/scripts/setup-native-mac.sh
 #
 #  Idempotent: re-running skips steps that are already done.
 #
@@ -22,7 +22,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# app/Backend/scripts/ -> repo root is THREE levels up.
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 BACKEND_DIR="$REPO_ROOT/app/Backend"
 VENV_DIR="$REPO_ROOT/.venv"
 
@@ -169,7 +170,7 @@ cat <<EOF
   Next steps:
     1. cp app/Backend/.env.example app/Backend/.env
        (then edit POSTGRES_PASSWORD, AZURE_OPENAI_*, API_KEY)
-    2. bash scripts/init-db-native.sh     # bootstrap database
+    2. bash app/Backend/scripts/init-db-native.sh     # bootstrap database
     3. bash scripts/run-frontend-backend.sh         # start dashboard (Phase 1)
     4. (separate terminal — Phase 2, run from the sibling AI repo)
        cd ../AI_physician_patient_communication &&

@@ -10,19 +10,20 @@
 #  Idempotent: safe to re-run.
 #
 #  Prerequisites:
-#    1. bash scripts/setup-native-mac.sh        (or setup-native-linux.sh)
+#    1. bash app/Backend/scripts/setup-native-mac.sh        (or setup-native-linux.sh)
 #    2. cp app/Backend/.env.example app/Backend/.env
 #       (then edit POSTGRES_PASSWORD etc.)
 #
 #  Usage:
-#    bash scripts/init-db-native.sh
+#    bash app/Backend/scripts/init-db-native.sh
 #
 #  Reference: dev_docs/DEPLOYMENT_NATIVE_PLAN.md (Phase 2)
 # ============================================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# This script lives in app/Backend/scripts/, so repo root is THREE levels up.
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 BACKEND_DIR="$REPO_ROOT/app/Backend"
 VENV_DIR="$REPO_ROOT/.venv"
 ENV_FILE="$BACKEND_DIR/.env"

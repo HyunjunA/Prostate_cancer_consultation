@@ -121,5 +121,6 @@ else
 fi
 
 # ── 2. Backend native (foreground) ──────────────────────────────────────────
+# run-backend.sh lives in app/Backend/scripts/ (backend-local), not scripts/.
 section "Starting native Backend"
-exec bash "$SCRIPT_DIR/run-backend.sh" ${BACKEND_ARGS[@]+"${BACKEND_ARGS[@]}"}
+exec bash "$REPO_ROOT/app/Backend/scripts/run-backend.sh" ${BACKEND_ARGS[@]+"${BACKEND_ARGS[@]}"}

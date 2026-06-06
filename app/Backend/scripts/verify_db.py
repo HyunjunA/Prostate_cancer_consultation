@@ -6,9 +6,9 @@ app/Backend/.env and runs the same 7 checks per analysis.
 
 Usage:
     source .venv/bin/activate
-    python scripts/verify_db.py
-    python scripts/verify_db.py --analysis-id 5
-    python scripts/verify_db.py --json
+    python app/Backend/scripts/verify_db.py
+    python app/Backend/scripts/verify_db.py --analysis-id 5
+    python app/Backend/scripts/verify_db.py --json
 
 Exits 0 on all-pass, 1 on any failure.
 
@@ -24,7 +24,7 @@ import os
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[3]  # file -> scripts -> Backend -> app -> repo root
 ENV_FILE = REPO_ROOT / "app" / "Backend" / ".env"
 
 # Load env BEFORE importing sqlalchemy (asyncpg URL must be set)

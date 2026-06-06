@@ -6,9 +6,9 @@ analysis (or one patient).
 
 Usage:
     source .venv/bin/activate
-    python scripts/show.py --analysis-id 5
-    python scripts/show.py --patient-id SID_10
-    python scripts/show.py --patient-id SID_10 --full
+    python app/Backend/scripts/show.py --analysis-id 5
+    python app/Backend/scripts/show.py --patient-id SID_10
+    python app/Backend/scripts/show.py --patient-id SID_10 --full
 
 Reference: dev_docs/DEPLOYMENT_NATIVE_PLAN.md (Phase 5)
 """
@@ -21,7 +21,7 @@ import os
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[3]  # file -> scripts -> Backend -> app -> repo root
 ENV_FILE = REPO_ROOT / "app" / "Backend" / ".env"
 
 try:

@@ -13,7 +13,7 @@
 #    4. Alembic migration check (auto-runs `upgrade head` if behind)
 #
 #  Usage:
-#    bash scripts/preflight-native.sh
+#    bash app/Backend/scripts/preflight-native.sh
 #
 #  Exits 0 on success, non-zero on hard failure.
 #
@@ -22,7 +22,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# This script lives in app/Backend/scripts/, so repo root is THREE levels up.
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 BACKEND_DIR="$REPO_ROOT/app/Backend"
 VENV_DIR="$REPO_ROOT/.venv"
 ENV_FILE="$BACKEND_DIR/.env"
@@ -42,7 +43,7 @@ fail()    { echo "  ✗ $1" >&2; exit 1; }
 
 # ── Step 0: Sanity ──────────────────────────────────────────────────────────
 [[ -f "$ENV_FILE" ]] || fail "$ENV_FILE not found — copy from .env.example"
-[[ -d "$VENV_DIR" ]] || fail "Python venv missing at $VENV_DIR — run setup-native-{mac,linux}.sh"
+[[ -d "$VENV_DIR" ]] || fail "Python venv missing at $VENV_DIR — run app/Backend/scripts/setup-native-{mac,linux}.sh"
 
 set -a
 # shellcheck disable=SC1090
@@ -70,7 +71,7 @@ fi
 ok "postgres listening on $POSTGRES_HOST:$POSTGRES_PORT"
 
 if ! PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT 1" >/dev/null 2>&1; then
-    fail "Cannot connect as $POSTGRES_USER@$POSTGRES_DB. Run scripts/init-db-native.sh first."
+    fail "Cannot connect as $POSTGRES_USER@$POSTGRES_DB. Run app/Backend/scripts/init-db-native.sh first."
 fi
 ok "postgres auth OK ($POSTGRES_USER@$POSTGRES_DB)"
 

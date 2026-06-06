@@ -4,7 +4,7 @@
 # This file owns ONLY the dashboard's read-time concerns: the Next.js
 # webapp container that browsers connect to. The native FastAPI backend,
 # PostgreSQL, and Redis run as host processes (see scripts/run-frontend-backend.sh
-# and scripts/setup-native-mac.sh).
+# and app/Backend/scripts/setup-native-mac.sh).
 #
 # What is intentionally NOT here:
 #   nlp-classifiers   The NLP classifier OCI is a write-time asset of the

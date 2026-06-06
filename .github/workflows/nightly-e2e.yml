@@ -158,7 +158,7 @@ jobs:
         # 12 base tables (auth_user, session_recording, transcript_*,
         # patient_summary, etc.) are defined in database_schema.sql,
         # which is applied by the postgres entrypoint in Docker mode
-        # and by scripts/init-db-native.sh in native mode. CI replicates
+        # and by app/Backend/scripts/init-db-native.sh in native mode. CI replicates
         # the native bootstrap order:
         #   1. Apply database_schema.sql via psql (creates 12 tables).
         #   2. `alembic stamp 001_baseline` so alembic knows the

@@ -210,12 +210,12 @@ runs skip the load).
 
 **macOS:**
 ```bash
-bash scripts/setup-native-mac.sh
+bash app/Backend/scripts/setup-native-mac.sh
 ```
 
 **Linux (Ubuntu/Debian):**
 ```bash
-sudo bash scripts/setup-native-linux.sh
+sudo bash app/Backend/scripts/setup-native-linux.sh
 ```
 
 Installs and starts:
@@ -331,7 +331,7 @@ OUTPUT_DIR=data/output
 ### 3. Bootstrap the database
 
 ```bash
-bash scripts/init-db-native.sh
+bash app/Backend/scripts/init-db-native.sh
 ```
 
 Creates the role + database, applies `app/Backend/database_schema.sql`,
@@ -389,8 +389,8 @@ What this does, in order:
    (`up -d --pull never` — runs the image you built above; the only
    service in that file is the Next.js webapp).
 2. Waits up to 60 s for the webapp's healthcheck.
-3. Runs `scripts/preflight-native.sh` — verifies postgres auth, alembic at head, redis ping. You can also run it any time on its own with `bash scripts/preflight-native.sh`.
-4. Execs `scripts/run-backend.sh`, which starts uvicorn against `main:app` on `0.0.0.0:18000` in the foreground.
+3. Runs `app/Backend/scripts/preflight-native.sh` — verifies postgres auth, alembic at head, redis ping. You can also run it any time on its own with `bash app/Backend/scripts/preflight-native.sh`.
+4. Execs `app/Backend/scripts/run-backend.sh`, which starts uvicorn against `main:app` on `0.0.0.0:18000` in the foreground.
 
 Then open in a browser:
 
@@ -448,7 +448,7 @@ later — writing each to PostgreSQL and archiving it (`data/input/` →
 ```bash
 cd ../AI_physician_patient_communication
 
-bash run-pipeline-watch.sh            # REMOTE by default (NLP via server gateway); add --skip-ai for NLP-only
+bash scripts/run-pipeline-watch.sh   # REMOTE by default (NLP via server gateway); add --skip-ai for NLP-only
 ```
 
 **`run-pipeline-watch.sh` now defaults to REMOTE mode** — it launches
@@ -467,7 +467,7 @@ opt-in via `PIPELINE_REMOTE=0`:
 
 ```bash
 cd ../AI_physician_patient_communication
-PIPELINE_REMOTE=0 bash run-pipeline-watch.sh        # NLP via the local container
+PIPELINE_REMOTE=0 bash scripts/run-pipeline-watch.sh   # NLP via the local container
 ```
 
 It reuses the dashboard venv automatically (override with `PIPELINE_PYTHON=...`).
@@ -475,6 +475,13 @@ It reuses the dashboard venv automatically (override with `PIPELINE_PYTHON=...`)
 **One-shot — process the whole folder, then exit.** Every `.xlsx`/`.csv` in
 `data/input/`, in sorted order; a failure on one file is logged and the run
 continues with the next:
+
+> ⚠️ **Local mode — bypasses the gateway.** These `main_complete_pipeline_db.py`
+> one-shots (`--dir` / `--file`) use `NLP_API_URL` (the **local** NLP container,
+> `localhost:8888`) and do **not** go through the remote server gateway
+> (`config_remote.yaml`'s `model_uri`). To run the same one-shot via the gateway,
+> use the REMOTE-default wrapper and pass the flag through it:
+> `bash scripts/run-pipeline-watch.sh --dir data/input` (or `--file <path>`).
 
 ```bash
 cd ../AI_physician_patient_communication
@@ -532,9 +539,9 @@ back first):
 
 ```bash
 cd /path/to/Prostate_cancer_consultation_dashboard
-.venv/bin/python scripts/verify_db.py                   # all analyses
-.venv/bin/python scripts/verify_db.py --analysis-id 5   # one analysis
-.venv/bin/python scripts/verify_db.py --json            # machine-readable
+.venv/bin/python app/Backend/scripts/verify_db.py                   # all analyses
+.venv/bin/python app/Backend/scripts/verify_db.py --analysis-id 5   # one analysis
+.venv/bin/python app/Backend/scripts/verify_db.py --json            # machine-readable
 ```
 
 Exit code 0 = all 7 checks pass per analysis. Exit 1 on any failure.
@@ -544,8 +551,8 @@ Exit code 0 = all 7 checks pass per analysis. Exit 1 on any failure.
 Also run from the dashboard repo root:
 
 ```bash
-.venv/bin/python scripts/show.py --analysis-id 5
-.venv/bin/python scripts/show.py --patient-id SID_10
+.venv/bin/python app/Backend/scripts/show.py --analysis-id 5
+.venv/bin/python app/Backend/scripts/show.py --patient-id SID_10
 ```
 
 Dumps every NLP + AI stage with sample rows.
@@ -582,7 +589,7 @@ docker compose -f docker-compose-ai-nlp-pipeline.yml down
 | Phase 1 start fails: webapp won't start / "image not found" / `pull access denied` | Webapp image was never built — `run-frontend-backend.sh` uses `up -d --pull never` and does **not** build it | `docker compose -f docker-compose-frontend.yml build webapp`, then re-run (see Phase 1 → Start the dashboard) |
 | Webapp loads but UI shows "No patients found" | webapp container booted with empty `API_KEY` (compose interpolated `${API_KEY}` to empty) | confirm `.env` is sourced before `docker compose up`; `run-frontend-backend.sh` does this automatically |
 | Standalone script: `No module named 'greenlet'` | sqlalchemy async lazy-imports greenlet | `.venv/bin/pip install greenlet` (already pinned in requirements.txt as of `1e3de47`) |
-| Webapp UI shows "No patients found" AND `curl /health` returns 500 AND `curl /docs` returns 200 | uvicorn workers have a stale module cache — sqlalchemy registered `_not_implemented` for greenlet at module-load time (before `pip install greenlet`). The pip install only helps brand-new Python processes; running workers keep the failed resolution. | **Restart uvicorn** (Ctrl-C the foreground process, then `bash scripts/run-backend.sh` again). General rule: after **any** `pip install` / `pip upgrade` against a venv whose uvicorn is already running, restart all workers. Pinning deps in `requirements.txt` prevents this scenario for fresh setups. |
+| Webapp UI shows "No patients found" AND `curl /health` returns 500 AND `curl /docs` returns 200 | uvicorn workers have a stale module cache — sqlalchemy registered `_not_implemented` for greenlet at module-load time (before `pip install greenlet`). The pip install only helps brand-new Python processes; running workers keep the failed resolution. | **Restart uvicorn** (Ctrl-C the foreground process, then `bash app/Backend/scripts/run-backend.sh` again). General rule: after **any** `pip install` / `pip upgrade` against a venv whose uvicorn is already running, restart all workers. Pinning deps in `requirements.txt` prevents this scenario for fresh setups. |
 | `kill <pid>` does not terminate a uvicorn process | The process is uninterruptible (stuck in a C extension or ignoring SIGTERM — observed for orphaned `--workers 1` instances) | `kill -9 <pid>` (SIGKILL). Confirm with `ps aux \| grep uvicorn` afterwards. |
 | Pipeline standalone: `pred_*` columns NULL | should be impossible after migration 006 + the persistence.py fix | open an issue with the offending analysis_id |
 

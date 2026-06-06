@@ -35,9 +35,9 @@ Three components are **independently restartable** (per the 2026-04-24 architect
 
 | Path | Contents |
 |---|---|
-| `app/Backend/` | FastAPI app, SQLAlchemy models, persistence modules, migrations |
-| `app/Webapp/` | Next.js 13 frontend (App Router) |
-| `scripts/` | `run-frontend-backend.sh`, `run-backend.sh`, `init-db-native.sh`, `setup-native-{mac,linux}.sh`, etc. (no in-repo pipeline runner — the Phase 2 entry point lives in the sibling AI repo) |
+| `app/Backend/` | FastAPI app, SQLAlchemy models, persistence modules, migrations; `app/Backend/scripts/` — backend / DB / native-setup ops: `setup-native-{mac,linux}.sh` (one-time stack provisioning), `init-db-native.sh` (DB bootstrap), `preflight-native.sh` (DB/redis/alembic check), `run-backend.sh` (Phase 1 launcher), `verify_db.py`, `show.py` |
+| `app/Webapp/` | Next.js 13 frontend (App Router); `app/Webapp/scripts/run-webapp.sh` (Phase 3 webapp launcher) |
+| `scripts/` | repo-level ops: `run-frontend-backend.sh` (Phase 1+3 bundle), `check-deps.sh`, `check-connections.sh`, `install-hooks.sh`, `run-docker.sh`, etc. (backend/DB/setup scripts under `app/Backend/scripts/`; webapp launcher under `app/Webapp/scripts/`; the Phase 2 pipeline runner in the sibling AI repo) |
 | `docs/` | This documentation |
 | `dev_docs/` | Internal development notes (mostly Korean) |
 | `meeting_notes/` | Meeting records (parent folder, project-wide) |

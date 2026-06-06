@@ -1,28 +1,48 @@
 #!/usr/bin/env bash
 # ============================================================================
-#  Backend FastAPI native launcher (Phase 3)
+#  run-backend.sh — Backend API launcher  (Phase 1: DB + Backend)
 #
-#  Runs the FastAPI backend as a native uvicorn process against the
-#  native PostgreSQL + Redis (and the still-Docker NLP-classifiers).
-#  No prestart.sh, no Docker for the backend itself.
+#  WHAT IT DOES
+#    Starts the FastAPI backend as a NATIVE uvicorn process (no Docker for the
+#    backend itself) on http://localhost:18000. This is the API the webapp
+#    (Phase 3) proxies every request to, and it reads/writes the same native
+#    PostgreSQL that the transcript pipeline (Phase 2) populates.
 #
-#  Steps:
-#    1. Source the venv
-#    2. Load app/Backend/.env into the environment
-#    3. Run scripts/preflight-native.sh (ICU, DB, redis, alembic)
-#    4. exec uvicorn (or gunicorn in production-like mode)
+#  WHAT IT DOES *NOT* TOUCH
+#    Only the backend. It does NOT start the webapp container, the NLP
+#    classifier, Postgres, or Redis. Postgres + Redis are expected to already
+#    be running (native brew services); the webapp is Phase 3 (run-webapp.sh);
+#    the NLP classifier is a Phase-2 concern of the sibling AI repo. The
+#    dashboard backend never calls the NLP classifier at request time.
 #
-#  Usage:
-#    bash scripts/run-backend.sh                # foreground (Ctrl-C to stop)
-#    bash scripts/run-backend.sh --reload       # dev: auto-reload on file change
-#    bash scripts/run-backend.sh --workers 4    # multi-worker (default 3)
+#  STEPS, IN ORDER
+#    1. Put postgres@16's bin on PATH (it is keg-only on macOS) so the
+#       preflight check's psql / pg_isready work.
+#    2. Load app/Backend/.env (DB URL, Azure keys, port, ...).
+#    3. Activate the Python venv, and add the sibling AI repo to PYTHONPATH so
+#       the doctor "Try & Score" / "AI Rewrite" routes can import ai_pipeline.*.
+#    4. Run preflight-native.sh — verify Postgres auth, alembic at head, redis.
+#    5. exec uvicorn main:app on :18000 (foreground; Ctrl-C to stop).
 #
-#  Reference: dev_docs/DEPLOYMENT_NATIVE_PLAN.md (Phase 3)
+#  THREE-PHASE NATIVE DEPLOYMENT (each phase runs on its own)
+#    Phase 1 (DB + Backend):  bash app/Backend/scripts/run-backend.sh        # :18000  <- this
+#    Phase 2 (Transcripts):   cd ../AI_physician_patient_communication \
+#                                  && bash scripts/run-pipeline-watch.sh  # NLP+AI -> DB
+#    Phase 3 (Webapp):        bash app/Webapp/scripts/run-webapp.sh         # :3001
+#
+#  USAGE
+#    bash app/Backend/scripts/run-backend.sh                # foreground (Ctrl-C to stop)
+#    bash app/Backend/scripts/run-backend.sh --reload       # dev: auto-reload on file change
+#    bash app/Backend/scripts/run-backend.sh --workers 4    # multi-worker (default 3)
+#    # long-running / detached (avoids idle SIGTERM in some shells):
+#    nohup bash app/Backend/scripts/run-backend.sh > /tmp/backend.log 2>&1 & disown
 # ============================================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# This script lives in app/Backend/scripts/, so the repo root is THREE levels
+# up (scripts/ -> app/Backend/ -> app/ -> repo root).
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 BACKEND_DIR="$REPO_ROOT/app/Backend"
 VENV_DIR="$REPO_ROOT/.venv"
 ENV_FILE="$BACKEND_DIR/.env"
@@ -71,7 +91,7 @@ done
 
 # ── Sanity ──────────────────────────────────────────────────────────────────
 [[ -f "$ENV_FILE" ]] || { echo "✗ $ENV_FILE not found — copy from .env.example" >&2; exit 1; }
-[[ -d "$VENV_DIR" ]] || { echo "✗ Python venv missing at $VENV_DIR — run setup-native-{mac,linux}.sh" >&2; exit 1; }
+[[ -d "$VENV_DIR" ]] || { echo "✗ Python venv missing at $VENV_DIR — run app/Backend/scripts/setup-native-{mac,linux}.sh" >&2; exit 1; }
 
 # ── Load env (POSTGRES_*, AZURE_*, NLP_API_URL, PORT, ...) ──────────────────
 set -a
@@ -99,6 +119,7 @@ if [[ -d "$AI_REPO_DIR" ]]; then
 fi
 
 # ── Preflight ───────────────────────────────────────────────────────────────
+# preflight-native.sh now lives alongside this script in app/Backend/scripts/.
 bash "$SCRIPT_DIR/preflight-native.sh"
 
 # ── Launch ──────────────────────────────────────────────────────────────────
