@@ -899,6 +899,8 @@ interface TopicCardProps {
     score: number | null;
     is_in_summary: boolean;
   }>;
+  /** [DEBUG] domain-level ai_scores (0–5) as stored — one entry per row/treatment. */
+  aiScores?: Array<number | null>;
   aiSourceSentence?: string;  // original sentence used to generate AI Summary
   aiSourceContext?: string | null;  // surrounding context with <main>...</main> around the focus sentence
   // [V39] one entry per treatment (side-effect domains) so every supporting
@@ -911,6 +913,21 @@ interface TopicCardProps {
   onToggleExpand: () => void;
   showEvidence: boolean;
   onToggleEvidence: () => void;
+  // [V40] Sub-domain (treatment) breakdown. When a domain has >= 2 distinct
+  // treatments, the card renders one section per treatment — each with its
+  // own ai_score and its own "View relevant sentences" toggle. The
+  // AI-Generated Summary stays domain-level (it is stored identically on
+  // every treatment row). Domains with 0-1 treatments keep the single layout
+  // and ignore these props.
+  aiSubDomains?: Array<{
+    treatment: string | null;
+    aiScore: number | null;
+    sources: Array<{ sentence: string | null; context: string | null }>;
+  }>;
+  // Per-treatment evidence toggle state/handler, keyed by treatment in the
+  // parent so each sub-domain's "relevant sentences" opens independently.
+  isSubEvidenceShown?: (treatment: string | null) => boolean;
+  onToggleSubEvidence?: (treatment: string | null) => void;
   isSubmitted: boolean;
   onSubmit: () => void;
   /**
@@ -952,11 +969,54 @@ interface TopicCardProps {
   trackScreen?: string;
 }
 
+// [V40] Renders one source sentence with the <main>...</main> focus-sentence
+// highlight. Extracted so the per-sub-domain evidence sections reuse the exact
+// same highlight treatment as the single-domain evidence list above.
+const SourceQuote: React.FC<{
+  sentence: string | null;
+  context: string | null;
+  isDark: boolean;
+}> = ({ sentence, context, isDark }) => (
+  <p
+    className={cx(
+      "text-sm leading-relaxed italic",
+      isDark ? "text-slate-300" : "text-gray-600",
+    )}
+  >
+    &ldquo;
+    {context && context.includes("<main>") ? (
+      <>
+        {context.split("<main>").map((part, pidx) => {
+          if (pidx === 0) return <span key={pidx}>{part}</span>;
+          const [highlighted, rest] = part.split("</main>");
+          return (
+            <span key={pidx}>
+              <span
+                className={cx(
+                  "font-bold underline",
+                  isDark ? "text-cyan-300" : "text-cyan-700",
+                )}
+              >
+                {highlighted}
+              </span>
+              {rest}
+            </span>
+          );
+        })}
+      </>
+    ) : (
+      sentence
+    )}
+    &rdquo;
+  </p>
+);
+
 const TopicCard: React.FC<TopicCardProps> = ({
   topicName,
   topicIndex,
   aiSummary,
   extractedSentences,
+  aiScores,
   aiSourceSentence,
   aiSourceContext,
   aiSources,
@@ -966,6 +1026,9 @@ const TopicCard: React.FC<TopicCardProps> = ({
   onToggleExpand,
   showEvidence,
   onToggleEvidence,
+  aiSubDomains,
+  isSubEvidenceShown,
+  onToggleSubEvidence,
   isSubmitted,
   onSubmit,
   showQuestions = true,
@@ -983,6 +1046,19 @@ const TopicCard: React.FC<TopicCardProps> = ({
 }) => {
   const topicId = topicName.replace(/\s+/g, "");
   const colors = TOPIC_COLORS[topicName] || TOPIC_COLORS["Cancer Prognosis"];
+
+  // [V40] A domain is rendered per sub-domain only when it has >= 2 distinct
+  // treatments (e.g. ED = radiation + surgery). 0-1 treatments (cp/le, or a
+  // side-effect domain with a single treatment) keep the single-domain layout.
+  const hasSubDomains = (aiSubDomains?.length ?? 0) >= 2;
+
+  // [V40 / feedback #1] Single-domain card (cp/le or a single-treatment domain):
+  // "not discussed" when the (single) treatment's ai_score === 0. Mirrors the
+  // per-sub-domain rule. null / score > 0 behave normally.
+  const singleNotDiscussed =
+    !hasSubDomains &&
+    (aiSubDomains?.length ?? 0) >= 1 &&
+    (aiSubDomains ?? []).every((s) => s.aiScore === 0);
 
   // [V38] Slider-interaction tracking. Each `slider_moved` event records one
   // settled value the patient committed: its slider_name, the value, and (via
@@ -1459,19 +1535,173 @@ const TopicCard: React.FC<TopicCardProps> = ({
             )}
           </div>
 
+          {/* [V40] Sub-domain (treatment) sections — rendered only when the
+              domain has >= 2 distinct treatments (e.g. ED = radiation +
+              surgery). The domain-level AI-Generated Summary above stays
+              shared; each treatment gets its own ai_score and its own
+              "View relevant sentences" toggle. */}
+          {hasSubDomains && (
+            <div className="mb-6 space-y-4">
+              {(aiSubDomains ?? []).map((sub, subIdx) => {
+                // Real treatment -> show its name as a header. "<missing>" ->
+                // the AI found a relevant sentence but could NOT tie it to a
+                // specific treatment; show an explanatory note instead of a
+                // misleading badge. (null treatments do not reach here, since a
+                // multi-treatment domain has named treatments.)
+                const treatmentLabel =
+                  sub.treatment && sub.treatment !== "<missing>"
+                    ? sub.treatment
+                    : null;
+                const isUnspecifiedTreatment = sub.treatment === "<missing>";
+                const subShown = isSubEvidenceShown?.(sub.treatment) || false;
+                // [V40 / feedback #1] ai_score === 0 means the doctor did not
+                // discuss this treatment, so its supporting sentences are
+                // unrelated to the topic and must NOT be shown. The toggle is
+                // disabled and replaced with a "not discussed" note. null /
+                // score > 0 behave normally.
+                const subNotDiscussed = sub.aiScore === 0;
+                return (
+                  <div
+                    key={subIdx}
+                    className={cx(
+                      "p-3 sm:p-4 rounded-xl border",
+                      isDark
+                        ? "bg-slate-800/40 border-slate-700"
+                        : "bg-white border-gray-200 shadow-sm",
+                    )}
+                  >
+                    {/* Sub-domain header: treatment name. The internal ai_score
+                        is NOT shown to the patient; it only drives the score=0
+                        "not discussed" disable below. */}
+                    {treatmentLabel ? (
+                      <p
+                        className={cx(
+                          "mb-3 text-xs font-bold uppercase tracking-wide",
+                          isDark ? "text-violet-300" : "text-violet-700",
+                        )}
+                      >
+                        {treatmentLabel}
+                      </p>
+                    ) : isUnspecifiedTreatment ? (
+                      <p
+                        className={cx(
+                          "mb-3 text-xs italic",
+                          isDark ? "text-slate-500" : "text-gray-400",
+                        )}
+                      >
+                        No specific treatment identified
+                      </p>
+                    ) : null}
+
+                    {/* Per-treatment "View relevant sentences" toggle.
+                        Disabled (greyed, non-clickable) when ai_score === 0. */}
+                    <button
+                      type="button"
+                      disabled={subNotDiscussed}
+                      onClick={
+                        subNotDiscussed
+                          ? undefined
+                          : () => onToggleSubEvidence?.(sub.treatment)
+                      }
+                      aria-disabled={subNotDiscussed}
+                      data-track-proximity={`EvidenceToggle_${topicId}_${subIdx}`}
+                      className={cx(
+                        "w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200",
+                        subNotDiscussed
+                          ? isDark
+                            ? "bg-slate-800/40 text-slate-600 border border-slate-800 cursor-not-allowed"
+                            : "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed"
+                          : isDark
+                            ? "bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700"
+                            : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200 shadow-sm hover:shadow",
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <MessageSquareText size={16} className="opacity-70" />
+                        <span>
+                          {subShown ? "Hide" : "View"} relevant sentences from
+                          your visit
+                        </span>
+                      </div>
+                      {subNotDiscussed ? null : subShown ? (
+                        <ChevronUp size={16} />
+                      ) : (
+                        <ChevronDown size={16} />
+                      )}
+                    </button>
+
+                    {subNotDiscussed ? (
+                      <p
+                        className={cx(
+                          "mt-2 flex items-center gap-1.5 px-1 text-xs",
+                          isDark ? "text-slate-500" : "text-gray-400",
+                        )}
+                      >
+                        <Info size={13} className="shrink-0" />
+                        This topic was not discussed in your visit.
+                      </p>
+                    ) : (
+                      subShown && (
+                        <div className="mt-3 space-y-3">
+                          {sub.sources.length > 0 ? (
+                            sub.sources.map((src, sidx) => (
+                              <div
+                                key={sidx}
+                                className={cx(
+                                  "p-4 rounded-xl border-l-4 transition-all duration-200",
+                                  isDark
+                                    ? "bg-indigo-900/20 border-l-violet-500 border-y border-r border-violet-700/30"
+                                    : "bg-violet-50/50 border-l-violet-500 border-y border-r border-violet-200",
+                                )}
+                              >
+                                <SourceQuote
+                                  sentence={src.sentence}
+                                  context={src.context}
+                                  isDark={isDark ?? false}
+                                />
+                              </div>
+                            ))
+                          ) : (
+                            <p
+                              className={cx(
+                                "text-sm italic px-1",
+                                isDark ? "text-slate-500" : "text-gray-400",
+                              )}
+                            >
+                              No relevant sentences were recorded for this
+                              treatment.
+                            </p>
+                          )}
+                        </div>
+                      )
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {/* [V38] Relevant sentences toggle — moved here (directly under
               the AI summary toggle) per the 2026-05-21 layout request, so
-              both review panels sit together above the questions. */}
+              both review panels sit together above the questions. Single-
+              domain layout: cp/le and single-treatment side-effect domains. */}
+          {!hasSubDomains && (
           <div className="mb-6">
             <button
               type="button"
-              onClick={onToggleEvidence}
+              disabled={singleNotDiscussed}
+              onClick={singleNotDiscussed ? undefined : onToggleEvidence}
+              aria-disabled={singleNotDiscussed}
               data-track-proximity={`EvidenceToggle_${topicId}`}
               className={cx(
                 "w-full flex items-center justify-between gap-2 px-3 py-3 sm:px-4 sm:py-3.5 lg:px-5 lg:py-4 rounded-xl text-sm font-semibold transition-all duration-200",
-                isDark
-                  ? "bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700"
-                  : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200 shadow-sm hover:shadow",
+                singleNotDiscussed
+                  ? isDark
+                    ? "bg-slate-800/40 text-slate-600 border border-slate-800 cursor-not-allowed"
+                    : "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed"
+                  : isDark
+                    ? "bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700"
+                    : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200 shadow-sm hover:shadow",
               )}
             >
               <div className="flex items-center gap-2">
@@ -1481,14 +1711,24 @@ const TopicCard: React.FC<TopicCardProps> = ({
                   your visit
                 </span>
               </div>
-              {showEvidence ? (
+              {singleNotDiscussed ? null : showEvidence ? (
                 <ChevronUp size={16} />
               ) : (
                 <ChevronDown size={16} />
               )}
             </button>
 
-            {showEvidence && (
+            {singleNotDiscussed ? (
+              <p
+                className={cx(
+                  "mt-2 flex items-center gap-1.5 px-1 text-xs",
+                  isDark ? "text-slate-500" : "text-gray-400",
+                )}
+              >
+                <Info size={13} className="shrink-0" />
+                This topic was not discussed in your visit.
+              </p>
+            ) : showEvidence ? (
               <div
                 data-track-proximity={`EvidenceContent_${topicId}`}
                 className="mt-4 space-y-3"
@@ -1641,8 +1881,9 @@ const TopicCard: React.FC<TopicCardProps> = ({
                   </div>
                 )}
               </div>
-            )}
+            ) : null}
           </div>
+          )}
 
           {/* [V37] Cancer Prognosis — Experimental arm sub-questions
               Sits directly under the AI Summary so the wording
@@ -3427,6 +3668,8 @@ const PatientReportFirstVisitV40: React.FC<PatientReportProps> = ({
     aiSourceByTopic,
     aiSourceContextByTopic,
     aiSourceListByTopic,
+    aiScoreListByTopic,
+    aiSubDomainsByTopic,
   } = useMemo(() => {
     const summaryMap: Record<string, string> = {};
     // [V39] track reformat text already added per topic, so identical
@@ -3439,6 +3682,20 @@ const PatientReportFirstVisitV40: React.FC<PatientReportProps> = ({
       string,
       Array<{ treatment: string | null; sentence: string | null; context: string | null }>
     > = {};
+    // [DEBUG] every row's ai_score per topic, as stored (one per treatment row).
+    const scoreListMap: Record<string, Array<number | null>> = {};
+    // [V40] Sub-domain (treatment) grouping. Rows are grouped by treatment so a
+    // domain with >= 2 distinct treatments can be shown per sub-domain, each
+    // with its own ai_score and its own source sentences. Insertion order of
+    // treatments is preserved; historical duplicate rows are de-duplicated.
+    const subDomainMap: Record<
+      string,
+      Array<{
+        treatment: string | null;
+        aiScore: number | null;
+        sources: Array<{ sentence: string | null; context: string | null }>;
+      }>
+    > = {};
     if (aiSummaryData?.domains) {
       const domainToTopic: Record<string, string> = {
         "Cancer Prognosis": "Cancer Prognosis",
@@ -3449,6 +3706,32 @@ const PatientReportFirstVisitV40: React.FC<PatientReportProps> = ({
       };
       for (const d of aiSummaryData.domains) {
         const topic = domainToTopic[d.domain_name] || d.domain_name;
+        // [DEBUG] collect this row's ai_score as-is (one entry per row/treatment).
+        if (!scoreListMap[topic]) scoreListMap[topic] = [];
+        scoreListMap[topic].push(d.ai_score ?? null);
+        // [V40] group this row under its treatment (sub-domain).
+        {
+          const treatment: string | null = d.treatment ?? null;
+          const tKey = treatment ?? "<null>";
+          if (!subDomainMap[topic]) subDomainMap[topic] = [];
+          let sub = subDomainMap[topic].find(
+            (s) => (s.treatment ?? "<null>") === tKey,
+          );
+          if (!sub) {
+            sub = { treatment, aiScore: d.ai_score ?? null, sources: [] };
+            subDomainMap[topic].push(sub);
+          } else if (sub.aiScore === null && d.ai_score != null) {
+            sub.aiScore = d.ai_score;
+          }
+          if (d.source_sentence || d.source_context) {
+            const sentence: string | null = d.source_sentence ?? null;
+            const context: string | null = d.source_context ?? null;
+            const dup = sub.sources.some(
+              (x) => x.sentence === sentence && x.context === context,
+            );
+            if (!dup) sub.sources.push({ sentence, context });
+          }
+        }
         // [V39] Fix 1 — summary: the AI stores ONE domain-level reformat
         // duplicated on every treatment row. Append only DISTINCT text so the
         // panel shows it once. (If a domain ever produced genuinely different
@@ -3487,6 +3770,8 @@ const PatientReportFirstVisitV40: React.FC<PatientReportProps> = ({
       aiSourceByTopic: sourceMap,
       aiSourceContextByTopic: sourceCtxMap,
       aiSourceListByTopic: sourceListMap,
+      aiScoreListByTopic: scoreListMap,
+      aiSubDomainsByTopic: subDomainMap,
     };
   }, [aiSummaryData]);
 
@@ -3498,6 +3783,8 @@ const PatientReportFirstVisitV40: React.FC<PatientReportProps> = ({
       string,
       {
         aiSummary: string;
+        aiScores: Array<number | null>;
+        aiSubDomains: Array<{ treatment: string | null; aiScore: number | null; sources: Array<{ sentence: string | null; context: string | null }> }>;
         aiSourceContext: string | null;
         aiSourceList: Array<{ treatment: string | null; sentence: string | null; context: string | null }>;
         extractedSentences: Array<{sentence: string; context: string | null; pred_score: number; score: number | null; is_in_summary: boolean}>;
@@ -3512,6 +3799,8 @@ const PatientReportFirstVisitV40: React.FC<PatientReportProps> = ({
           const aiText = aiSummaryByTopic[topicName];
           topics[topicName] = {
             aiSummary: aiText || cls.summary || "Summary not available.",
+            aiScores: aiScoreListByTopic[topicName] || [],
+            aiSubDomains: aiSubDomainsByTopic[topicName] || [],
             aiSourceContext: aiSourceContextByTopic[topicName] ?? null,
             aiSourceList: aiSourceListByTopic[topicName] || [],
             extractedSentences: evidenceSentences[topicName] || [],
@@ -3525,6 +3814,8 @@ const PatientReportFirstVisitV40: React.FC<PatientReportProps> = ({
         const aiText = aiSummaryByTopic[topic];
         topics[topic] = {
           aiSummary: aiText || "Summary not available for this topic.",
+          aiScores: aiScoreListByTopic[topic] || [],
+          aiSubDomains: aiSubDomainsByTopic[topic] || [],
           aiSourceContext: aiSourceContextByTopic[topic] ?? null,
           aiSourceList: aiSourceListByTopic[topic] || [],
           extractedSentences: evidenceSentences[topic] || [],
@@ -3533,7 +3824,7 @@ const PatientReportFirstVisitV40: React.FC<PatientReportProps> = ({
     });
 
     return topics;
-  }, [summaryData, evidenceSentences, aiSummaryByTopic, aiSourceContextByTopic, aiSourceListByTopic]);
+  }, [summaryData, evidenceSentences, aiSummaryByTopic, aiSourceContextByTopic, aiSourceListByTopic, aiScoreListByTopic, aiSubDomainsByTopic]);
 
   // Event Handlers
 
@@ -3603,24 +3894,33 @@ const PatientReportFirstVisitV40: React.FC<PatientReportProps> = ({
    * - No click → Summary alone was likely sufficient
    * - Click → User likely wanted to verify/supplement the summary
    */
-  const handleToggleEvidence = (topic: string) => {
-    const isCurrentlyShown = showEvidenceStates[topic];
-    setShowEvidenceStates((prev) => ({ ...prev, [topic]: !prev[topic] }));
+  const handleToggleEvidence = (key: string) => {
+    // [V40] `key` is either a plain topic (single-domain card) or a compound
+    // `topic::treatment` key (one per sub-domain). State is stored under the
+    // full key so each sub-domain toggles independently; tracking resolves the
+    // base topic so the domain/dimension fields stay correct.
+    const sep = key.indexOf("::");
+    const baseTopic = sep >= 0 ? key.slice(0, sep) : key;
+    const treatment = sep >= 0 ? key.slice(sep + 2) : null;
+    const isCurrentlyShown = showEvidenceStates[key];
+    setShowEvidenceStates((prev) => ({ ...prev, [key]: !prev[key] }));
 
     trackingManager.recordEvent({
       eventType: isCurrentlyShown ? "evidence_collapse" : "evidence_expand",
-      elementId: `Evidence_${topic.replace(/\s+/g, "")}`,
+      elementId: `Evidence_${baseTopic.replace(/\s+/g, "")}`,
       timestamp: new Date().toISOString(),
       patientId: currentSpeaker,
       visitId,
-      dimensionType: topic,
+      dimensionType: baseTopic,
       metadata: {
-        topic,
+        topic: baseTopic,
+        treatment,
         action: isCurrentlyShown ? "collapse" : "expand",
-        summaryRatingAtExpand: ratings[topic] || null,
+        summaryRatingAtExpand: ratings[baseTopic] || null,
       },
     });
 
+    const topic = baseTopic;
     const domain = TOPIC_TO_DOMAIN[topic];
     if (domain) {
       trackFirst(currentFile, currentSpeaker, {
@@ -4155,6 +4455,7 @@ const PatientReportFirstVisitV40: React.FC<PatientReportProps> = ({
                   topicIndex={index}
                   aiSummary={topicData?.aiSummary || "Summary not available."}
                   extractedSentences={topicData?.extractedSentences || []}
+                  aiScores={topicData?.aiScores || []}
                   aiSourceSentence={aiSourceByTopic[topic]}
                   aiSourceContext={topicData?.aiSourceContext || null}
                   aiSources={topicData?.aiSourceList}
@@ -4164,6 +4465,14 @@ const PatientReportFirstVisitV40: React.FC<PatientReportProps> = ({
                   onToggleExpand={() => handleToggleExpand(topic)}
                   showEvidence={showEvidenceStates[topic] || false}
                   onToggleEvidence={() => handleToggleEvidence(topic)}
+                  aiSubDomains={topicData?.aiSubDomains || []}
+                  isSubEvidenceShown={(treatment) =>
+                    showEvidenceStates[`${topic}::${treatment ?? "<null>"}`] ||
+                    false
+                  }
+                  onToggleSubEvidence={(treatment) =>
+                    handleToggleEvidence(`${topic}::${treatment ?? "<null>"}`)
+                  }
                   showAiSummary={showAiSummaryStates[topic] ?? true}
                   onToggleAiSummary={() => handleToggleAiSummary(topic)}
                   isSubmitted={!!submittedDomains[topic]}
