@@ -271,7 +271,7 @@ export default function Home() {
   // Start a new capture whenever the visible view/file changes; tag it with
   // the matching area so admin can filter recordings by interface.
   useEffect(() => {
-    if (currentView === "selection" || !fileId) return;
+    if (currentView === "selection") return;
     // [area] First-visit splits into report vs survey by ?mode=survey (same
     // split tracked in patient_first_behavior, migration 016). Doctor view is
     // the physician page.
@@ -287,11 +287,18 @@ export default function Home() {
       area = mode === "survey" ? "patient_first_survey" : "patient_first_report";
     else if (currentView === "patient" && visitType === "followup") area = "patient_followup";
     if (!area) return;
+    // The physician page is often opened without a patient file (e.g.
+    // ?doctorid=auto), so record it anyway and tag the recording with the
+    // doctor id. Patient views are always tied to a file, so skip if it is
+    // somehow missing (no patient data to record).
+    const fileTag =
+      area === "physician" ? fileId || doctorId || "physician" : fileId;
+    if (!fileTag) return;
     stopRecording(); // stop previous recording if any
     const sessionId = `rec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    startRecording(sessionId, fileId, area);
+    startRecording(sessionId, fileTag, area);
     return () => { stopRecording(); };
-  }, [currentView, fileId, visitType, searchParams]);
+  }, [currentView, fileId, visitType, searchParams, doctorId]);
 
   // ═══════════════════════════════════════════════════════════
   // Selection Screen — Patient list + visit type buttons
