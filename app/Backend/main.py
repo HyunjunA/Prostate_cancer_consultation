@@ -46,6 +46,7 @@ from core.settings import get_settings
 # Each routes_*.py module exposes a `router = APIRouter(...)`. We import
 # them as named aliases (`as <name>_router`) so the ROUTERS list below
 # reads like a table of contents instead of a wall of namespaced names.
+from auth.admin_auth_routes import router as admin_auth_router
 from auth.admin_routes import router as auth_router
 from routes_admin_pipeline import router as admin_pipeline_router
 from routes_doctor import router as doctor_router
@@ -84,6 +85,7 @@ ROUTERS = [
     track_doctor_router,
     track_recordings_router,
     auth_router,
+    admin_auth_router,
     admin_pipeline_router,
 ]
 

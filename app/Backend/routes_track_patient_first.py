@@ -38,6 +38,7 @@ from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_user
+from auth.admin_session import require_admin_user
 from db import get_db
 from models import PatientFirstBehavior
 
@@ -203,7 +204,7 @@ async def post_patient_first_events(
 
 # ── GET /sessions ────────────────────────────────────────────────────────────
 
-@router.get("/sessions")
+@router.get("/sessions", dependencies=[Depends(require_admin_user)])
 async def list_sessions(
     file: Optional[str] = Query(None, description="Filter by patient file"),
     speaker: Optional[str] = Query(None, description="Filter by speaker"),
@@ -254,7 +255,7 @@ async def list_sessions(
 
 # ── GET /session/{session_id} ────────────────────────────────────────────────
 
-@router.get("/session/{session_id}")
+@router.get("/session/{session_id}", dependencies=[Depends(require_admin_user)])
 async def get_session_events(
     session_id: str,
     db: AsyncSession = Depends(get_db),
@@ -293,7 +294,7 @@ async def get_session_events(
 
 # ── GET /aggregate ───────────────────────────────────────────────────────────
 
-@router.get("/aggregate")
+@router.get("/aggregate", dependencies=[Depends(require_admin_user)])
 async def aggregate_by_session(
     file: str = Query(..., description="Patient file (required)"),
     db: AsyncSession = Depends(get_db),

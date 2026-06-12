@@ -37,6 +37,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_user
+from auth.admin_session import require_admin_user
 from auth.base import AuthUser
 from db import get_db
 import models as M
@@ -197,7 +198,7 @@ async def _check_one_analysis(db: AsyncSession, aid: int) -> Dict[str, Any]:
 
 
 # ── Endpoint ─────────────────────────────────────────────────────────────────
-@router.get("/pipeline-status")
+@router.get("/pipeline-status", dependencies=[Depends(require_admin_user)])
 async def pipeline_status(
     analysis_id: int | None = Query(None, description="Verify a single analysis_id (default: all)"),
     user: AuthUser = Depends(get_current_user),

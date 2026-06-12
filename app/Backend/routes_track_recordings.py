@@ -46,6 +46,7 @@ from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_user
+from auth.admin_session import require_admin_user
 from db import get_db
 from models import SessionRecording
 
@@ -170,7 +171,7 @@ async def post_recording_chunk(
 
 # ── GET /api/track/recordings/{area} ─────────────────────────────────────────
 
-@router.get("/{area}")
+@router.get("/{area}", dependencies=[Depends(require_admin_user)])
 async def list_recordings(
     area: Area,
     file: Optional[str] = Query(None),
@@ -237,7 +238,7 @@ async def list_recordings(
 
 # ── GET /api/track/recordings/{area}/{session_id} ────────────────────────────
 
-@router.get("/{area}/{session_id}")
+@router.get("/{area}/{session_id}", dependencies=[Depends(require_admin_user)])
 async def get_recording_payload(
     area: Area,
     session_id: str,

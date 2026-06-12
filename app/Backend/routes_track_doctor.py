@@ -36,6 +36,7 @@ from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_user
+from auth.admin_session import require_admin_user
 from db import get_db
 from models import DoctorBehavior
 
@@ -149,7 +150,7 @@ async def post_doctor_events(
 
 # ── GET /sessions ────────────────────────────────────────────────────────────
 
-@router.get("/sessions")
+@router.get("/sessions", dependencies=[Depends(require_admin_user)])
 async def list_sessions(
     speaker: Optional[str] = Query(None),
     file: Optional[str] = Query(None),
@@ -218,7 +219,7 @@ async def list_sessions(
 
 # ── GET /session/{session_id} ────────────────────────────────────────────────
 
-@router.get("/session/{session_id}")
+@router.get("/session/{session_id}", dependencies=[Depends(require_admin_user)])
 async def get_session_events(
     session_id: str,
     db: AsyncSession = Depends(get_db),
@@ -256,7 +257,7 @@ async def get_session_events(
 
 # ── GET /speakers ────────────────────────────────────────────────────────────
 
-@router.get("/speakers")
+@router.get("/speakers", dependencies=[Depends(require_admin_user)])
 async def list_speakers(
     db: AsyncSession = Depends(get_db),
 ):
@@ -290,7 +291,7 @@ async def list_speakers(
 
 # ── GET /actions ─────────────────────────────────────────────────────────────
 
-@router.get("/actions")
+@router.get("/actions", dependencies=[Depends(require_admin_user)])
 async def list_actions(
     speaker: str = Query(..., description="Doctor identifier (required)"),
     file: Optional[str] = Query(None),
@@ -335,7 +336,7 @@ async def list_actions(
 
 # ── GET /aggregate ───────────────────────────────────────────────────────────
 
-@router.get("/aggregate")
+@router.get("/aggregate", dependencies=[Depends(require_admin_user)])
 async def aggregate_by_session(
     speaker: str = Query(..., description="Doctor identifier (required)"),
     db: AsyncSession = Depends(get_db),
