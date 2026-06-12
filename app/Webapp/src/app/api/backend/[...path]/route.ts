@@ -19,6 +19,14 @@ async function proxyRequest(
   if (API_KEY) {
     headers["X-API-Key"] = API_KEY;
   }
+  // Forward the admin session (httpOnly cookie) as a Bearer token so the
+  // backend's admin-only endpoints (require_admin_user) can authenticate the
+  // logged-in admin. Harmless for non-admin endpoints, which ignore it and
+  // authenticate via X-API-Key. The cookie value never reaches client JS.
+  const adminToken = request.cookies.get("admin_session")?.value;
+  if (adminToken) {
+    headers["Authorization"] = `Bearer ${adminToken}`;
+  }
   const contentType = request.headers.get("content-type");
   if (contentType) {
     headers["Content-Type"] = contentType;
