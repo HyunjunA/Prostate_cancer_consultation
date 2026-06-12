@@ -23,7 +23,11 @@ const MAX_EVENTS_PER_CHUNK = 500; // or when 500 events buffered
 
 // ── State ────────────────────────────────────────────────────────────────────
 
-type Area = "patient_first" | "patient_followup" | "doctor";
+type Area =
+  | "patient_first_report"
+  | "patient_first_survey"
+  | "patient_followup"
+  | "physician";
 
 let _events: eventWithTime[] = [];
 let _stopFn: (() => void) | null = null;

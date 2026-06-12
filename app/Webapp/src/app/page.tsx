@@ -272,16 +272,26 @@ export default function Home() {
   // the matching area so admin can filter recordings by interface.
   useEffect(() => {
     if (currentView === "selection" || !fileId) return;
-    let area: "patient_first" | "patient_followup" | "doctor" | null = null;
-    if (currentView === "doctor") area = "doctor";
-    else if (currentView === "patient" && visitType === "first") area = "patient_first";
+    // [area] First-visit splits into report vs survey by ?mode=survey (same
+    // split tracked in patient_first_behavior, migration 016). Doctor view is
+    // the physician page.
+    const mode = searchParams.get("mode"); // "survey" on the first-visit survey entry
+    let area:
+      | "patient_first_report"
+      | "patient_first_survey"
+      | "patient_followup"
+      | "physician"
+      | null = null;
+    if (currentView === "doctor") area = "physician";
+    else if (currentView === "patient" && visitType === "first")
+      area = mode === "survey" ? "patient_first_survey" : "patient_first_report";
     else if (currentView === "patient" && visitType === "followup") area = "patient_followup";
     if (!area) return;
     stopRecording(); // stop previous recording if any
     const sessionId = `rec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     startRecording(sessionId, fileId, area);
     return () => { stopRecording(); };
-  }, [currentView, fileId, visitType]);
+  }, [currentView, fileId, visitType, searchParams]);
 
   // ═══════════════════════════════════════════════════════════
   // Selection Screen — Patient list + visit type buttons

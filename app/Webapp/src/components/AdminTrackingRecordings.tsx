@@ -12,11 +12,15 @@
  * see during replay matches what was actually stored.
  */
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 
 const API_BASE = "";
 
-type Area = "patient_first" | "patient_followup" | "doctor";
+type Area =
+  | "patient_first_report"
+  | "patient_first_survey"
+  | "patient_followup"
+  | "physician";
 
 interface RecordingSession {
   session_id: string;
@@ -36,9 +40,10 @@ interface RecordingPayload {
 }
 
 const AREA_LABEL: Record<Area, string> = {
-  patient_first: "Patient First-Visit",
-  patient_followup: "Patient Follow-up",
-  doctor: "Doctor",
+  patient_first_report: "Patient First Visit Report",
+  patient_first_survey: "Patient First Survey",
+  patient_followup: "Patient Follow Up",
+  physician: "Physician Page",
 };
 
 function fmtDate(s: string | null): string {
@@ -63,7 +68,7 @@ function durationSecs(start: string | null, end: string | null): string {
 }
 
 export default function AdminTrackingRecordings() {
-  const [area, setArea] = useState<Area>("patient_first");
+  const [area, setArea] = useState<Area>("patient_first_report");
   const [sessions, setSessions] = useState<RecordingSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [payload, setPayload] = useState<RecordingPayload | null>(null);
@@ -71,7 +76,22 @@ export default function AdminTrackingRecordings() {
   const [error, setError] = useState<string | null>(null);
 
   const playerContainerRef = useRef<HTMLDivElement | null>(null);
+  // [fit] Outer frame we own: full column width + overflow-hidden. We scale the
+  // rrweb wrapper to fit this frame, since rrweb.Replayer renders the recording
+  // at its original captured size and does not auto-fit.
+  const playerFrameRef = useRef<HTMLDivElement | null>(null);
   const playerInstanceRef = useRef<any>(null);
+  const resizeObsRef = useRef<ResizeObserver | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [speed, setSpeed] = useState(1);
+  // [expand] Fullscreen-overlay toggle. expandedRef lets the fit logic read the
+  // current mode without re-mounting the player (which would restart playback).
+  const [expanded, setExpanded] = useState(false);
+  const expandedRef = useRef(false);
+  // [progress] Playback position + duration (ms) for the seek bar.
+  const [currentTime, setCurrentTime] = useState(0);
+  const [totalTime, setTotalTime] = useState(0);
+  const tickRef = useRef<number | null>(null);
 
   const reloadSessions = async () => {
     setLoading(true);
@@ -114,9 +134,52 @@ export default function AdminTrackingRecordings() {
     })();
   }, [selectedSession, area]);
 
+  // [fit] Scale the rrweb replay to fit our frame's width. rrweb.Replayer draws
+  // the recording into a `.replayer-wrapper` at the ORIGINAL captured viewport
+  // size (e.g. 1728×964) and applies no scaling — so without this it overflows
+  // the column. We compute scale = frameWidth / recordedWidth, apply it to the
+  // wrapper via a CSS transform, and set the frame height to the scaled height
+  // so the layout reserves the right space. Re-run on container resize.
+  const fitReplayToContainer = useCallback(() => {
+    const frame = playerFrameRef.current;
+    const root = playerContainerRef.current;
+    if (!frame || !root) return;
+    const wrapper = root.querySelector(".replayer-wrapper") as HTMLElement | null;
+    if (!wrapper) return;
+    // Recorded viewport comes from the rrweb Meta event (type 4); fall back to
+    // the wrapper's own measured size.
+    const meta = payload?.events.find((e) => e?.type === 4) as
+      | { data?: { width?: number; height?: number } }
+      | undefined;
+    const recW = meta?.data?.width || wrapper.offsetWidth || 1;
+    const recH = meta?.data?.height || wrapper.offsetHeight || 1;
+    const availW = frame.clientWidth || recW;
+    let scale = availW / recW;
+    if (expandedRef.current) {
+      // Fullscreen: fit the whole recording inside the viewport (width AND
+      // height), leaving room for the control bar + padding.
+      const availH =
+        (typeof window !== "undefined" ? window.innerHeight : recH) - 140;
+      scale = Math.min(availW / recW, availH / recH);
+    }
+    scale = Math.min(scale, 1); // never upscale past original
+    wrapper.style.transform = `scale(${scale})`;
+    wrapper.style.transformOrigin = "top left";
+    // The imported rrweb-player CSS sets `.replayer-wrapper { float:left;
+    // left:50%; top:50% }` — that 50%/50% offset is meant to pair with
+    // rrweb-player's own `translate(-50%,-50%)`, which the raw Replayer does
+    // NOT apply. Left as-is it pushes the replay off-centre so only part shows.
+    // Neutralise it (inline wins over the stylesheet).
+    wrapper.style.left = "0";
+    wrapper.style.top = "0";
+    wrapper.style.float = "none";
+    frame.style.height = `${Math.round(recH * scale)}px`;
+  }, [payload]);
+
   // Mount/unmount the rrweb Replayer when payload changes.
   // We use rrweb.Replayer (vanilla JS class) instead of rrweb-player
-  // (Svelte component) to avoid Svelte runtime in a Next.js client bundle.
+  // (Svelte component) to avoid Svelte runtime in a Next.js client bundle —
+  // which means we own the fit/scale logic above.
   useEffect(() => {
     if (!payload || !playerContainerRef.current) return;
     let cancelled = false;
@@ -133,21 +196,117 @@ export default function AdminTrackingRecordings() {
         console.error("rrweb.Replayer not found in module exports");
         return;
       }
-      playerInstanceRef.current = new Replayer(payload.events, {
+      const inst = new Replayer(payload.events, {
         root: playerContainerRef.current,
         liveMode: false,
         showWarning: false,
+        speed,
       });
-      try { playerInstanceRef.current.play(); } catch { /* ignore */ }
+      playerInstanceRef.current = inst;
+      try { inst.play(); setIsPlaying(true); } catch { /* ignore */ }
+      // [progress] Reset position for this video, read its duration, mark
+      // finished, and poll the current playback time for the seek bar.
+      setCurrentTime(0);
+      try { setTotalTime(inst.getMetaData?.().totalTime || 0); } catch { /* ignore */ }
+      try { inst.on?.("finish", () => setIsPlaying(false)); } catch { /* ignore */ }
+      if (tickRef.current) window.clearInterval(tickRef.current);
+      tickRef.current = window.setInterval(() => {
+        const p = playerInstanceRef.current;
+        if (!p) return;
+        try {
+          const t = p.getCurrentTime?.();
+          if (typeof t === "number") setCurrentTime(t);
+        } catch { /* ignore */ }
+      }, 100);
+      // Fit immediately, again after the wrapper settles, and on every resize.
+      fitReplayToContainer();
+      requestAnimationFrame(fitReplayToContainer);
+      setTimeout(fitReplayToContainer, 60);
+      if (playerFrameRef.current && typeof ResizeObserver !== "undefined") {
+        resizeObsRef.current?.disconnect();
+        resizeObsRef.current = new ResizeObserver(() => fitReplayToContainer());
+        resizeObsRef.current.observe(playerFrameRef.current);
+      }
     })();
     return () => {
       cancelled = true;
+      resizeObsRef.current?.disconnect();
+      resizeObsRef.current = null;
+      if (tickRef.current) { window.clearInterval(tickRef.current); tickRef.current = null; }
       if (playerInstanceRef.current) {
         try { playerInstanceRef.current.pause?.(); } catch { /* ignore */ }
         playerInstanceRef.current = null;
       }
+      setIsPlaying(false);
     };
-  }, [payload]);
+    // `speed` is read once at mount; speed changes are applied via setConfig.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payload, fitReplayToContainer]);
+
+  // Keep the fit logic aware of expanded state (without re-mounting the player),
+  // refit after the layout change, lock body scroll while expanded, and let
+  // Escape collapse the overlay.
+  useEffect(() => {
+    expandedRef.current = expanded;
+    requestAnimationFrame(fitReplayToContainer);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setExpanded(false);
+    };
+    if (expanded) {
+      document.body.style.overflow = "hidden";
+      window.addEventListener("keydown", onKey);
+    }
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [expanded, fitReplayToContainer]);
+
+  const togglePlay = () => {
+    const inst = playerInstanceRef.current;
+    if (!inst) return;
+    if (isPlaying) {
+      try { inst.pause(); } catch { /* ignore */ }
+      setIsPlaying(false);
+    } else {
+      try { inst.play(); } catch { /* ignore */ }
+      setIsPlaying(true);
+    }
+  };
+
+  const restart = () => {
+    const inst = playerInstanceRef.current;
+    if (!inst) return;
+    try { inst.play(0); } catch { /* ignore */ }
+    setCurrentTime(0);
+    setIsPlaying(true);
+    fitReplayToContainer();
+  };
+
+  const changeSpeed = (s: number) => {
+    setSpeed(s);
+    const inst = playerInstanceRef.current;
+    if (inst) {
+      try { inst.setConfig?.({ speed: s }); } catch { /* ignore */ }
+    }
+  };
+
+  // [progress] Jump to a position (ms). Keeps the current play/pause state.
+  const seek = (ms: number) => {
+    const inst = playerInstanceRef.current;
+    if (!inst) return;
+    setCurrentTime(ms);
+    try {
+      if (isPlaying) inst.play(ms);
+      else inst.pause(ms);
+    } catch { /* ignore */ }
+  };
+
+  const fmtTime = (ms: number): string => {
+    if (!ms || ms < 0) return "0:00";
+    const s = Math.floor(ms / 1000);
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  };
 
   const downloadJson = () => {
     if (!payload) return;
@@ -266,7 +425,95 @@ export default function AdminTrackingRecordings() {
               {selectedSession && loading && (
                 <div className="text-center text-sm text-slate-500 py-12">Loading payload…</div>
               )}
-              <div ref={playerContainerRef} className="rrweb-player-container" />
+              {/* [expand] Controls + player. When expanded, this wrapper becomes
+                  a fullscreen overlay; the responsive fit logic scales the replay
+                  up to the larger frame. Click the backdrop or press Esc to close. */}
+              {payload && (
+                <div
+                  className={
+                    expanded
+                      ? "fixed inset-0 z-50 bg-slate-900/80 p-4 sm:p-6 flex flex-col"
+                      : ""
+                  }
+                  onClick={(e) => {
+                    if (expanded && e.target === e.currentTarget) setExpanded(false);
+                  }}
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <button
+                      onClick={togglePlay}
+                      className="px-3 py-1.5 text-xs font-medium bg-slate-700 text-white rounded-md hover:bg-slate-800"
+                    >
+                      {isPlaying ? "⏸ Pause" : "▶ Play"}
+                    </button>
+                    <button
+                      onClick={restart}
+                      className="px-3 py-1.5 text-xs font-medium bg-slate-200 text-slate-700 rounded-md hover:bg-slate-300"
+                    >
+                      ↻ Restart
+                    </button>
+                    <button
+                      onClick={() => setExpanded((v) => !v)}
+                      className="px-3 py-1.5 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-md hover:bg-indigo-200"
+                    >
+                      {expanded ? "⤡ Collapse" : "⤢ Expand"}
+                    </button>
+                    <div className="ml-auto flex items-center gap-1">
+                      <span
+                        className={`text-xs mr-1 ${expanded ? "text-slate-300" : "text-slate-400"}`}
+                      >
+                        Speed
+                      </span>
+                      {[1, 2, 4].map((s) => (
+                        <button
+                          key={s}
+                          onClick={() => changeSpeed(s)}
+                          className={`px-2 py-1 text-xs rounded-md ${
+                            speed === s
+                              ? "bg-indigo-600 text-white"
+                              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                          }`}
+                        >
+                          {s}×
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* [progress] Seek bar: elapsed / total + draggable position. */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <span
+                      className={`text-xs tabular-nums ${expanded ? "text-slate-300" : "text-slate-500"}`}
+                    >
+                      {fmtTime(currentTime)}
+                    </span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={totalTime || 0}
+                      step={50}
+                      value={Math.min(currentTime, totalTime || 0)}
+                      onChange={(e) => seek(Number(e.target.value))}
+                      aria-label="Seek"
+                      className="flex-1 accent-indigo-600 cursor-pointer"
+                    />
+                    <span
+                      className={`text-xs tabular-nums ${expanded ? "text-slate-300" : "text-slate-500"}`}
+                    >
+                      {fmtTime(totalTime)}
+                    </span>
+                  </div>
+                  {/* [fit] Responsive frame: full available width, clips the scaled
+                      replay. The rrweb wrapper inside is scaled to fit. */}
+                  <div
+                    ref={playerFrameRef}
+                    className={`rrweb-player-frame w-full overflow-hidden rounded border border-slate-200 ${
+                      expanded ? "bg-white" : "bg-slate-100"
+                    }`}
+                  >
+                    <div ref={playerContainerRef} className="rrweb-player-container" />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
