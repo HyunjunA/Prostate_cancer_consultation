@@ -66,7 +66,31 @@ router = APIRouter(
 # Pydantic-friendly enum of valid `area` values. Using a Literal type
 # means FastAPI will reject (with 422) any path like `/api/track/recordings/admin`
 # at the router level, before our handler runs.
-Area = Literal["patient_first", "patient_followup", "doctor"]
+#
+# Interface-level areas the admin UI filters by:
+#   patient_first_report / patient_first_survey / patient_followup / physician
+# Interface-level areas the admin UI filters by are the first four. The legacy
+# values ('patient_first', 'doctor') are still ACCEPTED on POST so a browser
+# running the pre-split JS (or an in-flight session) does not lose its upload
+# with a 422; they are normalised to the new keys at write time (see
+# _AREA_NORMALIZE) so every recording lands in the correct new tab regardless
+# of which client version produced it.
+Area = Literal[
+    "patient_first_report",
+    "patient_first_survey",
+    "patient_followup",
+    "physician",
+    "patient_first",
+    "doctor",
+]
+
+# Legacy area key -> canonical new key. Applied on write so old-client uploads
+# show up under the new taxonomy (patient_first was the pre-split first visit;
+# 'doctor' is the same interface now called 'physician').
+_AREA_NORMALIZE = {
+    "patient_first": "patient_first_report",
+    "doctor": "physician",
+}
 
 
 # ── Pydantic models ──────────────────────────────────────────────────────────
@@ -143,13 +167,18 @@ async def post_recording_chunk(
     # typically 5-15x because the same DOM strings repeat constantly.
     compressed = gzip.compress(chunk.events.encode("utf-8"))
 
+    # Normalise legacy area keys ('patient_first', 'doctor') to the new
+    # taxonomy so uploads from a cached pre-split client still land in the
+    # correct tab instead of an invisible/old bucket.
+    stored_area = _AREA_NORMALIZE.get(area, area)
+
     row = SessionRecording(
         session_id=chunk.session_id,
         chunk_index=next_idx,
         file=chunk.file,
         recording_data=compressed,
         event_count=len(events_list),
-        area=area,
+        area=stored_area,
     )
 
     try:
