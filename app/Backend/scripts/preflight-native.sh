@@ -63,7 +63,19 @@ if ! command -v pg_isready >/dev/null 2>&1; then
     fail "pg_isready not on PATH"
 fi
 
-if ! pg_isready -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -q; then
+# pg_isready's default connection timeout is short and the first probe to a
+# freshly-resolved localhost can exceed it, returning a false "no response"
+# (exit 2) even though psql/asyncpg connect fine. Give each probe an explicit
+# 15s timeout and retry a few times before declaring postgres down.
+pg_ready=0
+for _ in 1 2 3 4 5; do
+    if pg_isready -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -t 15 -q; then
+        pg_ready=1
+        break
+    fi
+    sleep 1
+done
+if [[ "$pg_ready" -ne 1 ]]; then
     fail "postgres not listening on $POSTGRES_HOST:$POSTGRES_PORT
        Start it:  brew services start postgresql@16   (macOS)
                   sudo systemctl start postgresql      (Linux)"
