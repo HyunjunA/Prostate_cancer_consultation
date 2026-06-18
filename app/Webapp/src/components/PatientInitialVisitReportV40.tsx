@@ -467,6 +467,11 @@ const usePassiveTracking = (config?: {
 
 interface PatientReportProps {
   isDarkMode?: boolean;
+  // Optional: when provided (combined-survey flow), advancing past the LAST
+  // survey domain calls this instead of being a dead-end, so the parent can
+  // hand off to the follow-up surveys. Undefined for the standalone
+  // "1st · Survey" entry → behavior is unchanged (last-screen Next stays disabled).
+  onComplete?: () => void;
 }
 
 interface ClassSummary {
@@ -3355,6 +3360,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
 
 const PatientReportFirstVisitV40: React.FC<PatientReportProps> = ({
   isDarkMode = false,
+  onComplete,
 }) => {
   const patientId = usePatientId((state) => state.patientId);
   const fileId = useFileId((state) => state.fileId);
@@ -4510,7 +4516,14 @@ const PatientReportFirstVisitV40: React.FC<PatientReportProps> = ({
           const isLastScreen = currentScreen >= TOTAL_SCREENS - 1;
           const needsSubmit =
             currentTopic !== null && !submittedDomains[currentTopic];
-          const nextDisabled = isLastScreen || needsSubmit;
+          // Combined-survey flow: on the last domain, once it is submitted,
+          // the Next button becomes a "Continue" action that hands off to the
+          // follow-up surveys via onComplete(). Standalone (onComplete undefined)
+          // keeps the original behavior (Next disabled on the last screen).
+          const isContinueToFollowup = !!onComplete && isLastScreen && !needsSubmit;
+          const nextDisabled = isContinueToFollowup
+            ? false
+            : isLastScreen || needsSubmit;
           return (
             <div
               className={cx(
@@ -4562,9 +4575,13 @@ const PatientReportFirstVisitV40: React.FC<PatientReportProps> = ({
               <button
                 type="button"
                 disabled={nextDisabled}
-                onClick={() =>
-                  setCurrentScreen((s) => Math.min(TOTAL_SCREENS - 1, s + 1))
-                }
+                onClick={() => {
+                  if (isContinueToFollowup) {
+                    onComplete!();
+                  } else {
+                    setCurrentScreen((s) => Math.min(TOTAL_SCREENS - 1, s + 1));
+                  }
+                }}
                 data-track-proximity="WizardNext"
                 className={cx(
                   "inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 border text-white",
@@ -4573,7 +4590,7 @@ const PatientReportFirstVisitV40: React.FC<PatientReportProps> = ({
                     : "bg-gradient-to-r from-indigo-500 to-violet-500 border-transparent shadow hover:from-indigo-600 hover:to-violet-600",
                 )}
               >
-                Next
+                {isContinueToFollowup ? "Continue to Follow-up" : "Next"}
                 <ChevronRight size={16} />
               </button>
             </div>

@@ -76,7 +76,7 @@ type ViewType = "patient" | "doctor" | "selection";
 // first:    PatientReportFirstVisit (summary only, no surveys)
 // followup: PatientFollowUpReport (with surveys)
 // ═══════════════════════════════════════════════════════════
-type VisitType = "first" | "followup";
+type VisitType = "first" | "followup" | "combined";
 
 // ═══════════════════════════════════════════════════════════
 // localStorage key
@@ -157,6 +157,12 @@ export default function Home() {
   // ═══════════════════════════════════════════════════════════
   const [visitType, setVisitType] = useState<VisitType>("followup");
 
+  // Combined-survey flow phase: run the 1st·Survey first, then the Follow-up.
+  // Only used when visitType === "combined"; in-memory (no reload) hand-off.
+  const [combinedPhase, setCombinedPhase] = useState<"first_survey" | "followup">(
+    "first_survey",
+  );
+
   // ═══════════════════════════════════════════════════════════
   // Initialize Dev Mode from localStorage
   // ═══════════════════════════════════════════════════════════
@@ -223,6 +229,10 @@ export default function Home() {
       if (visitTypeFromUrl === "first") {
         setVisitType("first");
         console.log("📋 Visit Type: First Visit (summary only)");
+      } else if (visitTypeFromUrl === "combined") {
+        setVisitType("combined");
+        setCombinedPhase("first_survey");
+        console.log("📋 Visit Type: Combined (1st·Survey → Follow-up)");
       } else {
         setVisitType("followup");
         console.log("📋 Visit Type: Follow-up Visit (with surveys)");
@@ -286,6 +296,10 @@ export default function Home() {
     else if (currentView === "patient" && visitType === "first")
       area = mode === "survey" ? "patient_first_survey" : "patient_first_report";
     else if (currentView === "patient" && visitType === "followup") area = "patient_followup";
+    // Combined flow: tag each phase with its existing area so admin recordings
+    // land in the same buckets as the standalone surveys.
+    else if (currentView === "patient" && visitType === "combined")
+      area = combinedPhase === "first_survey" ? "patient_first_survey" : "patient_followup";
     if (!area) return;
     // Record every view even when no patient file is present. Prefer the
     // patient file id, then the doctor id, and finally fall back to the
@@ -297,7 +311,7 @@ export default function Home() {
     const sessionId = `rec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     startRecording(sessionId, fileTag, area);
     return () => { stopRecording(); };
-  }, [currentView, fileId, visitType, searchParams, doctorId]);
+  }, [currentView, fileId, visitType, combinedPhase, searchParams, doctorId]);
 
   // ═══════════════════════════════════════════════════════════
   // Selection Screen — Patient list + visit type buttons
@@ -321,7 +335,7 @@ export default function Home() {
 
   const handlePatientSelect = (
     file: string,
-    visit: "first" | "followup",
+    visit: "first" | "followup" | "combined",
     survey = false,
   ) => {
     const stem = file.replace(/\.(xlsx|csv)$/i, "");
@@ -332,8 +346,10 @@ export default function Home() {
       patid: speaker,
       visit: visit,
     });
-    // Survey mode = second-visit questionnaire screen (first-visit only).
-    if (survey) params.set("mode", "survey");
+    // Survey mode = the per-domain questionnaire screen. Used by the standalone
+    // "1st · Survey" entry and by the first phase of the "Combined" flow (which
+    // starts on the survey, then hands off to the follow-up).
+    if (survey || visit === "combined") params.set("mode", "survey");
     window.location.href = `/?${params.toString()}`;
   };
 
@@ -515,6 +531,18 @@ export default function Home() {
                             >
                               Follow-up
                             </button>
+                            {/* Combined entry: 1st · Survey, then Follow-up, in one run. */}
+                            <button
+                              onClick={() => handlePatientSelect(file, "combined")}
+                              title="Combined — 1st·Survey questions, then the Follow-up surveys"
+                              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                                isDarkMode
+                                  ? "bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 border border-amber-500/20"
+                                  : "bg-amber-50 text-amber-700 hover:bg-amber-100 hover:text-amber-800 border border-amber-100"
+                              }`}
+                            >
+                              Combined
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -640,6 +668,20 @@ export default function Home() {
         {/* Patient Report - Follow-up Visit (with surveys) */}
         {currentView === "patient" && visitType === "followup" && (
           <PatientFollowUpReport isDarkMode={isDarkMode} />
+        )}
+
+        {/* Combined flow: 1st·Survey first, then Follow-up. Each phase renders
+            the existing standalone component (own submit + tracking), so admin
+            tracking is unaffected. Phase 1 finishing calls onComplete → phase 2. */}
+        {currentView === "patient" && visitType === "combined" && (
+          combinedPhase === "first_survey" ? (
+            <PatientReportFirstVisit
+              isDarkMode={isDarkMode}
+              onComplete={() => setCombinedPhase("followup")}
+            />
+          ) : (
+            <PatientFollowUpReport isDarkMode={isDarkMode} />
+          )
         )}
 
         {/* Selection Screen - No URL parameters */}
