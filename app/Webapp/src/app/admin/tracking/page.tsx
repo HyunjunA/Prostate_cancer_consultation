@@ -32,13 +32,15 @@ const AREAS = [
       "Consultation navigation, patient and topic selection, AI rewrite usage, rubric scoring activity.",
     color: "from-sky-500 to-cyan-500",
   },
-  {
-    href: "/admin/tracking/recordings",
-    title: "Session Recordings (rrweb)",
-    description:
-      "Replay or download captured sessions to see how users actually navigated. PHI is masked at capture time.",
-    color: "from-amber-500 to-orange-500",
-  },
+  // Session Recordings (rrweb) — hidden from the admin hub (commented out).
+  // The /admin/tracking/recordings route still exists; uncomment to show the card again.
+  // {
+  //   href: "/admin/tracking/recordings",
+  //   title: "Session Recordings (rrweb)",
+  //   description:
+  //     "Replay or download captured sessions to see how users actually navigated. PHI is masked at capture time.",
+  //   color: "from-amber-500 to-orange-500",
+  // },
 ];
 
 export default function AdminTrackingHubPage() {
