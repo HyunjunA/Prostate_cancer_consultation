@@ -175,7 +175,10 @@ const SURVEY_STEPS: SurveyStep[] = [
   "welcome",
   "sdm",
   "dcs",
-  "risk",
+  // "risk" — Risk Perception step intentionally hidden from the follow-up flow.
+  // Kept in the SurveyStep type / STEP_INFO so the (now unreachable) render block
+  // and handlers still type-check; simply removing it here drops it from the
+  // sidebar nav, progress bar, and next/back navigation.
   "satisfaction",
   "complete",
 ];
