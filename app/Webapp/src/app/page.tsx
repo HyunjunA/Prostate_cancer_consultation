@@ -287,13 +287,12 @@ export default function Home() {
       area = mode === "survey" ? "patient_first_survey" : "patient_first_report";
     else if (currentView === "patient" && visitType === "followup") area = "patient_followup";
     if (!area) return;
-    // The physician page is often opened without a patient file (e.g.
-    // ?doctorid=auto), so record it anyway and tag the recording with the
-    // doctor id. Patient views are always tied to a file, so skip if it is
-    // somehow missing (no patient data to record).
-    const fileTag =
-      area === "physician" ? fileId || doctorId || "physician" : fileId;
-    if (!fileTag) return;
+    // Record every view even when no patient file is present. Prefer the
+    // patient file id, then the doctor id, and finally fall back to the
+    // area name so the recording is always tagged with something (e.g. a
+    // patient page opened without ?fileid= is tagged "patient_first_report").
+    // `area` is always set here, so fileTag is never empty.
+    const fileTag = fileId || doctorId || area;
     stopRecording(); // stop previous recording if any
     const sessionId = `rec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     startRecording(sessionId, fileTag, area);

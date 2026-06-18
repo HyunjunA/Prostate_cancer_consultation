@@ -221,6 +221,13 @@ async def list_recordings(
                      beyond a single page here — admin UI is internal
                      and can refine via filters instead.
     """
+    # Normalise legacy area keys ('patient_first', 'doctor') the SAME way
+    # the POST handler does before storing, so a cached pre-split client
+    # that queries an old tab name still resolves to the canonical bucket
+    # its uploads landed in. Without this, POST stores 'physician' but a
+    # GET for 'doctor' returns nothing (the recordings are invisible).
+    area = _AREA_NORMALIZE.get(area, area)
+
     # Group-by session_id so the admin UI sees one row per session.
     # We aggregate chunk metadata: count, total events, first/last
     # timestamps.
@@ -284,6 +291,11 @@ async def get_recording_payload(
         skipped (logged but not raised). Better to hand the user 95% of
         a session than nothing — partial replays are still useful.
     """
+    # Normalise legacy area keys the same way as POST/list, so a playback
+    # request for an old tab name ('doctor') resolves to where the chunks
+    # were actually stored ('physician').
+    area = _AREA_NORMALIZE.get(area, area)
+
     # Fetch chunks in chunk_index order so the stitched event stream
     # reproduces the original chronological sequence.
     stmt = select(SessionRecording).where(
