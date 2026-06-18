@@ -84,7 +84,7 @@ EXPECTED_REDCAP = {
     "ed_1_rp_v2": "55", "ed_2_rp_v2": "3", "ed_3_rp_v2": "5",
     "ui_1_rp_v2": "20", "ui_2_rp_v2": "3", "ui_3_rp_v2": "3",
     "il_1_rp_v2": "10", "il_2_rp_v2": "2", "il_3_rp_v2": "2",
-    "post_risk_perception_2_complete": "2",
+    "risk_perception_2_complete": "2",
 }
 
 

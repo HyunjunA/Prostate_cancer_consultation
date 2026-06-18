@@ -72,7 +72,7 @@ async def test_cp_submit_posts_mapped_payload(client, patient_row, api_headers, 
     assert record["cp_1_rp_v2"] == "35"
     assert record["cp_2_rp_v2"] == "60"
     assert record["cp_3_rp_v2"] == "2"  # "Over next 5 years" -> code 2
-    assert record["post_risk_perception_2_complete"] == "2"
+    assert record["risk_perception_2_complete"] == "2"
 
 
 @pytest.mark.integration

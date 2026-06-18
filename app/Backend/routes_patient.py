@@ -1213,7 +1213,11 @@ _FV_FACTOR_CODES: Dict[str, Dict[str, str]] = {
 _FV_FACTOR_CODES["inc_factors"] = _FV_FACTOR_CODES["ed_factors"]
 _FV_FACTOR_CODES["ius_factors"] = _FV_FACTOR_CODES["ed_factors"]
 
-_REDCAP_POST_RISK_2_COMPLETE_FIELD = "post_risk_perception_2_complete"
+# REDCap's auto-generated form-complete status field for the risk_perception_2
+# instrument. The project's instrument is named `risk_perception_2` (NOT
+# `post_risk_perception_2`), so its complete field is `risk_perception_2_complete`.
+# Using the wrong name made REDCap reject the entire first-visit record (HTTP 400).
+_REDCAP_POST_RISK_2_COMPLETE_FIELD = "risk_perception_2_complete"
 
 
 def _fv_answer_to_redcap(question_id: str, field: str, value: Any) -> List[Tuple[str, str]]:
