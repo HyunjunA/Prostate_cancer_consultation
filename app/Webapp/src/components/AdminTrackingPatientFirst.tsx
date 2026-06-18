@@ -325,7 +325,7 @@ export default function AdminTrackingPatientFirst() {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">Patient First-Visit Behavior</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Patient Report & Survey Behavior</h1>
           <p className="text-sm text-slate-600 mt-1">
             Per-session view (no OR-merge). Sessions: {sessions.length} · Events: {totalCount}
           </p>

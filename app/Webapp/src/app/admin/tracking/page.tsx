@@ -13,9 +13,9 @@ import Link from "next/link";
 const AREAS = [
   {
     href: "/admin/tracking/patient-first",
-    title: "Patient First-Visit Behavior",
+    title: "Patient Report & Survey Behavior",
     description:
-      "Page views, topic and evidence open/close, and helpfulness ratings on the first-visit report page.",
+      "Report views, topic/evidence open-close, and helpfulness ratings, plus first-visit survey activity — filterable by Report / Survey mode.",
     color: "from-rose-500 to-pink-500",
   },
   {
