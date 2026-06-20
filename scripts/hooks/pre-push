@@ -61,24 +61,35 @@ fi
 
 cd "$REPO_ROOT/app/Backend"
 
-# 1. Ruff lint
-if ! "$PY" -m ruff check . --quiet 2>/dev/null; then
+# 1. Ruff lint. Skip gracefully (warn, don't block) if ruff isn't installed for
+# this interpreter — e.g. an IDE/GUI push that runs the hook with the system
+# python3 instead of the project .venv. CI still enforces lint.
+if ! "$PY" -m ruff --version >/dev/null 2>&1; then
+    warn "ruff not available for $PY — skipping lint (CI still checks). Install: $PY -m pip install ruff"
+elif ! "$PY" -m ruff check . --quiet 2>/dev/null; then
     if ! "$PY" -m ruff check . --config pyproject.toml; then
         fail "ruff lint failed — fix the lint errors above (or run 'ruff check . --fix')"
         exit 1
     fi
+    ok "ruff lint clean"
+else
+    ok "ruff lint clean"
 fi
-ok "ruff lint clean"
 
-# 2. pytest --collect-only (verifies test imports without running them)
-# Stub DATABASE_URL so modules importing db.py do not blow up on import.
-export DATABASE_URL="${DATABASE_URL:-postgresql+asyncpg://stub:stub@localhost:5432/stub}"
-if ! "$PY" -m pytest --collect-only -q --no-header > /tmp/pre-push-collect.log 2>&1; then
-    fail "pytest --collect-only failed — a test file's imports are broken:"
-    tail -20 /tmp/pre-push-collect.log >&2
-    exit 1
+# 2. pytest --collect-only (verifies test imports without running them).
+# Skip gracefully if pytest isn't installed for this interpreter.
+if ! "$PY" -m pytest --version >/dev/null 2>&1; then
+    warn "pytest not available for $PY — skipping collect check (CI still checks)."
+else
+    # Stub DATABASE_URL so modules importing db.py do not blow up on import.
+    export DATABASE_URL="${DATABASE_URL:-postgresql+asyncpg://stub:stub@localhost:5432/stub}"
+    if ! "$PY" -m pytest --collect-only -q --no-header > /tmp/pre-push-collect.log 2>&1; then
+        fail "pytest --collect-only failed — a test file's imports are broken:"
+        tail -20 /tmp/pre-push-collect.log >&2
+        exit 1
+    fi
+    ok "pytest --collect-only clean ($(grep -E 'tests? collected' /tmp/pre-push-collect.log | tail -1))"
 fi
-ok "pytest --collect-only clean ($(grep -E 'tests? collected' /tmp/pre-push-collect.log | tail -1))"
 
 echo "── pre-push checks passed ─────────────────────────────────────"
 echo ""
