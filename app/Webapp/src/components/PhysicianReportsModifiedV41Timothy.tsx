@@ -123,6 +123,13 @@ interface DashboardViewProps {
   setSelectedPatient: (patient: PatientRow) => void;
   setCurrentView: (view: "dashboard" | "grid" | "detail") => void;
   trajectoryData?: TrajectoryItem[];
+  scoreAverageData?: ScoreAverageItem[];
+  onOpenRubric?: (domain: TopicName | "All Domains", score: number | null) => void;
+  onTrackEvent?: (
+    eventType: string,
+    elementId: string,
+    metadata?: Record<string, any>,
+  ) => void;
 }
 
 interface GridViewProps {
@@ -592,6 +599,874 @@ const RUBRIC_SCORE_LEVELS = [
 ];
 
 // ═══════════════════════════════════════════════════════════
+// RubricBody — the shared "Quality of Risk Communication" rubric content:
+// the 0–5 scale bar (hover/lock) + per-domain criteria (All Domains accordion
+// or a single-domain tab). Used both inside the RubricFloatingButton modal and
+// inline under the Scoring Legend, so the two always show identical content.
+// Owns its own hover/lock/tab/expand state; initialScore/initialTab seed it
+// (the modal re-mounts this via a key to "open at" a score from elsewhere).
+// ═══════════════════════════════════════════════════════════
+interface RubricBodyProps {
+  isDarkMode: boolean;
+  initialScore?: number | null;
+  initialTab?: string;
+  onTrackEvent?: (
+    eventType: string,
+    elementId: string,
+    metadata?: Record<string, any>,
+  ) => void;
+}
+
+const RubricBody: React.FC<RubricBodyProps> = ({
+  isDarkMode,
+  initialScore = null,
+  initialTab = "All Domains",
+  onTrackEvent,
+}) => {
+  const [hoveredScore, setHoveredScore] = useState<number | null>(null);
+  const [lockedScore, setLockedScore] = useState<number | null>(initialScore);
+  const [activeTab, setActiveTab] = useState<string>(initialTab || "All Domains");
+  const [expandedDomains, setExpandedDomains] = useState<Set<string>>(new Set(RUBRIC_DOMAINS));
+  const activeScore = lockedScore !== null ? lockedScore : hoveredScore;
+
+  const toggleDomain = (domain: string) => {
+    setExpandedDomains((prev) => {
+      const next = new Set(prev);
+      const expanding = !next.has(domain);
+      if (expanding) next.add(domain);
+      else next.delete(domain);
+      onTrackEvent?.(expanding ? "rubric_domain_expand" : "rubric_domain_collapse", `rubric_domain_${domain}`, { domain });
+      return next;
+    });
+  };
+
+  return (
+    <>
+      {/* Scale bar chart — replicated from ConsultationScoring */}
+      <div data-tour="rubric-scale-bar" className="px-8 sm:px-12 pt-6 pb-4 overflow-visible">
+        {/* Scale bar — with horizontal padding so edge labels don't clip */}
+        <div className="mx-12 sm:mx-16">
+          <div className="relative">
+            <div className={cx("h-2 rounded-full", isDarkMode ? "bg-blue-400" : "bg-blue-600")}>
+              {/* Ticks */}
+              {RUBRIC_SCORE_LEVELS.map((_, index) => (
+                <div
+                  key={index}
+                  className="absolute -top-2 h-6"
+                  style={{
+                    left: `${(index / 5) * 100}%`,
+                    transform: "translateX(-50%)",
+                    borderLeft: `2px dashed ${isDarkMode ? "#93c5fd" : "#2563eb"}`,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Scale numbers and labels — hover sets hoveredScore for rubric table */}
+          <div className="relative mt-4" style={{ height: "80px" }}>
+            {RUBRIC_SCORE_LEVELS.map(({ score, label }, index) => {
+              const isActive = activeScore === score;
+              const isLocked = lockedScore === score;
+              return (
+                <div
+                  key={score}
+                  className="absolute text-center"
+                  style={{
+                    left: `${(index / 5) * 100}%`,
+                    transform: "translateX(-50%)",
+                    width: "90px",
+                  }}
+                  onMouseEnter={() => { if (lockedScore === null) setHoveredScore(score); }}
+                  onMouseLeave={() => { if (lockedScore === null) setHoveredScore(null); }}
+                  onClick={() => {
+                    const newLocked = lockedScore === score ? null : score;
+                    setLockedScore(newLocked);
+                    onTrackEvent?.(newLocked !== null ? "rubric_score_lock" : "rubric_score_unlock", `rubric_score_${score}`, { score });
+                  }}
+                >
+                  <div
+                    className={cx(
+                      "text-lg font-bold mb-1 cursor-pointer border-b-2 transition-colors",
+                      isLocked ? "border-solid" : "border-dashed",
+                      isActive
+                        ? isDarkMode ? "text-cyan-400 border-cyan-500" : "text-cyan-600 border-cyan-400"
+                        : isDarkMode ? "text-gray-100 border-slate-500" : "text-gray-800 border-slate-400",
+                    )}
+                    style={{ paddingBottom: "2px" }}
+                  >
+                    {score}
+                  </div>
+                  <div
+                    className={cx(
+                      "text-xs whitespace-pre-line leading-tight transition-colors",
+                      isActive
+                        ? isDarkMode ? "text-cyan-400 font-semibold" : "text-cyan-600 font-semibold"
+                        : isDarkMode ? "text-gray-200" : "text-gray-800",
+                    )}
+                  >
+                    {label}
+                  </div>
+                  {isLocked && (
+                    <div className={cx("text-[9px] mt-0.5", isDarkMode ? "text-cyan-500" : "text-cyan-500")}>
+                      (locked)
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Subtitle */}
+        <div className="text-center mt-2">
+          <h3 className={cx(
+            "text-lg font-semibold",
+            isDarkMode ? "text-gray-100" : "text-gray-800",
+          )}>
+            Quality of Risk Communication
+          </h3>
+        </div>
+      </div>
+
+      {/* Domain rubric — tabs + accordion hybrid */}
+      <div className="px-6 pb-6">
+        {/* Status bar */}
+        <div className={cx(
+          "text-xs font-semibold uppercase tracking-wider px-4 py-2 mb-3 rounded-lg text-center",
+          isDarkMode ? "bg-slate-800 text-slate-400" : "bg-slate-100 text-slate-500",
+        )}>
+          {activeScore !== null
+            ? `Score ${activeScore === 0 ? "0" : `1–${activeScore}`} Criteria${lockedScore !== null ? " — click score again to unlock" : ""}`
+            : "Hover or click a score above to see criteria"}
+        </div>
+
+        {/* Domain tabs — "All Domains" + individual */}
+        <div data-tour="rubric-tabs" className={cx(
+          "flex border-b overflow-x-auto",
+          isDarkMode ? "border-slate-700" : "border-slate-200",
+        )}>
+          {["All Domains", ...RUBRIC_DOMAINS].map((tab) => {
+            const shortLabel: Record<string, string> = {
+              "All Domains": "All",
+              "Cancer Prognosis": "CP",
+              "Life Expectancy": "LE",
+              "Erectile Dysfunction": "ED",
+              "Urinary Incontinence": "INC",
+              "Irritative Symptoms": "IUS",
+            };
+            return (
+              <button
+                key={tab}
+                onClick={() => { setActiveTab(tab); onTrackEvent?.("rubric_tab_change", `rubric_tab_${tab}`, { tab }); }}
+                className={cx(
+                  "px-3 py-2.5 text-xs sm:text-sm font-medium text-center transition-colors relative whitespace-nowrap",
+                  tab === "All Domains" ? "flex-shrink-0" : "flex-1",
+                  activeTab === tab
+                    ? isDarkMode ? "text-cyan-400" : "text-cyan-600"
+                    : isDarkMode ? "text-slate-400 hover:text-slate-200" : "text-slate-500 hover:text-slate-700",
+                )}
+              >
+                <span className="hidden sm:inline">{tab === "Irritative Symptoms" ? "Irritative Sym." : tab}</span>
+                <span className="sm:hidden">{shortLabel[tab] || tab}</span>
+                {activeTab === tab && (
+                  <div className={cx(
+                    "absolute bottom-0 left-0 right-0 h-0.5",
+                    isDarkMode ? "bg-cyan-400" : "bg-cyan-600",
+                  )} />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Tab content */}
+        <div data-tour="rubric-content" className={cx(
+          "rounded-b-xl border border-t-0",
+          isDarkMode ? "border-slate-700" : "border-slate-200",
+        )}>
+          {activeTab === "All Domains" ? (
+            /* All Domains — accordion view */
+            <div>
+              {/* Expand/Collapse All */}
+              <div className={cx(
+                "flex justify-end px-4 py-2",
+                isDarkMode ? "bg-slate-800/30" : "bg-slate-50",
+              )}>
+                <button
+                  onClick={() => {
+                    if (expandedDomains.size === RUBRIC_DOMAINS.length) {
+                      setExpandedDomains(new Set());
+                    } else {
+                      setExpandedDomains(new Set(RUBRIC_DOMAINS));
+                    }
+                  }}
+                  className={cx(
+                    "text-xs font-medium px-2 py-1 rounded transition-colors",
+                    isDarkMode ? "hover:bg-slate-700 text-slate-400" : "hover:bg-slate-200 text-slate-500",
+                  )}
+                >
+                  {expandedDomains.size === RUBRIC_DOMAINS.length ? "Collapse All" : "Expand All"}
+                </button>
+              </div>
+
+              {RUBRIC_DOMAINS.map((domain, idx) => {
+                const isExpanded = expandedDomains.has(domain);
+                return (
+                  <div
+                    key={domain}
+                    className={cx(
+                      idx < RUBRIC_DOMAINS.length - 1 && (isDarkMode ? "border-b border-slate-700" : "border-b border-slate-200"),
+                    )}
+                  >
+                    <button
+                      onClick={() => toggleDomain(domain)}
+                      className={cx(
+                        "w-full flex items-center justify-between px-4 py-3 text-sm font-medium transition-colors text-left",
+                        isDarkMode ? "text-slate-200 hover:bg-slate-800" : "text-slate-700 hover:bg-slate-50",
+                      )}
+                    >
+                      <span>{domain}</span>
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className={cx(
+                          "w-4 h-4 transition-transform duration-200 flex-shrink-0",
+                          isExpanded && "rotate-180",
+                          isDarkMode ? "text-slate-400" : "text-slate-500",
+                        )}
+                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+
+                    {isExpanded && (
+                      <div className={cx("px-4 pb-3", isDarkMode ? "bg-slate-800/50" : "bg-white")}>
+                        {activeScore === null
+                          ? <span className={cx("text-sm", isDarkMode ? "text-slate-500" : "text-slate-400")}>Select a score above</span>
+                          : (
+                            <div className="space-y-1.5">
+                              {Array.from({ length: activeScore + 1 }, (_, s) => s)
+                                .filter((s) => activeScore === 0 ? true : s > 0)
+                                .map((s) => {
+                                const text = s === 0 ? "No mention of this topic" : RUBRIC_DATA[domain][s];
+                                const isActiveLevel = s === activeScore;
+                                return (
+                                  <div key={s} className="flex gap-2 items-start">
+                                    <span className={cx(
+                                      "inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold text-white flex-shrink-0 mt-0.5",
+                                      RUBRIC_SCORE_LEVELS[s].color,
+                                    )}>
+                                      {s}
+                                    </span>
+                                    <span className={cx(
+                                      "text-sm leading-snug",
+                                      isActiveLevel
+                                        ? isDarkMode ? "text-white font-bold" : "text-slate-900 font-bold"
+                                        : isDarkMode ? "text-slate-400" : "text-slate-500",
+                                    )}>
+                                      {text}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            /* Individual domain tab — direct content */
+            <div className="p-4">
+              {activeScore === null
+                ? <span className={cx("text-sm", isDarkMode ? "text-slate-500" : "text-slate-400")}>Select a score above to see criteria</span>
+                : (
+                  <div className="space-y-2">
+                    {Array.from({ length: activeScore + 1 }, (_, s) => s)
+                      .filter((s) => activeScore === 0 ? true : s > 0)
+                      .map((s) => {
+                      const text = s === 0 ? "No mention of this topic" : RUBRIC_DATA[activeTab][s];
+                      const isActiveLevel = s === activeScore;
+                      return (
+                        <div key={s} className="flex gap-2.5 items-start">
+                          <span className={cx(
+                            "inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold text-white flex-shrink-0 mt-0.5",
+                            RUBRIC_SCORE_LEVELS[s].color,
+                          )}>
+                            {s}
+                          </span>
+                          <span className={cx(
+                            "text-sm leading-snug pt-0.5",
+                            isActiveLevel
+                              ? isDarkMode ? "text-white font-bold" : "text-slate-900 font-bold"
+                              : isDarkMode ? "text-slate-400" : "text-slate-500",
+                          )}>
+                            {text}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <p className={cx(
+          "text-xs mt-3 text-center",
+          isDarkMode ? "text-slate-500" : "text-slate-400",
+        )}>
+          Score 0 = No mention. Scores 1–5 progress from qualitative to patient-centered quantitative communication.
+        </p>
+      </div>
+    </>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════
+// RubricLegendStrip — always-visible 0–5 scoring legend shown on the
+// dashboard, below the trajectory chart. Reuses RUBRIC_SCORE_LEVELS and
+// mirrors the modal's scale-bar visual so doctors can see at a glance what
+// each score means. Every score and the explicit "view full rubric" link
+// open the existing Scoring Rubric modal (kept unchanged).
+// ═══════════════════════════════════════════════════════════
+interface RubricLegendStripProps {
+  isDarkMode: boolean;
+  onTrackEvent?: (
+    eventType: string,
+    elementId: string,
+    metadata?: Record<string, any>,
+  ) => void;
+}
+
+const RubricLegendStrip: React.FC<RubricLegendStripProps> = ({
+  isDarkMode,
+  onTrackEvent,
+}) => {
+  // The full rubric expands inline below the legend (instead of a modal).
+  const [expanded, setExpanded] = useState(false);
+  // Score to seed the inline RubricBody (null = no locked level). bodyKey
+  // re-mounts RubricBody so a tick click re-locks it even while already open.
+  const [legendScore, setLegendScore] = useState<number | null>(null);
+  const [bodyKey, setBodyKey] = useState(0);
+
+  // Expand the inline rubric, optionally locked to a score.
+  const expandAt = (score: number | null) => {
+    setLegendScore(score);
+    setBodyKey((k) => k + 1);
+    setExpanded(true);
+  };
+
+  return (
+    <div
+      data-tour="rubric-legend-strip"
+      className={cx(
+        "rounded-xl border p-4 sm:p-5",
+        isDarkMode
+          ? "bg-slate-800/60 border-slate-700"
+          : "bg-white border-slate-200 shadow-sm",
+      )}
+    >
+      <div className="flex items-center justify-between mb-4 gap-3">
+        <div>
+          <h2
+            className={cx(
+              "text-sm sm:text-base font-semibold",
+              isDarkMode ? "text-slate-100" : "text-slate-900",
+            )}
+          >
+            Risk Communication Scoring Rubric
+          </h2>
+          <p
+            className={cx(
+              "text-xs sm:text-sm mt-0.5",
+              isDarkMode ? "text-slate-400" : "text-slate-500",
+            )}
+          >
+            Hover or click a score level to see domain-specific criteria
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            if (expanded) {
+              setExpanded(false);
+              onTrackEvent?.("rubric_strip_collapse", "rubric_strip_view_all");
+            } else {
+              expandAt(null);
+              onTrackEvent?.("rubric_strip_expand", "rubric_strip_view_all");
+            }
+          }}
+          className="inline-flex items-center gap-1 text-xs sm:text-sm font-semibold rounded-md px-3 py-1.5 bg-cyan-600 text-white hover:bg-cyan-500 transition-colors whitespace-nowrap"
+          title={expanded ? "Hide the full scoring rubric" : "Show the full scoring rubric"}
+        >
+          {expanded ? "▼ Hide full rubric" : "▶ View full rubric — click here"}
+        </button>
+      </div>
+
+      {/* Compact scale bar — shown when collapsed; sized to match RubricBody's
+          scale bar so the blue axis doesn't shift when the rubric expands. */}
+      {!expanded && (
+      <div className="px-8 sm:px-12 pt-6 pb-4 overflow-visible">
+        <div className="mx-12 sm:mx-16">
+          <div className="relative">
+            <div
+              className={cx(
+                "h-2 rounded-full",
+                isDarkMode ? "bg-blue-400" : "bg-blue-600",
+              )}
+            >
+              {RUBRIC_SCORE_LEVELS.map((_, index) => (
+                <div
+                  key={index}
+                  className="absolute -top-2 h-6"
+                  style={{
+                    left: `${(index / 5) * 100}%`,
+                    transform: "translateX(-50%)",
+                    borderLeft: `2px dashed ${isDarkMode ? "#93c5fd" : "#2563eb"}`,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="relative mt-4" style={{ height: "80px" }}>
+            {RUBRIC_SCORE_LEVELS.map(({ score, label }, index) => (
+              <button
+                key={score}
+                type="button"
+                onClick={() => {
+                  expandAt(score);
+                  onTrackEvent?.("rubric_strip_score", `rubric_strip_score_${score}`, { score });
+                }}
+                className="absolute text-center cursor-pointer group"
+                style={{
+                  left: `${(index / 5) * 100}%`,
+                  transform: "translateX(-50%)",
+                  width: "90px",
+                }}
+                title={`Click to see criteria for score ${score}: ${label}`}
+              >
+                <div
+                  className={cx(
+                    "text-lg font-bold mb-1 border-b-2 border-dashed transition-colors",
+                    isDarkMode
+                      ? "text-gray-100 border-slate-500 group-hover:text-cyan-400 group-hover:border-cyan-500"
+                      : "text-gray-800 border-slate-400 group-hover:text-cyan-600 group-hover:border-cyan-400",
+                  )}
+                >
+                  {score}
+                </div>
+                <div
+                  className={cx(
+                    "text-xs leading-tight transition-colors",
+                    isDarkMode
+                      ? "text-gray-200 group-hover:text-cyan-400"
+                      : "text-gray-800 group-hover:text-cyan-600",
+                  )}
+                >
+                  {label}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      )}
+
+      {/* Full rubric — the SAME body as the Scoring Rubric modal, inline */}
+      {expanded && (
+        <div>
+          <RubricBody key={bodyKey} isDarkMode={isDarkMode} initialScore={legendScore} onTrackEvent={onTrackEvent} />
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════
+// PatientScoreBreakdownModal — centered modal opened from a patient's
+// Overall Score in the Patient Reports table. Shows that patient's per-domain
+// (category) score and the rubric criterion that corresponds to each score.
+// Per-domain scores come straight from scoreAverageData (no extra fetch);
+// criteria reuse RUBRIC_DATA / RUBRIC_SCORE_LEVELS.
+// ═══════════════════════════════════════════════════════════
+interface PatientScoreBreakdownModalProps {
+  isDarkMode: boolean;
+  patient: PatientRow | null;
+  scoreAverageData?: ScoreAverageItem[];
+  onClose: () => void;
+  onOpenRubric?: (domain: TopicName | "All Domains", score: number | null) => void;
+  onTrackEvent?: (
+    eventType: string,
+    elementId: string,
+    metadata?: Record<string, any>,
+  ) => void;
+}
+
+const PatientScoreBreakdownModal: React.FC<PatientScoreBreakdownModalProps> = ({
+  isDarkMode,
+  patient,
+  scoreAverageData,
+  onClose,
+  onOpenRubric,
+  onTrackEvent,
+}) => {
+  // Close on Escape — only while a patient is selected (modal is open).
+  useEffect(() => {
+    if (!patient) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [patient, onClose]);
+
+  // Per-domain score + rubric criterion for this patient. avg_score may be a
+  // float (e.g. 3.5); Math.round picks the rubric level, matching the grid
+  // badge's existing rounding when it opens the rubric.
+  const rows = useMemo(() => {
+    if (!patient) return [];
+    return RUBRIC_DOMAINS.map((domain) => {
+      const item = (scoreAverageData ?? []).find(
+        (d) =>
+          d.file === patient.fileName &&
+          d.avg_score !== null &&
+          (d.class === TOPIC_TO_CLASS[domain] || d.class === TOPIC_TO_MODEL[domain]),
+      );
+      const avg = item?.avg_score ?? null;
+      const level = avg === null ? null : Math.min(5, Math.max(0, Math.round(avg)));
+      const criterion =
+        level === null
+          ? "AI score not available"
+          : level === 0
+            ? "No mention of this domain in the consultation."
+            : RUBRIC_DATA[domain]?.[level] ?? "—";
+      const levelLabel =
+        level === null ? "—" : RUBRIC_SCORE_LEVELS[level]?.label ?? "—";
+      return { domain, avg, level, criterion, levelLabel };
+    });
+  }, [patient, scoreAverageData]);
+
+  if (!patient) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-start justify-center pt-16 px-4"
+      role="dialog"
+      aria-modal="true"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      {/* Content */}
+      <div
+        className={cx(
+          "relative z-[71] w-full max-w-2xl max-h-[80vh] overflow-y-auto rounded-2xl border shadow-2xl",
+          isDarkMode
+            ? "bg-slate-900 border-slate-700"
+            : "bg-white border-slate-200",
+        )}
+      >
+        {/* Header */}
+        <div
+          className={cx(
+            "sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b",
+            isDarkMode ? "bg-slate-900 border-slate-700" : "bg-white border-slate-200",
+          )}
+        >
+          <div>
+            <h2 className={cx("text-lg font-bold", isDarkMode ? "text-white" : "text-slate-900")}>
+              {patient.id} — Score Breakdown
+            </h2>
+            <p className={cx("text-sm mt-0.5", isDarkMode ? "text-slate-400" : "text-slate-500")}>
+              Per-category score and the matching rubric criterion. Click a row for the full rubric.
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className={cx(
+              "p-2 rounded-lg transition-colors",
+              isDarkMode
+                ? "hover:bg-slate-800 text-slate-400 hover:text-white"
+                : "hover:bg-slate-100 text-slate-500 hover:text-slate-900",
+            )}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Domain rows */}
+        <div className="p-4 space-y-2">
+          {rows.map(({ domain, avg, level, criterion, levelLabel }) => (
+            <button
+              key={domain}
+              type="button"
+              onClick={() => {
+                onTrackEvent?.("patient_score_breakdown_domain_click", `breakdown_${TOPIC_TO_MODEL[domain]}`, { domain, level });
+                onOpenRubric?.(domain, level);
+              }}
+              className={cx(
+                "w-full flex items-start gap-3 text-left rounded-xl border p-3 transition-colors",
+                isDarkMode
+                  ? "border-slate-700 hover:bg-slate-800/60"
+                  : "border-slate-200 hover:bg-slate-50",
+              )}
+              title="Click to open the full rubric for this domain"
+            >
+              <span
+                className={cx(
+                  "inline-flex items-center justify-center w-10 h-10 rounded-full text-sm font-bold flex-shrink-0",
+                  getScoreColorForValue(avg, isDarkMode),
+                )}
+              >
+                {avg !== null ? avg.toFixed(1) : "—"}
+              </span>
+              <span className="min-w-0">
+                <span className={cx("block text-sm font-semibold", isDarkMode ? "text-slate-100" : "text-slate-900")}>
+                  {domain}
+                  <span className={cx("ml-2 text-xs font-medium", isDarkMode ? "text-slate-400" : "text-slate-500")}>
+                    {level !== null ? `Level ${level} · ${levelLabel}` : "No AI score"}
+                  </span>
+                </span>
+                <span className={cx("block text-xs mt-1 leading-snug", isDarkMode ? "text-slate-300" : "text-slate-600")}>
+                  {criterion}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className={cx("px-4 pb-4 flex justify-end")}>
+          <button
+            type="button"
+            onClick={() => {
+              onTrackEvent?.("patient_score_breakdown_view_all", "breakdown_view_full_rubric");
+              onOpenRubric?.("All Domains", null);
+            }}
+            className="inline-flex items-center gap-1 text-xs sm:text-sm font-semibold rounded-md px-3 py-1.5 bg-cyan-600 text-white hover:bg-cyan-500 transition-colors"
+          >
+            ▶ View full rubric — click here
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════
+// PatientRubricReportModal — combined view opened from a patient's Overall
+// Score. For each domain it shows the patient's score AND that domain's full
+// 0–5 rubric, highlighting the level the patient reached — so a doctor sees
+// what every level means and what the next level would require. Reuses the
+// same per-domain score computation and the rubric modal's level-row visual.
+// ═══════════════════════════════════════════════════════════
+interface PatientRubricReportModalProps {
+  isDarkMode: boolean;
+  patient: PatientRow | null;
+  scoreAverageData?: ScoreAverageItem[];
+  onClose: () => void;
+  onOpenRubric?: (domain: TopicName | "All Domains", score: number | null) => void;
+  onTrackEvent?: (
+    eventType: string,
+    elementId: string,
+    metadata?: Record<string, any>,
+  ) => void;
+}
+
+const PatientRubricReportModal: React.FC<PatientRubricReportModalProps> = ({
+  isDarkMode,
+  patient,
+  scoreAverageData,
+  onClose,
+  onOpenRubric,
+  onTrackEvent,
+}) => {
+  useEffect(() => {
+    if (!patient) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [patient, onClose]);
+
+  // Patient's score + rounded rubric level per domain (same source/rounding as
+  // the simpler breakdown modal and the grid badge).
+  const rows = useMemo(() => {
+    if (!patient) return [];
+    return RUBRIC_DOMAINS.map((domain) => {
+      const item = (scoreAverageData ?? []).find(
+        (d) =>
+          d.file === patient.fileName &&
+          d.avg_score !== null &&
+          (d.class === TOPIC_TO_CLASS[domain] || d.class === TOPIC_TO_MODEL[domain]),
+      );
+      const avg = item?.avg_score ?? null;
+      const level = avg === null ? null : Math.min(5, Math.max(0, Math.round(avg)));
+      return { domain, avg, level };
+    });
+  }, [patient, scoreAverageData]);
+
+  if (!patient) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-start justify-center pt-12 px-4"
+      role="dialog"
+      aria-modal="true"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+
+      <div
+        className={cx(
+          "relative z-[71] w-full max-w-3xl max-h-[85vh] overflow-y-auto rounded-2xl border shadow-2xl",
+          isDarkMode ? "bg-slate-900 border-slate-700" : "bg-white border-slate-200",
+        )}
+      >
+        {/* Header */}
+        <div
+          className={cx(
+            "sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b",
+            isDarkMode ? "bg-slate-900 border-slate-700" : "bg-white border-slate-200",
+          )}
+        >
+          <div>
+            <h2 className={cx("text-lg font-bold", isDarkMode ? "text-white" : "text-slate-900")}>
+              {patient.id} — Rubric Report
+            </h2>
+            <p className={cx("text-sm mt-0.5", isDarkMode ? "text-slate-400" : "text-slate-500")}>
+              Each category shows the full 0–5 rubric with your score highlighted.
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className={cx(
+              "p-2 rounded-lg transition-colors",
+              isDarkMode
+                ? "hover:bg-slate-800 text-slate-400 hover:text-white"
+                : "hover:bg-slate-100 text-slate-500 hover:text-slate-900",
+            )}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Domain sections */}
+        <div className="p-4 space-y-4">
+          {rows.map(({ domain, avg, level }) => (
+            <div
+              key={domain}
+              className={cx(
+                "rounded-xl border",
+                isDarkMode ? "border-slate-700" : "border-slate-200",
+              )}
+            >
+              {/* Domain header — click hands off to the interactive rubric modal */}
+              <button
+                type="button"
+                onClick={() => {
+                  onTrackEvent?.("patient_rubric_report_domain_click", `report_${TOPIC_TO_MODEL[domain]}`, { domain, level });
+                  onOpenRubric?.(domain, level);
+                }}
+                className={cx(
+                  "w-full flex items-center gap-3 px-4 py-3 text-left rounded-t-xl transition-colors",
+                  isDarkMode ? "hover:bg-slate-800/60" : "hover:bg-slate-50",
+                )}
+                title="Open the interactive rubric for this domain"
+              >
+                <span
+                  className={cx(
+                    "inline-flex items-center justify-center w-9 h-9 rounded-full text-sm font-bold flex-shrink-0",
+                    getScoreColorForValue(avg, isDarkMode),
+                  )}
+                >
+                  {avg !== null ? avg.toFixed(1) : "—"}
+                </span>
+                <span className="min-w-0">
+                  <span className={cx("block text-sm font-semibold", isDarkMode ? "text-slate-100" : "text-slate-900")}>
+                    {domain}
+                  </span>
+                  <span className={cx("block text-xs", isDarkMode ? "text-slate-400" : "text-slate-500")}>
+                    {level !== null
+                      ? `Your score: ${avg!.toFixed(1)} · Level ${level} (${RUBRIC_SCORE_LEVELS[level].label})`
+                      : "No AI score available"}
+                  </span>
+                </span>
+              </button>
+
+              {/* Full 0–5 rubric for this domain */}
+              <div className={cx("px-4 pb-3 space-y-1.5", isDarkMode ? "bg-slate-800/30" : "bg-white")}>
+                {RUBRIC_SCORE_LEVELS.map(({ score: s, label, color }) => {
+                  const text = s === 0 ? "No mention of this topic" : RUBRIC_DATA[domain][s];
+                  const isYou = level !== null && s === level;
+                  return (
+                    <div
+                      key={s}
+                      className={cx(
+                        "flex gap-2.5 items-start rounded-lg px-2 py-1.5 transition-colors",
+                        isYou
+                          ? isDarkMode
+                            ? "bg-cyan-900/30 ring-1 ring-cyan-500/50"
+                            : "bg-cyan-50 ring-1 ring-cyan-400/50"
+                          : "",
+                      )}
+                    >
+                      <span className={cx("inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold text-white flex-shrink-0 mt-0.5", color)}>
+                        {s}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className={cx(
+                            "text-sm leading-snug",
+                            isYou
+                              ? isDarkMode ? "text-white font-bold" : "text-slate-900 font-bold"
+                              : isDarkMode ? "text-slate-400" : "text-slate-500",
+                          )}
+                        >
+                          {label}: {text}
+                        </span>
+                      </span>
+                      {isYou && (
+                        <span className={cx("text-xs font-bold flex-shrink-0 mt-0.5", isDarkMode ? "text-cyan-400" : "text-cyan-600")}>
+                          ◀ you
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer "View full rubric" button hidden per request. */}
+      </div>
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════
 // RubricTourTooltip — custom inline tooltip for modal mini-tour
 // ═══════════════════════════════════════════════════════════
 interface RubricTourTooltipProps {
@@ -748,10 +1623,11 @@ const RubricFloatingButton: React.FC<RubricFloatingButtonProps> = ({
   onTrackEvent,
 }) => {
   const [open, setOpen] = useState(false);
-  const [hoveredScore, setHoveredScore] = useState<number | null>(null);
-  const [lockedScore, setLockedScore] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<string>("All Domains");
-  const [expandedDomains, setExpandedDomains] = useState<Set<string>>(new Set([RUBRIC_DOMAINS[0]]));
+  // Seeds for the shared RubricBody; bumping bodyKey re-mounts it so an
+  // external request can "open at" a specific score/tab.
+  const [bodyScore, setBodyScore] = useState<number | null>(null);
+  const [bodyTab, setBodyTab] = useState<string>("All Domains");
+  const [bodyKey, setBodyKey] = useState(0);
 
   // Custom mini tour inside rubric modal
   const RUBRIC_TOUR_KEY = "rubric-modal-tour-completed";
@@ -808,30 +1684,17 @@ const RubricFloatingButton: React.FC<RubricFloatingButtonProps> = ({
     }
   }, [rubricTourStep]);
 
-  // Handle external open trigger (from GridView score click)
+  // Handle external open trigger (from a score click elsewhere). Seed the body
+  // and re-mount it (bodyKey) so it opens locked at that score/tab.
   useEffect(() => {
     if (externalOpen && externalTab !== undefined && externalScore !== undefined) {
+      setBodyTab(externalTab || "All Domains");
+      setBodyScore(externalScore);
+      setBodyKey((k) => k + 1);
       setOpen(true);
-      setActiveTab(externalTab || "All Domains");
-      setLockedScore(externalScore);
-      setHoveredScore(null);
       onExternalHandled?.();
     }
   }, [externalOpen, externalTab, externalScore, onExternalHandled]);
-
-  // Active score: locked takes priority over hovered
-  const activeScore = lockedScore !== null ? lockedScore : hoveredScore;
-
-  const toggleDomain = (domain: string) => {
-    setExpandedDomains((prev) => {
-      const next = new Set(prev);
-      const expanding = !next.has(domain);
-      if (expanding) next.add(domain);
-      else next.delete(domain);
-      onTrackEvent?.(expanding ? "rubric_domain_expand" : "rubric_domain_collapse", `rubric_domain_${domain}`, { domain });
-      return next;
-    });
-  };
 
   return (
     <>
@@ -854,7 +1717,7 @@ const RubricFloatingButton: React.FC<RubricFloatingButtonProps> = ({
           style={{ animationDuration: "2s" }}
         />
         <button
-          onClick={() => { setOpen(true); onTrackEvent?.("rubric_modal_open", "rubric_floating_button"); }}
+          onClick={() => { setBodyScore(null); setBodyTab("All Domains"); setBodyKey((k) => k + 1); setOpen(true); onTrackEvent?.("rubric_modal_open", "rubric_floating_button"); }}
           className={cx(
             "relative flex items-center gap-2 px-4 py-2.5 rounded-full font-semibold text-sm transition-all",
             "hover:scale-105 active:scale-95 animate-pulse",
@@ -876,10 +1739,10 @@ const RubricFloatingButton: React.FC<RubricFloatingButtonProps> = ({
       {open && (
         <div
           className="fixed inset-0 z-[70] flex items-start justify-center pt-16 px-4"
-          onClick={(e) => { if (e.target === e.currentTarget) { setOpen(false); setLockedScore(null); setHoveredScore(null); onTrackEvent?.("rubric_modal_close", "rubric_overlay"); } }}
+          onClick={(e) => { if (e.target === e.currentTarget) { setOpen(false); onTrackEvent?.("rubric_modal_close", "rubric_overlay"); } }}
         >
           {/* Backdrop */}
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { setOpen(false); setLockedScore(null); setHoveredScore(null); onTrackEvent?.("rubric_modal_close", "rubric_backdrop"); }} />
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { setOpen(false); onTrackEvent?.("rubric_modal_close", "rubric_backdrop"); }} />
 
           {/* Modal content — visible scrollbar */}
           <div
@@ -914,7 +1777,7 @@ const RubricFloatingButton: React.FC<RubricFloatingButtonProps> = ({
                 </p>
               </div>
               <button
-                onClick={() => { setOpen(false); setLockedScore(null); setHoveredScore(null); onTrackEvent?.("rubric_modal_close", "rubric_close_button"); }}
+                onClick={() => { setOpen(false); onTrackEvent?.("rubric_modal_close", "rubric_close_button"); }}
                 className={cx(
                   "p-2 rounded-lg transition-colors",
                   isDarkMode
@@ -928,287 +1791,15 @@ const RubricFloatingButton: React.FC<RubricFloatingButtonProps> = ({
               </button>
             </div>
 
-            {/* Scale bar chart — replicated from ConsultationScoring */}
-            <div data-tour="rubric-scale-bar" className="px-8 sm:px-12 pt-6 pb-4 overflow-visible">
-              {/* Scale bar — with horizontal padding so edge labels don't clip */}
-              <div className="mx-12 sm:mx-16">
-                <div className="relative">
-                  <div className={cx("h-2 rounded-full", isDarkMode ? "bg-blue-400" : "bg-blue-600")}>
-                    {/* Ticks */}
-                    {RUBRIC_SCORE_LEVELS.map((_, index) => (
-                      <div
-                        key={index}
-                        className="absolute -top-2 h-6"
-                        style={{
-                          left: `${(index / 5) * 100}%`,
-                          transform: "translateX(-50%)",
-                          borderLeft: `2px dashed ${isDarkMode ? "#93c5fd" : "#2563eb"}`,
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                {/* Scale numbers and labels — hover sets hoveredScore for rubric table */}
-                <div className="relative mt-4" style={{ height: "80px" }}>
-                  {RUBRIC_SCORE_LEVELS.map(({ score, label }, index) => {
-                    const isActive = activeScore === score;
-                    const isLocked = lockedScore === score;
-                    return (
-                      <div
-                        key={score}
-                        className="absolute text-center"
-                        style={{
-                          left: `${(index / 5) * 100}%`,
-                          transform: "translateX(-50%)",
-                          width: "90px",
-                        }}
-                        onMouseEnter={() => { if (lockedScore === null) setHoveredScore(score); }}
-                        onMouseLeave={() => { if (lockedScore === null) setHoveredScore(null); }}
-                        onClick={() => {
-                          const newLocked = lockedScore === score ? null : score;
-                          setLockedScore(newLocked);
-                          onTrackEvent?.(newLocked !== null ? "rubric_score_lock" : "rubric_score_unlock", `rubric_score_${score}`, { score });
-                        }}
-                      >
-                        <div
-                          className={cx(
-                            "text-lg font-bold mb-1 cursor-pointer border-b-2 transition-colors",
-                            isLocked ? "border-solid" : "border-dashed",
-                            isActive
-                              ? isDarkMode ? "text-cyan-400 border-cyan-500" : "text-cyan-600 border-cyan-400"
-                              : isDarkMode ? "text-gray-100 border-slate-500" : "text-gray-800 border-slate-400",
-                          )}
-                          style={{ paddingBottom: "2px" }}
-                        >
-                          {score}
-                        </div>
-                        <div
-                          className={cx(
-                            "text-xs whitespace-pre-line leading-tight transition-colors",
-                            isActive
-                              ? isDarkMode ? "text-cyan-400 font-semibold" : "text-cyan-600 font-semibold"
-                              : isDarkMode ? "text-gray-200" : "text-gray-800",
-                          )}
-                        >
-                          {label}
-                        </div>
-                        {isLocked && (
-                          <div className={cx("text-[9px] mt-0.5", isDarkMode ? "text-cyan-500" : "text-cyan-500")}>
-                            (locked)
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Subtitle */}
-              <div className="text-center mt-2">
-                <h3 className={cx(
-                  "text-lg font-semibold",
-                  isDarkMode ? "text-gray-100" : "text-gray-800",
-                )}>
-                  Quality of Risk Communication
-                </h3>
-              </div>
-            </div>
-
-            {/* Domain rubric — tabs + accordion hybrid */}
-            <div className="px-6 pb-6">
-              {/* Status bar */}
-              <div className={cx(
-                "text-xs font-semibold uppercase tracking-wider px-4 py-2 mb-3 rounded-lg text-center",
-                isDarkMode ? "bg-slate-800 text-slate-400" : "bg-slate-100 text-slate-500",
-              )}>
-                {activeScore !== null
-                  ? `Score ${activeScore === 0 ? "0" : `1–${activeScore}`} Criteria${lockedScore !== null ? " — click score again to unlock" : ""}`
-                  : "Hover or click a score above to see criteria"}
-              </div>
-
-              {/* Domain tabs — "All Domains" + individual */}
-              <div data-tour="rubric-tabs" className={cx(
-                "flex border-b overflow-x-auto",
-                isDarkMode ? "border-slate-700" : "border-slate-200",
-              )}>
-                {["All Domains", ...RUBRIC_DOMAINS].map((tab) => {
-                  const shortLabel: Record<string, string> = {
-                    "All Domains": "All",
-                    "Cancer Prognosis": "CP",
-                    "Life Expectancy": "LE",
-                    "Erectile Dysfunction": "ED",
-                    "Urinary Incontinence": "INC",
-                    "Irritative Symptoms": "IUS",
-                  };
-                  return (
-                    <button
-                      key={tab}
-                      onClick={() => { setActiveTab(tab); onTrackEvent?.("rubric_tab_change", `rubric_tab_${tab}`, { tab }); }}
-                      className={cx(
-                        "px-3 py-2.5 text-xs sm:text-sm font-medium text-center transition-colors relative whitespace-nowrap",
-                        tab === "All Domains" ? "flex-shrink-0" : "flex-1",
-                        activeTab === tab
-                          ? isDarkMode ? "text-cyan-400" : "text-cyan-600"
-                          : isDarkMode ? "text-slate-400 hover:text-slate-200" : "text-slate-500 hover:text-slate-700",
-                      )}
-                    >
-                      <span className="hidden sm:inline">{tab === "Irritative Symptoms" ? "Irritative Sym." : tab}</span>
-                      <span className="sm:hidden">{shortLabel[tab] || tab}</span>
-                      {activeTab === tab && (
-                        <div className={cx(
-                          "absolute bottom-0 left-0 right-0 h-0.5",
-                          isDarkMode ? "bg-cyan-400" : "bg-cyan-600",
-                        )} />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Tab content */}
-              <div data-tour="rubric-content" className={cx(
-                "rounded-b-xl border border-t-0",
-                isDarkMode ? "border-slate-700" : "border-slate-200",
-              )}>
-                {activeTab === "All Domains" ? (
-                  /* All Domains — accordion view */
-                  <div>
-                    {/* Expand/Collapse All */}
-                    <div className={cx(
-                      "flex justify-end px-4 py-2",
-                      isDarkMode ? "bg-slate-800/30" : "bg-slate-50",
-                    )}>
-                      <button
-                        onClick={() => {
-                          if (expandedDomains.size === RUBRIC_DOMAINS.length) {
-                            setExpandedDomains(new Set());
-                          } else {
-                            setExpandedDomains(new Set(RUBRIC_DOMAINS));
-                          }
-                        }}
-                        className={cx(
-                          "text-xs font-medium px-2 py-1 rounded transition-colors",
-                          isDarkMode ? "hover:bg-slate-700 text-slate-400" : "hover:bg-slate-200 text-slate-500",
-                        )}
-                      >
-                        {expandedDomains.size === RUBRIC_DOMAINS.length ? "Collapse All" : "Expand All"}
-                      </button>
-                    </div>
-
-                    {RUBRIC_DOMAINS.map((domain, idx) => {
-                      const isExpanded = expandedDomains.has(domain);
-                      return (
-                        <div
-                          key={domain}
-                          className={cx(
-                            idx < RUBRIC_DOMAINS.length - 1 && (isDarkMode ? "border-b border-slate-700" : "border-b border-slate-200"),
-                          )}
-                        >
-                          <button
-                            onClick={() => toggleDomain(domain)}
-                            className={cx(
-                              "w-full flex items-center justify-between px-4 py-3 text-sm font-medium transition-colors text-left",
-                              isDarkMode ? "text-slate-200 hover:bg-slate-800" : "text-slate-700 hover:bg-slate-50",
-                            )}
-                          >
-                            <span>{domain}</span>
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              className={cx(
-                                "w-4 h-4 transition-transform duration-200 flex-shrink-0",
-                                isExpanded && "rotate-180",
-                                isDarkMode ? "text-slate-400" : "text-slate-500",
-                              )}
-                              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                            </svg>
-                          </button>
-
-                          {isExpanded && (
-                            <div className={cx("px-4 pb-3", isDarkMode ? "bg-slate-800/50" : "bg-white")}>
-                              {activeScore === null
-                                ? <span className={cx("text-sm", isDarkMode ? "text-slate-500" : "text-slate-400")}>Select a score above</span>
-                                : (
-                                  <div className="space-y-1.5">
-                                    {Array.from({ length: activeScore + 1 }, (_, s) => s)
-                                      .filter((s) => activeScore === 0 ? true : s > 0)
-                                      .map((s) => {
-                                      const text = s === 0 ? "No mention of this topic" : RUBRIC_DATA[domain][s];
-                                      const isActiveLevel = s === activeScore;
-                                      return (
-                                        <div key={s} className="flex gap-2 items-start">
-                                          <span className={cx(
-                                            "inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold text-white flex-shrink-0 mt-0.5",
-                                            RUBRIC_SCORE_LEVELS[s].color,
-                                          )}>
-                                            {s}
-                                          </span>
-                                          <span className={cx(
-                                            "text-sm leading-snug",
-                                            isActiveLevel
-                                              ? isDarkMode ? "text-white font-bold" : "text-slate-900 font-bold"
-                                              : isDarkMode ? "text-slate-400" : "text-slate-500",
-                                          )}>
-                                            {text}
-                                          </span>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  /* Individual domain tab — direct content */
-                  <div className="p-4">
-                    {activeScore === null
-                      ? <span className={cx("text-sm", isDarkMode ? "text-slate-500" : "text-slate-400")}>Select a score above to see criteria</span>
-                      : (
-                        <div className="space-y-2">
-                          {Array.from({ length: activeScore + 1 }, (_, s) => s)
-                            .filter((s) => activeScore === 0 ? true : s > 0)
-                            .map((s) => {
-                            const text = s === 0 ? "No mention of this topic" : RUBRIC_DATA[activeTab][s];
-                            const isActiveLevel = s === activeScore;
-                            return (
-                              <div key={s} className="flex gap-2.5 items-start">
-                                <span className={cx(
-                                  "inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold text-white flex-shrink-0 mt-0.5",
-                                  RUBRIC_SCORE_LEVELS[s].color,
-                                )}>
-                                  {s}
-                                </span>
-                                <span className={cx(
-                                  "text-sm leading-snug pt-0.5",
-                                  isActiveLevel
-                                    ? isDarkMode ? "text-white font-bold" : "text-slate-900 font-bold"
-                                    : isDarkMode ? "text-slate-400" : "text-slate-500",
-                                )}>
-                                  {text}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                  </div>
-                )}
-              </div>
-
-              {/* Footer */}
-              <p className={cx(
-                "text-xs mt-3 text-center",
-                isDarkMode ? "text-slate-500" : "text-slate-400",
-              )}>
-                Score 0 = No mention. Scores 1–5 progress from qualitative to patient-centered quantitative communication.
-              </p>
-            </div>
+            {/* Quality of Risk Communication body — the shared RubricBody,
+                identical to the inline legend version */}
+            <RubricBody
+              key={bodyKey}
+              isDarkMode={isDarkMode}
+              initialScore={bodyScore}
+              initialTab={bodyTab}
+              onTrackEvent={onTrackEvent}
+            />
 
             {/* Custom mini tour tooltips — rendered inline, no portal */}
             {rubricTourStep !== null && (() => {
@@ -1745,6 +2336,9 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
   setSelectedPatient,
   setCurrentView,
   trajectoryData,
+  scoreAverageData,
+  onOpenRubric,
+  onTrackEvent,
 }) => {
   // Only count patients with AI scores (GPT-4o pipeline completed)
   const scoredPatients = patients.filter((p) => p.overallScore != null && p.overallScore > 0);
@@ -1822,9 +2416,13 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
     });
   }, [trajectoryData]);
 
-  // Chart mode: "average" = cumulative running average (default),
-  // "individual" = each consultation's own score (non-cumulative).
-  const [viewMode, setViewMode] = useState<"average" | "individual">("average");
+  // Chart mode: "individual" = each consultation's own score (default,
+  // non-cumulative), "average" = cumulative running average.
+  const [viewMode, setViewMode] = useState<"average" | "individual">("individual");
+
+  // Patient whose Rubric Report modal is open (opened by clicking the Overall
+  // Score badge in the Patient Reports table).
+  const [reportPatient, setReportPatient] = useState<PatientRow | null>(null);
 
   // Custom hover tooltip — a stable tooltip we fully control. recharts' own
   // tooltip follows the cursor and re-renders on every mousemove, so a long
@@ -1931,7 +2529,7 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
               className="inline-flex rounded-md border overflow-hidden text-xs"
               style={{ borderColor: isDarkMode ? "#475569" : "#cbd5e1" }}
             >
-              {(["average", "individual"] as const).map((m) => (
+              {(["individual", "average"] as const).map((m) => (
                 <button
                   key={m}
                   onClick={() => setViewMode(m)}
@@ -2158,6 +2756,22 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
+      {/* ── Row 2b: Always-visible scoring legend (full width) ── */}
+      <RubricLegendStrip
+        isDarkMode={isDarkMode}
+        onTrackEvent={onTrackEvent}
+      />
+
+      {/* Per-patient Rubric Report modal (opened from an Overall Score click) */}
+      <PatientRubricReportModal
+        isDarkMode={isDarkMode}
+        patient={reportPatient}
+        scoreAverageData={scoreAverageData}
+        onClose={() => setReportPatient(null)}
+        onOpenRubric={onOpenRubric}
+        onTrackEvent={onTrackEvent}
+      />
+
       {/* ── Row 3: Patient List (main content, full width) ── */}
       <div
         data-tour="patient-list"
@@ -2262,6 +2876,14 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                       {sortCaret("score")}
                     </span>
                   </button>
+                  <span
+                    className={cx(
+                      "block normal-case tracking-normal text-[10px] font-normal mt-0.5",
+                      isDarkMode ? "text-cyan-400" : "text-cyan-600",
+                    )}
+                  >
+                    Click a score for category breakdown
+                  </span>
                 </th>
                 <th className="px-6 py-3 text-center font-semibold" style={{ width: "22%" }}>
                   Actions
@@ -2283,14 +2905,9 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                   className={cx(
                     "transition-colors",
                     hasScore
-                      ? cx("cursor-pointer", isDarkMode ? "hover:bg-slate-700/30" : "hover:bg-slate-50")
-                      : cx("cursor-not-allowed", isDarkMode ? "opacity-50" : "opacity-40"),
+                      ? isDarkMode ? "hover:bg-slate-700/30" : "hover:bg-slate-50"
+                      : isDarkMode ? "opacity-50" : "opacity-40",
                   )}
-                  onClick={() => {
-                    if (!hasScore) return;
-                    setSelectedPatient(patient);
-                    setCurrentView("grid");
-                  }}
                 >
                   <td className="px-6 py-3.5" style={{ width: "35%" }}>
                     <div
@@ -2340,16 +2957,55 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                   </td>
                   <td className="px-6 py-3.5" style={{ width: "30%" }}>
                     <div className="flex items-center gap-2.5">
-                      <span
+                      <button
+                        type="button"
+                        disabled={!hasScore}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setReportPatient(patient);
+                          onTrackEvent?.(
+                            "patient_score_click",
+                            `dashboard_overall_score_${patient.id}`,
+                            { overallScore: patient.overallScore },
+                          );
+                        }}
+                        title={
+                          hasScore
+                            ? "Click to see per-category scores & criteria"
+                            : undefined
+                        }
                         className={cx(
-                          "inline-flex items-center justify-center w-9 h-9 rounded-full text-sm font-bold",
+                          "relative inline-flex items-center justify-center w-9 h-9 rounded-full text-sm font-bold transition-all",
                           getScoreColorForValue(patient.overallScore, isDarkMode),
+                          hasScore
+                            ? "cursor-pointer ring-2 ring-cyan-400/50 hover:ring-4 hover:ring-cyan-400/70 hover:scale-105"
+                            : "cursor-not-allowed",
                         )}
                       >
+                        {/* Pulsing ring radiates from the score circle to signal it's clickable */}
+                        {hasScore && (
+                          <span
+                            aria-hidden
+                            className="absolute inset-0 rounded-full ring-2 ring-cyan-400 animate-ping pointer-events-none"
+                          />
+                        )}
                         {patient.overallScore > 0
                           ? patient.overallScore.toFixed(1)
                           : "—"}
-                      </span>
+                        {/* Always-visible magnifier pip signals the score is clickable */}
+                        {hasScore && (
+                          <span
+                            className={cx(
+                              "absolute -top-1.5 -right-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-cyan-500 text-white ring-2",
+                              isDarkMode ? "ring-slate-800" : "ring-white",
+                            )}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14z" />
+                            </svg>
+                          </span>
+                        )}
+                      </button>
                       <span
                         className={cx(
                           "text-xs font-medium px-2 py-0.5 rounded-full",
@@ -3742,12 +4398,18 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   const [rubricTab, setRubricTab] = useState<string>("All Domains");
   const [rubricScore, setRubricScore] = useState<number | null>(null);
 
-  const handleOpenRubric = useCallback((domain: TopicName, score: number) => {
-    // Map TopicName to rubric domain string (Irritative Symptoms matches)
-    setRubricTab(domain === "Irritative Symptoms" ? "Irritative Symptoms" : domain);
-    setRubricScore(score);
-    setRubricOpen(true);
-  }, []);
+  const handleOpenRubric = useCallback(
+    (domain: TopicName | "All Domains", score: number | null) => {
+      // Map domain to a rubric tab. "All Domains" and "Irritative Symptoms"
+      // both pass through unchanged; other TopicNames match their tab label.
+      setRubricTab(domain);
+      // score may be null (explicit "view full rubric" link) — that clears the
+      // locked level so the modal opens with nothing highlighted.
+      setRubricScore(score);
+      setRubricOpen(true);
+    },
+    [],
+  );
 
   const handleRubricHandled = useCallback(() => {
     setRubricOpen(false);
@@ -4424,6 +5086,9 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           }}
           setCurrentView={setCurrentView}
           trajectoryData={trajectoryData?.trajectory}
+          scoreAverageData={scoreAverage?.data}
+          onOpenRubric={handleOpenRubric}
+          onTrackEvent={trackEvent}
         />
       )}
 
