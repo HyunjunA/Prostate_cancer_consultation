@@ -99,6 +99,24 @@ def bad_api_headers():
     return {"X-API-Key": "wrong-key"}
 
 
+@pytest.fixture
+def stub_admin_auth():
+    """Satisfy require_admin_user for admin-guarded endpoints under test.
+
+    The suite authenticates via X-API-Key, not an admin JWT, so endpoints that
+    depend on require_admin_user would 401. These routes attach the dependency
+    via ``dependencies=[...]`` and never bind its return value, so a no-op
+    override is enough to let the request through. Opt in per test module via
+    ``pytestmark = pytest.mark.usefixtures("stub_admin_auth")`` — the dedicated
+    auth tests do not use it, so their 401/403 assertions stay intact.
+    """
+    from main import app
+    from auth.admin_session import require_admin_user
+    app.dependency_overrides[require_admin_user] = lambda: None
+    yield
+    app.dependency_overrides.pop(require_admin_user, None)
+
+
 # ── pytest configuration ──────────────────────────────────────────────────
 
 def pytest_configure(config):

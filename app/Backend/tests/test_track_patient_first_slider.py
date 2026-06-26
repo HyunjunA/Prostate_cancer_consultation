@@ -15,6 +15,10 @@ import pytest
 
 PREFIX = "/api/track/patient-first"
 
+# The /aggregate and /session endpoints require an admin JWT; this suite uses
+# the X-API-Key fixture, so stub admin auth for every test in this module.
+pytestmark = pytest.mark.usefixtures("stub_admin_auth")
+
 
 def _event(**overrides):
     """Build a minimal slider_moved event payload, with overrides."""
