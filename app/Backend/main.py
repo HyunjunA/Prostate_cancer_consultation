@@ -33,6 +33,8 @@ Why a factory function instead of building `app` at module top-level:
 """
 
 import logging
+import sys
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -57,6 +59,17 @@ from routes_track_doctor import router as track_doctor_router
 from routes_track_patient_first import router as track_patient_first_router
 from routes_track_patient_followup import router as track_patient_followup_router
 from routes_track_recordings import router as track_recordings_router
+
+# Native mode: make the sibling AI pipeline repo importable (ai_pipeline.*),
+# used at request time by /api/doctor/score-sentence and /api/doctor/ai-rewrite.
+# In Docker the repo is bundled at /app (handled at the call site); natively it
+# sits beside the dashboard repo. Append (not insert-at-0) so the dashboard's
+# own modules (db, models, ...) are never shadowed by same-named AI-repo modules.
+# Placed after imports (not before) to keep module imports at the top — ai_pipeline
+# is imported lazily at request time, so the path only needs to exist by then.
+_AI_REPO = Path(__file__).resolve().parents[3] / "AI_physician_patient_communication"
+if _AI_REPO.is_dir() and str(_AI_REPO) not in sys.path:
+    sys.path.append(str(_AI_REPO))
 
 # Apply the standard logging config (level + format) BEFORE create_app()
 # runs so the FastAPI startup banner and lifespan hooks get the same
