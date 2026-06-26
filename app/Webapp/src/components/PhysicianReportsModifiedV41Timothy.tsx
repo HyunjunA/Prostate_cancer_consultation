@@ -77,6 +77,10 @@ interface TopicData {
   score: number | null;
   sentences: string[];
   sentenceDetails: SentenceDetail[];
+  // Treatment of the by_class row this domain's score/sentence came from.
+  // "<missing>" means the domain was mentioned but not tied to the designated
+  // treatment (score forced to 0) — used to show a "not tied to surgery" badge.
+  representativeTreatment?: string | null;
 }
 
 interface PatientRow {
@@ -3442,13 +3446,15 @@ const GridView: React.FC<GridViewProps> = ({
                           )}
                           title="Click to view scoring rubric"
                         >
-                          {getLastSentenceScore(data, topicName) !== null ? getLastSentenceScore(data, topicName)!.toFixed(1) : "—"}
+                          {getLastSentenceScore(data, topicName) !== null ? getLastSentenceScore(data, topicName)!.toFixed(1) : "0.0"}
                         </button>
                       )}
                     </td>
 
                     {/* Representative Sentence Column */}
                     <td className="px-4 py-5">
+                      {/* "Mentioned — not tied to treatment" badge hidden for now
+                          (representativeTreatment still set for future use). */}
                       <div
                         className={cx(
                           "text-sm leading-relaxed max-h-32 overflow-y-auto pr-2",
@@ -4860,13 +4866,22 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       scoreSummary.by_class.forEach((item: any) => {
         const topicName = CLASS_TO_TOPIC[item.class];
         if (topicName && result[topicName]) {
-          result[topicName].score = item.score ?? item.avg_score ?? null;
-          // Store representative sentence info from API (no frontend processing needed)
-          // representativeSentence: not used (context comes from sentences API via sentenceDetails)
-          result[topicName].representativeI = item.i ?? null;
-          result[topicName].representativeI2 = item.i2 ?? null;
-          result[topicName].predScore = item.pred_score ?? null;
-          console.log(`[topicsData] ${topicName}: score=${result[topicName].score}, pred=${item.pred_score}, sentence="${(item.sentence || "").slice(0, 50)}..."`);
+          // A domain can have several by_class rows (one per treatment for
+          // side-effect domains). Keep the MAX-score row — and take THAT row's
+          // representative sentence — so the Grid's "Your Score" and its
+          // Original Sentence match the per-domain MAX used by the rubric /
+          // Patient Reports. (Was last-row-wins, which only agreed by luck of
+          // row order.)
+          const s = item.score ?? item.avg_score ?? null;
+          const cur = result[topicName].score;
+          if (s != null && (cur == null || s > cur)) {
+            result[topicName].score = s;
+            result[topicName].representativeI = item.i ?? null;
+            result[topicName].representativeI2 = item.i2 ?? null;
+            result[topicName].predScore = item.pred_score ?? null;
+            result[topicName].representativeTreatment = item.treatment ?? null;
+            console.log(`[topicsData] ${topicName}: max score=${s}, sentence="${(item.sentence || "").slice(0, 50)}..."`);
+          }
         }
       });
     }

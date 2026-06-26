@@ -44,7 +44,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_user
@@ -588,6 +588,7 @@ async def get_doctor_score_average(
             (L.source_filename == latest_analysis.c.file)
             & (L.analysis_id == latest_analysis.c.aid),
         )
+        .where(_designated_treatment_filter(L))
         .group_by(L.source_filename, L.domain)
     )
     if file:
@@ -636,7 +637,7 @@ async def get_doctor_score_average(
                 "speaker": speaker_val or "",
                 "class": cls,
                 # avg_score is kept for ScoreAverageItem schema compatibility,
-                # but it is now the MAX evidence score, not a true average.
+                # but it is now the designated-treatment ai_score, not an average.
                 "avg_score": score,
                 "count": entry["evidence_count"],
                 "rewritten_count": 0,
@@ -645,7 +646,7 @@ async def get_doctor_score_average(
                 "max_score": score,
             })
 
-    # ── Step 5: per-patient overall = AVG of 5 per-category MAXs ────
+    # ── Step 5: per-patient overall = AVG of 5 designated-treatment scores ──
     # Missing categories already padded to 0 above, so this is just a
     # straight mean over the 5 entries (or len(target_categories) if
     # the caller filtered to a single class).
@@ -706,16 +707,48 @@ async def get_doctor_score_summary_by_file_speaker(
     # Try GPT-4o ai_score from llm_domain_scoring_and_summary first
     from models import LLMDomainScoringAndSummary
     ai_stmt = select(LLMDomainScoringAndSummary).where(
-        LLMDomainScoringAndSummary.analysis_id == analysis_id
+        LLMDomainScoringAndSummary.analysis_id == analysis_id,
     ).order_by(LLMDomainScoringAndSummary.domain)
     ai_results = (await db.execute(ai_stmt)).scalars().all()
+
+    # Select ONE row per domain for the grid. Side-effect domains store one row
+    # per treatment; per the 2026-06-02 decision the dashboard scores each via a
+    # single designated treatment (ED/inc=surgery, ius=radiation). If that
+    # treatment was discussed, use its row with its real score. If it was NOT
+    # discussed but the physician still mentioned the domain (a "<missing>"-
+    # treatment row), surface that row's sentence with the score forced to 0
+    # ("mentioned, not tied to the designated treatment"). cp/le have a single
+    # row. This is the only surface that falls back to <missing>; /scores/average
+    # and /scores/trajectory stay strictly designated (a not-discussed domain is
+    # 0 there too), so every overall agrees.
+    rows_by_domain: Dict[str, list] = {}
+    for r in ai_results:
+        rows_by_domain.setdefault(r.domain, []).append(r)
+
+    selected: list = []  # (row, display_score)
+    for domain, rows in rows_by_domain.items():
+        designated = DOMAIN_DESIGNATED_TREATMENT.get(domain)
+        if designated is None:
+            chosen = max(
+                rows, key=lambda x: x.ai_score if x.ai_score is not None else -1,
+            )
+            selected.append((chosen, chosen.ai_score))
+            continue
+        match = next((x for x in rows if x.treatment == designated), None)
+        if match is not None:
+            selected.append((match, match.ai_score))
+        else:
+            fallback = next((x for x in rows if x.treatment == "<missing>"), None)
+            if fallback is not None:
+                # Not discussed for the designated treatment -> score 0, but keep
+                # the sentence the physician actually said about the domain.
+                selected.append((fallback, 0))
 
     # Use AI pipeline ai_score only
     by_class = []
     scores_list = []
-    for r in ai_results:
-        score_val = r.ai_score
-
+    domain_scores: Dict[str, float] = {}
+    for r, display_score in selected:
         # Find matching (i, i2) and context with <main> tags from sentence_prediction
         i_val = None
         i2_val = None
@@ -735,7 +768,7 @@ async def get_doctor_score_summary_by_file_speaker(
 
         by_class.append({
             "class": r.domain,
-            "score": score_val,
+            "score": display_score,
             "pred_score": None,
             "sentence": r.source_sentence,
             "i": i_val,
@@ -744,10 +777,14 @@ async def get_doctor_score_summary_by_file_speaker(
             "extracted_estimate": r.extracted_estimate,
             "treatment": r.treatment,
         })
-        if score_val is not None:
-            scores_list.append(score_val)
+        if display_score is not None:
+            scores_list.append(display_score)
+            domain_scores[r.domain] = display_score
 
-    overall_score = round(sum(scores_list) / len(scores_list), 2) if scores_list else None
+    # Canonical overall: the per-domain designated-treatment score (a not-
+    # discussed domain contributes 0), averaged over 5 — matches /scores/average
+    # and /scores/trajectory so all surfaces agree.
+    overall_score = _overall_from_domain_scores(domain_scores) if domain_scores else None
 
     return {
         "file": file,
@@ -758,6 +795,51 @@ async def get_doctor_score_summary_by_file_speaker(
         },
         "by_class": by_class,
     }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Canonical per-patient overall score
+# ──────────────────────────────────────────────────────────────────────────────
+# Single source of truth shared by /scores/average, /scores/trajectory and
+# /scores/summary so every dashboard surface shows ONE consistent overall.
+#
+# Rule: each domain contributes its DESIGNATED-treatment ai_score, then the
+# mean over ALL 5 domains with any un-scored domain counting as 0. Side-effect
+# domains store one ai_score row per treatment; per the 2026-06-02 decision the
+# physician dashboard scores each via a single designated treatment (ED/inc =
+# surgery, ius = radiation), selected by ``_designated_treatment_filter`` at the
+# query level. cp/le have no treatment split. A side-effect domain whose
+# designated treatment was never discussed yields no row -> counts as 0.
+DOMAIN_COUNT = 5
+
+# Designated treatment per side-effect domain (cp/le have none).
+DOMAIN_DESIGNATED_TREATMENT = {"ed": "surgery", "inc": "surgery", "ius": "radiation"}
+
+
+def _designated_treatment_filter(model):
+    """SQLAlchemy WHERE keeping only the designated-treatment row per side-effect
+    domain (cp/le pass through unchanged). A side-effect domain whose designated
+    treatment was never discussed ends up with no rows, so it is padded to 0
+    downstream.
+    """
+    return or_(
+        model.domain.in_(("cp", "le")),
+        and_(model.domain == "ed", model.treatment == "surgery"),
+        and_(model.domain == "inc", model.treatment == "surgery"),
+        and_(model.domain == "ius", model.treatment == "radiation"),
+    )
+
+
+def _overall_from_domain_scores(domain_scores: Dict[str, float]) -> float:
+    """Mean over the 5 domains of the per-domain designated-treatment ai_score
+    (missing = 0).
+
+    ``domain_scores`` must contain at most the 5 canonical domains (extra keys
+    would skew the denominator). Absent domains are treated as 0 by dividing
+    the present-domain sum by the fixed domain count.
+    """
+    total = sum(v for v in domain_scores.values() if v is not None)
+    return round(total / DOMAIN_COUNT, 2)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -792,14 +874,35 @@ async def get_doctor_score_trajectory(
         "ius": "irritative_urinary_symptoms",
     }
 
-    # ── Step 1: Get all AI scores per patient per domain ──
-    score_stmt = select(
-        LLMDomainScoringAndSummary.source_filename,
-        LLMDomainScoringAndSummary.domain,
-        LLMDomainScoringAndSummary.ai_score,
-        LLMDomainScoringAndSummary.created_at,
-    ).where(
-        LLMDomainScoringAndSummary.ai_score.isnot(None),
+    # ── Step 1: Get AI scores per patient per domain, LATEST analysis only ──
+    # Restrict to each file's most recent analysis (same basis as
+    # /scores/average and /scores/summary). Without this, re-running a
+    # transcript would mix old + new analysis rows and the trajectory would
+    # diverge from those endpoints. Combined with the per-domain MAX merge
+    # below, this makes the per-patient overall identical to /scores/average.
+    latest_analysis = (
+        select(
+            TranscriptAnalysisLog.source_filename.label("file"),
+            func.max(TranscriptAnalysisLog.id).label("aid"),
+        )
+        .group_by(TranscriptAnalysisLog.source_filename)
+        .subquery()
+    )
+    L = LLMDomainScoringAndSummary
+    score_stmt = (
+        select(
+            L.source_filename,
+            L.domain,
+            L.ai_score,
+            L.created_at,
+        )
+        .join(
+            latest_analysis,
+            (L.source_filename == latest_analysis.c.file)
+            & (L.analysis_id == latest_analysis.c.aid),
+        )
+        .where(L.ai_score.isnot(None))
+        .where(_designated_treatment_filter(L))
     )
     score_results = (await db.execute(score_stmt)).all()
 
@@ -811,7 +914,14 @@ async def get_doctor_score_trajectory(
     file_dates: Dict[str, Any] = {}
     for r in score_results:
         domain_full = domain_short_to_full.get(r.domain, r.domain)
-        file_scores.setdefault(r.source_filename, {})[domain_full] = r.ai_score
+        # score_results is filtered to the designated treatment per side-effect
+        # domain (ED/inc=surgery, ius=radiation) by _designated_treatment_filter,
+        # so at most one row per (file, domain) reaches here. The max() is a
+        # harmless safety net should a domain ever carry duplicate rows.
+        fs = file_scores.setdefault(r.source_filename, {})
+        if r.ai_score is not None:
+            prev = fs.get(domain_full)
+            fs[domain_full] = r.ai_score if prev is None else max(prev, r.ai_score)
         if r.source_filename not in file_dates or r.created_at < file_dates[r.source_filename]:
             file_dates[r.source_filename] = r.created_at
 
@@ -843,10 +953,13 @@ async def get_doctor_score_trajectory(
         for f in consulted_files:
             if f in patient_class_scores and patient_class_scores[f]:
                 p_avgs = patient_class_scores[f]
-                p_overall = sum(p_avgs.values()) / len(p_avgs)
+                # Canonical per-patient overall: the designated-treatment score
+                # per domain averaged over all 5 domains (missing = 0),
+                # identical to /scores/average.
+                p_overall = _overall_from_domain_scores(p_avgs)
                 patients_detail.append({
                     "file": f,
-                    "overall_score": round(p_overall, 4),
+                    "overall_score": p_overall,
                 })
 
         overall = sum(class_avgs.values()) / len(class_avgs) if class_avgs else None
