@@ -70,7 +70,77 @@ import APITestDashboard from "@/components/ApiTestDashboard";
 // Patient: ?fileid=xxx&patid=yyy&visit=first|followup
 // Doctor:  ?fileid=xxx&doctorid=zzz
 // ═══════════════════════════════════════════════════════════
-type ViewType = "patient" | "doctor" | "selection";
+type ViewType = "patient" | "doctor" | "doctorSelect" | "selection";
+
+// Doctor-selection screen: lists doctors (from /api/doctor/list) and links each
+// to ?doctorid=<hashed>. Replaces the removed "?doctorid=auto" (= all patients)
+// entry so the physician view is always scoped to one doctor.
+function DoctorSelectionScreen({ isDarkMode }: { isDarkMode: boolean }) {
+  const [doctors, setDoctors] = useState<
+    { doctor_id: string; patient_count: number }[]
+  >([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/backend/doctor/list`)
+      .then((r) => r.json())
+      .then((d) => setDoctors(d.doctors || []))
+      .catch((e) => console.error("[DoctorSelect] load failed:", e))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div
+      className={`min-h-screen p-8 ${
+        isDarkMode ? "bg-slate-950 text-slate-100" : "bg-slate-50 text-slate-900"
+      }`}
+    >
+      <div className="max-w-2xl mx-auto">
+        <a
+          href="/"
+          className={`text-sm hover:underline ${
+            isDarkMode ? "text-slate-400" : "text-slate-500"
+          }`}
+        >
+          ← Back
+        </a>
+        <h1 className="text-2xl font-bold mt-4 mb-1">Select a physician</h1>
+        <p
+          className={`text-sm mb-6 ${
+            isDarkMode ? "text-slate-400" : "text-slate-500"
+          }`}
+        >
+          Choose a doctor to view only their patients.
+        </p>
+        {loading ? (
+          <p className="text-sm opacity-70">Loading doctors…</p>
+        ) : doctors.length === 0 ? (
+          <p className="text-sm opacity-70">No doctors found.</p>
+        ) : (
+          <ul className="space-y-2">
+            {doctors.map((d) => (
+              <li key={d.doctor_id}>
+                <a
+                  href={`/?doctorid=${encodeURIComponent(d.doctor_id)}`}
+                  className={`flex items-center justify-between rounded-lg border px-4 py-3 transition-all ${
+                    isDarkMode
+                      ? "border-slate-800 bg-slate-900 hover:bg-slate-800"
+                      : "border-slate-200 bg-white hover:bg-slate-50 shadow-sm"
+                  }`}
+                >
+                  <span className="font-medium">Doctor {d.doctor_id}</span>
+                  <span className="text-xs opacity-70">
+                    {d.patient_count} patient{d.patient_count !== 1 ? "s" : ""}
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ═══════════════════════════════════════════════════════════
 // Visit Type: first visit or follow-up visit
@@ -239,6 +309,12 @@ export default function Home() {
         console.log("📋 Visit Type: Follow-up Visit (with surveys)");
       }
     }
+    // ═══ Doctor-selection screen (?select=physician) — pick a doctor, no "auto" ═══
+    else if (searchParams.get("select") === "physician") {
+      clearDoctorId();
+      clearPatientId();
+      setCurrentView("doctorSelect");
+    }
   }, [
     searchParams,
     setFileId,
@@ -325,10 +401,9 @@ export default function Home() {
       setLoadingPatients(true);
       // Scope the picker to a doctor when ?doctorid=<id> is present (not "auto").
       const d = searchParams.get("doctorid");
-      const filesUrl =
-        d && d !== "auto"
-          ? `/api/backend/patient/files?doctor_id=${encodeURIComponent(d)}`
-          : `/api/backend/patient/files`;
+      const filesUrl = d
+        ? `/api/backend/patient/files?doctor_id=${encodeURIComponent(d)}`
+        : `/api/backend/patient/files`;
       fetch(filesUrl)
         .then((r) => r.json())
         .then((data) => {
@@ -380,7 +455,7 @@ export default function Home() {
           </h1>
           <div className="flex items-center gap-2">
             <a
-              href="/?doctorid=auto"
+              href="/?select=physician"
               className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition-all ${
                 isDarkMode
                   ? "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700"
@@ -685,6 +760,11 @@ export default function Home() {
         {/* Physician report - Doctor View */}
         {currentView === "doctor" && (
           <PhysicianReports isDarkMode={isDarkMode} />
+        )}
+
+        {/* Doctor-selection screen (?select=physician) */}
+        {currentView === "doctorSelect" && (
+          <DoctorSelectionScreen isDarkMode={isDarkMode} />
         )}
 
         {/* Patient Report - First Visit (summary only, no surveys) */}

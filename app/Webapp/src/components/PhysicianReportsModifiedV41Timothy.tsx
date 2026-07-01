@@ -4366,7 +4366,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
     // Rewrite Stats (B-5)
     rewriteStats,
     fetchRewriteStats,
-  } = useDoctorData();
+  } = useDoctorData(doctorId);
 
   // ═══════════════════════════════════════════════════════════
   // UI State

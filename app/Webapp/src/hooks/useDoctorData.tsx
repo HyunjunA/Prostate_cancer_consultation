@@ -281,7 +281,7 @@ const getHeaders = () => ({
   "Content-Type": "application/json",
 });
 
-export const useDoctorData = () => {
+export const useDoctorData = (doctorId?: string | null) => {
   const [files, setFiles] = useState<string[] | null>(null);
   const [sentences, setSentences] = useState<DoctorSentencesResponse | null>(
     null
@@ -339,7 +339,7 @@ export const useDoctorData = () => {
       setLoading(true);
       setError(null);
       const params = new URLSearchParams();
-      if (doctorId && doctorId !== "auto") params.append("doctor_id", doctorId);
+      if (doctorId) params.append("doctor_id", doctorId);
       const url = params.toString()
         ? `${BASE_URL}/api/backend/doctor/files?${params.toString()}`
         : `${BASE_URL}/api/backend/doctor/files`;
@@ -607,7 +607,7 @@ export const useDoctorData = () => {
       if (file) params.append("file", file);
       if (speaker) params.append("speaker", speaker);
       if (classNumber) params.append("class", classNumber);
-      if (doctorId && doctorId !== "auto") params.append("doctor_id", doctorId);
+      if (doctorId) params.append("doctor_id", doctorId);
 
       const url = params.toString()
         ? `${BASE_URL}/api/backend/doctor/scores/average?${params.toString()}`
@@ -945,7 +945,7 @@ export const useDoctorData = () => {
 
       const params = new URLSearchParams();
       if (speaker) params.append("speaker", speaker);
-      if (doctorId && doctorId !== "auto") params.append("doctor_id", doctorId);
+      if (doctorId) params.append("doctor_id", doctorId);
 
       const url = params.toString()
         ? `${BASE_URL}/api/backend/doctor/scores/trajectory?${params.toString()}`
@@ -1001,8 +1001,11 @@ export const useDoctorData = () => {
   };
 
   useEffect(() => {
-    fetchFiles();
-  }, []);
+    // Scope the mount fetch to the doctor (if provided) so it never races with
+    // a component's own scoped fetch and shows another doctor's patients.
+    fetchFiles(doctorId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doctorId]);
 
   return {
     // State
