@@ -251,12 +251,30 @@ export default function Home() {
   // OR ?fileid=xxx&doctorid=zzz
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
+    const fFromUrl = searchParams.get("f");
     const fileIdFromUrl = searchParams.get("fileid");
     const patIdFromUrl = searchParams.get("patid");
     const doctorIdFromUrl = searchParams.get("doctorid");
     const visitTypeFromUrl = searchParams.get("visit");
 
+    // Minimized URL carries a single stem "?f=<hashedPatient>_<hashedDoctor>_<date>".
+    // Reconstruct the full filename (<stem>.csv) and speaker (Patient_<stem>) the
+    // stores/APIs expect. Old "?fileid=&patid=" links still work (2nd/3rd branch).
+    let reconFileId: string | null = null;
+    let reconPatId: string | null = null;
+    if (fFromUrl) {
+      reconFileId = `${fFromUrl}.csv`;
+      reconPatId = `Patient_${fFromUrl}`;
+    } else if (fileIdFromUrl) {
+      reconFileId = fileIdFromUrl;
+      reconPatId =
+        patIdFromUrl || `Patient_${fileIdFromUrl.replace(/\.(xlsx|csv)$/i, "")}`;
+    } else if (patIdFromUrl) {
+      reconPatId = patIdFromUrl;
+    }
+
     console.log("🔍 URL Parameters:", {
+      f: fFromUrl,
       fileid: fileIdFromUrl,
       patid: patIdFromUrl,
       doctorid: doctorIdFromUrl,
@@ -264,9 +282,9 @@ export default function Home() {
     });
 
     // Process File ID (common for both views)
-    if (fileIdFromUrl) {
-      setFileId(fileIdFromUrl);
-      console.log("📁 File ID from URL:", fileIdFromUrl);
+    if (reconFileId) {
+      setFileId(reconFileId);
+      console.log("📁 File ID (reconstructed):", reconFileId);
     } else {
       initFileFromStorage();
     }
@@ -277,8 +295,8 @@ export default function Home() {
     if (doctorIdFromUrl) {
       setDoctorId(doctorIdFromUrl);
       clearPatientId(); // Patient ID Clear
-      if (!fileIdFromUrl) {
-        clearFileId(); // No fileid in URL → start at landing view (all patients)
+      if (!reconFileId) {
+        clearFileId(); // No file in URL → start at landing view (all patients)
       }
       setCurrentView("doctor");
       console.log("👨‍⚕️ Doctor ID from URL:", doctorIdFromUrl);
@@ -287,8 +305,8 @@ export default function Home() {
     // ═══════════════════════════════════════════════════════════
     // IF Patient ID is present → Patient View
     // ═══════════════════════════════════════════════════════════
-    else if (patIdFromUrl) {
-      setPatientId(patIdFromUrl);
+    else if (reconPatId) {
+      setPatientId(reconPatId);
       clearDoctorId(); // Doctor ID Clear
       setCurrentView("patient");
       console.log("👤 Patient ID from URL:", patIdFromUrl);
@@ -421,11 +439,11 @@ export default function Home() {
     survey = false,
   ) => {
     const stem = file.replace(/\.(xlsx|csv)$/i, "");
-    const speaker = `Patient_${stem}`;
-    // Navigate with URL parameters (same format as before)
+    // Minimized URL: one compact stem "?f=<hashedPatient>_<hashedDoctor>_<date>".
+    // The reader reconstructs fileid (<stem>.csv) and patid (Patient_<stem>), so
+    // fileid/patid are no longer duplicated in the URL.
     const params = new URLSearchParams({
-      fileid: file,
-      patid: speaker,
+      f: stem,
       visit: visit,
     });
     // Survey mode = the per-domain questionnaire screen. Used by the standalone

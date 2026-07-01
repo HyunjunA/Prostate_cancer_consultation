@@ -5104,9 +5104,10 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           setSelectedPatient={(patient) => {
             trackEvent("patient_select", `dashboard_patient_${patient.id}`, { fileId: patient.fileName, overallScore: patient.overallScore });
             setSelectedPatient(patient);
-            // Update URL with fileid so the page is bookmarkable / shareable
+            // Update URL with the minimized stem so the page is bookmarkable / shareable
             const url = new URL(window.location.href);
-            url.searchParams.set("fileid", patient.fileName);
+            url.searchParams.set("f", patient.fileName.replace(/\.(xlsx|csv)$/i, ""));
+            url.searchParams.delete("fileid"); // drop any legacy param
             window.history.replaceState({}, "", url.toString());
           }}
           setCurrentView={setCurrentView}
@@ -5131,9 +5132,10 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           setCurrentView={(view) => {
             if (view === "dashboard") {
               trackEvent("button_click", "grid_back_to_dashboard", { patientId: selectedPatient.id });
-              // Remove fileid from URL when returning to dashboard
+              // Remove the patient stem from URL when returning to dashboard
               const url = new URL(window.location.href);
-              url.searchParams.delete("fileid");
+              url.searchParams.delete("f");
+              url.searchParams.delete("fileid"); // legacy
               window.history.replaceState({}, "", url.toString());
             }
             setCurrentView(view);
