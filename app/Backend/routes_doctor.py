@@ -521,6 +521,34 @@ async def get_doctor_files(
 
 
 
+@router.get("/list")
+async def get_doctor_list(
+    db: AsyncSession = Depends(get_db),
+    user: AuthUser = Depends(get_current_user),
+):
+    """Distinct doctor ids (with patient counts) for the doctor-selection screen.
+
+    Only doctors that actually have data are returned (doctor_id NOT NULL), so
+    the picker never shows an empty/legacy doctor.
+    """
+    stmt = (
+        select(
+            TranscriptAnalysisLog.doctor_id.label("doctor_id"),
+            func.count(func.distinct(TranscriptAnalysisLog.source_filename)).label("patient_count"),
+        )
+        .where(TranscriptAnalysisLog.doctor_id.isnot(None))
+        .group_by(TranscriptAnalysisLog.doctor_id)
+        .order_by(TranscriptAnalysisLog.doctor_id)
+    )
+    rows = (await db.execute(stmt)).all()
+    return {
+        "doctors": [
+            {"doctor_id": r.doctor_id, "patient_count": r.patient_count}
+            for r in rows
+        ]
+    }
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Doctor Interface - Score Average APIs (with Rewrite Log Priority)
 # ──────────────────────────────────────────────────────────────────────────────
