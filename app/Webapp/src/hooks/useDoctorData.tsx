@@ -334,11 +334,16 @@ export const useDoctorData = () => {
   // ═══════════════════════════════════════════════════════════
   // 1) Get Files
   // ═══════════════════════════════════════════════════════════
-  const fetchFiles = async () => {
+  const fetchFiles = async (doctorId?: string | null) => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`${BASE_URL}/api/backend/doctor/files`, {
+      const params = new URLSearchParams();
+      if (doctorId && doctorId !== "auto") params.append("doctor_id", doctorId);
+      const url = params.toString()
+        ? `${BASE_URL}/api/backend/doctor/files?${params.toString()}`
+        : `${BASE_URL}/api/backend/doctor/files`;
+      const response = await fetch(url, {
         method: "GET",
         headers: getHeaders(),
       });
@@ -591,7 +596,8 @@ export const useDoctorData = () => {
   const fetchScoreAverage = async (
     file?: string,
     speaker?: string,
-    classNumber?: string
+    classNumber?: string,
+    doctorId?: string | null
   ) => {
     try {
       setLoading(true);
@@ -601,6 +607,7 @@ export const useDoctorData = () => {
       if (file) params.append("file", file);
       if (speaker) params.append("speaker", speaker);
       if (classNumber) params.append("class", classNumber);
+      if (doctorId && doctorId !== "auto") params.append("doctor_id", doctorId);
 
       const url = params.toString()
         ? `${BASE_URL}/api/backend/doctor/scores/average?${params.toString()}`
@@ -929,7 +936,8 @@ export const useDoctorData = () => {
   // GET /api/doctor/scores/trajectory?speaker=...
   // ═══════════════════════════════════════════════════════════
   const fetchTrajectory = async (
-    speaker?: string
+    speaker?: string,
+    doctorId?: string | null
   ): Promise<TrajectoryResponse | null> => {
     try {
       setLoading(true);
@@ -937,6 +945,7 @@ export const useDoctorData = () => {
 
       const params = new URLSearchParams();
       if (speaker) params.append("speaker", speaker);
+      if (doctorId && doctorId !== "auto") params.append("doctor_id", doctorId);
 
       const url = params.toString()
         ? `${BASE_URL}/api/backend/doctor/scores/trajectory?${params.toString()}`

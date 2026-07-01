@@ -4637,13 +4637,14 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
     if (fileId) setSelectedFile(fileId);
   }, [fileId]);
 
-  useEffect(() => {
-    if (doctorId && doctorId !== "auto") setSelectedSpeaker(doctorId);
-  }, [doctorId]);
+  // NOTE: `doctorId` (?doctorid=doc1) is a doctor SCOPING key, not a transcript
+  // speaker. The speaker is always auto-detected per file below, so we no longer
+  // set selectedSpeaker = doctorId here.
 
   useEffect(() => {
     const init = async () => {
-      const result = await fetchFiles();
+      // Scope the file list to the selected doctor; "auto"/absent = all doctors.
+      const result = await fetchFiles(doctorId);
       // Build file→speaker map from API response
       if (result?.file_details?.length > 0) {
         const map: Record<string, string> = {};
@@ -4661,16 +4662,14 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
         setFileSpeakerMap(map);
         setFileDateMap(dateMap);
 
-        // Set default speaker from first file
-        const useAutoDetect = !doctorId || doctorId === "auto";
-        const defaultSpeaker = useAutoDetect
-          ? result.file_details[0].speaker
-          : doctorId;
+        // Always auto-detect the transcript speaker from the first (scoped)
+        // file — doctorId is a scoping key, not a speaker.
+        const defaultSpeaker = result.file_details[0].speaker;
         setSelectedSpeaker(defaultSpeaker);
-        fetchTrajectory(defaultSpeaker);
-      } else if (doctorId && doctorId !== "auto") {
-        setSelectedSpeaker(doctorId);
-        fetchTrajectory(doctorId);
+        fetchTrajectory(defaultSpeaker, doctorId);
+      } else {
+        // No files for this doctor — trajectory scoped to the doctor is empty.
+        fetchTrajectory(undefined, doctorId);
       }
     };
     init();
@@ -4687,7 +4686,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       files &&
       files.length > 0
     ) {
-      fetchScoreAverage(undefined, undefined, undefined);
+      fetchScoreAverage(undefined, undefined, undefined, doctorId);
       fetchRewriteStats(selectedSpeaker);
     }
   }, [currentView, selectedSpeaker]);
@@ -4704,7 +4703,10 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
         // patient is identifiable. Displayed truncated + full on hover below.
         const id = match
           ? `SID-${match[1]}`
-          : fileName.replace(/\.[^.]+$/, "").replace(/_\d{8}$/, "");
+          : fileName
+              .replace(/\.[^.]+$/, "")
+              .replace(/_[^_]+_\d{8}$/, "") // strip 3-part "_<doctor>_<date>"
+              .replace(/_\d{8}$/, ""); // strip legacy 2-part "_<date>"
 
         return {
           id,

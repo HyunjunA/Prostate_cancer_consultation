@@ -323,7 +323,13 @@ export default function Home() {
   useEffect(() => {
     if (currentView === "selection") {
       setLoadingPatients(true);
-      fetch(`/api/backend/patient/files`)
+      // Scope the picker to a doctor when ?doctorid=<id> is present (not "auto").
+      const d = searchParams.get("doctorid");
+      const filesUrl =
+        d && d !== "auto"
+          ? `/api/backend/patient/files?doctor_id=${encodeURIComponent(d)}`
+          : `/api/backend/patient/files`;
+      fetch(filesUrl)
         .then((r) => r.json())
         .then((data) => {
           console.log("[SelectionScreen] Patient files loaded:", data);
@@ -463,7 +469,12 @@ export default function Home() {
                 }`}>
                   {patientList.map((file, idx) => {
                     const match = file.match(/sid[\s_-]*(\d+)/i);
-                    const label = match ? `SID-${match[1]}` : file;
+                    const label = match
+                      ? `SID-${match[1]}`
+                      : file
+                          .replace(/\.[^.]+$/, "")
+                          .replace(/_[^_]+_\d{8}$/, "") // strip 3-part "_<doctor>_<date>"
+                          .replace(/_\d{8}$/, ""); // strip legacy 2-part "_<date>"
                     // Hard-truncate the displayed text (auto-layout tables ignore
                     // a child's max-width for long unbreakable hashed names, which
                     // then overflow the overflow-hidden container). Full value on
