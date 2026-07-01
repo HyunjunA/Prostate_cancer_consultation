@@ -603,14 +603,17 @@ async def get_patient_sentences_by_class(
     # Build ai_score lookup from llm_domain_scoring_and_summary so we
     # can attach the GPT-4o score to each sentence. Map keys on
     # `source_sentence` because that is what the LLM stage stored.
-    ai_score_map: dict[str, int | None] = {}
+    # Key on (source_sentence, domain): a sentence can represent more than one
+    # domain, so a text-only key would let one domain's score overwrite another's.
+    ai_score_map: dict[tuple[str, str], int | None] = {}
     ai_stmt = select(
         LLMDomainScoringAndSummary.source_sentence,
+        LLMDomainScoringAndSummary.domain,
         LLMDomainScoringAndSummary.ai_score,
     ).where(LLMDomainScoringAndSummary.analysis_id == analysis_id)
     for ai_row in (await db.execute(ai_stmt)).all():
         if ai_row.source_sentence:
-            ai_score_map[ai_row.source_sentence] = ai_row.ai_score
+            ai_score_map[(ai_row.source_sentence, ai_row.domain)] = ai_row.ai_score
 
     by_class: dict[str, list[dict]] = {}
     for r in results:
@@ -622,7 +625,7 @@ async def get_patient_sentences_by_class(
             "sentence": r.sentence_text,
             "context": r.context,  # ±N surrounding sentences w/ <main>...</main>
             "pred_score": round(float(r.pred_score), 4),
-            "score": ai_score_map.get(r.sentence_text),
+            "score": ai_score_map.get((r.sentence_text, model)),
             "speaker": r.speaker,
             "i": r.utterance_index,
             "i2": r.sentence_in_utterance,

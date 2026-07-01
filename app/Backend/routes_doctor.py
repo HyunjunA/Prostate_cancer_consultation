@@ -131,16 +131,19 @@ async def get_doctor_sentences(
             detail="No data found for the specified file and speaker."
         )
 
-    # Build ai_score lookup from llm_domain_scoring_and_summary
+    # Build ai_score lookup keyed on (source_sentence, domain): a sentence can be
+    # the representative of more than one domain, so keying on text alone would let
+    # one domain's score overwrite another's.
     from models import LLMDomainScoringAndSummary
     ai_score_map = {}
     ai_stmt = select(
         LLMDomainScoringAndSummary.source_sentence,
+        LLMDomainScoringAndSummary.domain,
         LLMDomainScoringAndSummary.ai_score,
     ).where(LLMDomainScoringAndSummary.analysis_id == analysis_id)
     for row in (await db.execute(ai_stmt)).all():
         if row.source_sentence:
-            ai_score_map[row.source_sentence] = row.ai_score
+            ai_score_map[(row.source_sentence, row.domain)] = row.ai_score
 
     return {
         "file": file,
@@ -152,7 +155,7 @@ async def get_doctor_sentences(
                 "i2": r.i2,
                 "sentence": r.sentence,
                 "context": r.context,
-                "score": ai_score_map.get(r.sentence),
+                "score": ai_score_map.get((r.sentence, r.model)),
                 "class": r.model,
                 "time": None
             }
@@ -301,27 +304,38 @@ async def get_doctor_rewrite_history(
     original_score = None
     try:
         from models import LLMDomainScoringAndSummary
-        # Find the sentence text from sentence_prediction
-        sp_stmt = select(SentencePrediction.sentence_text).where(
-            SentencePrediction.patient_id == file,
-            SentencePrediction.utterance_index == i,
-            SentencePrediction.sentence_in_utterance == i2,
-        ).limit(1)
-        sentence_text = (await db.execute(sp_stmt)).scalar_one_or_none()
+        # Resolve the analysis FIRST, then look up the sentence WITHIN that
+        # analysis — a patient_id-only lookup would span re-analyses and could
+        # return a sentence from a different (older) run. Order everything so the
+        # pick is deterministic.
+        analysis_stmt = select(TranscriptAnalysisLog.id).where(
+            TranscriptAnalysisLog.source_filename == file
+        ).order_by(TranscriptAnalysisLog.analyzed_at.desc()).limit(1)
+        analysis_id = (await db.execute(analysis_stmt)).scalar_one_or_none()
 
-        if sentence_text:
-            # Find analysis_id for this file
-            analysis_stmt = select(TranscriptAnalysisLog.id).where(
-                TranscriptAnalysisLog.source_filename == file
-            ).order_by(TranscriptAnalysisLog.analyzed_at.desc()).limit(1)
-            analysis_id = (await db.execute(analysis_stmt)).scalar_one_or_none()
+        if analysis_id:
+            sp_stmt = select(SentencePrediction.sentence_text).where(
+                SentencePrediction.analysis_id == analysis_id,
+                SentencePrediction.utterance_index == i,
+                SentencePrediction.sentence_in_utterance == i2,
+            ).order_by(SentencePrediction.id).limit(1)
+            sentence_text = (await db.execute(sp_stmt)).scalar_one_or_none()
 
-            if analysis_id:
+            if sentence_text:
+                # Prefer THIS sentence's own domain (class_); fall back to any
+                # domain if class_ doesn't match a stored domain string.
                 ai_stmt = select(LLMDomainScoringAndSummary.ai_score).where(
                     LLMDomainScoringAndSummary.analysis_id == analysis_id,
                     LLMDomainScoringAndSummary.source_sentence == sentence_text,
-                ).limit(1)
+                    LLMDomainScoringAndSummary.domain == class_,
+                ).order_by(LLMDomainScoringAndSummary.id).limit(1)
                 original_score = (await db.execute(ai_stmt)).scalar_one_or_none()
+                if original_score is None:
+                    ai_stmt = select(LLMDomainScoringAndSummary.ai_score).where(
+                        LLMDomainScoringAndSummary.analysis_id == analysis_id,
+                        LLMDomainScoringAndSummary.source_sentence == sentence_text,
+                    ).order_by(LLMDomainScoringAndSummary.id).limit(1)
+                    original_score = (await db.execute(ai_stmt)).scalar_one_or_none()
     except Exception as e:
         logger.warning("Error fetching original score: %s", e)
 
@@ -790,6 +804,9 @@ async def get_doctor_score_summary_by_file_speaker(
         i_val = None
         i2_val = None
         if r.source_sentence:
+            # Match within THIS domain's model rows and order by coordinate, so a
+            # sentence that repeats in the transcript yields a deterministic,
+            # domain-correct (i, i2) instead of an arbitrary one.
             match_stmt = select(
                 SentencePrediction.utterance_index,
                 SentencePrediction.sentence_in_utterance,
@@ -797,6 +814,10 @@ async def get_doctor_score_summary_by_file_speaker(
             ).where(
                 SentencePrediction.analysis_id == analysis_id,
                 SentencePrediction.sentence_text == r.source_sentence,
+                SentencePrediction.model == r.domain,
+            ).order_by(
+                SentencePrediction.utterance_index,
+                SentencePrediction.sentence_in_utterance,
             ).limit(1)
             match_row = (await db.execute(match_stmt)).first()
             if match_row:

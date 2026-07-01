@@ -195,7 +195,10 @@ async def list_sessions(
         """
         if not csv:
             return None
-        items = [f for f in csv.split(",") if f]  # drop empty strings (NULLs)
+        # Sort so the label is stable: string_agg has no defined element order,
+        # so without this the "first" item (and the whole CSV) could vary between
+        # identical queries.
+        items = sorted(f for f in csv.split(",") if f)  # drop empty strings (NULLs)
         if not items:
             return None
         if len(items) == 1:
