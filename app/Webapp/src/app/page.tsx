@@ -438,20 +438,20 @@ export default function Home() {
             <div className={`rounded-xl overflow-hidden border ${
               isDarkMode ? "border-slate-800 bg-slate-900/50" : "border-slate-200 bg-white shadow-sm"
             }`}>
-              <table className="w-full">
+              <table className="w-full table-fixed">
                 <thead>
                   <tr className={isDarkMode ? "bg-slate-800/50" : "bg-slate-50"}>
-                    <th className={`px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider ${
+                    <th className={`w-[34%] px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider ${
                       isDarkMode ? "text-slate-400" : "text-slate-500"
                     }`}>
                       Patient ID
                     </th>
-                    <th className={`px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider hidden sm:table-cell ${
+                    <th className={`w-[28%] px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider hidden sm:table-cell ${
                       isDarkMode ? "text-slate-400" : "text-slate-500"
                     }`}>
                       Source File
                     </th>
-                    <th className={`px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider ${
+                    <th className={`w-[38%] px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider ${
                       isDarkMode ? "text-slate-400" : "text-slate-500"
                     }`}>
                       Actions
@@ -464,6 +464,14 @@ export default function Home() {
                   {patientList.map((file, idx) => {
                     const match = file.match(/sid[\s_-]*(\d+)/i);
                     const label = match ? `SID-${match[1]}` : file;
+                    // Hard-truncate the displayed text (auto-layout tables ignore
+                    // a child's max-width for long unbreakable hashed names, which
+                    // then overflow the overflow-hidden container). Full value on
+                    // hover via title.
+                    const shorten = (s: string, n = 22) =>
+                      s.length > n ? `${s.slice(0, n)}…` : s;
+                    const labelShort = shorten(label, 16);
+                    const fileShort = shorten(file, 18);
                     return (
                       <tr
                         key={file}
@@ -482,22 +490,28 @@ export default function Home() {
                             }`}>
                               {match ? match[1] : (idx + 1)}
                             </div>
-                            <span className={`font-medium text-sm ${
-                              isDarkMode ? "text-slate-200" : "text-slate-800"
-                            }`}>
-                              {label}
+                            <span
+                              title={label}
+                              className={`block truncate max-w-[200px] font-medium text-sm ${
+                                isDarkMode ? "text-slate-200" : "text-slate-800"
+                              }`}
+                            >
+                              {labelShort}
                             </span>
                           </div>
                         </td>
                         <td className={`px-5 py-4 hidden sm:table-cell`}>
-                          <span className={`text-xs font-mono ${
-                            isDarkMode ? "text-slate-500" : "text-slate-400"
-                          }`}>
-                            {file}
+                          <span
+                            title={file}
+                            className={`block truncate max-w-[240px] text-xs font-mono ${
+                              isDarkMode ? "text-slate-500" : "text-slate-400"
+                            }`}
+                          >
+                            {fileShort}
                           </span>
                         </td>
-                        <td className="px-5 py-4">
-                          <div className="flex items-center justify-end gap-2">
+                        <td className="px-5 py-4 whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-2 shrink-0">
                             <button
                               onClick={() => handlePatientSelect(file, "first")}
                               title="First visit — AI summary report (read-only)"
@@ -532,7 +546,7 @@ export default function Home() {
                             >
                               Follow-up
                             </button>
-                            {/* Combined entry: 1st · Survey, then Follow-up, in one run. */}
+                            {/* Combined entry hidden per request (2026-06-26).
                             <button
                               onClick={() => handlePatientSelect(file, "combined")}
                               title="Combined — 1st·Survey questions, then the Follow-up surveys"
@@ -544,6 +558,7 @@ export default function Home() {
                             >
                               Combined
                             </button>
+                            */}
                           </div>
                         </td>
                       </tr>

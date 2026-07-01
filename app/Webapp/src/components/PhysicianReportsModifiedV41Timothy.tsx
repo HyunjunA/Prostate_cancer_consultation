@@ -2153,16 +2153,18 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
                 <td className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6" style={{ width: "30%" }}>
                   <div>
                     <div
+                      title={patient.name}
                       className={cx(
-                        "text-base sm:text-lg font-semibold",
+                        "text-base sm:text-lg font-semibold truncate max-w-[220px]",
                         isDarkMode ? "text-slate-100" : "text-slate-900",
                       )}
                     >
                       {patient.name}
                     </div>
                     <div
+                      title={patient.id}
                       className={cx(
-                        "text-sm font-medium",
+                        "text-sm font-medium truncate max-w-[220px]",
                         isDarkMode ? "text-cyan-400" : "text-cyan-600",
                       )}
                     >
@@ -2915,16 +2917,18 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                 >
                   <td className="px-6 py-3.5" style={{ width: "35%" }}>
                     <div
+                      title={patient.name}
                       className={cx(
-                        "text-sm font-semibold",
+                        "text-sm font-semibold truncate max-w-[200px]",
                         isDarkMode ? "text-slate-100" : "text-slate-900",
                       )}
                     >
                       {patient.name}
                     </div>
                     <div
+                      title={patient.id}
                       className={cx(
-                        "text-xs",
+                        "text-xs truncate max-w-[200px]",
                         isDarkMode ? "text-slate-500" : "text-slate-400",
                       )}
                     >
@@ -3171,8 +3175,9 @@ const GridView: React.FC<GridViewProps> = ({
         )}
       >
         <h1
+          title={selectedPatient.name}
           className={cx(
-            "text-2xl sm:text-3xl lg:text-4xl font-light mb-3",
+            "text-2xl sm:text-3xl lg:text-4xl font-light mb-3 truncate max-w-full",
             isDarkMode ? "text-slate-100" : "text-slate-900",
           )}
         >
@@ -4694,9 +4699,12 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
     if (files && files.length > 0) {
       const patientList: PatientRow[] = files.map((fileName, idx) => {
         const match = fileName.match(/sid[- ]?(\d+)/i);
+        // De-identified files are named "<hashed_token>_<MMDDYYYY>.csv" — show
+        // the hashed token (the de-id id) instead of a generic "P00n" so each
+        // patient is identifiable. Displayed truncated + full on hover below.
         const id = match
           ? `SID-${match[1]}`
-          : `P${String(idx + 1).padStart(3, "0")}`;
+          : fileName.replace(/\.[^.]+$/, "").replace(/_\d{8}$/, "");
 
         return {
           id,
