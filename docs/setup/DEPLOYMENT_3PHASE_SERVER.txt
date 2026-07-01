@@ -1,0 +1,257 @@
+===============================================================================
+ PROSTATE CANCER CONSULTATION DASHBOARD
+ DEPLOYMENT_3PHASE_SERVER  --  THIS SERVER (caire-server) deployment runbook
+===============================================================================
+
+ This is the SERVER-SPECIFIC companion to docs/setup/DEPLOYMENT_3PHASE.txt.
+ The original DEPLOYMENT_3PHASE.txt / .md target a clean Mac/local deploy with
+ the default ports. THIS file has the exact commands that actually work on this
+ shared Linux host (caire-server, internal IP 10.226.8.205), where the runbook
+ defaults DO NOT apply.
+
+ WHY A SEPARATE FILE (this host's reality)
+   - Postgres is on 5439 (5433 is taken by another project's container).
+   - Redis is on 6380 (not 6379).
+   - Backend is on 18001 (18000 is an unrelated user's SSH tunnel).
+   - The bundled .venv is a macOS venv -> broken on Linux -> must be rebuilt.
+   - No passwordless sudo -> init-db-native.sh / setup-native-linux.sh DO NOT
+     work here -> DB is created/migrated manually as prostatecancer_user.
+   - The NLP "remote" gateway 10.226.8.205:18080 is THIS host's own gateway.
+
+ ABSOLUTE PATHS used below (siblings):
+   DASH=/home/choih2/test-prostate-cancer/Prostate_cancer_consultation_dashboard
+   AI  =/home/choih2/test-prostate-cancer/AI_physician_patient_communication
+   VENV=$DASH/.venv         (the ONE working venv; the AI repo's own .venv is broken)
+
+ Legend:  $ = shell command    (!) = secret    every block starts with `cd <dir>`.
+
+
+===============================================================================
+ 0. WHAT IS ALREADY RUNNING ON THIS HOST (check first)
+===============================================================================
+
+   $ cd /home/choih2/test-prostate-cancer/AI_physician_patient_communication
+
+   # native services (systemd) — normally already up, no action needed:
+   $ PGPASSWORD=<POSTGRES_PASSWORD> psql "host=127.0.0.1 port=5439 user=prostatecancer_user dbname=prostatecancer_db_native" -c "select 1" >/dev/null && echo "PG 5439 OK"
+   $ redis-cli -p 6380 ping        # PONG
+
+   # this project's pieces:
+   $ curl -s -o /dev/null -w "backend 18001 /docs -> %{http_code}\n" http://localhost:18001/docs
+   $ curl -s -o /dev/null -w "webapp  3001  /     -> %{http_code}\n" http://localhost:3001/
+   $ curl -s -o /dev/null -w "nlp gateway 18080 /ping -> %{http_code}\n" http://127.0.0.1:18080/ping
+   $ docker ps --format '{{.Names}}\t{{.Status}}' | grep prostatecancer
+
+ If all of the above answer, the stack is up — skip to Phase 2 (data load).
+ The sections below are the full rebuild order for a from-scratch run.
+
+
+===============================================================================
+ 1. ENV FILES  -- ALREADY host-adjusted. DO NOT overwrite with runbook defaults.
+===============================================================================
+
+ The live .env files already carry this host's ports. Confirm (do not "fix"
+ them back to 5433/6379/18000):
+
+   $ cd /home/choih2/test-prostate-cancer/Prostate_cancer_consultation_dashboard
+   $ grep -E 'PORT|5439|6380|18001' app/Backend/.env
+   $ grep NEXT_PUBLIC_API_URL app/Webapp/.env          # ...:18001
+   $ grep BACKEND_URL docker-compose-frontend.yml       # ...:18001
+   $ grep -E '5439' ../AI_physician_patient_communication/.env ../AI_physician_patient_communication/ai_pipeline/.env
+
+ Expected (this host):
+   Backend/.env : DATABASE_URL/_SYNC @localhost:5439 ; POSTGRES_PORT=5439 ;
+                  REDIS_URL .../6380/0 ; REDIS_PORT=6380 ; PORT=18001
+   Webapp/.env  : NEXT_PUBLIC_API_URL=http://host.docker.internal:18001
+   compose      : BACKEND_URL=http://host.docker.internal:18001 ; healthcheck 127.0.0.1
+   AI .env + ai_pipeline/.env : DATABASE_URL/_SYNC @localhost:5439
+
+
+===============================================================================
+ 2. PHASE 0 -- VENV + NLP GATEWAY
+===============================================================================
+
+ -- 2a. Rebuild the dashboard venv (the bundled one is a broken macOS venv)
+   $ cd /home/choih2/test-prostate-cancer/Prostate_cancer_consultation_dashboard
+   $ rm -rf .venv
+   $ /usr/bin/python3.10 -m venv .venv
+   $ .venv/bin/pip install --upgrade pip
+   $ .venv/bin/pip install -r app/Backend/requirements.txt -r app/Backend/requirements-dev.txt
+   $ .venv/bin/python -c "import fastapi, asyncpg, alembic, redis; print('venv OK')"
+   # NOTE: the AI pipeline reuses THIS venv (PIPELINE_PYTHON default). Do not try
+   #       to use ../AI_.../.venv — it is the broken macOS one.
+
+ -- 2b. NLP classifier container (already running; start only if missing)
+   $ docker ps --format '{{.Names}}\t{{.Status}}' | grep prostatecancer-nlp-native
+   # if absent:
+   #   $ cd /home/choih2/test-prostate-cancer/AI_physician_patient_communication/nlp_classifier_server
+   #   $ bash scripts/start.sh      # loads image + compose up + gateway
+
+ -- 2c. NLP gateway (host process on :18080) — rebuild venv + start
+   $ cd /home/choih2/test-prostate-cancer/AI_physician_patient_communication/nlp_classifier_server
+   $ /usr/bin/python3.10 -m venv gateway/.venv
+   $ gateway/.venv/bin/pip install -r gateway/requirements.txt
+   # start it (AUTH DISABLED on this host so clients need no key — test env only):
+   $ cd /home/choih2/test-prostate-cancer/AI_physician_patient_communication/nlp_classifier_server/gateway
+   $ set -a; source .env; set +a
+   $ export NLP_GATEWAY_DISABLE_AUTH=1
+   $ nohup .venv/bin/python -m uvicorn app:app --host 0.0.0.0 --port 18080 \
+         > ../logs/gateway.log 2>&1 & disown
+   $ sleep 3; curl -s http://127.0.0.1:18080/ping; echo      # {"status":"online"}
+   $ curl -s -o /dev/null -w "no-key /segment -> %{http_code}\n" -X POST \
+         http://127.0.0.1:18080/segment -H 'Content-Type: application/json' \
+         -d '{"texts":["hi. ok?"]}'                          # 200 (auth off)
+   # NOTE: app.py honors NLP_GATEWAY_DISABLE_AUTH (added on this host). With auth
+   #       ENABLED instead, clients must send X-API-Key = NLP_GATEWAY_API_KEY,
+   #       and run-pipeline-watch.sh auto-loads it from gateway/.env.
+
+
+===============================================================================
+ 3. PHASE 1 -- DB + BACKEND
+===============================================================================
+
+ -- 3a. Create/seed the DB  (init-db-native.sh does NOT work here: no superuser)
+    Run manually as prostatecancer_user (db owner + CREATEDB).
+
+    FULL REBUILD (drop + recreate + schema + migrate). Stop the backend first
+    because DROP needs no open connections:
+      $ pkill -f "uvicorn main:app .* --port 18001"
+      $ PW=<POSTGRES_PASSWORD>          # (!) your POSTGRES_PASSWORD from app/Backend/.env — never hardcode
+      $ PG="host=127.0.0.1 port=5439 user=prostatecancer_user"
+      $ PGPASSWORD=$PW psql "$PG dbname=postgres" -c \
+          "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='prostatecancer_db_native' AND pid<>pg_backend_pid();"
+      $ PGPASSWORD=$PW psql "$PG dbname=postgres" -c "DROP DATABASE IF EXISTS prostatecancer_db_native;"
+      $ PGPASSWORD=$PW psql "$PG dbname=postgres" -c "CREATE DATABASE prostatecancer_db_native OWNER prostatecancer_user;"
+      $ cd /home/choih2/test-prostate-cancer/Prostate_cancer_consultation_dashboard
+      $ PGPASSWORD=$PW psql "$PG dbname=prostatecancer_db_native" -f app/Backend/database_schema.sql
+      $ cd app/Backend
+      $ ../../.venv/bin/alembic stamp 001_baseline
+      $ ../../.venv/bin/alembic upgrade head          # -> 017_recording_area_split
+      $ cd /home/choih2/test-prostate-cancer/Prostate_cancer_consultation_dashboard
+
+    (Full DB reset details + a DATA-ONLY wipe option are in
+     docs/setup/DB_RESET_SHARED_HOST.md / _KR.md.)
+
+ -- 3b. Start the backend (native uvicorn :18001)
+   $ cd /home/choih2/test-prostate-cancer/Prostate_cancer_consultation_dashboard
+   $ nohup bash app/Backend/scripts/run-backend.sh > /tmp/backend_18001.log 2>&1 & disown
+   $ sleep 4; curl -s http://localhost:18001/health; echo
+   # expect {"status":"healthy","components":{"database":"healthy","redis":"healthy"}}
+
+
+===============================================================================
+ 4. PHASE 2 -- TRANSCRIPTS  (de-identify -> pipeline -> DB)
+===============================================================================
+
+ De-identification is a MANUAL pre-step (not part of the pipeline). Use the
+ SIMPLE version (short 5-digit codes) per request.
+
+ -- 4a. De-identify the whole input folder
+   $ cd /home/choih2/test-prostate-cancer/AI_physician_patient_communication
+   $ rm -f data/input_deid/*.csv
+   $ ../Prostate_cancer_consultation_dashboard/.venv/bin/python \
+         scripts/deidentify_transcript_simple.py --dir data/input --out-dir data/input_deid
+   $ ls data/input_deid/                 # <code>_<MMDDYYYY>.csv  (e.g. 13547_06262026.csv)
+   # reverse a code:  ... scripts/deidentify_transcript_simple.py --decode 13547   # -> SID_10
+
+ -- 4b. Run the pipeline on the de-identified folder (writes to DB)
+   $ cd /home/choih2/test-prostate-cancer/AI_physician_patient_communication
+   $ bash scripts/run-pipeline-watch.sh --dir data/input_deid
+   # REMOTE gateway is default; the wrapper handles the gateway key automatically.
+   # (Gateway auth is currently DISABLED on this host, so a key is not required.)
+
+   EQUIVALENT direct call (only if you skip the wrapper) — note you MUST load the
+   key yourself when auth is enabled:
+   $ cd /home/choih2/test-prostate-cancer/AI_physician_patient_communication
+   $ set -a; source nlp_classifier_server/gateway/.env; set +a
+   $ ../Prostate_cancer_consultation_dashboard/.venv/bin/python \
+         main_complete_pipeline_db_api.py --config config_remote.yaml --dir data/input_deid --skip-nlp-startup
+
+ -- 4c. Verify rows landed (patient_id = the codes)
+   $ PGPASSWORD=<POSTGRES_PASSWORD> psql "host=127.0.0.1 port=5439 user=prostatecancer_user dbname=prostatecancer_db_native" \
+         -c "select patient_id, source_filename, processed from transcript_analysis_log order by id;"
+
+
+===============================================================================
+ 5. PHASE 3 -- WEBAPP  (Docker :3001)
+===============================================================================
+
+ -- 5a. Build + start (first run / after the API port changed)
+   $ cd /home/choih2/test-prostate-cancer/Prostate_cancer_consultation_dashboard
+   $ set -a; source app/Backend/.env; set +a            # for ${API_KEY} interpolation
+   $ bash app/Webapp/scripts/run-webapp.sh --build       # NEXT_PUBLIC_API_URL=18001 baked in
+
+ -- 5b. Apply compose changes (BACKEND_URL / healthcheck / port binding) without rebuild
+   $ cd /home/choih2/test-prostate-cancer/Prostate_cancer_consultation_dashboard
+   $ set -a; source app/Backend/.env; set +a
+   $ docker compose -f docker-compose-frontend.yml up -d
+   $ docker inspect --format '{{.State.Health.Status}}' prostatecancer-webapp-native   # healthy
+
+ -- 5c. External (LAN) access
+   The compose `ports` is set to 0.0.0.0:3001:3000 on this host, so the dashboard
+   is reachable on the LAN:  http://10.226.8.205:3001
+   (PHI — revert to 127.0.0.1:3001:3000 after testing if you want it local-only.)
+
+
+===============================================================================
+ 6. FULL VERIFICATION
+===============================================================================
+   $ curl -s -o /dev/null -w "backend  %{http_code}\n" http://localhost:18001/docs    # 200
+   $ curl -s -o /dev/null -w "webapp   %{http_code}\n" http://localhost:3001/          # 200
+   $ curl -s -o /dev/null -w "proxy    %{http_code}\n" http://localhost:3001/api/backend/doctor/files  # 200
+   $ cd /home/choih2/test-prostate-cancer/Prostate_cancer_consultation_dashboard
+   $ .venv/bin/python app/Backend/scripts/verify_db.py
+   browser: http://10.226.8.205:3001   (or http://localhost:3001)
+
+
+===============================================================================
+ 7. STOP / RESTART
+===============================================================================
+   # stop (keep data)
+   $ pkill -f "uvicorn main:app .* --port 18001"                       # backend
+   $ cd /home/choih2/test-prostate-cancer/Prostate_cancer_consultation_dashboard && docker compose -f docker-compose-frontend.yml stop webapp
+   $ pkill -f "uvicorn app:app --host 0.0.0.0 --port 18080"            # NLP gateway
+
+   # restart
+   $ cd /home/choih2/test-prostate-cancer/Prostate_cancer_consultation_dashboard
+   $ nohup bash app/Backend/scripts/run-backend.sh > /tmp/backend_18001.log 2>&1 & disown
+   $ docker compose -f docker-compose-frontend.yml up -d
+   # gateway: see 2c (with NLP_GATEWAY_DISABLE_AUTH=1)
+
+
+===============================================================================
+ 8. TROUBLESHOOTING (this host)
+===============================================================================
+   401 Unauthorized at /segment
+       -> gateway auth is on and the client sent no/ wrong key. Either run via
+          run-pipeline-watch.sh (auto-loads the key), OR `set -a; source
+          nlp_classifier_server/gateway/.env; set +a` before a direct call, OR
+          start the gateway with NLP_GATEWAY_DISABLE_AUTH=1 (2c).
+
+   pipeline: "Python interpreter not found"
+       -> the AI repo's .venv is the broken macOS one. Use the dashboard venv:
+          PIPELINE_PYTHON=../Prostate_cancer_consultation_dashboard/.venv/bin/python
+
+   init-db-native.sh fails at "Pick bootstrap superuser"
+       -> expected on this host (no sudo/superuser). Use the manual steps in 3a.
+
+   DROP DATABASE: "database is being accessed by other users"
+       -> stop the backend first (pkill ... --port 18001), then terminate
+          connections + DROP (3a).
+
+   webapp 502 at /api/backend/...
+       -> compose BACKEND_URL still 18000. Set it to 18001 and recreate (5b).
+
+   webapp shows "unhealthy" but serves 200
+       -> healthcheck used `localhost` (IPv6). Use 127.0.0.1 (already fixed here).
+
+   port 5433 / 6379 / 18000 "in use" or wrong DB
+       -> those are OTHER projects/tunnels on this host. This stack uses
+          5439 / 6380 / 18001. Do not change the .env back to the defaults.
+
+
+ See also:
+   docs/setup/DEPLOYMENT_3PHASE.txt          -- ORIGINAL (Mac/local, default ports)
+   docs/setup/DB_RESET_SHARED_HOST.md / _KR  -- DB reset (data-only / full rebuild)
+   ../../../DEPLOYMENT_2026-06-26_SHARED_HOST_KR.md  -- narrative of this host setup
+===============================================================================
