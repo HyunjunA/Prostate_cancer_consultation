@@ -300,13 +300,25 @@
  HTTP at the gateway in config_remote.yaml (model_uri). No local NLP image
  needed. The AI scoring substep always calls Azure OpenAI.
 
+ DE-IDENTIFICATION (recommended): run-pipeline-deid.sh first hashes the patient
+ ID in each filename (data/input -> data/input_deid), then runs the pipeline on
+ the hashed copies, so the DB stores HASHED patient IDs (e.g. 63514) instead of
+ the original SID. Default hash is the SIMPLE one (no key). The originals in
+ data/input are left untouched. See AI repo docs/DEIDENTIFICATION_EN.md.
+
  Prerequisites (REMOTE):
    - NLP_GATEWAY_API_KEY set (auto-read from nlp_classifier_server/gateway/.env)
    - gateway host (model_uri) reachable (VPN / firewall)
    - ai_pipeline/.env has the Azure OpenAI credentials for the AI substep (see 2.5)
 
- Run:
+ Run (RECOMMENDED -- de-identify, then process):
        $ cd ../AI_physician_patient_communication
+       $ bash scripts/run-pipeline-deid.sh    # de-id (simple hash) -> pipeline; DB gets hashed IDs
+       #
+       # AES-SIV (stronger) hash instead of the simple one (needs DEID_KEY in .env):
+       # $ DEID_METHOD=aes bash scripts/run-pipeline-deid.sh
+
+ Run (WITHOUT de-identification -- original SIDs go into the DB):
        $ bash scripts/run-pipeline-watch.sh --dir data/input    # process once, then exit
        #
        # WATCH mode (process input/, then keep watching for new drops; Ctrl-C to stop):
