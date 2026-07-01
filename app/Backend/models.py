@@ -368,6 +368,9 @@ class TranscriptAnalysisLog(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     patient_id = Column(String(255), nullable=False)  # indexed via composite idx_transcript_log_patient_analyzed
+    # Parsed from a 3-part de-id filename "<patient>_<doctor>_<MMDDYYYY>"; NULL for
+    # 2-part / non-doctor inputs. Doctor-scoped endpoints filter on this column.
+    doctor_id = Column(String(255), nullable=True, index=True)
     total_sentences = Column(Integer, nullable=False, default=0)
     top_n = Column(Integer, nullable=False, default=0)
     context_window = Column(Integer, nullable=False, default=3)

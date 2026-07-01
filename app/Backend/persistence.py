@@ -31,7 +31,7 @@ Tables this module DOES NOT write to:
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -69,6 +69,7 @@ async def save_all(
     *,
     filename: str,
     patient_id: str,
+    doctor_id: Optional[str] = None,
     doctor_speaker: str,
     patient_speaker: str,
     total_sentences: int,
@@ -116,6 +117,7 @@ async def save_all(
             # later. Until then we know "NLP wrote, LLM hasn't yet".
             analysis_log = models.TranscriptAnalysisLog(
                 patient_id=patient_id,
+                doctor_id=doctor_id,
                 total_sentences=total_sentences,
                 top_n=top_n,
                 context_window=context_window,

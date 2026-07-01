@@ -452,6 +452,7 @@ async def get_doctor_rewrite_stats(
 @router.get("/files")
 async def get_doctor_files(
     limit: int = Query(default=500, ge=1, le=5000, description="Max files to return"),
+    doctor_id: Optional[str] = Query(default=None, description="Scope to one doctor (NULL rows excluded when set)"),
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user)
 ):
@@ -474,6 +475,8 @@ async def get_doctor_files(
         .order_by(TranscriptAnalysisLog.source_filename)
         .limit(limit)
     )
+    if doctor_id:
+        stmt = stmt.where(TranscriptAnalysisLog.doctor_id == doctor_id)
     rows = (await db.execute(stmt)).all()
 
     # Per-file consult date. NOTE: there is no real visit date in the schema yet;
@@ -527,6 +530,7 @@ async def get_doctor_score_average(
     file: Optional[str] = None,
     speaker: Optional[str] = None,
     class_: Optional[str] = Query(None, alias="class"),
+    doctor_id: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user)
 ):
@@ -561,14 +565,18 @@ async def get_doctor_score_average(
     # ── Step 1: latest analysis_id per source_filename ──────────────
     # We aggregate this once and then join below; cheaper and clearer
     # than a correlated subquery per row.
-    latest_analysis = (
-        select(
-            TranscriptAnalysisLog.source_filename.label("file"),
-            func.max(TranscriptAnalysisLog.id).label("aid"),
-        )
-        .group_by(TranscriptAnalysisLog.source_filename)
-        .subquery()
+    latest_analysis_q = select(
+        TranscriptAnalysisLog.source_filename.label("file"),
+        func.max(TranscriptAnalysisLog.id).label("aid"),
     )
+    # When a doctor is selected, restrict which files aggregate at all.
+    if doctor_id:
+        latest_analysis_q = latest_analysis_q.where(
+            TranscriptAnalysisLog.doctor_id == doctor_id
+        )
+    latest_analysis = latest_analysis_q.group_by(
+        TranscriptAnalysisLog.source_filename
+    ).subquery()
 
     # ── Step 2: MAX(ai_score) + COUNT per (file, domain) within that
     # latest analysis only. NULL ai_scores are excluded from the MAX
@@ -849,6 +857,7 @@ def _overall_from_domain_scores(domain_scores: Dict[str, float]) -> float:
 @router.get("/scores/trajectory")
 async def get_doctor_score_trajectory(
     speaker: Optional[str] = None,
+    doctor_id: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user)
 ):
@@ -880,14 +889,18 @@ async def get_doctor_score_trajectory(
     # transcript would mix old + new analysis rows and the trajectory would
     # diverge from those endpoints. Combined with the per-domain MAX merge
     # below, this makes the per-patient overall identical to /scores/average.
-    latest_analysis = (
-        select(
-            TranscriptAnalysisLog.source_filename.label("file"),
-            func.max(TranscriptAnalysisLog.id).label("aid"),
-        )
-        .group_by(TranscriptAnalysisLog.source_filename)
-        .subquery()
+    latest_analysis_q = select(
+        TranscriptAnalysisLog.source_filename.label("file"),
+        func.max(TranscriptAnalysisLog.id).label("aid"),
     )
+    # When a doctor is selected, restrict which files aggregate at all.
+    if doctor_id:
+        latest_analysis_q = latest_analysis_q.where(
+            TranscriptAnalysisLog.doctor_id == doctor_id
+        )
+    latest_analysis = latest_analysis_q.group_by(
+        TranscriptAnalysisLog.source_filename
+    ).subquery()
     L = LLMDomainScoringAndSummary
     score_stmt = (
         select(

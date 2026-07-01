@@ -510,13 +510,22 @@ async def update_patient_responses(
 @router.get("/api/patient/files")
 async def get_patient_files(
     limit: int = Query(default=500, ge=1, le=5000, description="Max files to return"),
+    doctor_id: Optional[str] = Query(default=None, description="Scope to one doctor (NULL rows excluded when set)"),
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user)
 ):
     """List distinct patient file identifiers (xlsx names) the user can see."""
     # `.distinct()` collapses the (file, speaker) PK to file only —
     # the frontend uses this for the patient picker dropdown.
-    stmt = select(PatientSummary.file).distinct().order_by(PatientSummary.file).limit(limit)
+    stmt = select(PatientSummary.file)
+    # When a doctor is selected, scope the list to files processed for that
+    # doctor by joining the run header (source_filename == PatientSummary.file).
+    if doctor_id:
+        stmt = stmt.join(
+            TranscriptAnalysisLog,
+            TranscriptAnalysisLog.source_filename == PatientSummary.file,
+        ).where(TranscriptAnalysisLog.doctor_id == doctor_id)
+    stmt = stmt.distinct().order_by(PatientSummary.file).limit(limit)
     files_raw = (await db.execute(stmt)).scalars().all()
     # Filter NULL files (legacy data may have them); a None entry would
     # break the dropdown rendering on the frontend.
