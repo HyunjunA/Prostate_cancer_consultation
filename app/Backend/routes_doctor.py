@@ -94,7 +94,13 @@ async def get_doctor_sentences(
             detail="No data found for the specified file and speaker."
         )
 
-    # Get unique sentences from sentence_prediction (DISTINCT on i, i2)
+    # One row per (sentence x model): a sentence selected by several models must
+    # surface in EVERY domain that selected it, tagged with that model. Do NOT
+    # merge the per-model rows into one with a single class — a multi-domain
+    # sentence would then land in only one domain's bucket (which one was
+    # arbitrary: array_agg has no defined order), so the other domain's grid row
+    # loses it and falls back to the wrong sentence. Emitting the model directly
+    # keeps each domain independent and deterministic.
     distinct_stmt = (
         select(
             SentencePrediction.utterance_index.label('i'),
@@ -102,22 +108,17 @@ async def get_doctor_sentences(
             SentencePrediction.speaker,
             SentencePrediction.sentence_text.label('sentence'),
             SentencePrediction.context,
-            func.array_agg(SentencePrediction.model).label('models'),
+            SentencePrediction.model.label('model'),
         )
         .where(
             SentencePrediction.analysis_id == analysis_id,
             SentencePrediction.speaker == speaker,
         )
-        .group_by(
-            SentencePrediction.utterance_index,
-            SentencePrediction.sentence_in_utterance,
-            SentencePrediction.speaker,
-            SentencePrediction.sentence_text,
-            SentencePrediction.context,
-        )
+        .distinct()
         .order_by(
             SentencePrediction.utterance_index,
             SentencePrediction.sentence_in_utterance,
+            SentencePrediction.model,
         )
     )
     results = (await db.execute(distinct_stmt)).all()
@@ -152,7 +153,7 @@ async def get_doctor_sentences(
                 "sentence": r.sentence,
                 "context": r.context,
                 "score": ai_score_map.get(r.sentence),
-                "class": r.models[0] if r.models else None,
+                "class": r.model,
                 "time": None
             }
             for r in results
