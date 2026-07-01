@@ -232,7 +232,15 @@
     Creates the role/database (from app/Backend/.env), applies the schema, runs
     alembic upgrade head. No-op if the DB already exists and is at head.
 
-       $ bash app/Backend/scripts/init-db-native.sh
+    (!) macOS: RUN IT WITH  PGGSSENCMODE=disable  (see below). Without it, the
+        Step-1 `pg_isready` check can falsely report "postgres NOT listening on
+        localhost:5433" and abort — a GSSAPI-negotiation quirk (no Kerberos realm
+        configured) that only trips pg_isready; postgres is actually fine (psql
+        connects). The env var disables that negotiation so the check passes.
+
+       $ PGGSSENCMODE=disable bash app/Backend/scripts/init-db-native.sh
+       # (plain `bash app/Backend/scripts/init-db-native.sh` also works on hosts
+       #  where pg_isready is not affected — e.g. the Linux caire-server.)
 
     Expected output (abridged) -- 6 steps, each a banner + ✓:
        === Step 0: Sanity checks
@@ -436,6 +444,13 @@
 
    init-db-native.sh: "CHANGE_ME" error
        -> POSTGRES_PASSWORD still a placeholder in app/Backend/.env.
+
+   init-db-native.sh / run-backend aborts: "postgres NOT listening on localhost:5433"
+   (macOS) even though postgres IS running (psql connects, `brew services` shows started)
+       -> pg_isready false negative from a GSSAPI negotiation quirk (no Kerberos
+          realm). Fix: prefix the command with  PGGSSENCMODE=disable , e.g.
+             $ PGGSSENCMODE=disable bash app/Backend/scripts/init-db-native.sh
+          Only pg_isready is affected; psql/asyncpg fall back automatically.
 
 
  See also:
