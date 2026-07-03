@@ -111,7 +111,7 @@ import { QID, fieldQuestionId } from "@/lib/firstVisitQuestions";
 import { usePatientId } from "@/stores/usePatientId";
 import { useFileId } from "@/stores/useFileId";
 import { sendTrackingEvents } from "@/api/trackingApi";
-import { trackFirst, startSession, endSession, type Domain } from "@/tracking/track";
+import { trackReport, startSession, endSession, type Domain } from "@/tracking/track";
 import { Slider } from "@/components/ui/slider";
 
 // Display name → backend domain code (cp/le/ed/inc/ius)
@@ -645,7 +645,7 @@ interface HelpfulnessRatingProps {
   trackingName?: string;
   disabled?: boolean;
   // Pattern A behavior tracking — when all three are provided, a
-  // rating_click event is sent to /api/track/patient-first.
+  // rating_click event is sent to /api/track/patient-report.
   trackFile?: string;
   trackSpeaker?: string;
   trackDomain?: Domain;
@@ -696,7 +696,7 @@ const HelpfulnessRating: React.FC<HelpfulnessRatingProps> = React.memo(({
                   },
                 });
                 if (trackFile && trackSpeaker && trackDomain) {
-                  trackFirst(trackFile, trackSpeaker, {
+                  trackReport(trackFile, trackSpeaker, {
                     event_type: "rating_click",
                     domain: trackDomain,
                     rating: i,
@@ -1067,7 +1067,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
 
   // [V38] Slider-interaction tracking. Each `slider_moved` event records one
   // settled value the patient committed: its slider_name, the value, and (via
-  // trackFirst's client_timestamp) when. The behavior log therefore holds the
+  // trackReport's client_timestamp) when. The behavior log therefore holds the
   // full change history — including re-edits AFTER Submit — so analysis can
   // reconstruct the trajectory (e.g. 50 → 70 → 65) and count revisions. The
   // "answered vs left at default 50" signal still falls out of this: any
@@ -1078,7 +1078,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
   // instead of one per pixel.
   const trackSliderCommit = (sliderName: string, value: number) => {
     if (!trackFile || !trackSpeaker || !trackDomain) return;
-    trackFirst(trackFile, trackSpeaker, {
+    trackReport(trackFile, trackSpeaker, {
       event_type: "slider_moved",
       domain: trackDomain,
       // question_id unifies the slider with every other question type; for
@@ -1103,7 +1103,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
     questionId?: string,
   ) => {
     if (!trackFile || !trackSpeaker || !trackDomain) return;
-    trackFirst(trackFile, trackSpeaker, {
+    trackReport(trackFile, trackSpeaker, {
       event_type: "answer_changed",
       domain: trackDomain,
       metadata: {
@@ -1361,7 +1361,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
       // time. This makes each Submit — and each re-Submit after editing — show
       // up in the admin as its own row, alongside the final answers.
       if (trackFile && trackSpeaker && trackDomain) {
-        trackFirst(trackFile, trackSpeaker, {
+        trackReport(trackFile, trackSpeaker, {
           event_type: "domain_submitted",
           domain: trackDomain,
           metadata: { answers, screen: trackScreen },
@@ -3389,7 +3389,7 @@ const PatientReportFirstVisitV40: React.FC<PatientReportProps> = ({
       metadata: { timestamp: new Date().toISOString() },
     });
 
-    trackFirst(currentFile, currentSpeaker, {
+    trackReport(currentFile, currentSpeaker, {
       event_type: "page_view",
       metadata: { page: "patient_first_visit_report" },
     });
@@ -3406,7 +3406,7 @@ const PatientReportFirstVisitV40: React.FC<PatientReportProps> = ({
         },
       });
 
-      trackFirst(currentFile, currentSpeaker, {
+      trackReport(currentFile, currentSpeaker, {
         event_type: "session_end",
         metadata: { time_spent_seconds: Math.round(timeSpentMs / 1000) },
       });
@@ -3883,7 +3883,7 @@ const PatientReportFirstVisitV40: React.FC<PatientReportProps> = ({
 
     const domain = TOPIC_TO_DOMAIN[topic];
     if (domain) {
-      trackFirst(currentFile, currentSpeaker, {
+      trackReport(currentFile, currentSpeaker, {
         event_type: isCurrentlyExpanded ? "topic_close" : "topic_open",
         domain,
         metadata: { topic, screen: STEP_KEYS[currentScreen] },
@@ -3926,7 +3926,7 @@ const PatientReportFirstVisitV40: React.FC<PatientReportProps> = ({
     const topic = baseTopic;
     const domain = TOPIC_TO_DOMAIN[topic];
     if (domain) {
-      trackFirst(currentFile, currentSpeaker, {
+      trackReport(currentFile, currentSpeaker, {
         event_type: isCurrentlyShown ? "evidence_close" : "evidence_open",
         domain,
         metadata: {
@@ -3953,7 +3953,7 @@ const PatientReportFirstVisitV40: React.FC<PatientReportProps> = ({
     // the same card on two screens is distinguishable.
     const domain = TOPIC_TO_DOMAIN[topic];
     if (domain) {
-      trackFirst(currentFile, currentSpeaker, {
+      trackReport(currentFile, currentSpeaker, {
         event_type: isCurrentlyShown ? "summary_close" : "summary_open",
         domain,
         metadata: { topic, screen: STEP_KEYS[currentScreen] },

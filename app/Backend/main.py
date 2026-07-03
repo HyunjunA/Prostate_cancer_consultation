@@ -56,7 +56,7 @@ from routes_patient import router as patient_router
 from routes_surveys import router as surveys_router
 from routes_system import router as system_router
 from routes_track_doctor import router as track_doctor_router
-from routes_track_patient_first import router as track_patient_first_router
+from routes_track_patient_report import router as track_patient_report_router
 from routes_track_patient_followup import router as track_patient_followup_router
 from routes_track_recordings import router as track_recordings_router
 
@@ -93,7 +93,7 @@ ROUTERS = [
     doctor_router,
     patient_router,
     surveys_router,
-    track_patient_first_router,
+    track_patient_report_router,
     track_patient_followup_router,
     track_doctor_router,
     track_recordings_router,

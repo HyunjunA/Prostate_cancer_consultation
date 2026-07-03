@@ -6,7 +6,7 @@
  * and POSTs to the matching backend endpoint.
  *
  * Backend endpoints:
- *   POST /api/backend/track/patient-first
+ *   POST /api/backend/track/patient-report
  *   POST /api/backend/track/patient-followup
  *   POST /api/backend/track/doctor
  */
@@ -20,17 +20,17 @@
 
 let _activeSessionId: string | null = null;
 
-// Where trackFirst events go. "first" = patient_first_behavior (normal). When
+// Where trackReport events go. "first" = patient_report_page_behavior (normal). When
 // the 1st survey (V41) is embedded as the combined Total Survey Risk step, this
 // is set to "followup-risk" so its events are redirected to
-// patient_followup_survey as survey_type='risk_perception' — showing uniformly
-// in the admin follow-up dashboard. All PatientFirstEventType values are allowed
+// patient_followup_survey_page_behavior as survey_type='risk_perception' — showing uniformly
+// in the admin follow-up dashboard. All PatientReportEventType values are allowed
 // there by migration 019.
-let _firstTarget: "first" | "followup-risk" = "first";
+let _reportTarget: "first" | "followup-risk" = "first";
 
-/** Redirect trackFirst events to the follow-up table (combined Risk step). */
-export function setFirstTrackingTarget(target: "first" | "followup-risk"): void {
-  _firstTarget = target;
+/** Redirect trackReport events to the follow-up table (combined Risk step). */
+export function setReportTrackingTarget(target: "first" | "followup-risk"): void {
+  _reportTarget = target;
 }
 
 function _generate(): string {
@@ -58,7 +58,7 @@ function getSessionId(): string {
 
 // ── Type-level event vocabularies (must mirror backend Literal unions) ───────
 
-export type PatientFirstEventType =
+export type PatientReportEventType =
   | "page_view"
   | "topic_open"
   | "topic_close"
@@ -101,8 +101,8 @@ export type DoctorTargetType = "patient" | "topic" | "sentence";
 
 // ── Event payload shapes (sent to backend) ───────────────────────────────────
 
-export interface PatientFirstEvent {
-  event_type: PatientFirstEventType;
+export interface PatientReportEvent {
+  event_type: PatientReportEventType;
   domain?: Domain;
   rating?: number;
   metadata?: Record<string, unknown>;
@@ -160,7 +160,7 @@ async function postEvents(url: string, body: unknown): Promise<void> {
   }
 }
 
-// ── Public API: trackFirst / trackFollowup / trackDoctor ─────────────────────
+// ── Public API: trackReport / trackFollowup / trackDoctor ─────────────────────
 
 /**
  * Record a single patient first-visit behavior event.
@@ -168,12 +168,12 @@ async function postEvents(url: string, body: unknown): Promise<void> {
  * Auto-fills client_timestamp and device_type if omitted; reads session_id
  * from localStorage. Caller MUST supply file and speaker (per-page state).
  */
-export async function trackFirst(
+export async function trackReport(
   file: string,
   speaker: string,
-  event: PatientFirstEvent | Omit<PatientFirstEvent, "client_timestamp" | "device_type">,
+  event: PatientReportEvent | Omit<PatientReportEvent, "client_timestamp" | "device_type">,
 ): Promise<void> {
-  const fullEvent: PatientFirstEvent = {
+  const fullEvent: PatientReportEvent = {
     client_timestamp: isoNow(),
     device_type: detectDeviceType(),
     ...event,
@@ -185,7 +185,7 @@ export async function trackFirst(
   // dropped — SDM/DCS don't record those. Each domain maps to one "question".
   // (survey_step_view + survey_complete are emitted directly by V41 via
   // trackFollowup — see PatientInitialVisitReportV41.tsx.)
-  if (_firstTarget === "followup-risk") {
+  if (_reportTarget === "followup-risk") {
     // Panel-toggle events (per-domain "View AI-Generated Summary" and "View
     // relevant sentences") are meaningful research data — keep them, tagged with
     // the domain as question_id. migration 019 allows these event types.
@@ -245,7 +245,7 @@ export async function trackFirst(
     });
     return;
   }
-  await postEvents(`${API_BASE}/api/backend/track/patient-first`, {
+  await postEvents(`${API_BASE}/api/backend/track/patient-report`, {
     session_id: getSessionId(),
     file,
     speaker,

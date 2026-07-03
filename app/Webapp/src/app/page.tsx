@@ -386,7 +386,7 @@ export default function Home() {
     if (currentView === "selection") return;
     // [area] First-visit splits into report vs survey. New URLs use
     // ?survey=first-visit; legacy links use ?mode=survey. Both map to the same
-    // split tracked in patient_first_behavior (migration 016).
+    // split tracked in patient_report_page_behavior (migration 016).
     const isSurveyMode =
       searchParams.get("survey") === "first-visit" ||
       searchParams.get("mode") === "survey";
@@ -826,7 +826,7 @@ export default function Home() {
           <PatientReportFirstVisit
             isDarkMode={isDarkMode}
             // Combined 2-step flow (seq=1): the standalone Risk survey is the sole
-            // Risk logger, so record it to patient_followup_survey as
+            // Risk logger, so record it to patient_followup_survey_page_behavior as
             // risk_perception — identical to the Total Survey's embedded Risk.
             // (Not combined=1: there the follow-up embeds Risk itself.)
             trackToFollowup={searchParams.get("seq") === "1"}

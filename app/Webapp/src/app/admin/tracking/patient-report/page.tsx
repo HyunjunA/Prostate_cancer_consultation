@@ -1,8 +1,8 @@
 "use client";
 
-import AdminTrackingPatientFirst from "@/components/AdminTrackingPatientFirst";
+import AdminTrackingPatientReport from "@/components/AdminTrackingPatientReport";
 
-// Patient Report behavior — patient_first_behavior is report-only.
+// Patient Report behavior — patient_report_page_behavior is report-only.
 export default function AdminTrackingPatientReportPage() {
-  return <AdminTrackingPatientFirst />;
+  return <AdminTrackingPatientReport />;
 }

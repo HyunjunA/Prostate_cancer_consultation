@@ -2,7 +2,7 @@
 
 Receives strict, area-specific behaviour events from the patient first-
 visit page (the page where the patient explores their consultation
-results for the first time) and stores them in `patient_first_behavior`.
+results for the first time) and stores them in `patient_report_page_behavior`.
 
 What "first-visit" means here vs. follow-up:
     - First-visit page : patient sees the AI-generated summary, opens
@@ -21,7 +21,7 @@ text event_type column; that made queries error-prone and produced the
 visually open forever. Each area now has its own table + its own
 narrow Literal of valid event types.
 
-Endpoint shape (all under /api/track/patient-first):
+Endpoint shape (all under /api/track/patient-report):
     POST  /                  -> append a batch of events
     GET   /sessions          -> list sessions (one row per session)
     GET   /session/{sid}     -> all events in one session, in time order
@@ -40,13 +40,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth import get_current_user
 from auth.admin_session import require_admin_user
 from db import get_db
-from models import PatientFirstBehavior
+from models import PatientReportPageBehavior
 
 logger = logging.getLogger(__name__)
 
 
 router = APIRouter(
-    prefix="/api/track/patient-first",
+    prefix="/api/track/patient-report",
     tags=["Track-PatientFirst"],
     # Router-level auth — every endpoint below requires X-API-Key.
     dependencies=[Depends(get_current_user)],
@@ -68,7 +68,7 @@ EventType = Literal[
 Domain = Literal["cp", "le", "ed", "inc", "ius"]
 
 
-class PatientFirstEvent(BaseModel):
+class PatientReportEvent(BaseModel):
     """One behaviour event captured by the first-visit page."""
 
     event_type: EventType
@@ -129,7 +129,7 @@ class PatientFirstEvent(BaseModel):
         return self
 
 
-class PatientFirstBatch(BaseModel):
+class PatientReportBatch(BaseModel):
     """Batch upload — one HTTP call carries one batch."""
 
     session_id: str = Field(..., min_length=1, max_length=100)
@@ -138,7 +138,7 @@ class PatientFirstBatch(BaseModel):
     # 500-event cap: the frontend flushes every few seconds, so 500 is
     # plenty of headroom; raising it any higher just lets one bad client
     # tie up DB writes.
-    events: List[PatientFirstEvent] = Field(..., min_length=1, max_length=500)
+    events: List[PatientReportEvent] = Field(..., min_length=1, max_length=500)
 
 
 class TrackResponse(BaseModel):
@@ -149,11 +149,11 @@ class TrackResponse(BaseModel):
     session_id: str
 
 
-# ── POST /api/track/patient-first ────────────────────────────────────────────
+# ── POST /api/track/patient-report ────────────────────────────────────────────
 
 @router.post("", response_model=TrackResponse)
 async def post_patient_first_events(
-    batch: PatientFirstBatch,
+    batch: PatientReportBatch,
     db: AsyncSession = Depends(get_db),
 ):
     """Bulk-insert a batch of patient first-visit behavior events."""
@@ -168,7 +168,7 @@ async def post_patient_first_events(
         except (ValueError, AttributeError):
             raise HTTPException(status_code=422, detail=f"Invalid client_timestamp: {ev.client_timestamp}")
 
-        rows.append(PatientFirstBehavior(
+        rows.append(PatientReportPageBehavior(
             session_id=batch.session_id,
             file=batch.file,
             speaker=batch.speaker,
@@ -188,7 +188,7 @@ async def post_patient_first_events(
         await db.commit()
     except Exception as e:
         await db.rollback()
-        logger.error(f"patient_first_behavior insert failed: {e}")
+        logger.error(f"patient_report_page_behavior insert failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to store events")
 
     return TrackResponse(status="ok", events_stored=len(rows), session_id=batch.session_id)
@@ -208,22 +208,22 @@ async def list_sessions(
     # admin UI uses this to render the session table without having to
     # download every event in every session.
     stmt = select(
-        PatientFirstBehavior.session_id,
-        PatientFirstBehavior.file,
-        PatientFirstBehavior.speaker,
-        func.min(PatientFirstBehavior.client_timestamp).label("started_at"),
-        func.max(PatientFirstBehavior.client_timestamp).label("ended_at"),
+        PatientReportPageBehavior.session_id,
+        PatientReportPageBehavior.file,
+        PatientReportPageBehavior.speaker,
+        func.min(PatientReportPageBehavior.client_timestamp).label("started_at"),
+        func.max(PatientReportPageBehavior.client_timestamp).label("ended_at"),
         func.count().label("event_count"),
     ).group_by(
-        PatientFirstBehavior.session_id,
-        PatientFirstBehavior.file,
-        PatientFirstBehavior.speaker,
+        PatientReportPageBehavior.session_id,
+        PatientReportPageBehavior.file,
+        PatientReportPageBehavior.speaker,
     ).order_by(desc("started_at")).limit(limit)
 
     if file:
-        stmt = stmt.where(PatientFirstBehavior.file == file)
+        stmt = stmt.where(PatientReportPageBehavior.file == file)
     if speaker:
-        stmt = stmt.where(PatientFirstBehavior.speaker == speaker)
+        stmt = stmt.where(PatientReportPageBehavior.speaker == speaker)
 
     res = await db.execute(stmt)
     return {
@@ -254,9 +254,9 @@ async def get_session_events(
     order they actually happened on the client; network buffering can
     reorder rows on the way to the DB.
     """
-    stmt = select(PatientFirstBehavior).where(
-        PatientFirstBehavior.session_id == session_id
-    ).order_by(PatientFirstBehavior.client_timestamp.asc())
+    stmt = select(PatientReportPageBehavior).where(
+        PatientReportPageBehavior.session_id == session_id
+    ).order_by(PatientReportPageBehavior.client_timestamp.asc())
 
     res = await db.execute(stmt)
     rows = res.scalars().all()
@@ -293,9 +293,9 @@ async def aggregate_by_session(
     topic opened in session A would show as still-open while viewing
     session B because the legacy aggregator OR-merged everything.)
     """
-    stmt = select(PatientFirstBehavior).where(
-        PatientFirstBehavior.file == file
-    ).order_by(PatientFirstBehavior.client_timestamp.asc())
+    stmt = select(PatientReportPageBehavior).where(
+        PatientReportPageBehavior.file == file
+    ).order_by(PatientReportPageBehavior.client_timestamp.asc())
     res = await db.execute(stmt)
     rows = res.scalars().all()
 

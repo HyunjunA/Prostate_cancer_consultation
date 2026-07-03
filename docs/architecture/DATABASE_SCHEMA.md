@@ -1,6 +1,6 @@
 # Database Schema
 
-PostgreSQL schema for COMPASS. **16 application tables** in the `public` schema (plus `alembic_version` for migration tracking → **17 tables total**). Schema lives in `app/Backend/models.py` (SQLAlchemy ORM) and is bootstrapped via `app/Backend/database_schema.sql` + Alembic migrations **001–025** (current head `025_drop_first_visit_answer`).
+PostgreSQL schema for COMPASS. **16 application tables** in the `public` schema (plus `alembic_version` for migration tracking → **17 tables total**). Schema lives in `app/Backend/models.py` (SQLAlchemy ORM) and is bootstrapped via `app/Backend/database_schema.sql` + Alembic migrations **001–028** (current head `028_rename_followup_behavior`).
 
 Native deployment uses port `:5433`; Docker mode uses `:5432`.
 
@@ -10,7 +10,10 @@ Native deployment uses port `:5433`; Docker mode uses `:5432`.
 > renamed to `patient_survey_submission_log` (mig 023). First-visit Risk answers
 > were consolidated into `patient_survey_submission_log` as
 > `survey_type='risk_perception_2'` and the `patient_first_visit_answer` table was
-> dropped (mig 024 backfill + 025 drop). See the Migrations table.
+> dropped (mig 024 backfill + 025 drop). `patient_first_behavior` became report-only
+> (mig 026 dropped its `mode` column + moved survey behavior to the follow-up table)
+> and was renamed to `patient_report_page_behavior` (mig 027); `patient_followup_survey`
+> was renamed to `patient_followup_survey_page_behavior` (mig 028). See the Migrations table.
 
 ---
 
@@ -101,8 +104,8 @@ Three sibling tables sharing `id, session_id, file, speaker, event_type, metadat
 
 | Table | Extra columns | Used by |
 |---|---|---|
-| `patient_first_behavior` | `domain`, `rating`, `mode` | First-visit page |
-| `patient_followup_survey` | `survey_type`, `question_id`, `step_number`, `domain`, `rating` | Follow-up surveys (DCS/SDM/Risk/Sat); `domain`/`rating` added by mig 019 for the embedded Risk step |
+| `patient_report_page_behavior` | `domain`, `rating` | First-visit **report** page (report-only; renamed from `patient_first_behavior`, mig 026 dropped `mode` + moved survey behavior out, mig 027 renamed) |
+| `patient_followup_survey_page_behavior` | `survey_type`, `question_id`, `step_number`, `domain`, `rating` | Follow-up survey pages (DCS/SDM/Sat) **+ the first-visit Risk survey** (`survey_type='risk_perception'`, redirected from the report page); `domain`/`rating` from mig 019; renamed from `patient_followup_survey` (mig 028) |
 | `doctor_behavior` | `target_type`, `target_id` | Doctor dashboard |
 
 ---
@@ -142,7 +145,7 @@ PK `(file, i, i2, speaker, time)`. One row = one AI-assisted sentence rewrite (`
 ## System (1 table)
 
 ### `alembic_version`
-Migration-tracking table; single column `version_num` (VARCHAR(32); current head `025_drop_first_visit_answer`).
+Migration-tracking table; single column `version_num` (VARCHAR(32); current head `028_rename_followup_behavior`).
 **Why it exists:** records which migration the DB is at, so the next can be applied/rolled back safely. (Used by Alembic, not the app.)
 
 ---
@@ -159,8 +162,11 @@ Migration-tracking table; single column `version_num` (VARCHAR(32); current head
 | **023_rename_survey_submission_log** | rename `survey_submission_log` → `patient_survey_submission_log` |
 | **024_backfill_risk_answers** | backfill first-visit answers into `patient_survey_submission_log` (`risk_perception_2`) |
 | **025_drop_first_visit_answer** | drop `patient_first_visit_answer` (consolidated into the survey log) |
+| **026_first_behavior_report_only** | drop `patient_first_behavior.mode` + delete legacy survey rows (survey behavior → follow-up table) |
+| **027_rename_report_page_behavior** | rename `patient_first_behavior` → `patient_report_page_behavior` |
+| **028_rename_followup_behavior** | rename `patient_followup_survey` → `patient_followup_survey_page_behavior` |
 
-`alembic upgrade head` brings a fresh DB to revision **025** (`025_drop_first_visit_answer`). `init-db-native.sh` does this end-to-end.
+`alembic upgrade head` brings a fresh DB to revision **028** (`028_rename_followup_behavior`). `init-db-native.sh` does this end-to-end.
 
 ---
 

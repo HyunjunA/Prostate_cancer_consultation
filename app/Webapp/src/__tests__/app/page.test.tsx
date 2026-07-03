@@ -36,7 +36,7 @@ jest.mock("@/components/PhysicianReportsModifiedV41Timothy", () => {
 
 jest.mock("@/components/PatientInitialVisitReportV41", () => {
   return function MockPatientFirstVisit() {
-    return <div data-testid="patient-first">Patient First Visit</div>;
+    return <div data-testid="patient-report">Patient First Visit</div>;
   };
 });
 
@@ -183,7 +183,7 @@ describe("Home page — URL-based routing", () => {
     render(<Home />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("patient-first")).toBeInTheDocument();
+      expect(screen.getByTestId("patient-report")).toBeInTheDocument();
     });
 
     // Selection screen should NOT be visible
@@ -203,7 +203,7 @@ describe("Home page — URL-based routing", () => {
     render(<Home />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("patient-first")).toBeInTheDocument();
+      expect(screen.getByTestId("patient-report")).toBeInTheDocument();
     });
   });
 
@@ -218,7 +218,7 @@ describe("Home page — URL-based routing", () => {
     render(<Home />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("patient-first")).toBeInTheDocument();
+      expect(screen.getByTestId("patient-report")).toBeInTheDocument();
     });
   });
 
@@ -340,6 +340,6 @@ describe("Home page — URL-based routing", () => {
       expect(screen.getByTestId("patient-followup")).toBeInTheDocument();
     });
 
-    expect(screen.queryByTestId("patient-first")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("patient-report")).not.toBeInTheDocument();
   });
 });

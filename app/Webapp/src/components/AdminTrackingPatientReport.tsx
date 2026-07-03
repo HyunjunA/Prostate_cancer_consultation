@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * AdminTrackingPatientFirst — admin view for patient first-visit behavior.
+ * AdminTrackingPatientReport — admin view for patient first-visit behavior.
  *
  * Lists sessions, allows selecting one to inspect its event stream, and
  * displays per-domain open/close counts and rating values.
@@ -216,7 +216,7 @@ function durationSecs(start: string | null, end: string | null): string {
   }
 }
 
-export default function AdminTrackingPatientFirst() {
+export default function AdminTrackingPatientReport() {
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [events, setEvents] = useState<EventRow[]>([]);
@@ -230,7 +230,7 @@ export default function AdminTrackingPatientFirst() {
     setLoading(true);
     setError(null);
     try {
-      const url = new URL(`${API_BASE}/api/backend/track/patient-first/sessions`, window.location.origin);
+      const url = new URL(`${API_BASE}/api/backend/track/patient-report/sessions`, window.location.origin);
       if (fileFilter) url.searchParams.set("file", fileFilter);
       url.searchParams.set("limit", "100");
       const res = await fetch(url.toString());
@@ -251,7 +251,7 @@ export default function AdminTrackingPatientFirst() {
       return;
     }
     try {
-      const res = await fetch(`${API_BASE}/api/backend/track/patient-first/session/${encodeURIComponent(selectedSession)}`);
+      const res = await fetch(`${API_BASE}/api/backend/track/patient-report/session/${encodeURIComponent(selectedSession)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setEvents(data.events || []);
@@ -264,7 +264,7 @@ export default function AdminTrackingPatientFirst() {
   const reloadAggregate = async () => {
     if (!fileFilter) { setAggregate(null); return; }
     try {
-      const res = await fetch(`${API_BASE}/api/backend/track/patient-first/aggregate?file=${encodeURIComponent(fileFilter)}`);
+      const res = await fetch(`${API_BASE}/api/backend/track/patient-report/aggregate?file=${encodeURIComponent(fileFilter)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setAggregate(data.sessions || []);

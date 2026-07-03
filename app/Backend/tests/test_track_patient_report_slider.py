@@ -6,14 +6,14 @@ of 50. Exercises three layers:
 
   - Pydantic validation at the API boundary (domain + metadata.slider_name
     are mandatory for slider_moved).
-  - Persistence into patient_first_behavior.
+  - Persistence into patient_report_page_behavior.
   - The /aggregate rollup, which lists the distinct slider names moved per
     domain in a session.
 """
 
 import pytest
 
-PREFIX = "/api/track/patient-first"
+PREFIX = "/api/track/patient-report"
 
 # The /aggregate and /session endpoints require an admin JWT; this suite uses
 # the X-API-Key fixture, so stub admin auth for every test in this module.

@@ -69,7 +69,7 @@ import { usePatientData } from "@/hooks/usePatientData";
 import { usePatientId } from "@/stores/usePatientId";
 import { useFileId } from "@/stores/useFileId";
 import { sendTrackingEvents } from "@/api/trackingApi";
-import { trackFirst, startSession, endSession, type Domain } from "@/tracking/track";
+import { trackReport, startSession, endSession, type Domain } from "@/tracking/track";
 
 // Display name → backend domain code (cp/le/ed/inc/ius)
 const TOPIC_TO_DOMAIN: Record<string, Domain> = {
@@ -595,7 +595,7 @@ interface HelpfulnessRatingProps {
   trackingName?: string;
   disabled?: boolean;
   // Pattern A behavior tracking — when all three are provided, a
-  // rating_click event is sent to /api/track/patient-first.
+  // rating_click event is sent to /api/track/patient-report.
   trackFile?: string;
   trackSpeaker?: string;
   trackDomain?: Domain;
@@ -638,7 +638,7 @@ const HelpfulnessRating: React.FC<HelpfulnessRatingProps> = React.memo(({
                   },
                 });
                 if (trackFile && trackSpeaker && trackDomain) {
-                  trackFirst(trackFile, trackSpeaker, {
+                  trackReport(trackFile, trackSpeaker, {
                     event_type: "rating_click",
                     domain: trackDomain,
                     rating: i,
@@ -1208,7 +1208,7 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
       metadata: { timestamp: new Date().toISOString() },
     });
 
-    trackFirst(currentFile, currentSpeaker, {
+    trackReport(currentFile, currentSpeaker, {
       event_type: "page_view",
       metadata: { page: "patient_first_visit_report" },
     });
@@ -1225,7 +1225,7 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
         },
       });
 
-      trackFirst(currentFile, currentSpeaker, {
+      trackReport(currentFile, currentSpeaker, {
         event_type: "session_end",
         metadata: { time_spent_seconds: Math.round(timeSpentMs / 1000) },
       });
@@ -1467,7 +1467,7 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
 
     const domain = TOPIC_TO_DOMAIN[topic];
     if (domain) {
-      trackFirst(currentFile, currentSpeaker, {
+      trackReport(currentFile, currentSpeaker, {
         event_type: isCurrentlyExpanded ? "topic_close" : "topic_open",
         domain,
         metadata: { topic },
@@ -1501,7 +1501,7 @@ const PatientReportFirstVisit: React.FC<PatientReportProps> = ({
 
     const domain = TOPIC_TO_DOMAIN[topic];
     if (domain) {
-      trackFirst(currentFile, currentSpeaker, {
+      trackReport(currentFile, currentSpeaker, {
         event_type: isCurrentlyShown ? "evidence_close" : "evidence_open",
         domain,
         metadata: { topic, summary_rating_at_expand: ratings[topic] || null },

@@ -87,7 +87,7 @@ export async function sendTrackingEvents(
   // FREEZE: legacy POST disabled during Pattern A migration.
   // The 244 component call sites still buffer events in memory, but nothing
   // is sent over the network. Phase 4 will replace call sites with the new
-  // trackFirst/Followup/Doctor helpers; Phase 6 deletes this file entirely.
+  // trackReport/Followup/Doctor helpers; Phase 6 deletes this file entirely.
   return true;
 
   if (!events || events.length === 0) return true;

@@ -119,7 +119,7 @@ import { QID, fieldQuestionId } from "@/lib/firstVisitQuestions";
 import { usePatientId } from "@/stores/usePatientId";
 import { useFileId } from "@/stores/useFileId";
 import { sendTrackingEvents } from "@/api/trackingApi";
-import { trackFirst, trackFollowup, startSession, endSession, setFirstTrackingTarget, type Domain } from "@/tracking/track";
+import { trackReport, trackFollowup, startSession, endSession, setReportTrackingTarget, type Domain } from "@/tracking/track";
 import { Slider } from "@/components/ui/slider";
 
 // Display name → backend domain code (cp/le/ed/inc/ius)
@@ -485,7 +485,7 @@ interface PatientReportProps {
   // so the URL-based survey detection would otherwise be false).
   forceSurveyMode?: boolean;
   // When embedded as the combined Total Survey Risk step, redirect this survey's
-  // behavior tracking to patient_followup_survey (survey_type='risk_perception')
+  // behavior tracking to patient_followup_survey_page_behavior (survey_type='risk_perception')
   // so the admin follow-up dashboard shows it with the other surveys.
   trackToFollowup?: boolean;
 }
@@ -661,7 +661,7 @@ interface HelpfulnessRatingProps {
   trackingName?: string;
   disabled?: boolean;
   // Pattern A behavior tracking — when all three are provided, a
-  // rating_click event is sent to /api/track/patient-first.
+  // rating_click event is sent to /api/track/patient-report.
   trackFile?: string;
   trackSpeaker?: string;
   trackDomain?: Domain;
@@ -712,7 +712,7 @@ const HelpfulnessRating: React.FC<HelpfulnessRatingProps> = React.memo(({
                   },
                 });
                 if (trackFile && trackSpeaker && trackDomain) {
-                  trackFirst(trackFile, trackSpeaker, {
+                  trackReport(trackFile, trackSpeaker, {
                     event_type: "rating_click",
                     domain: trackDomain,
                     rating: i,
@@ -1083,7 +1083,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
 
   // [V38] Slider-interaction tracking. Each `slider_moved` event records one
   // settled value the patient committed: its slider_name, the value, and (via
-  // trackFirst's client_timestamp) when. The behavior log therefore holds the
+  // trackReport's client_timestamp) when. The behavior log therefore holds the
   // full change history — including re-edits AFTER Submit — so analysis can
   // reconstruct the trajectory (e.g. 50 → 70 → 65) and count revisions. The
   // "answered vs left at default 50" signal still falls out of this: any
@@ -1094,7 +1094,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
   // instead of one per pixel.
   const trackSliderCommit = (sliderName: string, value: number) => {
     if (!trackFile || !trackSpeaker || !trackDomain) return;
-    trackFirst(trackFile, trackSpeaker, {
+    trackReport(trackFile, trackSpeaker, {
       event_type: "slider_moved",
       domain: trackDomain,
       // question_id unifies the slider with every other question type; for
@@ -1119,7 +1119,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
     questionId?: string,
   ) => {
     if (!trackFile || !trackSpeaker || !trackDomain) return;
-    trackFirst(trackFile, trackSpeaker, {
+    trackReport(trackFile, trackSpeaker, {
       event_type: "answer_changed",
       domain: trackDomain,
       metadata: {
@@ -1377,7 +1377,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
       // time. This makes each Submit — and each re-Submit after editing — show
       // up in the admin as its own row, alongside the final answers.
       if (trackFile && trackSpeaker && trackDomain) {
-        trackFirst(trackFile, trackSpeaker, {
+        trackReport(trackFile, trackSpeaker, {
           event_type: "domain_submitted",
           domain: trackDomain,
           metadata: { answers, screen: trackScreen },
@@ -3394,10 +3394,10 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
   // Pattern A: page-lifetime session — mount-only.
   useEffect(() => {
     // Survey-mode behavior (the standalone first-visit survey OR the combined
-    // Total Survey Risk step) is recorded in patient_followup_survey, NOT
-    // patient_first_behavior — the latter is report-only. Report mode keeps its
-    // own session and writes to patient_first_behavior.
-    if (surveyMode) setFirstTrackingTarget("followup-risk");
+    // Total Survey Risk step) is recorded in patient_followup_survey_page_behavior, NOT
+    // patient_report_page_behavior — the latter is report-only. Report mode keeps its
+    // own session and writes to patient_report_page_behavior.
+    if (surveyMode) setReportTrackingTarget("followup-risk");
     // When embedded as the Total Survey Risk step (trackToFollowup), REUSE the
     // follow-up's already-active session — do NOT start/end our own, or we'd
     // overwrite the follow-up session_id (splitting one Total Survey run into
@@ -3405,7 +3405,7 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
     if (!trackToFollowup) startSession();
     return () => {
       if (!trackToFollowup) endSession();
-      setFirstTrackingTarget("first");
+      setReportTrackingTarget("first");
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -3419,7 +3419,7 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
       metadata: { timestamp: new Date().toISOString() },
     });
 
-    trackFirst(currentFile, currentSpeaker, {
+    trackReport(currentFile, currentSpeaker, {
       event_type: "page_view",
       metadata: { page: "patient_first_visit_report" },
     });
@@ -3436,7 +3436,7 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
         },
       });
 
-      trackFirst(currentFile, currentSpeaker, {
+      trackReport(currentFile, currentSpeaker, {
         event_type: "session_end",
         metadata: { time_spent_seconds: Math.round(timeSpentMs / 1000) },
       });
@@ -3565,7 +3565,7 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
     );
     // Survey mode: emit a follow-up survey_step_view per domain (one "question"),
     // matching SDM/DCS, so the admin shows Q + step. Survey behavior lands in
-    // patient_followup_survey (see the mount effect's followup-risk redirect).
+    // patient_followup_survey_page_behavior (see the mount effect's followup-risk redirect).
     if (surveyMode && currentFile && currentSpeaker) {
       trackFollowup(currentFile, currentSpeaker, {
         event_type: "survey_step_view",
@@ -3897,7 +3897,7 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
 
     const domain = TOPIC_TO_DOMAIN[topic];
     if (domain) {
-      trackFirst(currentFile, currentSpeaker, {
+      trackReport(currentFile, currentSpeaker, {
         event_type: isCurrentlyExpanded ? "topic_close" : "topic_open",
         domain,
         metadata: { topic, screen: STEP_KEYS[currentScreen] },
@@ -3940,7 +3940,7 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
     const topic = baseTopic;
     const domain = TOPIC_TO_DOMAIN[topic];
     if (domain) {
-      trackFirst(currentFile, currentSpeaker, {
+      trackReport(currentFile, currentSpeaker, {
         event_type: isCurrentlyShown ? "evidence_close" : "evidence_open",
         domain,
         metadata: {
@@ -3967,7 +3967,7 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
     // the same card on two screens is distinguishable.
     const domain = TOPIC_TO_DOMAIN[topic];
     if (domain) {
-      trackFirst(currentFile, currentSpeaker, {
+      trackReport(currentFile, currentSpeaker, {
         event_type: isCurrentlyShown ? "summary_close" : "summary_open",
         domain,
         metadata: { topic, screen: STEP_KEYS[currentScreen] },

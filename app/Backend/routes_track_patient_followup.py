@@ -1,7 +1,7 @@
 """Patient Follow-up Survey Behaviour Tracking — POST/GET endpoints.
 
 Receives strict, area-specific behaviour events from the patient
-follow-up survey page and stores them in `patient_followup_survey`.
+follow-up survey page and stores them in `patient_followup_survey_page_behavior`.
 This table tracks **behaviour metadata only** (timing, ordering, step
 navigation, which question was answered when). The canonical answer
 payloads continue to live in `survey_submission_log`.
@@ -40,7 +40,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth import get_current_user
 from auth.admin_session import require_admin_user
 from db import get_db
-from models import PatientFollowupSurvey
+from models import PatientFollowupSurveyPageBehavior
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +151,7 @@ async def post_patient_followup_events(
         except (ValueError, AttributeError):
             raise HTTPException(status_code=422, detail=f"Invalid client_timestamp: {ev.client_timestamp}")
 
-        rows.append(PatientFollowupSurvey(
+        rows.append(PatientFollowupSurveyPageBehavior(
             session_id=batch.session_id,
             file=batch.file,
             speaker=batch.speaker,
@@ -175,7 +175,7 @@ async def post_patient_followup_events(
         await db.commit()
     except Exception as e:
         await db.rollback()
-        logger.error(f"patient_followup_survey insert failed: {e}")
+        logger.error(f"patient_followup_survey_page_behavior insert failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to store events")
 
     return TrackResponse(status="ok", events_stored=len(rows), session_id=batch.session_id)
@@ -195,22 +195,22 @@ async def list_sessions(
     # Aggregates expose the metadata the admin UI cares about (start /
     # end / event_count) without the cost of pulling every row.
     stmt = select(
-        PatientFollowupSurvey.session_id,
-        PatientFollowupSurvey.file,
-        PatientFollowupSurvey.speaker,
-        func.min(PatientFollowupSurvey.client_timestamp).label("started_at"),
-        func.max(PatientFollowupSurvey.client_timestamp).label("ended_at"),
+        PatientFollowupSurveyPageBehavior.session_id,
+        PatientFollowupSurveyPageBehavior.file,
+        PatientFollowupSurveyPageBehavior.speaker,
+        func.min(PatientFollowupSurveyPageBehavior.client_timestamp).label("started_at"),
+        func.max(PatientFollowupSurveyPageBehavior.client_timestamp).label("ended_at"),
         func.count().label("event_count"),
     ).group_by(
-        PatientFollowupSurvey.session_id,
-        PatientFollowupSurvey.file,
-        PatientFollowupSurvey.speaker,
+        PatientFollowupSurveyPageBehavior.session_id,
+        PatientFollowupSurveyPageBehavior.file,
+        PatientFollowupSurveyPageBehavior.speaker,
     ).order_by(desc("started_at")).limit(limit)
 
     if file:
-        stmt = stmt.where(PatientFollowupSurvey.file == file)
+        stmt = stmt.where(PatientFollowupSurveyPageBehavior.file == file)
     if speaker:
-        stmt = stmt.where(PatientFollowupSurvey.speaker == speaker)
+        stmt = stmt.where(PatientFollowupSurveyPageBehavior.speaker == speaker)
 
     res = await db.execute(stmt)
     return {
@@ -239,9 +239,9 @@ async def get_session_events(
     # Time-ordered fetch so the consumer (admin UI / replay tool) can
     # iterate the events in the order they actually happened on the
     # client, not in INSERT order which can drift due to network buffering.
-    stmt = select(PatientFollowupSurvey).where(
-        PatientFollowupSurvey.session_id == session_id
-    ).order_by(PatientFollowupSurvey.client_timestamp.asc())
+    stmt = select(PatientFollowupSurveyPageBehavior).where(
+        PatientFollowupSurveyPageBehavior.session_id == session_id
+    ).order_by(PatientFollowupSurveyPageBehavior.client_timestamp.asc())
 
     res = await db.execute(stmt)
     rows = res.scalars().all()
@@ -282,9 +282,9 @@ async def aggregate_by_session(
     because the per-survey-type rollup is shaped enough that a SQL
     version would be harder to read than the small loop below.
     """
-    stmt = select(PatientFollowupSurvey).where(
-        PatientFollowupSurvey.file == file
-    ).order_by(PatientFollowupSurvey.client_timestamp.asc())
+    stmt = select(PatientFollowupSurveyPageBehavior).where(
+        PatientFollowupSurveyPageBehavior.file == file
+    ).order_by(PatientFollowupSurveyPageBehavior.client_timestamp.asc())
     res = await db.execute(stmt)
     rows = res.scalars().all()
 

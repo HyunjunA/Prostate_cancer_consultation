@@ -5,8 +5,8 @@ Tables are grouped by feature area:
   2. Patient interface      : PatientSummary
   3. Surveys                : PatientSurveySubmissionLog
   4. Transcript analysis    : TranscriptAnalysisLog, SentencePrediction
-  5. Behaviour tracking     : SessionRecording, PatientFirstBehavior,
-                              PatientFollowupSurvey, DoctorBehavior
+  5. Behaviour tracking     : SessionRecording, PatientReportPageBehavior,
+                              PatientFollowupSurveyPageBehavior, DoctorBehavior
   6. AI pipeline outputs    : LLMDomainScoringAndSummary
 
 Auth tables (AuthUser, AuthAPIKey, PatientAccess) are defined in
@@ -245,7 +245,7 @@ class SentencePrediction(Base):
 # 6. (removed) UserInteractionLog — replaced by Pattern A behavior tables
 # =====================================================
 # The legacy single user_interaction_log table has been split into
-# patient_first_behavior, patient_followup_survey, and doctor_behavior
+# patient_report_page_behavior, patient_followup_survey_page_behavior, and doctor_behavior
 # (see section 7b below). The DROP TABLE migration is in Alembic
 # revision 003_drop_user_interaction_log.
 
@@ -286,9 +286,9 @@ class SessionRecording(Base):
 # The legacy single-table design produced false-positive "still open"
 # bugs where events from one area leaked into another's aggregation.
 
-class PatientFirstBehavior(Base):
+class PatientReportPageBehavior(Base):
     """Patient first-visit interaction events (Pattern A)."""
-    __tablename__ = 'patient_first_behavior'
+    __tablename__ = 'patient_report_page_behavior'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(String(100), nullable=False)
@@ -306,13 +306,13 @@ class PatientFirstBehavior(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
 
-class PatientFollowupSurvey(Base):
+class PatientFollowupSurveyPageBehavior(Base):
     """Patient follow-up survey behavior events (Pattern A).
 
     Stores behavior metadata (timing, ordering, step navigation) only.
     Canonical answer payloads live in patient_survey_submission_log.
     """
-    __tablename__ = 'patient_followup_survey'
+    __tablename__ = 'patient_followup_survey_page_behavior'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(String(100), nullable=False)
