@@ -190,25 +190,70 @@ export async function trackFirst(
     device_type: detectDeviceType(),
     ...event,
   };
-  // Combined Total Survey Risk step: redirect to the follow-up table so the
-  // admin follow-up dashboard shows Risk with the other surveys. domain/rating
-  // ride along (migration 019 added the columns); event_type is unchanged.
+  // Combined Total Survey Risk step: record to the follow-up table using the
+  // follow-up NATIVE vocabulary (survey_answer / page_view / session_end), so
+  // risk_perception looks like SDM/DCS in the admin. V41's rich interaction
+  // events (slider_moved, answer_changed, summary/evidence/topic toggles, …) are
+  // dropped — SDM/DCS don't record those. Each domain maps to one "question".
+  // (survey_step_view + survey_complete are emitted directly by V41 via
+  // trackFollowup — see PatientInitialVisitReportV41.tsx.)
   if (_firstTarget === "followup-risk") {
+    // Panel-toggle events (per-domain "View AI-Generated Summary" and "View
+    // relevant sentences") are meaningful research data — keep them, tagged with
+    // the domain as question_id. migration 019 allows these event types.
+    const KEEP_AS_IS = new Set([
+      "summary_open", "summary_close",
+      "evidence_open", "evidence_close",
+      "topic_open", "topic_close",
+    ]);
+    const base = {
+      survey_type: "risk_perception",
+      device_type: fullEvent.device_type,
+      client_timestamp: fullEvent.client_timestamp,
+    };
+    const meta = (fullEvent.metadata ?? {}) as {
+      answers?: Array<{ question_id?: string; field?: string }>;
+      screen?: string;
+    };
+    let events: Array<Record<string, unknown>> = [];
+    if (fullEvent.event_type === "domain_submitted") {
+      // Fan out into ONE survey_answer per answered question, so the admin shows
+      // each question's submission (cp_risk_without_treatment, cp_timeline, …)
+      // rather than a single domain-level row. question_id comes from the
+      // per-question snapshot V41 attached in metadata.answers. Value-free — the
+      // actual value is persisted to survey_submission_log via submitSurvey.
+      const answers = Array.isArray(meta.answers) ? meta.answers : [];
+      events = answers
+        .filter((a) => a?.question_id)
+        .map((a) => ({
+          ...base,
+          event_type: "survey_answer",
+          question_id: a.question_id,
+          metadata: { field: a.field, screen: meta.screen },
+        }));
+    } else if (
+      fullEvent.event_type === "page_view" ||
+      fullEvent.event_type === "session_end"
+    ) {
+      events = [{ ...base, event_type: fullEvent.event_type, metadata: meta }];
+    } else if (KEEP_AS_IS.has(fullEvent.event_type)) {
+      events = [
+        {
+          ...base,
+          event_type: fullEvent.event_type,
+          question_id: fullEvent.domain,
+          metadata: meta,
+        },
+      ];
+    }
+    // Dropped: slider_moved / answer_changed / rating_click (answer-input noise;
+    // the answers are captured per-question above on domain submit).
+    if (events.length === 0) return;
     await postEvents(`${API_BASE}/api/backend/track/patient-followup`, {
       session_id: getSessionId(),
       file,
       speaker,
-      events: [
-        {
-          event_type: fullEvent.event_type,
-          survey_type: "risk_perception",
-          domain: fullEvent.domain,
-          rating: fullEvent.rating,
-          metadata: fullEvent.metadata,
-          device_type: fullEvent.device_type,
-          client_timestamp: fullEvent.client_timestamp,
-        },
-      ],
+      events,
     });
     return;
   }

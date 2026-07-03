@@ -828,6 +828,11 @@ export default function Home() {
         {currentView === "patient" && visitType === "first" && (
           <PatientReportFirstVisit
             isDarkMode={isDarkMode}
+            // Combined 2-step flow (seq=1): the standalone Risk survey is the sole
+            // Risk logger, so record it to patient_followup_survey as
+            // risk_perception — identical to the Total Survey's embedded Risk.
+            // (Not combined=1: there the follow-up embeds Risk itself.)
+            trackToFollowup={searchParams.get("seq") === "1"}
             onComplete={
               searchParams.get("seq") === "1"
                 ? () => {

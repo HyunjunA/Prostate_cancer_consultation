@@ -108,6 +108,9 @@ import React, {
 } from "react";
 import { usePatientData } from "@/hooks/usePatientData";
 import { useFirstVisitAnswers } from "@/hooks/useFirstVisitAnswers";
+// Risk Perception (this survey) is submitted to survey_submission_log like the
+// other follow-up surveys, so it lands next to SDM/DCS/Satisfaction.
+import { submitSurvey } from "@/api/surveyApi";
 import {
   AnswerItem,
   DomainAnswers,
@@ -116,7 +119,7 @@ import { QID, fieldQuestionId } from "@/lib/firstVisitQuestions";
 import { usePatientId } from "@/stores/usePatientId";
 import { useFileId } from "@/stores/useFileId";
 import { sendTrackingEvents } from "@/api/trackingApi";
-import { trackFirst, startSession, endSession, setFirstMode, setFirstTrackingTarget, type Domain } from "@/tracking/track";
+import { trackFirst, trackFollowup, startSession, endSession, setFirstMode, setFirstTrackingTarget, type Domain } from "@/tracking/track";
 import { Slider } from "@/components/ui/slider";
 
 // Display name → backend domain code (cp/le/ed/inc/ius)
@@ -3394,9 +3397,13 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
     // admin tracking view and the research analysis can separate the two.
     if (trackToFollowup) setFirstTrackingTarget("followup-risk");
     setFirstMode(surveyMode ? "survey" : "report");
-    startSession();
+    // When embedded as the Total Survey Risk step (trackToFollowup), REUSE the
+    // follow-up's already-active session — do NOT start/end our own, or we'd
+    // overwrite the follow-up session_id (splitting one Total Survey run into
+    // several sessions in the admin). Standalone first-visit keeps its own.
+    if (!trackToFollowup) startSession();
     return () => {
-      endSession();
+      if (!trackToFollowup) endSession();
       setFirstTrackingTarget("first");
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3558,6 +3565,16 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
     setExpandedTopics((prev) =>
       prev[topic] ? prev : { ...prev, [topic]: true },
     );
+    // Embedded Risk step (Total Survey): emit a follow-up survey_step_view per
+    // domain (one "question"), matching SDM/DCS, so the admin shows Q + step.
+    if (trackToFollowup && surveyMode && currentFile && currentSpeaker) {
+      trackFollowup(currentFile, currentSpeaker, {
+        event_type: "survey_step_view",
+        survey_type: "risk_perception",
+        question_id: TOPIC_TO_DOMAIN[topic],
+        step_number: currentScreen,
+      });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentScreen]);
 
@@ -4614,7 +4631,28 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
                 disabled={nextDisabled}
                 onClick={() => {
                   if (isContinueToFollowup) {
-                    onComplete!();
+                    // Embedded Risk step: emit the follow-up survey_complete so
+                    // risk_perception is marked complete like SDM/DCS.
+                    if (trackToFollowup && currentFile && currentSpeaker) {
+                      trackFollowup(currentFile, currentSpeaker, {
+                        event_type: "survey_complete",
+                        survey_type: "risk_perception",
+                      });
+                    }
+                    // Submit the whole Risk Perception survey to
+                    // survey_submission_log (survey_type=risk_perception) — one
+                    // submission carrying every domain's answers — then hand off
+                    // to the follow-up. Non-blocking: advance even if it fails.
+                    void submitSurvey({
+                      survey_type: "risk_perception",
+                      file: currentFile,
+                      speaker: currentSpeaker,
+                      answers: firstVisit.responses,
+                    })
+                      .catch((e) =>
+                        console.warn("[risk] submitSurvey failed:", e),
+                      )
+                      .finally(() => onComplete!());
                   } else {
                     setCurrentScreen((s) => Math.min(TOTAL_SCREENS - 1, s + 1));
                   }
