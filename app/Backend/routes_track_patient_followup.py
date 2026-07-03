@@ -63,6 +63,13 @@ EventType = Literal[
     "page_view", "survey_step_view",
     "survey_answer", "survey_complete",
     "session_end",
+    # V41 (1st survey) event types — only used when the combined-flow Risk step
+    # tracks here as survey_type='risk_perception' (schema-expansion, mig 019).
+    "topic_open", "topic_close",
+    "evidence_open", "evidence_close",
+    "summary_open", "summary_close",
+    "rating_click", "slider_moved",
+    "answer_changed", "domain_submitted",
 ]
 SurveyType = Literal["sdm", "dcs", "risk_perception", "satisfaction"]
 
@@ -74,6 +81,10 @@ class PatientFollowupEvent(BaseModel):
     survey_type: Optional[SurveyType] = None
     question_id: Optional[str] = Field(None, max_length=50)
     step_number: Optional[int] = Field(None, ge=1)
+    # domain/rating: only sent by the embedded 1st survey (V41) Risk step of the
+    # combined flow (survey_type='risk_perception'); null for SDM/DCS/Satisfaction.
+    domain: Optional[str] = Field(None, max_length=50)
+    rating: Optional[int] = None
     # Free-form metadata for fields that vary per event type. We do NOT
     # validate the inner shape — anything the frontend sends is stored
     # verbatim into the JSONB column for later analysis.
@@ -148,6 +159,8 @@ async def post_patient_followup_events(
             survey_type=ev.survey_type,
             question_id=ev.question_id,
             step_number=ev.step_number,
+            domain=ev.domain,
+            rating=ev.rating,
             event_metadata=ev.metadata or {},
             device_type=ev.device_type,
             client_timestamp=client_ts,
