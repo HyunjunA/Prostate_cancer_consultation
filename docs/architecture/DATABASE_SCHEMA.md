@@ -1,12 +1,16 @@
 # Database Schema
 
-PostgreSQL schema for COMPASS. **17 application tables** in the `public` schema (plus `alembic_version` for migration tracking → **18 tables total**). Schema lives in `app/Backend/models.py` (SQLAlchemy ORM) and is bootstrapped via `app/Backend/database_schema.sql` + Alembic migrations **001–022** (current head `022_drop_patient_summary_domain`).
+PostgreSQL schema for COMPASS. **16 application tables** in the `public` schema (plus `alembic_version` for migration tracking → **17 tables total**). Schema lives in `app/Backend/models.py` (SQLAlchemy ORM) and is bootstrapped via `app/Backend/database_schema.sql` + Alembic migrations **001–025** (current head `025_drop_first_visit_answer`).
 
 Native deployment uses port `:5433`; Docker mode uses `:5432`.
 
-> **Recently removed** (unused-table cleanup): `patient_first_visit_responses` (mig 020),
-> the `patient_scoring`/`patient_response` columns (mig 021), and `patient_summary_domain`
-> (mig 022). See the Migrations table.
+> **Recent consolidation / cleanup:** `patient_first_visit_responses` (mig 020),
+> `patient_summary_domain.patient_scoring`/`patient_response` (mig 021), and
+> `patient_summary_domain` (mig 022) were dropped. `survey_submission_log` was
+> renamed to `patient_survey_submission_log` (mig 023). First-visit Risk answers
+> were consolidated into `patient_survey_submission_log` as
+> `survey_type='risk_perception_2'` and the `patient_first_visit_answer` table was
+> dropped (mig 024 backfill + 025 drop). See the Migrations table.
 
 ---
 
@@ -24,23 +28,23 @@ Some tables here hold **no data of their own** — they look empty at first ("wh
 
 → no data columns — just "this patient exists".
 
-**Child `patient_first_visit_answer`** — that patient's actual answers, **many rows** (one per domain × question):
+**Child `patient_survey_submission_log`** — that patient's actual survey submissions, **many rows** (one per `survey_type`: risk_perception_2, sdm, dcs, satisfaction, …):
 
-| file | speaker | domain | question_id | field | value |
-|---|---|---|---|---|---|
-| 13475_… | Patient_13475_… | cp | cp_risk_without_treatment | vas | 40 |
-| 13475_… | Patient_13475_… | cp | cp_timeline | timeline | "5-10 years" |
-| … | … | … | … | … | … |
+| file | speaker | survey_type | answers (JSONB) |
+|---|---|---|---|
+| 13475_… | Patient_13475_… | risk_perception_2 | `{cp:{cp_timeline:…}, le:{…}, …}` |
+| 13475_… | Patient_13475_… | sdm | `{…}` |
+| … | … | … | … |
 
 Every child row points at the **same** patient, so the patient is **defined once** in the parent.
 
 ### Why split into anchor + children — 3 payoffs
 1. **Referential integrity** — a child row can only exist for a real subject; the DB blocks data attaching to a non-existent patient/run.
 2. **Cascade delete** — deleting one anchor row removes **all** its child data at once.
-3. **Survives re-processing (UPSERT)** — re-running the same file UPSERTs the anchor row so existing referrers (survey submissions, first-visit answers) stay valid.
+3. **Survives re-processing (UPSERT)** — re-running the same file UPSERTs the anchor row so existing referrers (survey submissions) stay valid.
 
 The two anchors in this schema:
-- **`patient_summary`** `(file, speaker)` → anchor for patient-side children: `patient_first_visit_answer` and `patient_survey_submission_log`.
+- **`patient_summary`** `(file, speaker)` → anchor for patient-side children: `patient_survey_submission_log` (all patient survey answers, first-visit + follow-up).
 - **`transcript_analysis_log`** `id` → anchor for pipeline-output children (sentence predictions, NLP/AI intermediate + final).
 
 ---
@@ -50,10 +54,9 @@ The two anchors in this schema:
 | Group | Tables | Purpose |
 |---|---|---|
 | Pipeline persistence | 7 | NLP + AI pipeline outputs |
-| First-visit survey answers | 1 | Patient's per-domain first-visit cognition answers |
 | Behavior tracking | 3 | Per-page user behavior (patient first/followup, doctor) |
 | Authentication | 3 | API key auth + per-patient access control |
-| Other | 3 | Audio recordings, REDCap submissions, doctor rewrite log |
+| Other | 3 | Audio recordings, survey submissions, doctor rewrite log |
 
 > Each table below lists its **purpose** and **why it exists** (what breaks without it).
 
@@ -87,26 +90,18 @@ PK `id`, FK `analysis_id`. Per-domain `ai_score`, `score_explanation`, `extracte
 
 ### `patient_summary` — parent for patient-side data · **patient anchor**
 PK `(file, speaker)`. No data columns.
-**Why it exists:** defines one patient exactly once as the anchor for `patient_first_visit_answer` + `patient_survey_submission_log` (integrity, cascade delete, UPSERT survival). See the parent–child section. *(Its former child `patient_summary_domain` was dropped in migration 022.)*
-
----
-
-## First-visit survey answers (1 table)
-
-### `patient_first_visit_answer` — row-per-question (migration 014)
-PK `id`; one row per `(file, speaker, domain, question_id)`. `field` = vas/timeline/factors; `value` JSONB. FK `(file, speaker) → patient_summary`. Written by `PUT /api/patient/first-visit-answers`; feeds the REDCap `post_risk_perception_2` sync.
-**Why it exists:** stores the experimental arm's cognition/understanding answers (a core study metric). Row-per-question keeps same-type questions apart and maps 1:1 to the REDCap field export. *(The old fixed-column `patient_first_visit_responses` was dropped in migration 020.)*
+**Why it exists:** defines one patient exactly once as the anchor for `patient_survey_submission_log` (integrity, cascade delete, UPSERT survival). See the parent–child section. *(Its former child `patient_summary_domain` was dropped in migration 022.)*
 
 ---
 
 ## Behavior Tracking (3 tables)
 
 Three sibling tables sharing `id, session_id, file, speaker, event_type, metadata (jsonb), device_type, client_timestamp, created_at` plus per-area extras.
-**Why behavior tracking exists:** which areas a patient opens first/most is a **secondary outcome** — a proxy for what matters most to this patient.
+**Why behavior tracking exists:** which areas a patient opens first/most is a **secondary outcome** — a proxy for what matters most to this patient. These store interaction *events* (how the patient interacted); the *answers* live in `patient_survey_submission_log`.
 
 | Table | Extra columns | Used by |
 |---|---|---|
-| `patient_first_behavior` | `domain`, `rating` | First-visit page |
+| `patient_first_behavior` | `domain`, `rating`, `mode` | First-visit page |
 | `patient_followup_survey` | `survey_type`, `question_id`, `step_number`, `domain`, `rating` | Follow-up surveys (DCS/SDM/Risk/Sat); `domain`/`rating` added by mig 019 for the embedded Risk step |
 | `doctor_behavior` | `target_type`, `target_id` | Doctor dashboard |
 
@@ -134,9 +129,9 @@ PK `id`. Maps `user_id` → `patient_id` with `access_type`.
 PK `id`. Audio chunks (`recording_data` bytea) per session × file × area, with `event_count`.
 **Why it exists:** archives the raw consultation audio for re-analysis, verification, compliance.
 
-### `patient_survey_submission_log`
+### `patient_survey_submission_log` — all patient survey answers
 PK `id`. One row per submission: `survey_type`, `answers` (jsonb), `extra_data`, `submitted_at`, plus REDCap fields `redcap_synced`, `redcap_record_id`, `redcap_error`. FK `(file, speaker) → patient_summary`.
-**Why it exists:** the source of truth for follow-up survey answers + REDCap sync status; `redcap_error` records failures for retry.
+**Why it exists:** the single source of truth for **every patient survey answer** — follow-up surveys (`sdm`, `dcs`, `satisfaction`) *and* the first-visit Risk cognition answers (`survey_type='risk_perception_2'`, nested `answers` domain→question_id, written per-domain by `PUT /api/patient/first-visit-answers`, mirrored to REDCap `post_risk_perception_2`). `redcap_error` records failures for retry. *(The dedicated `patient_first_visit_answer` table was consolidated in here — mig 024/025.)*
 
 ### `doctor_rewrite_log`
 PK `(file, i, i2, speaker, time)`. One row = one AI-assisted sentence rewrite (`original_sentence`, `revised_sentence`, `score`, `class`).
@@ -147,7 +142,7 @@ PK `(file, i, i2, speaker, time)`. One row = one AI-assisted sentence rewrite (`
 ## System (1 table)
 
 ### `alembic_version`
-Migration-tracking table; single column `version_num` (VARCHAR(32); current head `022_drop_patient_summary_domain`).
+Migration-tracking table; single column `version_num` (VARCHAR(32); current head `025_drop_first_visit_answer`).
 **Why it exists:** records which migration the DB is at, so the next can be applied/rolled back safely. (Used by Alembic, not the app.)
 
 ---
@@ -157,19 +152,15 @@ Migration-tracking table; single column `version_num` (VARCHAR(32); current head
 | Revision | Purpose |
 |---|---|
 | 001–009 | baseline + behavior tracking + NLP/AI intermediates + widen LLM text (see git history) |
-| 010_add_patient_first_visit_responses | add `patient_first_visit_responses` (fixed 4-column) |
-| 011–013 | extend first-behavior `event_type` (slider_moved / domain_submitted / answer_changed) |
-| 014_first_visit_answers_row_per_question | add `patient_first_visit_answer`; backfill from responses |
-| 015_add_summary_toggle_events | extend `event_type` (summary/evidence open+close) |
-| 016_add_patient_first_mode | add first-behavior `mode` (report vs survey) |
-| 017_recording_area_split | split `session_recording` by area |
-| 018_add_doctor_id | add `doctor_id` scoping |
-| 019_followup_risk_expand | widen `patient_followup_survey` CHECK + add `domain`/`rating` |
-| **020_drop_first_visit_responses** | **drop `patient_first_visit_responses`** (superseded by `_answer`) |
-| **021_drop_domain_scoring_resp** | **drop `patient_summary_domain.patient_scoring`/`patient_response`** (rating no longer collected) |
-| **022_drop_patient_summary_domain** | **drop `patient_summary_domain`** (per-domain view now from the AI tables) |
+| 010–019 | first-visit responses/answers, behavior `event_type` extensions, recording split, doctor scoping, follow-up Risk expand |
+| **020_drop_first_visit_responses** | drop `patient_first_visit_responses` (superseded by `_answer`) |
+| **021_drop_domain_scoring_resp** | drop `patient_summary_domain.patient_scoring`/`patient_response` |
+| **022_drop_patient_summary_domain** | drop `patient_summary_domain` (per-domain view now from the AI tables) |
+| **023_rename_survey_submission_log** | rename `survey_submission_log` → `patient_survey_submission_log` |
+| **024_backfill_risk_answers** | backfill first-visit answers into `patient_survey_submission_log` (`risk_perception_2`) |
+| **025_drop_first_visit_answer** | drop `patient_first_visit_answer` (consolidated into the survey log) |
 
-`alembic upgrade head` brings a fresh DB to revision **022** (`022_drop_patient_summary_domain`). `init-db-native.sh` does this end-to-end.
+`alembic upgrade head` brings a fresh DB to revision **025** (`025_drop_first_visit_answer`). `init-db-native.sh` does this end-to-end.
 
 ---
 
