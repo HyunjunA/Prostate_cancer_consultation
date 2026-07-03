@@ -28,9 +28,6 @@ import PatientConsultationReports from "@/components/PatientConsultationReports"
 // import PatientReport from "@/components/PatientInitialVisitReportV29";
 // import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV31";
 // import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV33";
-// import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV37";
-// import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV38";
-// import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV39";
 // import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV40";
 import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV41";
 
