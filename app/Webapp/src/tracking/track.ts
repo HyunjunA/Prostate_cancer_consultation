@@ -221,7 +221,7 @@ export async function trackFirst(
       // each question's submission (cp_risk_without_treatment, cp_timeline, …)
       // rather than a single domain-level row. question_id comes from the
       // per-question snapshot V41 attached in metadata.answers. Value-free — the
-      // actual value is persisted to survey_submission_log via submitSurvey.
+      // actual value is persisted to patient_survey_submission_log via submitSurvey.
       const answers = Array.isArray(meta.answers) ? meta.answers : [];
       events = answers
         .filter((a) => a?.question_id)
@@ -271,7 +271,7 @@ export async function trackFirst(
  *
  * Note: this records BEHAVIOR metadata only (timing, ordering). The
  * canonical answer payload still goes to /api/surveys/submit which
- * persists to survey_submission_log.
+ * persists to patient_survey_submission_log.
  */
 export async function trackFollowup(
   file: string,

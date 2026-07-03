@@ -108,7 +108,7 @@ import React, {
 } from "react";
 import { usePatientData } from "@/hooks/usePatientData";
 import { useFirstVisitAnswers } from "@/hooks/useFirstVisitAnswers";
-// Risk Perception (this survey) is submitted to survey_submission_log like the
+// Risk Perception (this survey) is submitted to patient_survey_submission_log like the
 // other follow-up surveys, so it lands next to SDM/DCS/Satisfaction.
 import { submitSurvey } from "@/api/surveyApi";
 import {
@@ -4596,7 +4596,7 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
                       });
                     }
                     // Submit the whole Risk Perception survey to
-                    // survey_submission_log (survey_type=risk_perception) — one
+                    // patient_survey_submission_log (survey_type=risk_perception) — one
                     // submission carrying every domain's answers — then hand off
                     // to the follow-up. Non-blocking: advance even if it fails.
                     void submitSurvey({

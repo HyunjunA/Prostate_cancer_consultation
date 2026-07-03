@@ -40,7 +40,7 @@ Every child row points at the **same** patient, so the patient is **defined once
 3. **Survives re-processing (UPSERT)** — re-running the same file UPSERTs the anchor row so existing referrers (survey submissions, first-visit answers) stay valid.
 
 The two anchors in this schema:
-- **`patient_summary`** `(file, speaker)` → anchor for patient-side children: `patient_first_visit_answer` and `survey_submission_log`.
+- **`patient_summary`** `(file, speaker)` → anchor for patient-side children: `patient_first_visit_answer` and `patient_survey_submission_log`.
 - **`transcript_analysis_log`** `id` → anchor for pipeline-output children (sentence predictions, NLP/AI intermediate + final).
 
 ---
@@ -87,7 +87,7 @@ PK `id`, FK `analysis_id`. Per-domain `ai_score`, `score_explanation`, `extracte
 
 ### `patient_summary` — parent for patient-side data · **patient anchor**
 PK `(file, speaker)`. No data columns.
-**Why it exists:** defines one patient exactly once as the anchor for `patient_first_visit_answer` + `survey_submission_log` (integrity, cascade delete, UPSERT survival). See the parent–child section. *(Its former child `patient_summary_domain` was dropped in migration 022.)*
+**Why it exists:** defines one patient exactly once as the anchor for `patient_first_visit_answer` + `patient_survey_submission_log` (integrity, cascade delete, UPSERT survival). See the parent–child section. *(Its former child `patient_summary_domain` was dropped in migration 022.)*
 
 ---
 
@@ -134,7 +134,7 @@ PK `id`. Maps `user_id` → `patient_id` with `access_type`.
 PK `id`. Audio chunks (`recording_data` bytea) per session × file × area, with `event_count`.
 **Why it exists:** archives the raw consultation audio for re-analysis, verification, compliance.
 
-### `survey_submission_log`
+### `patient_survey_submission_log`
 PK `id`. One row per submission: `survey_type`, `answers` (jsonb), `extra_data`, `submitted_at`, plus REDCap fields `redcap_synced`, `redcap_record_id`, `redcap_error`. FK `(file, speaker) → patient_summary`.
 **Why it exists:** the source of truth for follow-up survey answers + REDCap sync status; `redcap_error` records failures for retry.
 

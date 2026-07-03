@@ -5,7 +5,7 @@ Models tested (7 total):
   2. PatientSummary      — composite PK (file, speaker)
   3. PatientSummaryScoring — FK to PatientSummary, check constraints (0-10)
   4. PatientResponses    — FK to PatientSummary
-  5. SurveySubmissionLog — FK to PatientSummary, autoincrement PK
+  5. PatientSurveySubmissionLog — FK to PatientSummary, autoincrement PK
   6. TranscriptAnalysisLog — autoincrement PK, relationship to SentencePrediction
   7. SentencePrediction  — FK to TranscriptAnalysisLog, cascade delete
 """
@@ -21,7 +21,7 @@ from models import (
     Base,
     DoctorRewriteLog,
     PatientSummary,
-    SurveySubmissionLog,
+    PatientSurveySubmissionLog,
     TranscriptAnalysisLog,
     SentencePrediction,
 )
@@ -207,11 +207,11 @@ class TestPatientResponses:
         assert "resp.xlsx" in r
 
 
-# ── SurveySubmissionLog ───────────────────────────────────────────────────
+# ── PatientSurveySubmissionLog ───────────────────────────────────────────────────
 
 
-class TestSurveySubmissionLog:
-    """SurveySubmissionLog model — auto-increment PK, FK to PatientSummary."""
+class TestPatientSurveySubmissionLog:
+    """PatientSurveySubmissionLog model — auto-increment PK, FK to PatientSummary."""
 
     async def test_instantiation(self):
         obj = TestDataFactory.survey_submission()
@@ -219,7 +219,7 @@ class TestSurveySubmissionLog:
         assert obj.answers == '{"q1": "a"}'
 
     async def test_auto_increment_pk(self):
-        mapper = inspect(SurveySubmissionLog)
+        mapper = inspect(PatientSurveySubmissionLog)
         pk_cols = [col.name for col in mapper.primary_key]
         assert pk_cols == ["id"]
 
@@ -229,15 +229,15 @@ class TestSurveySubmissionLog:
         db.add(parent)
         await db.flush()
 
-        obj = SurveySubmissionLog(
+        obj = PatientSurveySubmissionLog(
             file="rc.xlsx", speaker="P1", survey_type="baseline", answers="{}"
         )
         db.add(obj)
         await db.commit()
 
         result = await db.execute(
-            select(SurveySubmissionLog).where(
-                SurveySubmissionLog.file == "rc.xlsx"
+            select(PatientSurveySubmissionLog).where(
+                PatientSurveySubmissionLog.file == "rc.xlsx"
             )
         )
         row = result.scalar_one()
@@ -253,8 +253,8 @@ class TestSurveySubmissionLog:
         await db.commit()
 
         result = await db.execute(
-            select(SurveySubmissionLog).where(
-                SurveySubmissionLog.file == "sv.xlsx"
+            select(PatientSurveySubmissionLog).where(
+                PatientSurveySubmissionLog.file == "sv.xlsx"
             )
         )
         row = result.scalar_one()
@@ -262,7 +262,7 @@ class TestSurveySubmissionLog:
         assert row.survey_type == "baseline"
 
     async def test_repr(self):
-        obj = SurveySubmissionLog(
+        obj = PatientSurveySubmissionLog(
             id=42, file="x", speaker="P", survey_type="post", answers="{}"
         )
         r = repr(obj)
@@ -446,7 +446,7 @@ class TestBaseMetadata:
         models = [
             DoctorRewriteLog,
             PatientSummary,
-            SurveySubmissionLog,
+            PatientSurveySubmissionLog,
             TranscriptAnalysisLog, SentencePrediction,
         ]
         for model in models:
@@ -456,7 +456,7 @@ class TestBaseMetadata:
         expected = {
             "doctor_rewrite_log",
             "patient_summary",
-            "survey_submission_log",
+            "patient_survey_submission_log",
             "transcript_analysis_log", "sentence_prediction",
         }
         actual = set(Base.metadata.tables.keys())

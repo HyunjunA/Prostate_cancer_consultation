@@ -101,10 +101,10 @@ class TestSubmitSurvey:
         record_id = resp.json()["db"]["id"]
 
         from sqlalchemy import select
-        from models import SurveySubmissionLog
+        from models import PatientSurveySubmissionLog
 
         result = await db.execute(
-            select(SurveySubmissionLog).where(SurveySubmissionLog.id == record_id)
+            select(PatientSurveySubmissionLog).where(PatientSurveySubmissionLog.id == record_id)
         )
         row = result.scalar_one_or_none()
         assert row is not None
@@ -164,11 +164,11 @@ class TestSubmitSurvey:
 
         # Verify metadata stored as extra_data
         from sqlalchemy import select
-        from models import SurveySubmissionLog
+        from models import PatientSurveySubmissionLog
 
         result = await db.execute(
-            select(SurveySubmissionLog).where(
-                SurveySubmissionLog.id == resp2.json()["db"]["id"]
+            select(PatientSurveySubmissionLog).where(
+                PatientSurveySubmissionLog.id == resp2.json()["db"]["id"]
             )
         )
         row = result.scalar_one()

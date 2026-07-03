@@ -11,7 +11,7 @@ from typing import Optional
 from models import (
     DoctorRewriteLog,
     PatientSummary,
-    SurveySubmissionLog,
+    PatientSurveySubmissionLog,
     TranscriptAnalysisLog,
     SentencePrediction,
 )
@@ -77,8 +77,8 @@ class TestDataFactory:
         speaker: str = "Patient_1",
         survey_type: str = "baseline",
         answers: str = '{"q1": "a"}',
-    ) -> SurveySubmissionLog:
-        return SurveySubmissionLog(
+    ) -> PatientSurveySubmissionLog:
+        return PatientSurveySubmissionLog(
             file=file,
             speaker=speaker,
             survey_type=survey_type,

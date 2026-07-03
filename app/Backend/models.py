@@ -3,7 +3,7 @@
 Tables are grouped by feature area:
   1. Doctor interface       : DoctorRewriteLog
   2. Patient interface      : PatientSummary
-  3. Surveys                : SurveySubmissionLog
+  3. Surveys                : PatientSurveySubmissionLog
   4. Transcript analysis    : TranscriptAnalysisLog, SentencePrediction
   5. Behaviour tracking     : SessionRecording, PatientFirstBehavior,
                               PatientFollowupSurvey, DoctorBehavior
@@ -95,7 +95,7 @@ class PatientSummary(Base):
 
     Composite PK (file, speaker) pairs each xlsx with the patient
     speaker label inside it. Survives re-processing of the same file
-    via UPSERT in persistence.save_all() so survey_submission_log
+    via UPSERT in persistence.save_all() so patient_survey_submission_log
     referrers stay valid.
     """
     __tablename__ = 'patient_summary'
@@ -177,7 +177,7 @@ class PatientFirstVisitAnswer(Base):
 # 3. Survey Submission Tables
 # =====================================================
 
-class SurveySubmissionLog(Base):
+class PatientSurveySubmissionLog(Base):
     """Survey submission log - stores all survey responses.
 
     The actual answer payload lives in `answers` (JSONB) — different
@@ -191,7 +191,7 @@ class SurveySubmissionLog(Base):
       - redcap_error         records the last failure reason (if any)
                              so the admin UI can show "retry sync".
     """
-    __tablename__ = 'survey_submission_log'
+    __tablename__ = 'patient_survey_submission_log'
     __table_args__ = (
         # FK to the patient summary so deleting a patient also deletes
         # their submitted surveys (no orphaned answer rows).
@@ -217,7 +217,7 @@ class SurveySubmissionLog(Base):
     redcap_error = Column(Text)
 
     def __repr__(self):
-        return f"<SurveySubmissionLog(id={self.id}, survey_type={self.survey_type})>"
+        return f"<PatientSurveySubmissionLog(id={self.id}, survey_type={self.survey_type})>"
 
 
 # =====================================================
@@ -371,7 +371,7 @@ class PatientFollowupSurvey(Base):
     """Patient follow-up survey behavior events (Pattern A).
 
     Stores behavior metadata (timing, ordering, step navigation) only.
-    Canonical answer payloads live in survey_submission_log.
+    Canonical answer payloads live in patient_survey_submission_log.
     """
     __tablename__ = 'patient_followup_survey'
 

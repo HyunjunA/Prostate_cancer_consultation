@@ -11,12 +11,12 @@ when REDCAP_ENABLED is true (see redcap_config.py), also pushes the
 record to the project's REDCap instance.
 
 Two storage layers:
-    1. survey_submission_log  : ALL submissions (canonical answer
+    1. patient_survey_submission_log  : ALL submissions (canonical answer
                                 payload as JSONB). Append-only; this
                                 is the source of truth.
     2. REDCap                  : remote project. Synced via the REST
                                 API in redcap_config.py. Sync state
-                                is tracked in survey_submission_log
+                                is tracked in patient_survey_submission_log
                                 (redcap_synced / redcap_record_id /
                                 redcap_error).
 
@@ -42,7 +42,7 @@ endpoints additionally short-circuit to a clear error when
 REDCAP_ENABLED is false so the UI can hide the integration cleanly.
 
 Related modules:
-    models.py        : SurveySubmissionLog
+    models.py        : PatientSurveySubmissionLog
     redcap_config.py : REDCAP_API_URL / REDCAP_API_TOKEN / REDCAP_ENABLED
     routes_patient.py: also has POST /api/redcap/import (alternate path)
 """
@@ -61,7 +61,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_user
 from db import get_db
-from models import SurveySubmissionLog
+from models import PatientSurveySubmissionLog
 
 logger = logging.getLogger(__name__)
 
@@ -503,7 +503,7 @@ async def submit_survey(
     print("=" * 80 + "\n")
 
     # Save to PostgreSQL
-    db_record = SurveySubmissionLog(
+    db_record = PatientSurveySubmissionLog(
         file=submission.file,
         speaker=submission.speaker,
         survey_type=submission.survey_type,
@@ -556,19 +556,19 @@ async def get_submissions(
     Get all survey submissions with optional filters and pagination
     """
     # Build query
-    query = select(SurveySubmissionLog)
-    count_query = select(func.count(SurveySubmissionLog.id))
+    query = select(PatientSurveySubmissionLog)
+    count_query = select(func.count(PatientSurveySubmissionLog.id))
 
     # Apply filters
     filters = []
     if file:
-        filters.append(SurveySubmissionLog.file == file)
+        filters.append(PatientSurveySubmissionLog.file == file)
     if speaker:
-        filters.append(SurveySubmissionLog.speaker == speaker)
+        filters.append(PatientSurveySubmissionLog.speaker == speaker)
     if survey_type:
-        filters.append(SurveySubmissionLog.survey_type == survey_type)
+        filters.append(PatientSurveySubmissionLog.survey_type == survey_type)
     if redcap_synced is not None:
-        filters.append(SurveySubmissionLog.redcap_synced == redcap_synced)
+        filters.append(PatientSurveySubmissionLog.redcap_synced == redcap_synced)
 
     if filters:
         query = query.where(and_(*filters))
@@ -580,7 +580,7 @@ async def get_submissions(
 
     # Apply pagination and ordering
     offset = (page - 1) * size
-    query = query.order_by(desc(SurveySubmissionLog.submitted_at)).offset(offset).limit(size)
+    query = query.order_by(desc(PatientSurveySubmissionLog.submitted_at)).offset(offset).limit(size)
 
     result = await db.execute(query)
     records = result.scalars().all()
@@ -619,7 +619,7 @@ async def get_submission_by_id(
 ):
     """Get a specific survey submission by ID"""
     result = await db.execute(
-        select(SurveySubmissionLog).where(SurveySubmissionLog.id == submission_id)
+        select(PatientSurveySubmissionLog).where(PatientSurveySubmissionLog.id == submission_id)
     )
     record = result.scalar_one_or_none()
 
@@ -650,9 +650,9 @@ async def get_submissions_by_speaker(
 ):
     """Get all survey submissions for a specific speaker/patient"""
     result = await db.execute(
-        select(SurveySubmissionLog)
-        .where(SurveySubmissionLog.speaker == speaker)
-        .order_by(desc(SurveySubmissionLog.submitted_at))
+        select(PatientSurveySubmissionLog)
+        .where(PatientSurveySubmissionLog.speaker == speaker)
+        .order_by(desc(PatientSurveySubmissionLog.submitted_at))
     )
     records = result.scalars().all()
 
@@ -687,9 +687,9 @@ async def get_submissions_by_file(
 ):
     """Get all survey submissions for a specific file"""
     result = await db.execute(
-        select(SurveySubmissionLog)
-        .where(SurveySubmissionLog.file == file)
-        .order_by(desc(SurveySubmissionLog.submitted_at))
+        select(PatientSurveySubmissionLog)
+        .where(PatientSurveySubmissionLog.file == file)
+        .order_by(desc(PatientSurveySubmissionLog.submitted_at))
     )
     records = result.scalars().all()
 
@@ -723,17 +723,17 @@ async def get_submissions_by_type(
     """Get all submissions for a specific survey type"""
     # Count
     count_result = await db.execute(
-        select(func.count(SurveySubmissionLog.id))
-        .where(SurveySubmissionLog.survey_type == survey_type)
+        select(func.count(PatientSurveySubmissionLog.id))
+        .where(PatientSurveySubmissionLog.survey_type == survey_type)
     )
     total = count_result.scalar()
 
     # Data
     offset = (page - 1) * size
     result = await db.execute(
-        select(SurveySubmissionLog)
-        .where(SurveySubmissionLog.survey_type == survey_type)
-        .order_by(desc(SurveySubmissionLog.submitted_at))
+        select(PatientSurveySubmissionLog)
+        .where(PatientSurveySubmissionLog.survey_type == survey_type)
+        .order_by(desc(PatientSurveySubmissionLog.submitted_at))
         .offset(offset)
         .limit(size)
     )
@@ -769,43 +769,43 @@ async def get_survey_stats(
 
     # Total count
     total_result = await db.execute(
-        select(func.count(SurveySubmissionLog.id))
+        select(func.count(PatientSurveySubmissionLog.id))
     )
     total = total_result.scalar()
 
     # Count by survey type
     type_result = await db.execute(
         select(
-            SurveySubmissionLog.survey_type,
-            func.count(SurveySubmissionLog.id)
+            PatientSurveySubmissionLog.survey_type,
+            func.count(PatientSurveySubmissionLog.id)
         )
-        .group_by(SurveySubmissionLog.survey_type)
+        .group_by(PatientSurveySubmissionLog.survey_type)
     )
     by_type = {row[0]: row[1] for row in type_result.all()}
 
     # Count by REDCap sync status
     synced_result = await db.execute(
-        select(func.count(SurveySubmissionLog.id))
-        .where(SurveySubmissionLog.redcap_synced.is_(True))
+        select(func.count(PatientSurveySubmissionLog.id))
+        .where(PatientSurveySubmissionLog.redcap_synced.is_(True))
     )
     synced_count = synced_result.scalar()
 
     # Unique speakers
     speakers_result = await db.execute(
-        select(func.count(func.distinct(SurveySubmissionLog.speaker)))
+        select(func.count(func.distinct(PatientSurveySubmissionLog.speaker)))
     )
     unique_speakers = speakers_result.scalar()
 
     # Unique files
     files_result = await db.execute(
-        select(func.count(func.distinct(SurveySubmissionLog.file)))
+        select(func.count(func.distinct(PatientSurveySubmissionLog.file)))
     )
     unique_files = files_result.scalar()
 
     # Recent submissions (last 5)
     recent_result = await db.execute(
-        select(SurveySubmissionLog)
-        .order_by(desc(SurveySubmissionLog.submitted_at))
+        select(PatientSurveySubmissionLog)
+        .order_by(desc(PatientSurveySubmissionLog.submitted_at))
         .limit(5)
     )
     recent = recent_result.scalars().all()
@@ -840,7 +840,7 @@ async def delete_submission(
 ):
     """Delete a survey submission"""
     result = await db.execute(
-        select(SurveySubmissionLog).where(SurveySubmissionLog.id == submission_id)
+        select(PatientSurveySubmissionLog).where(PatientSurveySubmissionLog.id == submission_id)
     )
     record = result.scalar_one_or_none()
 

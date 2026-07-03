@@ -4,7 +4,7 @@
  * AdminTrackingPatientFollowup — admin view for patient follow-up survey behavior.
  *
  * Shows per-session survey progress (timing, ordering, completion). Canonical
- * answer values continue to live in survey_submission_log; this view is for
+ * answer values continue to live in patient_survey_submission_log; this view is for
  * understanding HOW the user navigated the survey, not WHAT they answered.
  */
 
@@ -130,7 +130,7 @@ export default function AdminTrackingPatientFollowup() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-slate-900">Patient Follow-up Survey Behavior</h1>
           <p className="text-sm text-slate-600 mt-1">
-            Behavior metadata only (timing, ordering). Answer values live in survey_submission_log.
+            Behavior metadata only (timing, ordering). Answer values live in patient_survey_submission_log.
             Sessions: {sessions.length} · Events: {totalCount}
           </p>
         </div>
