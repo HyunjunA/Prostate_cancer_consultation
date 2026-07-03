@@ -108,9 +108,9 @@ import React, {
 } from "react";
 import { usePatientData } from "@/hooks/usePatientData";
 import { useFirstVisitAnswers } from "@/hooks/useFirstVisitAnswers";
-// Risk Perception (this survey) is submitted to patient_survey_submission_log like the
-// other follow-up surveys, so it lands next to SDM/DCS/Satisfaction.
-import { submitSurvey } from "@/api/surveyApi";
+// First-visit Risk answers persist per-domain to patient_survey_submission_log
+// (survey_type=risk_perception_2) via the useFirstVisitAnswers hook's saveDomain
+// (PUT /api/patient/first-visit-answers), so no separate submitSurvey is needed.
 import {
   AnswerItem,
   DomainAnswers,
@@ -4588,27 +4588,18 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
                 onClick={() => {
                   if (isContinueToFollowup) {
                     // Embedded Risk step: emit the follow-up survey_complete so
-                    // risk_perception is marked complete like SDM/DCS.
+                    // risk_perception is marked complete like SDM/DCS. The answers
+                    // themselves are already persisted per-domain to
+                    // patient_survey_submission_log (survey_type=risk_perception_2)
+                    // by each domain Submit (PUT /api/patient/first-visit-answers),
+                    // so no separate final submit is needed here.
                     if (trackToFollowup && currentFile && currentSpeaker) {
                       trackFollowup(currentFile, currentSpeaker, {
                         event_type: "survey_complete",
                         survey_type: "risk_perception",
                       });
                     }
-                    // Submit the whole Risk Perception survey to
-                    // patient_survey_submission_log (survey_type=risk_perception) — one
-                    // submission carrying every domain's answers — then hand off
-                    // to the follow-up. Non-blocking: advance even if it fails.
-                    void submitSurvey({
-                      survey_type: "risk_perception",
-                      file: currentFile,
-                      speaker: currentSpeaker,
-                      answers: firstVisit.responses,
-                    })
-                      .catch((e) =>
-                        console.warn("[risk] submitSurvey failed:", e),
-                      )
-                      .finally(() => onComplete!());
+                    onComplete!();
                   } else {
                     setCurrentScreen((s) => Math.min(TOTAL_SCREENS - 1, s + 1));
                   }

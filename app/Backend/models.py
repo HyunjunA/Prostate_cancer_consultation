@@ -33,7 +33,7 @@ Conventions used throughout:
 
 from sqlalchemy import (
     JSON, Column, ForeignKey, ForeignKeyConstraint, Index, LargeBinary, String, Integer, Float,
-    Boolean, Text, TIMESTAMP, CheckConstraint, UniqueConstraint, func
+    Boolean, Text, TIMESTAMP, func
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship, declarative_base
@@ -111,71 +111,13 @@ class PatientSummary(Base):
 
 
 
-class PatientFirstVisitAnswer(Base):
-    """Row-per-question first-visit answers — the question_id-keyed successor
-    to the former fixed-4-column responses table.
-
-    One row per (file, speaker, domain, question_id). This long format keeps
-    multiple questions of the same type in one domain apart (the old table's
-    fixed vas_primary/vas_secondary/timeline/factors columns could not), maps
-    cleanly to REDCap's field-based export, and removes the cp-only
-    vas_secondary special case (it is just another question_id now).
-
-    `value` is JSONB so one column holds every answer shape: a VAS integer, a
-    timeline string, or a factors string-array. `field` records which kind it
-    is ("vas" / "timeline" / "factors") for display and light validation.
-
-    Written by PUT /api/patient/first-visit-answers on each per-domain Submit;
-    read by GET /api/patient/first-visit-answers/{file}/{speaker} to prefill.
-    Backfilled from the former patient_first_visit_responses table by
-    migration 014; that table was dropped in migration 020.
-    """
-    __tablename__ = 'patient_first_visit_answer'
-    __table_args__ = (
-        ForeignKeyConstraint(
-            ['file', 'speaker'],
-            ['patient_summary.file', 'patient_summary.speaker'],
-            ondelete='CASCADE',
-            name='fk_first_visit_answer_to_patient_summary',
-        ),
-        # One row per question — re-Submits overwrite this row in place.
-        UniqueConstraint(
-            'file', 'speaker', 'domain', 'question_id',
-            name='uq_first_visit_answer',
-        ),
-        CheckConstraint(
-            "domain IN ('cp','le','ed','inc','ius')",
-            name='ck_first_visit_answer_domain',
-        ),
-    )
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    file = Column(String(255), nullable=False)
-    speaker = Column(String(100), nullable=False)
-    domain = Column(String(100), nullable=False)
-    # Stable per-question identifier, shared with the behavior log so the two
-    # can be joined (e.g. "cp_risk_without_treatment", "ed_timeline").
-    question_id = Column(String(100), nullable=False)
-    # Answer kind: "vas" | "timeline" | "factors". Drives interpretation of value.
-    field = Column(String(20), nullable=False)
-    # The answer itself — integer / string / list, stored as JSONB.
-    value = Column(JSONB_COMPAT, nullable=False)
-    # Reset on every Submit (re-Submit overwrites).
-    submitted_at = Column(
-        TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
-    )
-
-    def __repr__(self):
-        return (
-            f"<PatientFirstVisitAnswer(file={self.file}, "
-            f"speaker={self.speaker}, domain={self.domain}, "
-            f"question_id={self.question_id})>"
-        )
-
-
 # =====================================================
 # 3. Survey Submission Tables
 # =====================================================
+#
+# First-visit Risk answers were consolidated into PatientSurveySubmissionLog
+# (survey_type='risk_perception_2') by migration 024; the former
+# patient_first_visit_answer table was dropped in migration 025.
 
 class PatientSurveySubmissionLog(Base):
     """Survey submission log - stores all survey responses.

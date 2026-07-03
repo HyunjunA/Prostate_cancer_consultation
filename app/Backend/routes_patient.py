@@ -27,6 +27,7 @@ Related modules:
 
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any, Literal, Tuple
 
 import httpx
@@ -41,7 +42,7 @@ from auth.base import AuthUser
 from db import get_db
 from models import (
     DoctorRewriteLog,
-    PatientFirstVisitAnswer,
+    PatientSurveySubmissionLog,
     PatientSummary,
     SentencePrediction,
     TranscriptAnalysisLog,
@@ -490,12 +491,18 @@ async def import_to_redcap(
 # Domain order shared by the first-visit ANSWERS endpoints below.
 _DOMAIN_ORDER: List[str] = ["cp", "le", "ed", "inc", "ius"]
 
+# First-visit Risk answers are stored in patient_survey_submission_log under this
+# survey_type (maps to the REDCap post_risk_perception_2 instrument). Consolidated
+# here from the former patient_first_visit_answer table.
+_RISK2_SURVEY_TYPE = "risk_perception_2"
+
 
 # ──────────────────────────────────────────────────────────────────────────────
-# First-visit ANSWERS — row-per-question (question_id). Table:
-# patient_first_visit_answer (migration 014). The active first-visit page (V41)
-# uses these. (The old fixed-column "responses" table + endpoints were dropped
-# in migration 020.)
+# First-visit ANSWERS — per-question, keyed by (domain, question_id). Persisted
+# to patient_survey_submission_log as one submission per patient with
+# survey_type='risk_perception_2' (answers JSONB nested domain -> question_id).
+# The active first-visit page (V41) uses these. Consolidated from the former
+# patient_first_visit_answer table (dropped in migration 025; backfilled by 024).
 # ──────────────────────────────────────────────────────────────────────────────
 
 FieldLiteral = Literal["vas", "timeline", "factors"]
@@ -580,20 +587,23 @@ async def get_first_visit_answers(
     """Return all first-visit answers for one patient, nested domain -> question_id."""
     await check_patient_access(file, user, db)
 
-    stmt = select(PatientFirstVisitAnswer).where(
-        PatientFirstVisitAnswer.file == file,
-        PatientFirstVisitAnswer.speaker == speaker,
+    stmt = select(PatientSurveySubmissionLog).where(
+        PatientSurveySubmissionLog.file == file,
+        PatientSurveySubmissionLog.speaker == speaker,
+        PatientSurveySubmissionLog.survey_type == _RISK2_SURVEY_TYPE,
     )
-    rows = (await db.execute(stmt)).scalars().all()
+    record = (await db.execute(stmt)).scalars().first()
 
     by_domain: Dict[str, Dict[str, AnswerRead]] = {d: {} for d in _DOMAIN_ORDER}
-    for row in rows:
-        by_domain.setdefault(row.domain, {})[row.question_id] = AnswerRead(
-            question_id=row.question_id,
-            field=row.field,
-            value=row.value,
-            submitted_at=row.submitted_at.isoformat(),
-        )
+    stored = (record.answers or {}) if record else {}
+    for domain, qmap in stored.items():
+        for qid, a in (qmap or {}).items():
+            by_domain.setdefault(domain, {})[qid] = AnswerRead(
+                question_id=a.get("question_id", qid),
+                field=a.get("field"),
+                value=a.get("value"),
+                submitted_at=a.get("submitted_at", ""),
+            )
     return FirstVisitAnswersGet(responses=by_domain)
 
 
@@ -809,27 +819,39 @@ async def upsert_first_visit_answers(
     """
     await check_patient_access(body.file, user, db)
 
-    for a in body.answers:
-        stmt = select(PatientFirstVisitAnswer).where(
-            PatientFirstVisitAnswer.file == body.file,
-            PatientFirstVisitAnswer.speaker == body.speaker,
-            PatientFirstVisitAnswer.domain == body.domain,
-            PatientFirstVisitAnswer.question_id == a.question_id,
-        )
-        record = (await db.execute(stmt)).scalars().first()
-        if record:
-            record.field = a.field
-            record.value = a.value
-            record.submitted_at = func.now()
-        else:
-            db.add(PatientFirstVisitAnswer(
-                file=body.file,
-                speaker=body.speaker,
-                domain=body.domain,
-                question_id=a.question_id,
-                field=a.field,
-                value=a.value,
-            ))
+    # Merge this domain's answers into the patient's single risk_perception_2
+    # submission row in patient_survey_submission_log. One row per patient
+    # accumulates all five domains (answers JSONB nested domain -> question_id);
+    # re-Submits overwrite the matching question_ids.
+    now_iso = datetime.now(timezone.utc).isoformat()
+    domain_answers = {
+        a.question_id: {
+            "question_id": a.question_id,
+            "field": a.field,
+            "value": a.value,
+            "submitted_at": now_iso,
+        }
+        for a in body.answers
+    }
+
+    stmt = select(PatientSurveySubmissionLog).where(
+        PatientSurveySubmissionLog.file == body.file,
+        PatientSurveySubmissionLog.speaker == body.speaker,
+        PatientSurveySubmissionLog.survey_type == _RISK2_SURVEY_TYPE,
+    )
+    record = (await db.execute(stmt)).scalars().first()
+    if record:
+        answers = dict(record.answers or {})
+        answers[body.domain] = {**answers.get(body.domain, {}), **domain_answers}
+        record.answers = answers
+        record.submitted_at = func.now()
+    else:
+        db.add(PatientSurveySubmissionLog(
+            file=body.file,
+            speaker=body.speaker,
+            survey_type=_RISK2_SURVEY_TYPE,
+            answers={body.domain: domain_answers},
+        ))
 
     await db.commit()
 
