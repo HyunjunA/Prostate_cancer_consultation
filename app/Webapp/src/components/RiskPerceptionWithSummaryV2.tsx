@@ -393,7 +393,11 @@ const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
   React.useEffect(() => {
     const q = RISK_QUESTIONS[currentQuestionIndex];
     if (q) onQuestionView?.(q.id, currentQuestionIndex);
-  }, [currentQuestionIndex, onQuestionView]);
+    // Fire only when the question actually changes — NOT on every re-render.
+    // (Inline parent callback in the deps would re-fire on every answer and
+    // duplicate survey_step_view.) Intentionally omitted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentQuestionIndex]);
   const [expandedSummaries, setExpandedSummaries] = React.useState<
     Record<string, boolean>
   >({});

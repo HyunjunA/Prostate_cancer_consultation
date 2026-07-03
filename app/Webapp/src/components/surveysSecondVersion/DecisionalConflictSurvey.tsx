@@ -318,7 +318,11 @@ export const DecisionalConflictSurvey: React.FC<
 
   React.useEffect(() => {
     onQuestionView?.(currentQuestion.id, currentQuestionIndex);
-  }, [currentQuestionIndex, currentQuestion.id, onQuestionView]);
+    // Fire only when the question actually changes — NOT on every re-render.
+    // (Inline parent callback in the deps would re-fire on every answer and
+    // duplicate survey_step_view.) Intentionally omitted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentQuestionIndex, currentQuestion.id]);
   const currentAnswer =
     answers[currentQuestion.id as keyof DecisionalConflictAnswers];
   const isCurrentAnswered = currentAnswer !== null;

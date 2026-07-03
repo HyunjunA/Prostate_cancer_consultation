@@ -78,6 +78,8 @@ import {
 import RiskPerceptionWithSummary, {
   type TopicSummaryMap,
 } from "@/components/RiskPerceptionWithSummaryV2";
+// Combined (Total Survey) flow renders the 1st survey (V41) as the Risk step.
+import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV41";
 
 import { submitSurvey, fetchSurveySubmissions } from "@/api/surveyApi";
 import { sendTrackingEvents } from "@/api/trackingApi";
@@ -269,6 +271,7 @@ interface ProgressSidebarProps {
   completedSteps: Set<SurveyStep>;
   onStepClick: (step: SurveyStep) => void;
   isDark?: boolean;
+  steps: SurveyStep[];
 }
 
 const ProgressSidebar: React.FC<ProgressSidebarProps> = ({
@@ -276,8 +279,9 @@ const ProgressSidebar: React.FC<ProgressSidebarProps> = ({
   completedSteps,
   onStepClick,
   isDark,
+  steps,
 }) => {
-  const currentIndex = SURVEY_STEPS.indexOf(currentStep);
+  const currentIndex = steps.indexOf(currentStep);
 
   return (
     <div
@@ -296,7 +300,7 @@ const ProgressSidebar: React.FC<ProgressSidebarProps> = ({
       </h3>
 
       <div className="space-y-1">
-        {SURVEY_STEPS.map((step, index) => {
+        {steps.map((step, index) => {
           const isCompleted = completedSteps.has(step);
           const isCurrent = step === currentStep;
           const isPast = index < currentIndex;
@@ -374,7 +378,7 @@ const ProgressSidebar: React.FC<ProgressSidebarProps> = ({
               isDark ? "text-slate-300" : "text-gray-600",
             )}
           >
-            {Math.round((currentIndex / (SURVEY_STEPS.length - 1)) * 100)}%
+            {Math.round((currentIndex / (steps.length - 1)) * 100)}%
           </span>
         </div>
         <div
@@ -386,7 +390,7 @@ const ProgressSidebar: React.FC<ProgressSidebarProps> = ({
           <div
             className="h-full bg-blue-500 rounded-full transition-all duration-300"
             style={{
-              width: `${(currentIndex / (SURVEY_STEPS.length - 1)) * 100}%`,
+              width: `${(currentIndex / (steps.length - 1)) * 100}%`,
             }}
           />
         </div>
@@ -667,6 +671,17 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
 
   // Navigation State
   const [currentStep, setCurrentStep] = useState<SurveyStep>("welcome");
+
+  // Total Survey (combined) flow: re-enable the Risk step and render it as the
+  // 1st survey (V41). Read once on mount from ?combined=1.
+  const [combined] = useState<boolean>(
+    () =>
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("combined") === "1",
+  );
+  const steps: SurveyStep[] = combined
+    ? ["welcome", "sdm", "dcs", "risk", "satisfaction", "complete"]
+    : SURVEY_STEPS;
   const [completedSteps, setCompletedSteps] = useState<Set<SurveyStep>>(
     new Set(),
   );
@@ -927,18 +942,6 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
   // 7.5 Navigation Handlers
   // ─────────────────────────────────────────────────────────────────────────
 
-  // Maps the outer wizard step name to the survey_type stored in the
-  // patient_followup_survey behavior table. welcome/complete have no
-  // associated survey, so they're sent with survey_type=null.
-  const STEP_TO_SURVEY_TYPE: Partial<
-    Record<SurveyStep, "sdm" | "dcs" | "risk_perception" | "satisfaction">
-  > = {
-    sdm: "sdm",
-    dcs: "dcs",
-    risk: "risk_perception",
-    satisfaction: "satisfaction",
-  };
-
   const goToStep = (step: SurveyStep) => {
     setCurrentStep(step);
     trackingManager.recordEvent({
@@ -947,28 +950,24 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
       timestamp: new Date().toISOString(),
       metadata: { step },
     });
-
-    const stepIndex = SURVEY_STEPS.indexOf(step) + 1;
-    trackFollowup(currentFile, currentSpeaker, {
-      event_type: "survey_step_view",
-      survey_type: STEP_TO_SURVEY_TYPE[step],
-      step_number: stepIndex,
-      metadata: { outer_step: step },
-    });
+    // Section-entry survey_step_view removed (2026-07-02): the per-question
+    // views (onQuestionView) already mark entry into each section. The outer
+    // section event (no question_id, step_number = section index) was redundant
+    // and confusing in the admin follow-up view.
   };
 
   const goNext = () => {
-    const currentIndex = SURVEY_STEPS.indexOf(currentStep);
-    if (currentIndex < SURVEY_STEPS.length - 1) {
+    const currentIndex = steps.indexOf(currentStep);
+    if (currentIndex < steps.length - 1) {
       setCompletedSteps((prev) => new Set([...prev, currentStep]));
-      goToStep(SURVEY_STEPS[currentIndex + 1]);
+      goToStep(steps[currentIndex + 1]);
     }
   };
 
   const goBack = () => {
-    const currentIndex = SURVEY_STEPS.indexOf(currentStep);
+    const currentIndex = steps.indexOf(currentStep);
     if (currentIndex > 0) {
-      goToStep(SURVEY_STEPS[currentIndex - 1]);
+      goToStep(steps[currentIndex - 1]);
     }
   };
 
@@ -1017,11 +1016,17 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
     value: any,
   ) => {
     setSatisfactionAnswers((prev) => ({ ...prev, [field]: value }));
-    trackFollowup(currentFile, currentSpeaker, {
-      event_type: "survey_answer",
-      survey_type: "satisfaction",
-      question_id: String(field),
-    });
+    // feedbackText is a free-text field: its onChange fires per keystroke, so
+    // tracking survey_answer here would emit one row per character. Skip it on
+    // change — it is emitted once at submit (handleSubmitSatisfaction). Rating
+    // fields still fire once per selection.
+    if (field !== "feedbackText") {
+      trackFollowup(currentFile, currentSpeaker, {
+        event_type: "survey_answer",
+        survey_type: "satisfaction",
+        question_id: String(field),
+      });
+    }
   };
 
   const handleTrackEvent = (eventData: any) => {
@@ -1133,6 +1138,15 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
 
   const handleSubmitSatisfaction = async () => {
     setIsSubmittingSatisfaction(true);
+    // feedbackText is tracked once here (not per keystroke) — only if the
+    // patient actually entered feedback.
+    if (satisfactionAnswers.feedbackText.trim().length > 0) {
+      trackFollowup(currentFile, currentSpeaker, {
+        event_type: "survey_answer",
+        survey_type: "satisfaction",
+        question_id: "feedbackText",
+      });
+    }
     try {
       await submitSurvey({
         survey_type: "satisfaction",
@@ -1284,6 +1298,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
         completedSteps={completedSteps}
         onStepClick={goToStep}
         isDark={isDarkMode}
+        steps={steps}
       />
 
       {/* Main Content */}
@@ -1440,6 +1455,17 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
 
             {/* Risk Perception - ONE QUESTION AT A TIME WITH COLLAPSIBLE SUMMARY */}
             {currentStep === "risk" && (
+              combined ? (
+                /* Total Survey: Risk step = the 1st survey (V41), as-is. V41
+                   drives its own 5-domain navigation; onComplete advances to
+                   the next follow-up step (Satisfaction). */
+                <PatientReportFirstVisit
+                  forceSurveyMode
+                  trackToFollowup
+                  isDarkMode={isDarkMode}
+                  onComplete={goNext}
+                />
+              ) : (
               <div>
                 <div
                   className={cx(
@@ -1516,6 +1542,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
                   />
                 </div>
               </div>
+              )
             )}
 
             {/* Satisfaction */}

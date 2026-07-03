@@ -116,7 +116,7 @@ import { QID, fieldQuestionId } from "@/lib/firstVisitQuestions";
 import { usePatientId } from "@/stores/usePatientId";
 import { useFileId } from "@/stores/useFileId";
 import { sendTrackingEvents } from "@/api/trackingApi";
-import { trackFirst, startSession, endSession, setFirstMode, type Domain } from "@/tracking/track";
+import { trackFirst, startSession, endSession, setFirstMode, setFirstTrackingTarget, type Domain } from "@/tracking/track";
 import { Slider } from "@/components/ui/slider";
 
 // Display name → backend domain code (cp/le/ed/inc/ius)
@@ -477,6 +477,14 @@ interface PatientReportProps {
   // hand off to the follow-up surveys. Undefined for the standalone
   // "1st · Survey" entry → behavior is unchanged (last-screen Next stays disabled).
   onComplete?: () => void;
+  // Force survey mode without relying on the URL. Used when V41 is embedded as
+  // the Risk step inside the combined follow-up flow (page URL is survey=follow-up,
+  // so the URL-based survey detection would otherwise be false).
+  forceSurveyMode?: boolean;
+  // When embedded as the combined Total Survey Risk step, redirect this survey's
+  // behavior tracking to patient_followup_survey (survey_type='risk_perception')
+  // so the admin follow-up dashboard shows it with the other surveys.
+  trackToFollowup?: boolean;
 }
 
 interface ClassSummary {
@@ -3366,6 +3374,8 @@ const TopicCard: React.FC<TopicCardProps> = ({
 const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
   isDarkMode = false,
   onComplete,
+  forceSurveyMode = false,
+  trackToFollowup = false,
 }) => {
   const patientId = usePatientId((state) => state.patientId);
   const fileId = useFileId((state) => state.fileId);
@@ -3382,9 +3392,13 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
   useEffect(() => {
     // Tag every event in this session as report (1st) or survey (2nd) so the
     // admin tracking view and the research analysis can separate the two.
+    if (trackToFollowup) setFirstTrackingTarget("followup-risk");
     setFirstMode(surveyMode ? "survey" : "report");
     startSession();
-    return () => endSession();
+    return () => {
+      endSession();
+      setFirstTrackingTarget("first");
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -3492,14 +3506,15 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
   const TOTAL_SCREENS = STEP_KEYS.length;
   const [currentScreen, setCurrentScreen] = useState<number>(0);
 
-  // [V40 / A-2] Survey mode — entered via ?mode=survey. Skips the
-  // Overview (report) screen entirely: starts at the first domain (cp)
-  // and Back never returns to Overview. Read once on mount.
-  const [surveyMode] = useState<boolean>(
-    () =>
-      typeof window !== "undefined" &&
-      new URLSearchParams(window.location.search).get("mode") === "survey",
-  );
+  // [V40 / A-2] Survey mode — entered via ?survey=first-visit (new) or the
+  // legacy ?mode=survey. Skips the Overview (report) screen entirely: starts at
+  // the first domain (cp) and Back never returns to Overview. Read once on mount.
+  const [surveyMode] = useState<boolean>(() => {
+    if (forceSurveyMode) return true;
+    if (typeof window === "undefined") return false;
+    const p = new URLSearchParams(window.location.search);
+    return p.get("survey") === "first-visit" || p.get("mode") === "survey";
+  });
 
   // [V38] Hydrate currentScreen from ?step= on mount.
   useEffect(() => {

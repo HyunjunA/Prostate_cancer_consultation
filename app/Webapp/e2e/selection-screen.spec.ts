@@ -94,8 +94,8 @@ test.describe("Selection Screen", () => {
 
     await firstVisitBtn.click();
 
-    // URL should now contain patient params
-    await expect(page).toHaveURL(/fileid=.*&patid=.*&visit=first/);
+    // URL should now be the self-descriptive first-visit report form.
+    await expect(page).toHaveURL(/[?&]f=.*&view=first-report/);
     // Selection screen heading should no longer be visible
     await expect(
       page.getByText("Patient Consultation System"),

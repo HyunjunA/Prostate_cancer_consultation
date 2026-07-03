@@ -48,8 +48,8 @@ test.describe("Cross-View Navigation", () => {
       .first();
     await firstVisitBtn.click();
 
-    // Should now be on patient view
-    await expect(page).toHaveURL(/visit=first/);
+    // Should now be on patient view (new self-descriptive URL).
+    await expect(page).toHaveURL(/[?&]f=.*(view=first-report|survey=first-visit)/);
     await expect(
       page.getByText("Patient Consultation System")
     ).not.toBeVisible({ timeout: 10_000 });

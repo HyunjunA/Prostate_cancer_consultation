@@ -372,16 +372,14 @@ test.describe("Patient First Visit — deep flow", () => {
     await chosenButton.scrollIntoViewIfNeeded();
     await chosenButton.click();
 
-    await page.waitForURL(/\bvisit=first\b/, { timeout: 10_000 });
+    // New self-descriptive URL: ?f=<stem>&view=first-report (no fileid/patid).
+    await page.waitForURL(/\bview=first-report\b/, { timeout: 10_000 });
     const liveUrl = new URL(page.url());
-    const fileid = liveUrl.searchParams.get("fileid");
-    const patid = liveUrl.searchParams.get("patid");
-    expect(fileid, "fileid in URL after click").toBeTruthy();
-    expect(patid, "patid in URL after click").toBeTruthy();
+    const f = liveUrl.searchParams.get("f");
+    expect(f, "f (stem) in URL after click").toBeTruthy();
 
     console.log(
-      `[deep] picked first-visit ${idx + 1}/${buttonCount}  ` +
-        `file=${fileid}  speaker=${patid}`,
+      `[deep] picked first-visit ${idx + 1}/${buttonCount}  stem=${f}`,
     );
 
     // ── 2. Confirm V37 mounted ──────────────────────────────────────

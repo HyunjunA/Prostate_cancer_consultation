@@ -622,7 +622,12 @@ export const SDMSurvey: React.FC<SDMSurveyProps> = ({
 
   React.useEffect(() => {
     onQuestionView?.(currentQuestion.id, currentQuestionIndex);
-  }, [currentQuestionIndex, currentQuestion.id, onQuestionView]);
+    // Fire only when the question actually changes — NOT on every re-render.
+    // onQuestionView is an inline callback from the parent (new reference each
+    // render), so keeping it in the deps re-fired this on every answer/re-render
+    // and produced duplicate survey_step_view rows. Intentionally omitted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentQuestionIndex, currentQuestion.id]);
   const currentAnswer = answers[currentQuestion.id as keyof SDMAnswers];
   const isCurrentAnswered = currentAnswer !== null;
   const isLastQuestion = currentQuestionIndex === totalQuestions - 1;

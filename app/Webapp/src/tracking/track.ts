@@ -31,6 +31,19 @@ export function setFirstMode(mode: "report" | "survey"): void {
   _activeFirstMode = mode;
 }
 
+// Where trackFirst events go. "first" = patient_first_behavior (normal). When
+// the 1st survey (V41) is embedded as the combined Total Survey Risk step, this
+// is set to "followup-risk" so its events are redirected to
+// patient_followup_survey as survey_type='risk_perception' — showing uniformly
+// in the admin follow-up dashboard. All PatientFirstEventType values are allowed
+// there by migration 019.
+let _firstTarget: "first" | "followup-risk" = "first";
+
+/** Redirect trackFirst events to the follow-up table (combined Risk step). */
+export function setFirstTrackingTarget(target: "first" | "followup-risk"): void {
+  _firstTarget = target;
+}
+
 function _generate(): string {
   const ts = Date.now();
   const rand = Math.random().toString(36).substring(2, 13);
@@ -177,6 +190,28 @@ export async function trackFirst(
     device_type: detectDeviceType(),
     ...event,
   };
+  // Combined Total Survey Risk step: redirect to the follow-up table so the
+  // admin follow-up dashboard shows Risk with the other surveys. domain/rating
+  // ride along (migration 019 added the columns); event_type is unchanged.
+  if (_firstTarget === "followup-risk") {
+    await postEvents(`${API_BASE}/api/backend/track/patient-followup`, {
+      session_id: getSessionId(),
+      file,
+      speaker,
+      events: [
+        {
+          event_type: fullEvent.event_type,
+          survey_type: "risk_perception",
+          domain: fullEvent.domain,
+          rating: fullEvent.rating,
+          metadata: fullEvent.metadata,
+          device_type: fullEvent.device_type,
+          client_timestamp: fullEvent.client_timestamp,
+        },
+      ],
+    });
+    return;
+  }
   await postEvents(`${API_BASE}/api/backend/track/patient-first`, {
     session_id: getSessionId(),
     file,

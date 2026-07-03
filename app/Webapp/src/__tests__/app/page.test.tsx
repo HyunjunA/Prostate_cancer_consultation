@@ -172,12 +172,12 @@ describe("Home page — URL-based routing", () => {
     ).toBeInTheDocument();
   });
 
-  // ── 2. Patient first visit ─────────────────────────────────────────────
-  test("shows PatientReportFirstVisit when ?fileid&patid&visit=first", async () => {
+  // ── 2. Patient first visit (new ?view=first-report) ────────────────────
+  test("shows PatientReportFirstVisit when ?fileid&patid&view=first-report", async () => {
     mockSearchParams({
       fileid: "test-file.xlsx",
       patid: "patient-001",
-      visit: "first",
+      view: "first-report",
     });
 
     render(<Home />);
@@ -192,8 +192,53 @@ describe("Home page — URL-based routing", () => {
     ).not.toBeInTheDocument();
   });
 
-  // ── 3. Patient follow-up visit ─────────────────────────────────────────
-  test("shows PatientFollowUpReport when ?fileid&patid&visit=followup", async () => {
+  // ── 2b. First-visit survey (new ?survey=first-visit) ───────────────────
+  test("shows PatientReportFirstVisit when ?fileid&patid&survey=first-visit", async () => {
+    mockSearchParams({
+      fileid: "test-file.xlsx",
+      patid: "patient-001",
+      survey: "first-visit",
+    });
+
+    render(<Home />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("patient-first")).toBeInTheDocument();
+    });
+  });
+
+  // ── 2c. Back-compat: legacy ?visit=first still resolves ────────────────
+  test("shows PatientReportFirstVisit for legacy ?visit=first", async () => {
+    mockSearchParams({
+      fileid: "test-file.xlsx",
+      patid: "patient-001",
+      visit: "first",
+    });
+
+    render(<Home />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("patient-first")).toBeInTheDocument();
+    });
+  });
+
+  // ── 3. Patient follow-up survey (new ?survey=follow-up) ────────────────
+  test("shows PatientFollowUpReport when ?fileid&patid&survey=follow-up", async () => {
+    mockSearchParams({
+      fileid: "test-file.xlsx",
+      patid: "patient-001",
+      survey: "follow-up",
+    });
+
+    render(<Home />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("patient-followup")).toBeInTheDocument();
+    });
+  });
+
+  // ── 3b. Back-compat: legacy ?visit=followup still resolves ─────────────
+  test("shows PatientFollowUpReport for legacy ?visit=followup", async () => {
     mockSearchParams({
       fileid: "test-file.xlsx",
       patid: "patient-001",
