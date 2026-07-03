@@ -158,7 +158,14 @@ class PatientSummaryDomain(Base):
 
 
 class PatientFirstVisitResponses(Base):
-    """V37 experimental-arm responses — one row per (file, speaker, domain).
+    """DEPRECATED — do not use in production. Superseded by
+    ``patient_first_visit_answer`` (migration 014, row-per-question). This
+    table is unused by any rendered page (its only consumers were the dead
+    V37/V38/V39 first-visit components + the ``useFirstVisitResponses`` hook;
+    the active V41 uses ``useFirstVisitAnswers``). Kept as a zero-row backup;
+    a future migration may drop it.
+
+    V37 experimental-arm responses — one row per (file, speaker, domain).
 
     PatientInitialVisitReportV37.tsx (experimental arm only) collects 14
     cognition / understanding inputs across the five clinical domains:

@@ -1,6 +1,11 @@
 /**
  * useFirstVisitResponses.tsx
  *
+ * @deprecated Backs the `patient_first_visit_responses` table, which is
+ * DEPRECATED (superseded by `patient_first_visit_answer`). Only the dead
+ * V37/V38/V39 components use this hook; the active V41 uses
+ * `useFirstVisitAnswers`. Do not use in new code.
+ *
  * Hook that bridges PatientInitialVisitReportV37.tsx with the backend
  * first-visit-responses endpoints. It does two things:
  *

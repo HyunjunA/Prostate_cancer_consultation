@@ -950,6 +950,8 @@ def _row_to_read(row: PatientFirstVisitResponses) -> FirstVisitResponseRead:
 @router.get(
     "/api/patient/first-visit-responses/{file}/{speaker}",
     response_model=FirstVisitResponsesGet,
+    deprecated=True,  # patient_first_visit_responses is superseded by
+    # patient_first_visit_answer; use /api/patient/first-visit-answers instead.
 )
 async def get_first_visit_responses(
     file: str,
@@ -978,6 +980,8 @@ async def get_first_visit_responses(
 @router.put(
     "/api/patient/first-visit-responses",
     response_model=FirstVisitResponseRead,
+    deprecated=True,  # patient_first_visit_responses is superseded by
+    # patient_first_visit_answer; use PUT /api/patient/first-visit-answers instead.
 )
 async def upsert_first_visit_response(
     body: FirstVisitResponseUpsert,

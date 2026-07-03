@@ -1,6 +1,11 @@
 /**
  * firstVisitApi.ts
  *
+ * @deprecated Wraps the DEPRECATED first-visit-responses endpoints
+ * (`patient_first_visit_responses` table, superseded by
+ * `patient_first_visit_answer`). Use `firstVisitAnswersApi` /
+ * `useFirstVisitAnswers` instead. Only the dead V37–V39 flow uses this.
+ *
  * Typed fetch wrappers for the V37 first-visit responses endpoints.
  * Both calls go through the Next.js proxy at /api/backend/[...path],
  * which injects the X-API-Key header server-side.
