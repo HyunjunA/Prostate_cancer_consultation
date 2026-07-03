@@ -115,19 +115,12 @@ class PatientSummary(Base):
 
 
 class PatientSummaryDomain(Base):
-    """Per-domain summary, scoring, and response — one row per patient per domain.
+    """Per-domain identity + display order — one row per patient per domain.
 
-    Frontend usage:
-      - patient_scoring (0-10) → PATIENT page: star rating entered by the patient
-                                  on the follow-up visit ("How well did your doctor
-                                  explain this topic?"). Saved via PUT /api/patient/scoring.
-                                  Initially NULL — populated when patient submits rating.
-      - patient_response       → PATIENT page: free-text response entered by the patient.
-                                  Saved via PUT /api/patient/responses.
-
-    NOTE: patient_scoring is NOT the same as llm_domain_scoring_and_summary.ai_score.
-      - patient_scoring = patient's subjective rating of doctor communication (PATIENT page)
-      - ai_score = GPT-4o's objective scoring of sentence relevance (DOCTOR page)
+    The patient rating / free-text response columns (patient_scoring,
+    patient_response) were dropped in migration 021 — that patient-input
+    feature is no longer collected by the frontend. This row now carries only
+    the per-domain identity + display_order.
     """
     __tablename__ = 'patient_summary_domain'
     __table_args__ = (
@@ -146,10 +139,6 @@ class PatientSummaryDomain(Base):
     speaker = Column(String(100), primary_key=True, nullable=False)
     domain = Column(String(100), primary_key=True, nullable=False)
     display_order = Column(Integer, nullable=False, default=0)
-    # CheckConstraint enforces the 0-10 Likert range at the DB level so
-    # an out-of-range value cannot land via direct SQL either.
-    patient_scoring = Column(Integer, CheckConstraint('patient_scoring BETWEEN 0 AND 10'))  # PATIENT enters this
-    patient_response = Column(Text)  # PATIENT enters this
 
     summary = relationship("PatientSummary", back_populates="domains")
 

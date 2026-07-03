@@ -76,16 +76,12 @@ class TestDataFactory:
         speaker: str = "Patient_1",
         domain: str = "cancer_prognosis",
         display_order: int = 1,
-        patient_scoring: int = 5,
-        patient_response: str = "test response",
     ) -> PatientSummaryDomain:
         return PatientSummaryDomain(
             file=file,
             speaker=speaker,
             domain=domain,
             display_order=display_order,
-            patient_scoring=patient_scoring,
-            patient_response=patient_response,
         )
 
     # ── Survey ────────────────────────────────────────────────────────

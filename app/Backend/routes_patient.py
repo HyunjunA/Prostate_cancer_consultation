@@ -8,8 +8,6 @@ table.
 
 Endpoint groups:
     /api/patient/summaries*       : patient consultation summaries
-    /api/patient/scoring          : 1-5 scoring submitted by the patient
-    /api/patient/responses        : free-text responses (one per domain)
     /api/patient/files            : list of patients the user can see
     /api/patient/sentences/{file} : tokenised sentences for a file
     /api/patient/ai-summary*      : LLM-generated per-domain summaries
@@ -20,8 +18,7 @@ Endpoint groups:
 Core data model:
     PatientSummary           : (file, speaker) PK — one row per patient.
     PatientSummaryDomain     : (file, speaker, domain) PK — five rows per
-                                patient, holds patient_scoring +
-                                patient_response per domain.
+                                patient (per-domain identity / display order).
     LLMDomainScoringAndSummary: GPT-4o output, one row per (analysis, domain).
 
 Related modules:
@@ -33,7 +30,6 @@ Related modules:
 import json
 import logging
 from typing import Optional, List, Dict, Any, Literal, Tuple
-from collections import defaultdict
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -50,7 +46,6 @@ from models import (
     DoctorRewriteLog,
     PatientFirstVisitAnswer,
     PatientSummary,
-    PatientSummaryDomain,
     SentencePrediction,
     TranscriptAnalysisLog,
     LLMDomainScoringAndSummary,
@@ -68,20 +63,6 @@ router = APIRouter(tags=["Patient Interface"])
 # Tiny update DTOs for PUT endpoints. We carry the composite key (file,
 # speaker, domain) in the body rather than the URL so the frontend can
 # batch-style update without rewriting the path each time.
-
-class PatientDomainScoringUpdate(BaseModel):
-    file: str
-    speaker: str
-    domain: str
-    patient_scoring: int
-
-
-class PatientDomainResponseUpdate(BaseModel):
-    file: str
-    speaker: str
-    domain: str
-    patient_response: str
-
 
 # ── Shared first-visit domain constants ───────────────────────────────────────
 # DomainLiteral + the per-domain factor whitelist are shared by the first-visit
@@ -204,239 +185,10 @@ async def get_patient_summary_detail(
         "speaker": speaker,
         "summary": {
             "classes": [
-                {
-                    "class_name": d.domain,
-                    "score": d.patient_scoring
-                }
+                {"class_name": d.domain}
                 for d in summary.domains
             ]
         }
-    }
-
-
-@router.get("/api/patient/scoring")
-async def get_patient_scoring(
-    file: Optional[str] = None,
-    speaker: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user)
-):
-    """Get patient-submitted scores grouped by (file, speaker).
-
-    Returns one entry per patient with `scores` (domain → score) and an
-    `average` across non-null domains. Only rows where patient_scoring
-    is set are included.
-    """
-    print("=" * 80)
-    print("[DEBUG] [get_patient_scoring] - Input Parameters:")
-    print(f"   file: {file}")
-    print(f"   speaker: {speaker}")
-
-    # `.isnot(None)` filters out domains where the patient has not yet
-    # submitted a score — frontend would render those as blank rows.
-    stmt = select(PatientSummaryDomain).where(
-        PatientSummaryDomain.patient_scoring.isnot(None)
-    ).order_by(
-        PatientSummaryDomain.file,
-        PatientSummaryDomain.speaker,
-        PatientSummaryDomain.display_order
-    )
-
-    if file:
-        stmt = stmt.where(PatientSummaryDomain.file == file)
-    if speaker:
-        stmt = stmt.where(PatientSummaryDomain.speaker == speaker)
-
-    results = (await db.execute(stmt)).scalars().all()
-
-    # Group by (file, speaker) in Python — SQL GROUP BY would lose the
-    # per-domain breakdown. The dataset is small enough (≤5 rows per
-    # patient) that a Python pass is faster than a window-function query.
-    grouped: Dict[tuple, list] = defaultdict(list)
-    for r in results:
-        grouped[(r.file, r.speaker)].append(r)
-
-    data = []
-    for (f, s), domains in grouped.items():
-        scores = {d.domain: d.patient_scoring for d in domains}
-        valid_scores = [v for v in scores.values() if v is not None]
-        average = round(sum(valid_scores) / len(valid_scores), 2) if valid_scores else None
-        data.append({
-            "file": f,
-            "speaker": s,
-            "scores": scores,
-            "average": average
-        })
-
-    return {
-        "total": len(data),
-        "data": data
-    }
-
-@router.put("/api/patient/scoring")
-async def update_patient_scoring(
-    update_data: PatientDomainScoringUpdate,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user)
-):
-    """Upsert one patient domain score and return the full updated set.
-
-    Returning the full per-patient score map (instead of just an OK)
-    lets the frontend re-render its score chart from the response
-    without an extra round-trip.
-    """
-    print("=" * 80)
-    print("[DEBUG] [update_patient_scoring] - Input Data:")
-    print(f"   file: {update_data.file}")
-    print(f"   speaker: {update_data.speaker}")
-    print(f"   domain: {update_data.domain}")
-    print(f"   patient_scoring: {update_data.patient_scoring}")
-
-    # Find existing domain row — UPSERT pattern: update if found, else
-    # create. We do NOT use ON CONFLICT here because the row may not
-    # exist yet for new patients.
-    stmt = select(PatientSummaryDomain).where(
-        PatientSummaryDomain.file == update_data.file,
-        PatientSummaryDomain.speaker == update_data.speaker,
-        PatientSummaryDomain.domain == update_data.domain
-    )
-    record = (await db.execute(stmt)).scalars().first()
-
-    if record:
-        record.patient_scoring = update_data.patient_scoring
-    else:
-        record = PatientSummaryDomain(
-            file=update_data.file,
-            speaker=update_data.speaker,
-            domain=update_data.domain,
-            patient_scoring=update_data.patient_scoring
-        )
-
-    db.add(record)
-    await db.commit()
-    await db.refresh(record)
-
-    # Return all scores for this file/speaker for convenience
-    all_stmt = select(PatientSummaryDomain).where(
-        PatientSummaryDomain.file == update_data.file,
-        PatientSummaryDomain.speaker == update_data.speaker,
-        PatientSummaryDomain.patient_scoring.isnot(None)
-    ).order_by(PatientSummaryDomain.display_order)
-    all_domains = (await db.execute(all_stmt)).scalars().all()
-
-    scores = {d.domain: d.patient_scoring for d in all_domains}
-    valid_scores = [v for v in scores.values() if v is not None]
-    average = round(sum(valid_scores) / len(valid_scores), 2) if valid_scores else None
-
-    return {
-        "file": record.file,
-        "speaker": record.speaker,
-        "scores": scores,
-        "average": average
-    }
-
-@router.get("/api/patient/responses")
-async def get_patient_responses(
-    file: Optional[str] = None,
-    speaker: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user)
-):
-    """Get patient free-text responses grouped by (file, speaker).
-
-    Same shape as /scoring but for the free-text answers instead of
-    Likert scores. Domains with no response yet are excluded.
-    """
-    print("=" * 80)
-    print("[DEBUG] [get_patient_responses] - Input Parameters:")
-    print(f"   file: {file}")
-    print(f"   speaker: {speaker}")
-
-    stmt = select(PatientSummaryDomain).where(
-        PatientSummaryDomain.patient_response.isnot(None)
-    ).order_by(
-        PatientSummaryDomain.file,
-        PatientSummaryDomain.speaker,
-        PatientSummaryDomain.display_order
-    )
-
-    if file:
-        stmt = stmt.where(PatientSummaryDomain.file == file)
-    if speaker:
-        stmt = stmt.where(PatientSummaryDomain.speaker == speaker)
-
-    results = (await db.execute(stmt)).scalars().all()
-
-    # Group by (file, speaker) — same pattern as /scoring above.
-    grouped: Dict[tuple, list] = defaultdict(list)
-    for r in results:
-        grouped[(r.file, r.speaker)].append(r)
-
-    data = []
-    for (f, s), domains in grouped.items():
-        answers = {d.domain: d.patient_response for d in domains}
-        data.append({
-            "file": f,
-            "speaker": s,
-            "answers": answers
-        })
-
-    return {
-        "total": len(data),
-        "data": data
-    }
-
-@router.put("/api/patient/responses")
-async def update_patient_responses(
-    update_data: PatientDomainResponseUpdate,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user)
-):
-    """Upsert one patient domain free-text response and return all responses."""
-    print("=" * 80)
-    print("[DEBUG] [update_patient_responses] - Input Data:")
-    print(f"   file: {update_data.file}")
-    print(f"   speaker: {update_data.speaker}")
-    print(f"   domain: {update_data.domain}")
-    # Truncated preview only — full responses can be hundreds of chars.
-    print(f"   patient_response: {update_data.patient_response[:30] if update_data.patient_response else None}...")
-
-    # Same UPSERT pattern as update_patient_scoring above.
-    stmt = select(PatientSummaryDomain).where(
-        PatientSummaryDomain.file == update_data.file,
-        PatientSummaryDomain.speaker == update_data.speaker,
-        PatientSummaryDomain.domain == update_data.domain
-    )
-    record = (await db.execute(stmt)).scalars().first()
-
-    if record:
-        record.patient_response = update_data.patient_response
-    else:
-        record = PatientSummaryDomain(
-            file=update_data.file,
-            speaker=update_data.speaker,
-            domain=update_data.domain,
-            patient_response=update_data.patient_response
-        )
-
-    db.add(record)
-    await db.commit()
-    await db.refresh(record)
-
-    # Return all responses for this file/speaker for convenience
-    all_stmt = select(PatientSummaryDomain).where(
-        PatientSummaryDomain.file == update_data.file,
-        PatientSummaryDomain.speaker == update_data.speaker,
-        PatientSummaryDomain.patient_response.isnot(None)
-    ).order_by(PatientSummaryDomain.display_order)
-    all_domains = (await db.execute(all_stmt)).scalars().all()
-
-    answers = {d.domain: d.patient_response for d in all_domains}
-
-    return {
-        "file": record.file,
-        "speaker": record.speaker,
-        "answers": answers
     }
 
 
@@ -625,24 +377,10 @@ async def get_dashboard_stats(
         select(func.count(func.distinct(PatientSummary.file)))
     )).scalar_one()
 
-    # Average patient scoring per domain — group + avg, filter NULLs
-    # so blank scores do not drag the average down to zero.
-    avg_scores_stmt = select(
-        PatientSummaryDomain.domain,
-        func.avg(PatientSummaryDomain.patient_scoring).label('avg_score')
-    ).where(
-        PatientSummaryDomain.patient_scoring.isnot(None)
-    ).group_by(
-        PatientSummaryDomain.domain
-    ).order_by(
-        PatientSummaryDomain.domain
-    )
-    avg_rows = (await db.execute(avg_scores_stmt)).all()
-
-    average_scores = {
-        row.domain: round(row.avg_score, 2) if row.avg_score is not None else None
-        for row in avg_rows
-    }
+    # Patient per-domain scoring was removed (dropped columns) — the patient
+    # rating feature is no longer collected. Kept as an empty map for API
+    # backward-compatibility with the dashboard consumer.
+    average_scores: Dict[str, Any] = {}
 
     return {
         "doctor_interface": {

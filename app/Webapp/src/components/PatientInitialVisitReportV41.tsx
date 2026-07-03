@@ -3383,7 +3383,7 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
   const patientId = usePatientId((state) => state.patientId);
   const fileId = useFileId((state) => state.fileId);
 
-  const { fetchSummaryDetail, fetchAISummary, fetchSentencesByClass, updateSingleClassScore } = usePatientData();
+  const { fetchSummaryDetail, fetchAISummary, fetchSentencesByClass } = usePatientData();
 
   usePassiveTracking({
     proximity: { threshold: 150, debounceMs: 100 },
@@ -3659,15 +3659,8 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
         if (result) {
           setSummaryData(result);
 
-          // Load previously saved ratings
-          const initialRatings: Record<string, number> = {};
-          result.summary?.classes?.forEach((cls: ClassSummary) => {
-            const topicName = CLASS_TO_TOPIC_MAP[cls.class_name];
-            if (topicName && cls.score !== null) {
-              initialRatings[topicName] = cls.score;
-            }
-          });
-          setRatings(initialRatings);
+          // Patient rating persistence was removed (dropped columns) — the
+          // rating UI is disabled, so there is nothing to restore here.
 
           // First topic expanded by default
           setExpandedTopics({ [TOPIC_ORDER[0]]: true });
@@ -3904,23 +3897,11 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
    * - Updates local state
    * - Saves to server via API call
    */
-  const handleRatingChange = async (topic: string, newRating: number) => {
+  const handleRatingChange = (topic: string, newRating: number) => {
+    // Local-only: the patient-rating backend (patient_scoring column +
+    // /api/patient/scoring) was removed. The rating UI is disabled, so this
+    // only keeps the in-memory value if a rating widget is ever restored.
     setRatings((prev) => ({ ...prev, [topic]: newRating }));
-
-    const backendDomain = TOPIC_TO_BACKEND_DOMAIN[topic];
-
-    if (backendDomain) {
-      try {
-        await updateSingleClassScore(
-          currentFile,
-          currentSpeaker,
-          backendDomain,
-          newRating,
-        );
-      } catch (err) {
-        console.error("❌ Error updating score:", err);
-      }
-    }
   };
 
   const handleToggleExpand = (topic: string) => {
