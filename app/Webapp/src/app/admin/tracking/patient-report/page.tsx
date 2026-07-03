@@ -2,7 +2,7 @@
 
 import AdminTrackingPatientFirst from "@/components/AdminTrackingPatientFirst";
 
-// Patient Report behavior — first-visit report mode only.
+// Patient Report behavior — patient_first_behavior is report-only.
 export default function AdminTrackingPatientReportPage() {
-  return <AdminTrackingPatientFirst lockedMode="report" />;
+  return <AdminTrackingPatientFirst />;
 }

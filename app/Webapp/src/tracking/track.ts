@@ -20,17 +20,6 @@
 
 let _activeSessionId: string | null = null;
 
-// Session-level entry mode for the first-visit page: "report" (1st visit) or
-// "survey" (2nd visit). Set once per mount via setFirstMode() so every
-// trackFirst event in the session carries it without threading it through
-// each call site. null until set (older callers / pre-split).
-let _activeFirstMode: "report" | "survey" | null = null;
-
-/** Tag the active first-visit session as report (1st) or survey (2nd). */
-export function setFirstMode(mode: "report" | "survey"): void {
-  _activeFirstMode = mode;
-}
-
 // Where trackFirst events go. "first" = patient_first_behavior (normal). When
 // the 1st survey (V41) is embedded as the combined Total Survey Risk step, this
 // is set to "followup-risk" so its events are redirected to
@@ -57,7 +46,6 @@ export function startSession(): string {
 
 export function endSession(): void {
   _activeSessionId = null;
-  _activeFirstMode = null;
 }
 
 function getSessionId(): string {
@@ -261,7 +249,6 @@ export async function trackFirst(
     session_id: getSessionId(),
     file,
     speaker,
-    mode: _activeFirstMode,
     events: [fullEvent],
   });
 }

@@ -119,7 +119,7 @@ import { QID, fieldQuestionId } from "@/lib/firstVisitQuestions";
 import { usePatientId } from "@/stores/usePatientId";
 import { useFileId } from "@/stores/useFileId";
 import { sendTrackingEvents } from "@/api/trackingApi";
-import { trackFirst, trackFollowup, startSession, endSession, setFirstMode, setFirstTrackingTarget, type Domain } from "@/tracking/track";
+import { trackFirst, trackFollowup, startSession, endSession, setFirstTrackingTarget, type Domain } from "@/tracking/track";
 import { Slider } from "@/components/ui/slider";
 
 // Display name → backend domain code (cp/le/ed/inc/ius)
@@ -3393,10 +3393,11 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
 
   // Pattern A: page-lifetime session — mount-only.
   useEffect(() => {
-    // Tag every event in this session as report (1st) or survey (2nd) so the
-    // admin tracking view and the research analysis can separate the two.
-    if (trackToFollowup) setFirstTrackingTarget("followup-risk");
-    setFirstMode(surveyMode ? "survey" : "report");
+    // Survey-mode behavior (the standalone first-visit survey OR the combined
+    // Total Survey Risk step) is recorded in patient_followup_survey, NOT
+    // patient_first_behavior — the latter is report-only. Report mode keeps its
+    // own session and writes to patient_first_behavior.
+    if (surveyMode) setFirstTrackingTarget("followup-risk");
     // When embedded as the Total Survey Risk step (trackToFollowup), REUSE the
     // follow-up's already-active session — do NOT start/end our own, or we'd
     // overwrite the follow-up session_id (splitting one Total Survey run into
@@ -3562,9 +3563,10 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
     setExpandedTopics((prev) =>
       prev[topic] ? prev : { ...prev, [topic]: true },
     );
-    // Embedded Risk step (Total Survey): emit a follow-up survey_step_view per
-    // domain (one "question"), matching SDM/DCS, so the admin shows Q + step.
-    if (trackToFollowup && surveyMode && currentFile && currentSpeaker) {
+    // Survey mode: emit a follow-up survey_step_view per domain (one "question"),
+    // matching SDM/DCS, so the admin shows Q + step. Survey behavior lands in
+    // patient_followup_survey (see the mount effect's followup-risk redirect).
+    if (surveyMode && currentFile && currentSpeaker) {
       trackFollowup(currentFile, currentSpeaker, {
         event_type: "survey_step_view",
         survey_type: "risk_perception",
@@ -4593,7 +4595,7 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
                     // patient_survey_submission_log (survey_type=risk_perception_2)
                     // by each domain Submit (PUT /api/patient/first-visit-answers),
                     // so no separate final submit is needed here.
-                    if (trackToFollowup && currentFile && currentSpeaker) {
+                    if (surveyMode && currentFile && currentSpeaker) {
                       trackFollowup(currentFile, currentSpeaker, {
                         event_type: "survey_complete",
                         survey_type: "risk_perception",

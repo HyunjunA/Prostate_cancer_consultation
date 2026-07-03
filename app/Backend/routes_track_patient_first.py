@@ -66,10 +66,6 @@ EventType = Literal[
     "session_end",
 ]
 Domain = Literal["cp", "le", "ed", "inc", "ius"]
-# Session-level entry mode. 'report' = 1st visit (read-only overview),
-# 'survey' = 2nd visit (questionnaire). Optional so pre-split clients that
-# never send it still store NULL.
-Mode = Literal["report", "survey"]
 
 
 class PatientFirstEvent(BaseModel):
@@ -139,9 +135,6 @@ class PatientFirstBatch(BaseModel):
     session_id: str = Field(..., min_length=1, max_length=100)
     file: str = Field(..., min_length=1, max_length=255)
     speaker: str = Field(..., min_length=1, max_length=100)
-    # Session-level mode (same for every event in the batch). Optional for
-    # pre-split clients; new clients always send 'report' or 'survey'.
-    mode: Optional[Mode] = None
     # 500-event cap: the frontend flushes every few seconds, so 500 is
     # plenty of headroom; raising it any higher just lets one bad client
     # tie up DB writes.
@@ -179,7 +172,6 @@ async def post_patient_first_events(
             session_id=batch.session_id,
             file=batch.file,
             speaker=batch.speaker,
-            mode=batch.mode,
             event_type=ev.event_type,
             domain=ev.domain,
             rating=ev.rating,
@@ -222,9 +214,6 @@ async def list_sessions(
         func.min(PatientFirstBehavior.client_timestamp).label("started_at"),
         func.max(PatientFirstBehavior.client_timestamp).label("ended_at"),
         func.count().label("event_count"),
-        # mode is constant within a session, so MAX just lifts the single
-        # value (NULL for pre-split sessions).
-        func.max(PatientFirstBehavior.mode).label("mode"),
     ).group_by(
         PatientFirstBehavior.session_id,
         PatientFirstBehavior.file,
@@ -243,7 +232,6 @@ async def list_sessions(
                 "session_id": r.session_id,
                 "file": r.file,
                 "speaker": r.speaker,
-                "mode": r.mode,
                 "started_at": r.started_at.isoformat() if r.started_at else None,
                 "ended_at": r.ended_at.isoformat() if r.ended_at else None,
                 "event_count": r.event_count,
@@ -274,8 +262,6 @@ async def get_session_events(
     rows = res.scalars().all()
     return {
         "session_id": session_id,
-        # Session-level mode (same on every row); NULL for pre-split sessions.
-        "mode": rows[0].mode if rows else None,
         "events": [
             {
                 "id": r.id,
@@ -323,7 +309,6 @@ async def aggregate_by_session(
             "session_id": r.session_id,
             "file": r.file,
             "speaker": r.speaker,
-            "mode": r.mode,
             "started_at": r.client_timestamp,
             "ended_at": r.client_timestamp,
             "by_domain": {},

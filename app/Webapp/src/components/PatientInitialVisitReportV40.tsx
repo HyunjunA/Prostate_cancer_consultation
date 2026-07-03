@@ -111,7 +111,7 @@ import { QID, fieldQuestionId } from "@/lib/firstVisitQuestions";
 import { usePatientId } from "@/stores/usePatientId";
 import { useFileId } from "@/stores/useFileId";
 import { sendTrackingEvents } from "@/api/trackingApi";
-import { trackFirst, startSession, endSession, setFirstMode, type Domain } from "@/tracking/track";
+import { trackFirst, startSession, endSession, type Domain } from "@/tracking/track";
 import { Slider } from "@/components/ui/slider";
 
 // Display name → backend domain code (cp/le/ed/inc/ius)
@@ -3375,9 +3375,6 @@ const PatientReportFirstVisitV40: React.FC<PatientReportProps> = ({
 
   // Pattern A: page-lifetime session — mount-only.
   useEffect(() => {
-    // Tag every event in this session as report (1st) or survey (2nd) so the
-    // admin tracking view and the research analysis can separate the two.
-    setFirstMode(surveyMode ? "survey" : "report");
     startSession();
     return () => endSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps

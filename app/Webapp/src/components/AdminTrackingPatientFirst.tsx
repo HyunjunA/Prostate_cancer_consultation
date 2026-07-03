@@ -17,8 +17,6 @@ interface SessionRow {
   session_id: string;
   file: string;
   speaker: string;
-  // "report" (1st visit) | "survey" (2nd visit) | null (pre-split legacy).
-  mode: "report" | "survey" | null;
   started_at: string | null;
   ended_at: string | null;
   event_count: number;
@@ -106,7 +104,6 @@ interface AggregateSession {
   session_id: string;
   file: string;
   speaker: string;
-  mode: "report" | "survey" | null;
   started_at: string | null;
   ended_at: string | null;
   by_domain: Record<string, DomainAgg>;
@@ -219,42 +216,12 @@ function durationSecs(start: string | null, end: string | null): string {
   }
 }
 
-// Pill showing a session's entry mode. NULL = pre-split legacy data, shown
-// honestly as "— pre-split" rather than guessed as report.
-function ModeBadge({ mode }: { mode: "report" | "survey" | null }) {
-  const base =
-    "inline-block text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded";
-  if (mode === "survey")
-    return <span className={`${base} bg-violet-100 text-violet-700`}>Survey</span>;
-  if (mode === "report")
-    return <span className={`${base} bg-blue-100 text-blue-700`}>Report</span>;
-  return (
-    <span
-      className={`${base} bg-slate-100 text-slate-400`}
-      title="Recorded before the report/survey split"
-    >
-      — pre-split
-    </span>
-  );
-}
-
-export default function AdminTrackingPatientFirst({
-  lockedMode,
-}: {
-  // When set, the dashboard is fixed to one entry mode and the mode toggle is
-  // hidden — used by the split "Patient Report" / "Patient Survey Behavior" pages.
-  lockedMode?: "report" | "survey";
-} = {}) {
+export default function AdminTrackingPatientFirst() {
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [events, setEvents] = useState<EventRow[]>([]);
   const [aggregate, setAggregate] = useState<AggregateSession[] | null>(null);
   const [fileFilter, setFileFilter] = useState<string>("");
-  // report (1st) / survey (2nd) / all. Filters the session list client-side
-  // since every session row already carries its mode.
-  const [modeFilter, setModeFilter] = useState<"all" | "report" | "survey">(
-    lockedMode ?? "all",
-  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -318,11 +285,7 @@ export default function AdminTrackingPatientFirst({
   useEffect(() => { reloadEvents(); /* eslint-disable-next-line */ }, [selectedSession]);
   useEffect(() => { reloadAggregate(); /* eslint-disable-next-line */ }, [fileFilter]);
 
-  // Mode filter is applied client-side so toggling does not refetch.
-  const visibleSessions = useMemo(
-    () => sessions.filter((s) => modeFilter === "all" || s.mode === modeFilter),
-    [sessions, modeFilter],
-  );
+  const visibleSessions = sessions;
   const totalCount = useMemo(
     () => visibleSessions.reduce((sum, s) => sum + s.event_count, 0),
     [visibleSessions],
@@ -334,11 +297,7 @@ export default function AdminTrackingPatientFirst({
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-slate-900">
-            {lockedMode === "report"
-              ? "Patient Report"
-              : lockedMode === "survey"
-                ? "Patient Survey Behavior"
-                : "Patient Report & Survey Behavior"}
+            Patient Report Behavior
           </h1>
           <p className="text-sm text-slate-600 mt-1">
             Per-session view (no OR-merge). Sessions: {sessions.length} · Events: {totalCount}
@@ -357,28 +316,6 @@ export default function AdminTrackingPatientFirst({
               className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
             />
           </div>
-          {/* Entry-mode filter: 1st-visit report vs 2nd-visit survey.
-              Hidden when the page is locked to a single mode. */}
-          {!lockedMode && (
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">Mode</label>
-            <div className="inline-flex rounded-md border border-slate-300 overflow-hidden">
-              {(["all", "report", "survey"] as const).map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setModeFilter(m)}
-                  className={`px-3 py-2 text-sm capitalize ${
-                    modeFilter === m
-                      ? "bg-indigo-600 text-white"
-                      : "bg-white text-slate-600 hover:bg-slate-50"
-                  }`}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-          </div>
-          )}
           <button
             onClick={reloadAll}
             disabled={loading}
@@ -413,7 +350,6 @@ export default function AdminTrackingPatientFirst({
                     className={`w-full text-left px-4 py-3 hover:bg-slate-50 ${active ? "bg-indigo-50 border-l-4 border-indigo-500" : ""}`}
                   >
                     <div className="flex items-center gap-2">
-                      <ModeBadge mode={s.mode} />
                       <div className="text-xs font-mono text-slate-500 truncate">{s.session_id}</div>
                     </div>
                     <div className="text-sm font-medium text-slate-900 truncate">{s.file}</div>
@@ -495,7 +431,6 @@ export default function AdminTrackingPatientFirst({
                     <tr key={s.session_id}>
                       <td className="px-3 py-2 font-mono text-slate-600">
                         <div className="flex items-center gap-2">
-                          <ModeBadge mode={s.mode} />
                           <span>{s.session_id.slice(0, 12)}…</span>
                         </div>
                       </td>

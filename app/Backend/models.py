@@ -295,9 +295,6 @@ class PatientFirstBehavior(Base):
     file = Column(String(255), nullable=False)
     speaker = Column(String(100), nullable=False)
     event_type = Column(String(30), nullable=False)
-    # Session-level entry mode: 'report' (1st visit) or 'survey' (2nd visit).
-    # NULL = pre-split legacy rows, recorded before the two modes existed.
-    mode = Column(String(10))
     domain = Column(String(50))
     rating = Column(Integer)  # SMALLINT in DB; SQLAlchemy Integer is fine for read/write
     # `metadata` is reserved by SQLAlchemy on the Base class itself,
