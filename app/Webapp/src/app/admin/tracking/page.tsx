@@ -12,11 +12,18 @@ import Link from "next/link";
 
 const AREAS = [
   {
-    href: "/admin/tracking/patient-first",
-    title: "Patient Report & Survey Behavior",
+    href: "/admin/tracking/patient-report",
+    title: "Patient Report",
     description:
-      "Report views, topic/evidence open-close, and helpfulness ratings, plus first-visit survey activity — filterable by Report / Survey mode.",
+      "First-visit report mode: report views, topic/evidence open-close, and helpfulness ratings.",
     color: "from-rose-500 to-pink-500",
+  },
+  {
+    href: "/admin/tracking/patient-survey",
+    title: "Patient Survey Behavior",
+    description:
+      "First-visit survey mode: question answers, sliders, and submission activity.",
+    color: "from-emerald-500 to-teal-500",
   },
   {
     href: "/admin/tracking/patient-followup",
@@ -24,6 +31,13 @@ const AREAS = [
     description:
       "Survey navigation, step views, answer timing, and completion across SDM / DCS / Risk / Satisfaction.",
     color: "from-violet-500 to-purple-500",
+  },
+  {
+    href: "/admin/tracking/patient-surveys-combined",
+    title: "Patient Survey + Follow-up (Combined)",
+    description:
+      "First-visit survey and follow-up survey behavior together in one combined view.",
+    color: "from-amber-500 to-orange-500",
   },
   {
     href: "/admin/tracking/doctor",

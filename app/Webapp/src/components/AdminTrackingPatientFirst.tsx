@@ -238,7 +238,13 @@ function ModeBadge({ mode }: { mode: "report" | "survey" | null }) {
   );
 }
 
-export default function AdminTrackingPatientFirst() {
+export default function AdminTrackingPatientFirst({
+  lockedMode,
+}: {
+  // When set, the dashboard is fixed to one entry mode and the mode toggle is
+  // hidden — used by the split "Patient Report" / "Patient Survey Behavior" pages.
+  lockedMode?: "report" | "survey";
+} = {}) {
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [events, setEvents] = useState<EventRow[]>([]);
@@ -246,7 +252,9 @@ export default function AdminTrackingPatientFirst() {
   const [fileFilter, setFileFilter] = useState<string>("");
   // report (1st) / survey (2nd) / all. Filters the session list client-side
   // since every session row already carries its mode.
-  const [modeFilter, setModeFilter] = useState<"all" | "report" | "survey">("all");
+  const [modeFilter, setModeFilter] = useState<"all" | "report" | "survey">(
+    lockedMode ?? "all",
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -325,7 +333,13 @@ export default function AdminTrackingPatientFirst() {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">Patient Report & Survey Behavior</h1>
+          <h1 className="text-2xl font-bold text-slate-900">
+            {lockedMode === "report"
+              ? "Patient Report"
+              : lockedMode === "survey"
+                ? "Patient Survey Behavior"
+                : "Patient Report & Survey Behavior"}
+          </h1>
           <p className="text-sm text-slate-600 mt-1">
             Per-session view (no OR-merge). Sessions: {sessions.length} · Events: {totalCount}
           </p>
@@ -343,7 +357,9 @@ export default function AdminTrackingPatientFirst() {
               className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm"
             />
           </div>
-          {/* Entry-mode filter: 1st-visit report vs 2nd-visit survey. */}
+          {/* Entry-mode filter: 1st-visit report vs 2nd-visit survey.
+              Hidden when the page is locked to a single mode. */}
+          {!lockedMode && (
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1">Mode</label>
             <div className="inline-flex rounded-md border border-slate-300 overflow-hidden">
@@ -362,6 +378,7 @@ export default function AdminTrackingPatientFirst() {
               ))}
             </div>
           </div>
+          )}
           <button
             onClick={reloadAll}
             disabled={loading}

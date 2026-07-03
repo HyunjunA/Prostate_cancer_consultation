@@ -6,6 +6,7 @@
 // bar only reads /admin-auth/me (through the proxy) for a display name.
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import Link from "next/link";
 
 export default function AdminTopBar() {
   const pathname = usePathname();
@@ -44,9 +45,18 @@ export default function AdminTopBar() {
   return (
     <div className="w-full bg-white border-b border-gray-200">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2 sm:px-6">
-        <span className="text-xs font-medium uppercase tracking-wider text-gray-400">
-          Admin
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-medium uppercase tracking-wider text-gray-400">
+            Admin
+          </span>
+          {/* Home = the admin tracking hub. Shown on every admin page. */}
+          <Link
+            href="/admin/tracking"
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+          >
+            ← Home
+          </Link>
+        </div>
         <div className="flex items-center gap-3">
           {username && (
             <span className="text-sm text-gray-600">
