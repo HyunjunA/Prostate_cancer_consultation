@@ -192,7 +192,7 @@ Inside the `client` fixture:
 
 ### 5.3 Test data factory
 
-`app/Backend/tests/factories.py` exposes `TestDataFactory` with helpers for the most common models — `doctor_rewrite()`, `patient_summary()`, `patient_summary_domain()`, `survey_submission()`, `transcript_analysis()`, `sentence_prediction()`, plus a `prediction_set()` bulk helper. Use these instead of constructing model instances by hand so changes to defaults are picked up suite-wide.
+`app/Backend/tests/factories.py` exposes `TestDataFactory` with helpers for the most common models — `doctor_rewrite()`, `patient_summary()`, `survey_submission()`, `transcript_analysis()`, `sentence_prediction()`, plus a `prediction_set()` bulk helper. Use these instead of constructing model instances by hand so changes to defaults are picked up suite-wide.
 
 ### 5.4 Markers
 

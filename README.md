@@ -52,7 +52,7 @@ The backend lives at [`app/Backend/`](app/Backend/). Each concern has its own fi
 | [`routes_surveys.py`](app/Backend/routes_surveys.py) | `/api/surveys/...` | SDM / DCS / Risk / Satisfaction submissions + REDCap sync |
 | [`routes_admin_pipeline.py`](app/Backend/routes_admin_pipeline.py) | `/api/admin/...` | Pipeline DB-storage verification (HTTP mirror of `verify_pipeline_db.py`) |
 | [`routes_system.py`](app/Backend/routes_system.py) | `/health`, `/ready` | Health checks (unauthenticated) |
-| [`routes_track_patient_first.py`](app/Backend/routes_track_patient_first.py) | `/api/track/patient-first` | First-visit page behaviour events |
+| [`routes_track_patient_report.py`](app/Backend/routes_track_patient_report.py) | `/api/track/patient-report` | First-visit page behaviour events |
 | [`routes_track_patient_followup.py`](app/Backend/routes_track_patient_followup.py) | `/api/track/patient-followup` | Follow-up survey behaviour events |
 | [`routes_track_doctor.py`](app/Backend/routes_track_doctor.py) | `/api/track/doctor` | Doctor view behaviour events |
 | [`routes_track_recordings.py`](app/Backend/routes_track_recordings.py) | `/api/track/recordings` | rrweb-style session recording chunks |
@@ -63,7 +63,7 @@ The backend lives at [`app/Backend/`](app/Backend/). Each concern has its own fi
 |---|---|
 | [`models.py`](app/Backend/models.py) | Single source of truth — all 19 SQLAlchemy ORM classes |
 | [`db.py`](app/Backend/db.py) | Async + sync engines, `get_db()` dependency |
-| [`persistence.py`](app/Backend/persistence.py) | NLP pipeline → 6 tables in one transaction (`save_all`) |
+| [`persistence.py`](app/Backend/persistence.py) | NLP pipeline → 5 tables in one transaction (`save_all`) |
 | [`init_db.py`](app/Backend/init_db.py) | Schema bootstrap (used by Docker entrypoint) |
 | [`inspect_pipeline_run.py`](app/Backend/inspect_pipeline_run.py) | CLI: dump pipeline outputs for one analysis |
 | [`migrations/versions/`](app/Backend/migrations/versions/) | Alembic 001–015 (15 migrations, all reversible) |
@@ -105,7 +105,7 @@ of the DB-write surface:
 
 | File | Role |
 |---|---|
-| [`persistence.py`](app/Backend/persistence.py) | `save_all()` writes the NLP-side rows (6 tables) in one transaction — called cross-repo by the AI repo's pipeline entry point |
+| [`persistence.py`](app/Backend/persistence.py) | `save_all()` writes the NLP-side rows (5 tables) in one transaction — called cross-repo by the AI repo's pipeline entry point |
 | [`models.py`](app/Backend/models.py) | SQLAlchemy ORM definitions for every pipeline table — the schema source of truth |
 
 The **AI/LLM-side** writes (2 tables: `llm_pipeline_intermediate`,
@@ -176,7 +176,7 @@ Active development is tracked here at a high level. Detailed plans, audits, and 
 ### Next (this month)
 
 - **Resolve authentication limbo** — the login feature was dropped on 2026-05-07; finish removing the unused `auth_user / auth_api_key / patient_access` tables and the route-level `check_patient_access()` guards that currently no-op via superuser bypass.
-- **Audit and drop suspected dead columns** — `patient_summary_domain.patient_scoring / patient_response`, `transcript_analysis_log.model_results`, and the half-implemented `llm_pipeline_intermediate.step` enum.
+- **Audit and drop suspected dead columns** — `transcript_analysis_log.model_results`, and the half-implemented `llm_pipeline_intermediate.step` enum.
 - **Column-level docstrings** — add SQLAlchemy `Column(..., comment=...)` on non-obvious schema columns so PostgreSQL inspection tools surface the meaning automatically.
 - **Integrate the AI scoring + reformat pipeline** into the backend (existing P0-A in [`dev_docs/TODO.md`](dev_docs/TODO.md)).
 

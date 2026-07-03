@@ -17,7 +17,7 @@ Transcript (.xlsx / .csv)
 [AI 5-step]    ai_pipeline (Azure OpenAI GPT-4o)
     │           └─ scoring → extraction → filtering → selection → reformat
     ▼
-PostgreSQL (8 tables) + nested output folder
+PostgreSQL (7 tables) + nested output folder
 ```
 
 Both stages run as one process via `../AI_physician_patient_communication/main_complete_pipeline_db.py` (the canonical Phase 2 entry point in the sibling AI repo). It calls AI repo's own NLP and AI modules directly and writes to the same DB by importing the dashboard's `persistence.save_all()` cross-repo.
@@ -34,7 +34,7 @@ Both stages run as one process via `../AI_physician_patient_communication/main_c
 | 4 — selection | `selection.py` | top-N sentences per domain (default top-10) |
 | 5 — context | `context.py` | each top-N sentence + ±N surrounding sentences |
 | 6 — export | `export.py` | xlsx + nested CSVs |
-| 7 — DB persistence | `app/Backend/persistence.py` | 6 tables (see DB section) |
+| 7 — DB persistence | `app/Backend/persistence.py` | 5 tables (see DB section) |
 
 ### Five domains / models
 
@@ -78,7 +78,7 @@ All pipeline outputs land in PostgreSQL through two write paths:
 
 | Where the writes are issued | Tables | Stage |
 |---|---|---|
-| `app/Backend/persistence.py` `save_all()` (in this repo) — called cross-repo by Phase 2's `_save_nlp_results` helper in `../AI_physician_patient_communication/db/persistence_helper.py` | `transcript_analysis_log`, `sentence_prediction`, `nlp_all_predictions`, `nlp_pipeline_intermediate`, `patient_summary`, `patient_summary_domain` | NLP |
+| `app/Backend/persistence.py` `save_all()` (in this repo) — called cross-repo by Phase 2's `_save_nlp_results` helper in `../AI_physician_patient_communication/db/persistence_helper.py` | `transcript_analysis_log`, `sentence_prediction`, `nlp_all_predictions`, `nlp_pipeline_intermediate`, `patient_summary` | NLP |
 | `_save_ai_results` helper in `../AI_physician_patient_communication/db/persistence_helper.py` (called from `main_complete_pipeline_db.py` after the AI 5-substep finishes) | `llm_pipeline_intermediate`, `llm_domain_scoring_and_summary`, plus `transcript_analysis_log.ai_overall_score` UPDATE | AI |
 
 See [`DATABASE_SCHEMA.md`](../architecture/DATABASE_SCHEMA.md) for column-level detail. Migration `009_widen_llm_text_columns` widens `estimate`/`treatment` columns to `TEXT` so longer LLM outputs do not overflow.

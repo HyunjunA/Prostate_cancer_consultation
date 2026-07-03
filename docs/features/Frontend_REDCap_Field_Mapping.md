@@ -304,7 +304,7 @@ POST /api/surveys/submit
          │                               ▼
          │                    ┌─────────────────────┐
          │                    │ Save to PostgreSQL  │
-         │                    │ (SurveySubmissionLog)│
+         │                    │ (PatientSurveySubmissionLog)│
          │                    └─────────────────────┘
          ▼
 ┌─────────────────────┐
@@ -683,7 +683,7 @@ POST /api/surveys/submit
 @router.post("/submit")
 async def submit_survey(submission: SurveySubmission, db: AsyncSession):
     # Save to PostgreSQL
-    db_record = SurveySubmissionLog(...)
+    db_record = PatientSurveySubmissionLog(...)
     db.add(db_record)
     await db.commit()
 

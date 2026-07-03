@@ -53,8 +53,8 @@ The Backend imports the AI repo via `sys.path` insertion — both repos must be 
 |---|---|
 | `main.py` | FastAPI app, middleware, CORS, lifespan |
 | `db.py` | Async + sync engines, session factories |
-| `models.py` | SQLAlchemy ORM (19 tables) |
-| `persistence.py` | Persists NLP results to 6 tables in one transaction (`save_all`). Called cross-repo by the AI repo's Phase 2 pipeline |
+| `models.py` | SQLAlchemy ORM (16 tables) |
+| `persistence.py` | Persists NLP results to 5 tables in one transaction (`save_all`). Called cross-repo by the AI repo's Phase 2 pipeline |
 | `routes_*.py` | API routes — patient, doctor, surveys, admin, system, track_* |
 | `auth/` | API-key auth backend, password hashing |
 | `core/` | Settings (typed env), structured logging |
@@ -69,11 +69,11 @@ The Backend imports the AI repo via `sys.path` insertion — both repos must be 
 
 1. Webapp loads patient page
         │   → Next.js calls Backend at /api/patient/files, /api/patient/ai-summary, …
-        │   → Backend reads from llm_domain_scoring_and_summary, patient_summary_domain
+        │   → Backend reads from llm_domain_scoring_and_summary
         │   → JSON returned, rendered as the patient-facing summary
         │
 2. Patient submits survey
-        │   → /api/surveys/* persists to survey_submission_log + behavior tables
+        │   → /api/surveys/* persists to patient_survey_submission_log + behavior tables
         │   → optional REDCap sync (if REDCAP_API_TOKEN configured)
         │
 3. Doctor uses Try & Score on the doctor dashboard
