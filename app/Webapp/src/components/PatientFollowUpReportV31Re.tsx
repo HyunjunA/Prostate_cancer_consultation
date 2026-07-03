@@ -660,7 +660,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
   // ─────────────────────────────────────────────────────────────────────────
   const patientId = usePatientId((state) => state.patientId);
   const fileId = useFileId((state) => state.fileId);
-  const { fetchSummaryDetail, fetchAISummary } = usePatientData();
+  const { fetchAISummary } = usePatientData();
 
   const currentFile = fileId || "Input_Keystrokes REC001 (SID 14).xlsx";
   const currentSpeaker = patientId || "Patient_Input_Keystrokes REC001 (SID 14)";
@@ -687,9 +687,6 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
   );
 
   // API State
-  const [summaryData, setSummaryData] = useState<SummaryDetailResponse | null>(
-    null,
-  );
   const [aiSummaryData, setAiSummaryData] = useState<any | null>(null);
   const [apiLoading, setApiLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -730,20 +727,13 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
         setApiLoading(true);
         setApiError(null);
 
-        const [result, aiResult] = await Promise.all([
-          fetchSummaryDetail(currentFile, currentSpeaker),
-          fetchAISummary(currentFile),
-        ]);
+        // Summaries come from the AI pipeline (fetchAISummary); the old
+        // patient_summary_domain read (fetchSummaryDetail) was removed with that table.
+        const aiResult = await fetchAISummary(currentFile);
 
         // Store AI summary data for GPT-4o reformat sentences
         if (aiResult?.source === "ai_pipeline_gpt4o" && aiResult.domains?.length > 0) {
           setAiSummaryData(aiResult);
-        }
-
-        if (result) {
-          setSummaryData(result);
-        } else {
-          setApiError("Failed to load summary data");
         }
       } catch (err) {
         console.error("Error loading summary:", err);
@@ -919,24 +909,17 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
   }, [aiSummaryData]);
 
   const topicSummaries = useMemo((): TopicSummaryMap => {
+    // Built from the AI pipeline summaries (keyed by topic). The old
+    // patient_summary_domain-driven loop was removed with that table.
     const summaries: TopicSummaryMap = {};
-
-    if (summaryData?.summary?.classes) {
-      summaryData.summary.classes.forEach((cls: ClassSummary) => {
-        const topicName = CLASS_TO_TOPIC_MAP[cls.class_name];
-        if (topicName) {
-          // Use GPT-4o AI summary if available, fallback to existing rewriter
-          const aiText = aiSummaryByTopic[topicName];
-          summaries[topicName] = {
-            aiSummary: aiText || cls.summary || "Summary not available.",
-            extractedSentences: [],
-          };
-        }
-      });
-    }
-
+    Object.keys(aiSummaryByTopic).forEach((topicName) => {
+      summaries[topicName] = {
+        aiSummary: aiSummaryByTopic[topicName] || "Summary not available.",
+        extractedSentences: [],
+      };
+    });
     return summaries;
-  }, [summaryData, aiSummaryByTopic]);
+  }, [aiSummaryByTopic]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // 7.5 Navigation Handlers

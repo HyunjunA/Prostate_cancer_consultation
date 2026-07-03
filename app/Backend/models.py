@@ -2,7 +2,7 @@
 
 Tables are grouped by feature area:
   1. Doctor interface       : DoctorRewriteLog
-  2. Patient interface      : PatientSummary, PatientSummaryDomain
+  2. Patient interface      : PatientSummary
   3. Surveys                : SurveySubmissionLog
   4. Transcript analysis    : TranscriptAnalysisLog, SentencePrediction
   5. Behaviour tracking     : SessionRecording, PatientFirstBehavior,
@@ -18,7 +18,7 @@ edits to this file alone do not migrate the live database.
 
 Conventions used throughout:
     - Composite PKs are declared with multiple `primary_key=True` columns
-      (DoctorRewriteLog, PatientSummary, PatientSummaryDomain).
+      (DoctorRewriteLog, PatientSummary).
     - `ondelete='CASCADE'` on FKs means "if the parent row goes, this
       row goes too" — used on transcript_analysis_log children so a
       manual analysis cleanup leaves no orphans.
@@ -103,47 +103,10 @@ class PatientSummary(Base):
     file = Column(String(255), primary_key=True, nullable=False)
     speaker = Column(String(100), primary_key=True, nullable=False)
 
-    # `cascade="all, delete-orphan"` means deleting a PatientSummary
-    # also deletes its child PatientSummaryDomain rows. Combined with
-    # the FK ondelete=CASCADE below, this works at both ORM and DB
-    # levels — belt + braces.
-    domains = relationship("PatientSummaryDomain", back_populates="summary",
-                           cascade="all, delete-orphan", order_by="PatientSummaryDomain.display_order")
-
     def __repr__(self):
         return f"<PatientSummary(file={self.file}, speaker={self.speaker})>"
 
 
-class PatientSummaryDomain(Base):
-    """Per-domain identity + display order — one row per patient per domain.
-
-    The patient rating / free-text response columns (patient_scoring,
-    patient_response) were dropped in migration 021 — that patient-input
-    feature is no longer collected by the frontend. This row now carries only
-    the per-domain identity + display_order.
-    """
-    __tablename__ = 'patient_summary_domain'
-    __table_args__ = (
-        # Composite FK back to PatientSummary's composite PK. ondelete
-        # CASCADE means deleting a PatientSummary tears down every
-        # domain row attached to it, in addition to the ORM-level
-        # cascade declared in PatientSummary above.
-        ForeignKeyConstraint(
-            ['file', 'speaker'],
-            ['patient_summary.file', 'patient_summary.speaker'],
-            ondelete='CASCADE'
-        ),
-    )
-
-    file = Column(String(255), primary_key=True, nullable=False)
-    speaker = Column(String(100), primary_key=True, nullable=False)
-    domain = Column(String(100), primary_key=True, nullable=False)
-    display_order = Column(Integer, nullable=False, default=0)
-
-    summary = relationship("PatientSummary", back_populates="domains")
-
-    def __repr__(self):
-        return f"<PatientSummaryDomain(file={self.file}, domain={self.domain})>"
 
 
 

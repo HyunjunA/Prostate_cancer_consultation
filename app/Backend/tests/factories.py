@@ -11,7 +11,6 @@ from typing import Optional
 from models import (
     DoctorRewriteLog,
     PatientSummary,
-    PatientSummaryDomain,
     SurveySubmissionLog,
     TranscriptAnalysisLog,
     SentencePrediction,
@@ -69,20 +68,6 @@ class TestDataFactory:
         # dropped. PatientSummary now only carries the (file, speaker) PK; the
         # per-domain rows live in PatientSummaryDomain.
         return PatientSummary(file=file, speaker=speaker)
-
-    @staticmethod
-    def patient_summary_domain(
-        file: str = "test-file.xlsx",
-        speaker: str = "Patient_1",
-        domain: str = "cancer_prognosis",
-        display_order: int = 1,
-    ) -> PatientSummaryDomain:
-        return PatientSummaryDomain(
-            file=file,
-            speaker=speaker,
-            domain=domain,
-            display_order=display_order,
-        )
 
     # ── Survey ────────────────────────────────────────────────────────
 
@@ -216,30 +201,3 @@ class TestDataFactory:
             row.speaker = speaker
         return rows
 
-    @classmethod
-    def patient_scoring(
-        cls,
-        file: str = "test-file.xlsx",
-        speaker: str = "Patient_1",
-        domain: str = "cancer_prognosis",
-        patient_scoring: int = 5,
-        **kwargs,
-    ) -> PatientSummaryDomain:
-        return cls.patient_summary_domain(
-            file=file, speaker=speaker, domain=domain,
-            patient_scoring=patient_scoring, **kwargs,
-        )
-
-    @classmethod
-    def patient_responses(
-        cls,
-        file: str = "test-file.xlsx",
-        speaker: str = "Patient_1",
-        domain: str = "cancer_prognosis",
-        patient_response: str = "test response",
-        **kwargs,
-    ) -> PatientSummaryDomain:
-        return cls.patient_summary_domain(
-            file=file, speaker=speaker, domain=domain,
-            patient_response=patient_response, **kwargs,
-        )

@@ -3383,7 +3383,7 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
   const patientId = usePatientId((state) => state.patientId);
   const fileId = useFileId((state) => state.fileId);
 
-  const { fetchSummaryDetail, fetchAISummary, fetchSentencesByClass } = usePatientData();
+  const { fetchAISummary, fetchSentencesByClass } = usePatientData();
 
   usePassiveTracking({
     proximity: { threshold: 150, debounceMs: 100 },
@@ -3450,9 +3450,6 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
 
   // State Management
   const [aiSummaryData, setAiSummaryData] = useState<any | null>(null);
-  const [summaryData, setSummaryData] = useState<SummaryDetailResponse | null>(
-    null,
-  );
   const [evidenceSentences, setEvidenceSentences] = useState<Record<string, Array<{
     sentence: string;
     context: string | null;
@@ -3643,9 +3640,11 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
         setApiLoading(true);
         setApiError(null);
 
-        // Fetch summary, AI summary, and evidence sentences in parallel
-        const [result, aiResult, sentencesResult] = await Promise.all([
-          fetchSummaryDetail(currentFile, currentSpeaker),
+        // Fetch AI summary + evidence sentences in parallel. The domain
+        // structure + summaries come from the AI pipeline (fetchAISummary) and
+        // the fixed TOPIC_ORDER — the old patient_summary_domain read
+        // (fetchSummaryDetail) was removed with that table.
+        const [aiResult, sentencesResult] = await Promise.all([
           fetchAISummary(currentFile),
           fetchSentencesByClass(currentFile),
         ]);
@@ -3656,18 +3655,9 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
           console.log("[V35] AI Summary loaded:", aiResult.total_domains, "domains");
         }
 
-        if (result) {
-          setSummaryData(result);
-
-          // Patient rating persistence was removed (dropped columns) — the
-          // rating UI is disabled, so there is nothing to restore here.
-
-          // First topic expanded by default
-          setExpandedTopics({ [TOPIC_ORDER[0]]: true });
-          setShowEvidenceStates({});
-        } else {
-          setApiError("Failed to load summary data");
-        }
+        // First topic expanded by default (every topic renders from TOPIC_ORDER).
+        setExpandedTopics({ [TOPIC_ORDER[0]]: true });
+        setShowEvidenceStates({});
 
         // Map evidence sentences by class → topic name (with pred_score, score, is_in_summary)
         if (sentencesResult?.by_class) {
@@ -3843,24 +3833,9 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
       }
     > = {};
 
-    if (summaryData?.summary?.classes) {
-      summaryData.summary.classes.forEach((cls: ClassSummary) => {
-        const topicName = CLASS_TO_TOPIC_MAP[cls.class_name];
-        if (topicName) {
-          // Use GPT-4o AI summary if available, fallback to existing rewriter summary
-          const aiText = aiSummaryByTopic[topicName];
-          topics[topicName] = {
-            aiSummary: aiText || cls.summary || "Summary not available.",
-            aiScores: aiScoreListByTopic[topicName] || [],
-            aiSubDomains: aiSubDomainsByTopic[topicName] || [],
-            aiSourceContext: aiSourceContextByTopic[topicName] ?? null,
-            aiSourceList: aiSourceListByTopic[topicName] || [],
-            extractedSentences: evidenceSentences[topicName] || [],
-          };
-        }
-      });
-    }
-
+    // Build one entry per clinical domain from the fixed TOPIC_ORDER + the AI
+    // pipeline output (the old patient_summary_domain-driven loop was removed
+    // with that table).
     TOPIC_ORDER.forEach((topic) => {
       if (!topics[topic]) {
         const aiText = aiSummaryByTopic[topic];
@@ -3876,7 +3851,7 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
     });
 
     return topics;
-  }, [summaryData, evidenceSentences, aiSummaryByTopic, aiSourceContextByTopic, aiSourceListByTopic, aiScoreListByTopic, aiSubDomainsByTopic]);
+  }, [evidenceSentences, aiSummaryByTopic, aiSourceContextByTopic, aiSourceListByTopic, aiScoreListByTopic, aiSubDomainsByTopic]);
 
   // Event Handlers
 

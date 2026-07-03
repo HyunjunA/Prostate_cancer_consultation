@@ -17,12 +17,10 @@ Endpoint groups:
 
 Core data model:
     PatientSummary           : (file, speaker) PK — one row per patient.
-    PatientSummaryDomain     : (file, speaker, domain) PK — five rows per
-                                patient (per-domain identity / display order).
     LLMDomainScoringAndSummary: GPT-4o output, one row per (analysis, domain).
 
 Related modules:
-    models.py             : PatientSummary, PatientSummaryDomain, DoctorRewriteLog
+    models.py             : PatientSummary, DoctorRewriteLog
     redcap_config.py      : REDCAP_API_URL / REDCAP_API_TOKEN single source
     auth/access_control.py: enforces patient_id allow-list per user
 """
@@ -36,7 +34,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from auth import get_current_user
 from auth.access_control import check_patient_access
@@ -86,111 +83,6 @@ _FACTOR_WHITELIST: Dict[str, set[str]] = {
 # ──────────────────────────────────────────────────────────────────────────────
 # Patient Interface APIs
 # ──────────────────────────────────────────────────────────────────────────────
-
-@router.get("/api/patient/summaries")
-async def get_patient_summaries(
-    file: Optional[str] = None,
-    speaker: Optional[str] = None,
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user)
-):
-    """List patient summaries with optional file/speaker filters + pagination.
-
-    Returns:
-        {"total": int, "skip": int, "limit": int, "data": [...]}
-        where each `data` entry is a PatientSummary plus its per-domain
-        list (just domain names — no scoring data, kept light for the
-        list view).
-    """
-    print("=" * 80)
-    print("[DEBUG] [get_patient_summaries] - Input Parameters:")
-    print(f"   file: {file}")
-    print(f"   speaker: {speaker}")
-    print(f"   skip: {skip}, limit: {limit}")
-
-    # selectinload eagerly fetches `domains` in one extra query so we
-    # do not N+1 inside the response comprehension below.
-    stmt = select(PatientSummary).options(selectinload(PatientSummary.domains))
-
-    if file:
-        stmt = stmt.where(PatientSummary.file == file)
-    if speaker:
-        stmt = stmt.where(PatientSummary.speaker == speaker)
-
-    # Total count (subquery so the WHERE is applied to the count too).
-    # The frontend uses `total` to render pagination controls.
-    count_stmt = select(func.count()).select_from(
-        select(PatientSummary.file, PatientSummary.speaker).where(
-            *([PatientSummary.file == file] if file else []),
-            *([PatientSummary.speaker == speaker] if speaker else []),
-        ).subquery()
-    )
-    total = (await db.execute(count_stmt)).scalar_one()
-
-    # Get paginated results.
-    stmt = stmt.offset(skip).limit(limit)
-    # `.unique()` deduplicates rows that selectinload may double-fetch
-    # for the JOIN-based eager load.
-    results = (await db.execute(stmt)).scalars().unique().all()
-
-    return {
-        "total": total,
-        "skip": skip,
-        "limit": limit,
-        "data": [
-            {
-                "file": r.file,
-                "speaker": r.speaker,
-                "classes": [
-                    {"class_name": d.domain}
-                    for d in r.domains
-                ]
-            }
-            for r in results
-        ]
-    }
-
-@router.get("/api/patient/summaries/{file}/{speaker}")
-async def get_patient_summary_detail(
-    file: str,
-    speaker: str,
-    db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user)
-):
-    """Get one patient summary with per-domain scoring (no responses)."""
-    # Per-patient access gate — non-superusers must have an explicit
-    # entry in patient_access for this file. Superusers bypass.
-    await check_patient_access(file, user, db)
-    print("=" * 80)
-    print("[DEBUG] [get_patient_summary_detail] - Input Parameters:")
-    print(f"   file: {file}")
-    print(f"   speaker: {speaker}")
-
-    # Get summary with domains eager-loaded
-    summary_stmt = select(PatientSummary).options(
-        selectinload(PatientSummary.domains)
-    ).where(
-        PatientSummary.file == file,
-        PatientSummary.speaker == speaker
-    )
-    summary = (await db.execute(summary_stmt)).scalars().unique().first()
-
-    if not summary:
-        raise HTTPException(status_code=404, detail="Summary not found")
-
-    return {
-        "file": file,
-        "speaker": speaker,
-        "summary": {
-            "classes": [
-                {"class_name": d.domain}
-                for d in summary.domains
-            ]
-        }
-    }
-
 
 @router.get("/api/patient/files")
 async def get_patient_files(

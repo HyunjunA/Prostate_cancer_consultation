@@ -170,24 +170,9 @@ async def save_all(
                 .values(file=filename, speaker=patient_speaker)
                 .on_conflict_do_nothing(index_elements=["file", "speaker"])
             )
-
-            # Per-domain rows: UPSERT-with-update on display_order so
-            # re-runs can change the domain ordering (e.g. if the
-            # outcome list is reconfigured) without leaving stale rows.
-            for order, (domain_full, slot) in enumerate(domain_slot_map.items(), start=1):
-                await session.execute(
-                    pg_insert(models.PatientSummaryDomain)
-                    .values(
-                        file=filename,
-                        speaker=patient_speaker,
-                        domain=domain_full,
-                        display_order=order,
-                    )
-                    .on_conflict_do_update(
-                        index_elements=["file", "speaker", "domain"],
-                        set_={"display_order": order},
-                    )
-                )
+            # (patient_summary_domain per-domain rows were dropped in migration
+            # 022 — the table is gone; the parent patient_summary row above is
+            # still the anchor for first-visit answers + survey submissions.)
 
             # ── 4. nlp_all_predictions (step 3 fully normalized) ─────
             # One row per sentence with all 5 model scores. Lets ad-hoc

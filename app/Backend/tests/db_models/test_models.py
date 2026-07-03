@@ -442,13 +442,10 @@ class TestBaseMetadata:
     """Verify the registered models share the same Base + metadata."""
 
     async def test_all_models_share_same_base(self):
-        # PatientSummaryScoring / PatientResponses were merged into
-        # PatientSummaryDomain in migration 008; the surviving names
-        # are imported above.
-        from models import PatientSummaryDomain
+        # patient_summary_domain was dropped in migration 022.
         models = [
             DoctorRewriteLog,
-            PatientSummary, PatientSummaryDomain,
+            PatientSummary,
             SurveySubmissionLog,
             TranscriptAnalysisLog, SentencePrediction,
         ]
@@ -458,7 +455,7 @@ class TestBaseMetadata:
     async def test_all_table_names_in_metadata(self):
         expected = {
             "doctor_rewrite_log",
-            "patient_summary", "patient_summary_domain",
+            "patient_summary",
             "survey_submission_log",
             "transcript_analysis_log", "sentence_prediction",
         }
