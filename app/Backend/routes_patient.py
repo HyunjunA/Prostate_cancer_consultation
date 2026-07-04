@@ -750,17 +750,23 @@ def _fv_answer_to_redcap(question_id: str, field: str, value: Any) -> List[Tuple
     return []
 
 
-async def _sync_first_visit_answers_to_redcap(record_id: str, answers) -> None:
+async def _sync_first_visit_answers_to_redcap(record_id: str, answers) -> Dict[str, Any]:
     """Best-effort mirror of one domain's first-visit answers into the REDCap
     'post_risk_perception_2' instrument.
 
     Never raises: REDCap being down or misconfigured must not break the primary
     DB write. record_id matches the existing survey flow, which uses the patient
     'speaker' as the REDCap record identifier.
+
+    Returns a result dict so the caller can persist the sync outcome on the
+    submission row (mirrors the follow-up survey flow):
+    ``{"attempted": bool, "success": bool, "record_id": str|None, "error": str|None}``.
+    ``attempted`` is False when REDCap is unconfigured or the domain produced no
+    syncable fields — nothing was sent, so the caller leaves the flags untouched.
     """
     if not (REDCAP_API_URL and REDCAP_API_TOKEN):
         logger.info("REDCap not configured; skipping post_risk_perception_2 sync")
-        return
+        return {"attempted": False, "success": False, "record_id": None, "error": None}
 
     fields: Dict[str, str] = {}
     for a in answers:
@@ -768,7 +774,7 @@ async def _sync_first_visit_answers_to_redcap(record_id: str, answers) -> None:
             fields[redcap_field] = redcap_value
 
     if not fields:
-        return
+        return {"attempted": False, "success": False, "record_id": None, "error": None}
 
     fields[_REDCAP_POST_RISK_2_COMPLETE_FIELD] = "2"  # mark instrument complete (green)
     record = {"record_id": record_id, **fields}
@@ -791,13 +797,18 @@ async def _sync_first_visit_answers_to_redcap(record_id: str, answers) -> None:
                 "REDCap post_risk_perception_2 sync ok: record_id=%s fields=%s",
                 record_id, list(fields.keys()),
             )
-        else:
-            logger.warning(
-                "REDCap post_risk_perception_2 sync failed: record_id=%s status=%s body=%s",
-                record_id, resp.status_code, resp.text[:300],
-            )
+            return {"attempted": True, "success": True, "record_id": record_id, "error": None}
+        logger.warning(
+            "REDCap post_risk_perception_2 sync failed: record_id=%s status=%s body=%s",
+            record_id, resp.status_code, resp.text[:300],
+        )
+        return {
+            "attempted": True, "success": False, "record_id": record_id,
+            "error": f"HTTP {resp.status_code}: {resp.text[:200]}",
+        }
     except Exception as exc:  # noqa: BLE001 - best-effort mirror, never fatal
         logger.warning("REDCap post_risk_perception_2 sync error: %s", exc)
+        return {"attempted": True, "success": False, "record_id": record_id, "error": str(exc)[:200]}
 
 
 @router.put(
@@ -856,6 +867,17 @@ async def upsert_first_visit_answers(
 
     # Best-effort mirror to REDCap "post_risk_perception_2" (never breaks the DB
     # write). record_id follows the existing survey flow: the patient 'speaker'.
-    await _sync_first_visit_answers_to_redcap(body.speaker, body.answers)
+    redcap_result = await _sync_first_visit_answers_to_redcap(body.speaker, body.answers)
+
+    # Record the sync outcome on the submission row so the DB self-reports REDCap
+    # status (redcap_synced / redcap_record_id / redcap_error), mirroring the
+    # follow-up survey flow. Only when a push was actually attempted.
+    if redcap_result["attempted"]:
+        row = (await db.execute(stmt)).scalars().first()
+        if row is not None:
+            row.redcap_synced = redcap_result["success"]
+            row.redcap_record_id = redcap_result["record_id"]
+            row.redcap_error = redcap_result["error"]
+            await db.commit()
 
     return await get_first_visit_answers(body.file, body.speaker, db, user)

@@ -35,6 +35,14 @@ def enable_redcap(monkeypatch):
     monkeypatch.setattr(routes_patient, "REDCAP_API_TOKEN", FAKE_REDCAP_TOKEN)
 
 
+@pytest.fixture
+def disable_redcap(monkeypatch):
+    """Force REDCap off (URL/TOKEN None) so the sync is a genuine no-op."""
+    import routes_patient
+    monkeypatch.setattr(routes_patient, "REDCAP_API_URL", None)
+    monkeypatch.setattr(routes_patient, "REDCAP_API_TOKEN", None)
+
+
 @pytest_asyncio.fixture
 async def patient_row(db):
     row = PatientSummary(file="f.xlsx", speaker="Patient")
@@ -157,3 +165,71 @@ async def test_redcap_failure_does_not_break_db(client, patient_row, api_headers
     # The answer is persisted regardless of the REDCap outcome.
     got = await client.get(URL_GET.format(file="f.xlsx", speaker="Patient"), headers=api_headers)
     assert got.json()["responses"]["ius"]["ius_risk"]["value"] == 29
+
+
+async def _fetch_risk2_row(db):
+    """Read back the patient's single risk_perception_2 submission row."""
+    from sqlalchemy import select
+    from models import PatientSurveySubmissionLog
+
+    db.expire_all()
+    stmt = select(PatientSurveySubmissionLog).where(
+        PatientSurveySubmissionLog.file == "f.xlsx",
+        PatientSurveySubmissionLog.speaker == "Patient",
+        PatientSurveySubmissionLog.survey_type == "risk_perception_2",
+    )
+    return (await db.execute(stmt)).scalars().first()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@respx.mock
+async def test_sync_success_recorded_on_row(client, patient_row, api_headers, enable_redcap, db):
+    # A successful REDCap import records synced=True + record_id on the DB row.
+    respx.post(FAKE_REDCAP_URL).mock(return_value=httpx.Response(200, json={"count": 1}))
+
+    resp = await client.put(URL_PUT, headers=api_headers, json={
+        "file": "f.xlsx", "speaker": "Patient", "domain": "cp",
+        "answers": [{"question_id": "cp_timeline", "field": "timeline", "value": "Over next 5 years"}],
+    })
+
+    assert resp.status_code == 200, resp.text
+    row = await _fetch_risk2_row(db)
+    assert row.redcap_synced is True
+    assert row.redcap_record_id == "Patient"
+    assert row.redcap_error is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@respx.mock
+async def test_sync_failure_recorded_on_row(client, patient_row, api_headers, enable_redcap, db):
+    # A REDCap failure records synced=False + the error on the DB row (visible for retry).
+    respx.post(FAKE_REDCAP_URL).mock(return_value=httpx.Response(500, text="boom"))
+
+    resp = await client.put(URL_PUT, headers=api_headers, json={
+        "file": "f.xlsx", "speaker": "Patient", "domain": "cp",
+        "answers": [{"question_id": "cp_timeline", "field": "timeline", "value": "Over next 5 years"}],
+    })
+
+    assert resp.status_code == 200, resp.text
+    row = await _fetch_risk2_row(db)
+    assert row.redcap_synced is False
+    assert row.redcap_record_id == "Patient"
+    assert "HTTP 500" in (row.redcap_error or "")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_sync_disabled_leaves_flags_untouched(client, patient_row, api_headers, db, disable_redcap):
+    # REDCap disabled -> no push attempted -> the row's sync flags stay at their defaults.
+    resp = await client.put(URL_PUT, headers=api_headers, json={
+        "file": "f.xlsx", "speaker": "Patient", "domain": "cp",
+        "answers": [{"question_id": "cp_timeline", "field": "timeline", "value": "Over my lifetime"}],
+    })
+
+    assert resp.status_code == 200, resp.text
+    row = await _fetch_risk2_row(db)
+    assert row.redcap_synced is False
+    assert row.redcap_record_id is None
+    assert row.redcap_error is None
