@@ -1,32 +1,31 @@
 "use client";
 
 /**
- * AdminTrackingDoctor — Doctor-centric chronological action log.
+ * AdminTrackingDoctor — admin view for doctor consultation behavior.
  *
- * Shows each doctor's behavior as a flat time-ordered stream. Sessions
- * still exist in the data (each row carries session_id) and are surfaced
- * here only as subtle separators between bursts, not as the primary view.
- *
- * Backend endpoints:
- *   GET /api/track/doctor/speakers          — distinct doctor list
- *   GET /api/track/doctor/actions?speaker=X — flat action log for one doctor
+ * Session-based 2-panel layout mirroring AdminTrackingPatientFollowup: a Sessions
+ * list (left) + per-session Event detail (right), plus a per-session aggregate for
+ * the selected session's doctor. Behavior metadata only (navigation, selections,
+ * rewrite/rubric usage) — this view is about HOW the doctor worked, not content.
  */
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 const API_BASE = "";
 
-interface SpeakerRow {
-  speaker: string;
+interface SessionRow {
+  session_id: string;
+  speaker: string | null;
+  file: string | null;
+  started_at: string | null;
+  ended_at: string | null;
   event_count: number;
-  last_seen: string | null;
 }
 
-interface ActionRow {
+interface EventRow {
   id: number;
-  session_id: string;
-  file: string | null;
   event_type: string;
+  file: string | null;
   target_type: string | null;
   target_id: string | null;
   metadata: Record<string, unknown>;
@@ -34,162 +33,118 @@ interface ActionRow {
   client_timestamp: string | null;
 }
 
-const EVENT_COLOR: Record<string, string> = {
-  page_view: "bg-slate-200 text-slate-700",
-  view_change: "bg-slate-200 text-slate-700",
-  patient_select: "bg-amber-200 text-amber-900",
-  topic_select: "bg-violet-200 text-violet-900",
-  sentence_select: "bg-sky-200 text-sky-900",
-  rewrite_apply: "bg-emerald-200 text-emerald-900",
-  rubric_open: "bg-fuchsia-200 text-fuchsia-900",
-  rubric_close: "bg-fuchsia-100 text-fuchsia-700",
-  tour_open: "bg-cyan-200 text-cyan-900",
-  tour_end: "bg-cyan-100 text-cyan-700",
-  session_end: "bg-slate-300 text-slate-700",
-};
+interface AggregateSession {
+  session_id: string;
+  speaker: string;
+  started_at: string | null;
+  ended_at: string | null;
+  by_event_type: Record<string, number>;
+  total_events: number;
+}
 
-function fmtTime(s: string | null): string {
+function fmtDate(s: string | null): string {
   if (!s) return "—";
+  try { return new Date(s).toLocaleString(); } catch { return s; }
+}
+
+function durationSecs(start: string | null, end: string | null): string {
+  if (!start || !end) return "—";
   try {
-    return new Date(s).toLocaleString();
-  } catch {
-    return s;
-  }
-}
-
-function shortFile(file: string | null): string {
-  if (!file) return "(no file)";
-  return file.length > 50 ? file.slice(0, 47) + "…" : file;
-}
-
-function describeAction(a: ActionRow): React.ReactNode {
-  const meta = (a.metadata || {}) as Record<string, any>;
-  switch (a.event_type) {
-    case "patient_select":
-      return <span>→ patient: <code className="text-xs">{a.target_id ?? meta.fileId ?? "?"}</code></span>;
-    case "topic_select":
-      return <span>→ topic: <strong>{a.target_id ?? meta.topicName ?? "?"}</strong></span>;
-    case "sentence_select":
-      return <span>→ sentence #{a.target_id ?? meta.sentenceIdx ?? "?"}</span>;
-    case "rewrite_apply":
-      return <span>→ Try & Score (length {meta.length ?? "?"} chars, topic <strong>{meta.topic ?? "?"}</strong>)</span>;
-    case "rubric_open":
-      return <span>→ open Scoring Rubric modal</span>;
-    case "rubric_close":
-      return <span>→ close Scoring Rubric modal</span>;
-    case "tour_open":
-      return <span>→ open guided tour (trigger: <strong>{meta.trigger ?? "auto"}</strong>, view: {meta.view ?? "?"})</span>;
-    case "tour_end":
-      return <span>→ end guided tour (status: <strong>{meta.status ?? "?"}</strong>, view: {meta.view ?? "?"})</span>;
-    case "view_change":
-      return <span>→ view: <strong>{meta.to ?? meta.view ?? "?"}</strong>{meta.from && <span className="text-slate-400"> (from {meta.from})</span>}</span>;
-    case "page_view":
-      return <span>→ {meta.page ?? "page"} ({meta.view ?? "?"})</span>;
-    case "session_end":
-      return <span>→ session end</span>;
-    default:
-      return null;
-  }
+    const ms = new Date(end).getTime() - new Date(start).getTime();
+    const s = Math.round(ms / 1000);
+    if (s < 60) return `${s}s`;
+    const m = Math.floor(s / 60);
+    return `${m}m ${s % 60}s`;
+  } catch { return "—"; }
 }
 
 export default function AdminTrackingDoctor() {
-  const [speakers, setSpeakers] = useState<SpeakerRow[]>([]);
-  const [selectedSpeaker, setSelectedSpeaker] = useState<string>("");
-  const [actions, setActions] = useState<ActionRow[]>([]);
+  const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  // Auto-follow the newest session (sessions are newest-first) until the user
+  // manually picks one, so a Refresh surfaces newly-arrived events without an
+  // extra click. Manual selection turns this off (to inspect an older session).
+  const [followLatest, setFollowLatest] = useState(true);
+  const [events, setEvents] = useState<EventRow[]>([]);
+  const [aggregate, setAggregate] = useState<AggregateSession[] | null>(null);
   const [fileFilter, setFileFilter] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch the dropdown list of distinct doctor speakers
-  const reloadSpeakers = async () => {
+  const reloadSessions = async () => {
+    setLoading(true); setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/backend/track/doctor/speakers`);
+      const url = new URL(`${API_BASE}/api/backend/track/doctor/sessions`, window.location.origin);
+      if (fileFilter) url.searchParams.set("file", fileFilter);
+      url.searchParams.set("limit", "100");
+      const res = await fetch(url.toString());
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      const list: SpeakerRow[] = data.speakers || [];
-      setSpeakers(list);
-      // Default to the most recently active doctor if nothing selected.
-      if (!selectedSpeaker && list.length > 0) {
-        setSelectedSpeaker(list[0].speaker);
-      }
+      const list = data.sessions || [];
+      setSessions(list);
+      if (followLatest && list.length > 0) setSelectedSession(list[0].session_id);
     } catch (e) {
-      setError(`Failed to load speakers: ${e}`);
-    }
+      setError(`Failed to load sessions: ${e}`);
+    } finally { setLoading(false); }
   };
 
-  useEffect(() => { reloadSpeakers(); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { reloadSessions(); /* eslint-disable-next-line */ }, []);
 
-  // Fetch action log when speaker (or file filter) changes
   useEffect(() => {
-    if (!selectedSpeaker) {
-      setActions([]);
-      return;
-    }
-    setLoading(true);
-    setError(null);
+    if (!selectedSession) { setEvents([]); return; }
     (async () => {
       try {
-        const url = new URL(`${API_BASE}/api/backend/track/doctor/actions`, window.location.origin);
-        url.searchParams.set("speaker", selectedSpeaker);
-        if (fileFilter) url.searchParams.set("file", fileFilter);
-        url.searchParams.set("limit", "500");
-        const res = await fetch(url.toString());
+        const res = await fetch(`${API_BASE}/api/backend/track/doctor/session/${encodeURIComponent(selectedSession)}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        setActions(data.actions || []);
-      } catch (e) {
-        setError(`Failed to load actions: ${e}`);
-      } finally {
-        setLoading(false);
-      }
+        setEvents(data.events || []);
+      } catch (e) { setError(`Failed to load events: ${e}`); }
     })();
-  }, [selectedSpeaker, fileFilter]);
+  }, [selectedSession]);
 
-  // Group actions by session_id boundary so we can render subtle separators.
-  // Sessions are kept in the data — they show up only as section dividers.
-  const sectioned = useMemo(() => {
-    const out: { session_id: string; rows: ActionRow[] }[] = [];
-    for (const a of actions) {
-      const last = out[out.length - 1];
-      if (!last || last.session_id !== a.session_id) {
-        out.push({ session_id: a.session_id, rows: [a] });
-      } else {
-        last.rows.push(a);
-      }
-    }
-    return out;
-  }, [actions]);
+  // The doctor aggregate is speaker-scoped (not file-scoped like follow-up), so
+  // load it for the selected session's doctor. Strip any " (+N more)" label suffix
+  // the sessions endpoint adds when a session touched more than one speaker.
+  const selectedSpeaker = useMemo(() => {
+    const s = sessions.find((x) => x.session_id === selectedSession);
+    return s?.speaker ? s.speaker.replace(/ \(\+\d+ more\)$/, "") : null;
+  }, [sessions, selectedSession]);
+
+  useEffect(() => {
+    if (!selectedSpeaker) { setAggregate(null); return; }
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/backend/track/doctor/aggregate?speaker=${encodeURIComponent(selectedSpeaker)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        setAggregate(data.sessions || []);
+      } catch (e) { setError(`Failed to load aggregate: ${e}`); }
+    })();
+  }, [selectedSpeaker]);
+
+  const totalCount = useMemo(() => sessions.reduce((sum, s) => sum + s.event_count, 0), [sessions]);
+
+  // Aggregate table columns = the union of event_types present, stable-sorted.
+  const aggEventTypes = useMemo(() => {
+    const set = new Set<string>();
+    (aggregate || []).forEach((s) => Object.keys(s.by_event_type || {}).forEach((k) => set.add(k)));
+    return Array.from(set).sort();
+  }, [aggregate]);
 
   return (
     <div className="min-h-screen bg-slate-50 p-6">
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-slate-900">Doctor Behavior</h1>
           <p className="text-sm text-slate-600 mt-1">
-            Per-doctor chronological action log. Each session is shown as a
-            subtle separator — actions are otherwise listed in time order.
+            Behavior metadata only (navigation, selections, rewrite/rubric usage).
+            Sessions: {sessions.length} · Events: {totalCount}
           </p>
         </div>
 
-        {/* Filter bar */}
-        <div className="bg-white rounded-lg shadow p-4 mb-6 grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">Doctor ID</label>
-            <select
-              value={selectedSpeaker}
-              onChange={(e) => setSelectedSpeaker(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm bg-white"
-            >
-              {speakers.length === 0 && <option value="">(no doctors yet)</option>}
-              {speakers.map((s) => (
-                <option key={s.speaker} value={s.speaker}>
-                  {s.speaker} ({s.event_count} events)
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">File (optional)</label>
+        <div className="bg-white rounded-lg shadow p-4 mb-6 flex gap-4 items-end">
+          <div className="flex-1">
+            <label className="block text-xs font-medium text-slate-700 mb-1">Filter by file</label>
             <input
               type="text"
               value={fileFilter}
@@ -199,7 +154,7 @@ export default function AdminTrackingDoctor() {
             />
           </div>
           <button
-            onClick={() => { reloadSpeakers(); /* trigger actions effect */ setSelectedSpeaker(selectedSpeaker); }}
+            onClick={reloadSessions}
             disabled={loading}
             className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 disabled:opacity-50"
           >
@@ -208,54 +163,107 @@ export default function AdminTrackingDoctor() {
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-md mb-4 text-sm">
-            {error}
-          </div>
+          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-md mb-4 text-sm">{error}</div>
         )}
 
-        {/* Action log */}
-        <div className="bg-white rounded-lg shadow">
-          <div className="px-4 py-3 border-b border-slate-200 flex justify-between items-baseline">
-            <h2 className="text-sm font-semibold text-slate-900">
-              {selectedSpeaker
-                ? <>Action log for <code className="bg-slate-100 px-2 py-0.5 rounded">{selectedSpeaker}</code></>
-                : "Select a doctor"}
-            </h2>
-            <span className="text-xs text-slate-500">{actions.length} actions across {sectioned.length} session(s)</span>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white rounded-lg shadow">
+            <div className="px-4 py-3 border-b border-slate-200">
+              <h2 className="text-sm font-semibold text-slate-900">Sessions</h2>
+            </div>
+            <div className="divide-y divide-slate-100 max-h-[600px] overflow-y-auto">
+              {sessions.length === 0 && (
+                <div className="p-6 text-center text-sm text-slate-500">No sessions yet.</div>
+              )}
+              {sessions.map((s) => {
+                const active = s.session_id === selectedSession;
+                return (
+                  <button
+                    key={s.session_id}
+                    onClick={() => { setSelectedSession(s.session_id); setFollowLatest(false); }}
+                    className={`w-full text-left px-4 py-3 hover:bg-slate-50 ${active ? "bg-indigo-50 border-l-4 border-indigo-500" : ""}`}
+                  >
+                    <div className="text-xs font-mono text-slate-500 truncate">{s.session_id}</div>
+                    <div className="text-sm font-medium text-slate-900 truncate">{s.file || "(no file)"}</div>
+                    <div className="flex justify-between text-xs text-slate-600 mt-1">
+                      <span>{s.speaker || "(no doctor)"}</span>
+                      <span>{s.event_count} events · {durationSecs(s.started_at, s.ended_at)}</span>
+                    </div>
+                    <div className="text-xs text-slate-400 mt-0.5">{fmtDate(s.started_at)}</div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="divide-y divide-slate-100 max-h-[700px] overflow-y-auto">
-            {actions.length === 0 && selectedSpeaker && !loading && (
-              <div className="p-6 text-center text-sm text-slate-500">No actions for this doctor.</div>
-            )}
-
-            {sectioned.map((section, sectionIdx) => (
-              <div key={`${section.session_id}-${sectionIdx}`}>
-                <div className="px-4 py-1.5 bg-slate-50 border-y border-slate-200 text-xs text-slate-500 font-mono">
-                  ── session {section.session_id} ── ({section.rows.length} actions)
-                </div>
-                {section.rows.map((a) => (
-                  <div key={a.id} className="px-4 py-2 hover:bg-slate-50 grid grid-cols-[120px_120px_1fr] gap-3 items-start text-sm">
-                    <span className="text-xs text-slate-500 font-mono pt-0.5">
-                      {fmtTime(a.client_timestamp)}
-                    </span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium text-center ${EVENT_COLOR[a.event_type] || "bg-slate-200 text-slate-700"}`}>
-                      {a.event_type}
-                    </span>
-                    <div className="text-slate-700">
-                      {describeAction(a)}
-                      {a.file && (
-                        <div className="text-xs text-slate-400 mt-0.5 truncate" title={a.file}>
-                          {shortFile(a.file)}
-                        </div>
-                      )}
-                    </div>
+          <div className="bg-white rounded-lg shadow">
+            <div className="px-4 py-3 border-b border-slate-200">
+              <h2 className="text-sm font-semibold text-slate-900">
+                {selectedSession ? `Events for ${selectedSession.slice(0, 16)}…` : "Select a session"}
+              </h2>
+            </div>
+            <div className="divide-y divide-slate-100 max-h-[600px] overflow-y-auto">
+              {events.length === 0 && selectedSession && (
+                <div className="p-6 text-center text-sm text-slate-500">No events.</div>
+              )}
+              {events.map((e) => (
+                <div key={e.id} className="px-4 py-2 text-xs">
+                  <div className="flex justify-between items-baseline">
+                    <span className="font-mono font-semibold text-indigo-700">{e.event_type}</span>
+                    <span className="text-slate-400">{fmtDate(e.client_timestamp)}</span>
                   </div>
-                ))}
-              </div>
-            ))}
+                  <div className="text-slate-700 mt-0.5 flex gap-2 flex-wrap">
+                    {e.target_type && <span className="bg-violet-100 px-2 py-0.5 rounded">{e.target_type}</span>}
+                    {e.target_id && <span className="bg-slate-100 px-2 py-0.5 rounded">{e.target_id}</span>}
+                    {e.file && <span className="bg-amber-100 px-2 py-0.5 rounded truncate max-w-[16rem]" title={e.file}>{e.file}</span>}
+                    {e.device_type && <span className="text-slate-500">{e.device_type}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
+
+        {aggregate && aggregate.length > 0 && (
+          <div className="bg-white rounded-lg shadow mt-6">
+            <div className="px-4 py-3 border-b border-slate-200">
+              <h2 className="text-sm font-semibold text-slate-900">
+                Per-session aggregate for: <span className="font-mono">{selectedSpeaker}</span>
+              </h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-xs">
+                <thead className="bg-slate-50 text-slate-700">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Session</th>
+                    <th className="px-3 py-2 text-left">Started</th>
+                    {aggEventTypes.map((k) => (
+                      <th key={k} className="px-3 py-2 text-center font-mono">{k}</th>
+                    ))}
+                    <th className="px-3 py-2 text-center">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {aggregate.map((s) => (
+                    <tr key={s.session_id}>
+                      <td className="px-3 py-2 font-mono text-slate-600">{s.session_id.slice(0, 12)}…</td>
+                      <td className="px-3 py-2 text-slate-500">{fmtDate(s.started_at)}</td>
+                      {aggEventTypes.map((k) => {
+                        const n = s.by_event_type?.[k];
+                        return (
+                          <td key={k} className={`px-3 py-2 text-center ${n ? "" : "text-slate-300"}`}>
+                            {n ?? "—"}
+                          </td>
+                        );
+                      })}
+                      <td className="px-3 py-2 text-center font-medium">{s.total_events}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
