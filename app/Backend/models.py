@@ -9,7 +9,7 @@ Tables are grouped by feature area:
                               PatientFollowupSurveyPageBehavior, DoctorBehavior
   6. AI pipeline outputs    : LLMDomainScoringAndSummary
 
-Auth tables (AuthUser, AuthAPIKey, PatientAccess) are defined in
+Auth tables (AuthUser, AuthAPIKey) are defined in
 auth/models.py but reuse the same `Base` declared here so every table
 shares one metadata registry — required for create_all() and Alembic.
 

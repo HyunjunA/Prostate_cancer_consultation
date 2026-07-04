@@ -15,14 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_user
 from auth.base import AuthUser as AuthUserDTO
-from auth.models import AuthAPIKey, AuthUser, PatientAccess
+from auth.models import AuthAPIKey, AuthUser
 from auth.schemas import (
     APIKeyCreate,
     APIKeyCreated,
     APIKeyResponse,
     LoginRequest,
-    PatientAccessGrant,
-    PatientAccessResponse,
     TokenResponse,
     UserCreate,
     UserResponse,
@@ -244,80 +242,6 @@ async def revoke_api_key(
     if not key_row:
         raise HTTPException(status_code=404, detail="API key not found")
     key_row.is_active = False
-    await db.commit()
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Patient Access Management
-# ──────────────────────────────────────────────────────────────────────────────
-
-@router.get("/users/{user_id}/patients", response_model=List[PatientAccessResponse])
-async def list_patient_access(
-    user_id: int,
-    user: AuthUserDTO = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """List patient access records for a user (admin only)."""
-    _require_admin(user)
-    stmt = select(PatientAccess).where(PatientAccess.user_id == user_id).order_by(PatientAccess.id)
-    result = await db.execute(stmt)
-    return result.scalars().all()
-
-
-@router.post("/users/{user_id}/patients", response_model=PatientAccessResponse, status_code=201)
-async def grant_patient_access(
-    user_id: int,
-    body: PatientAccessGrant,
-    user: AuthUserDTO = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Grant patient access to a user (admin only)."""
-    _require_admin(user)
-
-    # Verify target user exists
-    result = await db.execute(select(AuthUser).where(AuthUser.id == user_id))
-    if not result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # Check for duplicate
-    stmt = select(PatientAccess).where(
-        PatientAccess.user_id == user_id,
-        PatientAccess.patient_id == body.patient_id,
-    )
-    existing = (await db.execute(stmt)).scalar_one_or_none()
-    if existing:
-        raise HTTPException(status_code=409, detail="Access already granted for this patient")
-
-    access = PatientAccess(
-        user_id=user_id,
-        patient_id=body.patient_id,
-        access_type=body.access_type,
-        granted_by=int(user.user_id) if user.user_id.isdigit() else None,
-    )
-    db.add(access)
-    await db.commit()
-    await db.refresh(access)
-    return access
-
-
-@router.delete("/users/{user_id}/patients/{patient_id}", status_code=204)
-async def revoke_patient_access(
-    user_id: int,
-    patient_id: str,
-    user: AuthUserDTO = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Revoke patient access from a user (admin only)."""
-    _require_admin(user)
-    stmt = select(PatientAccess).where(
-        PatientAccess.user_id == user_id,
-        PatientAccess.patient_id == patient_id,
-    )
-    result = await db.execute(stmt)
-    access = result.scalar_one_or_none()
-    if not access:
-        raise HTTPException(status_code=404, detail="Patient access not found")
-    await db.delete(access)
     await db.commit()
 
 

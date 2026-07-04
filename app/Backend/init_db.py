@@ -49,7 +49,7 @@ from models import Base
 # in this file) is what registers them with `Base.metadata` so create_all
 # picks them up. The trailing noqa comment tells lint tools to leave the
 # unused imports alone — they exist for their side effects.
-from auth.models import AuthUser, AuthAPIKey, PatientAccess  # noqa: F401
+from auth.models import AuthUser, AuthAPIKey  # noqa: F401
 
 
 async def init_database():

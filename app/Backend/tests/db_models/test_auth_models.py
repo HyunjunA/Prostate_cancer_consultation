@@ -3,14 +3,13 @@
 Models tested (3 total):
   1. AuthUser       — application user with role/active/superuser flags
   2. AuthAPIKey     — per-user API key (hashed), FK to AuthUser
-  3. PatientAccess  — per-user patient access grants, FK to AuthUser
 
 These models share the same Base as the main models.py (verified).
 """
 
 from sqlalchemy import inspect, select
 
-from auth.models import AuthUser, AuthAPIKey, PatientAccess
+from auth.models import AuthUser, AuthAPIKey
 from models import Base
 
 
@@ -71,9 +70,6 @@ class TestAuthUser:
         mapper = inspect(AuthUser)
         assert "api_keys" in mapper.relationships
 
-    async def test_patient_accesses_relationship_exists(self):
-        mapper = inspect(AuthUser)
-        assert "patient_accesses" in mapper.relationships
 
     async def test_persist_and_query(self, db):
         user = AuthUser(
@@ -174,69 +170,6 @@ class TestAuthAPIKey:
         assert issubclass(AuthAPIKey, Base)
 
 
-# ── PatientAccess ─────────────────────────────────────────────────────────
-
-
-class TestPatientAccess:
-    """PatientAccess model — maps users to patients with access types."""
-
-    async def test_instantiation(self):
-        pa = PatientAccess(user_id=1, patient_id="sid-01", access_type="read")
-        assert pa.user_id == 1
-        assert pa.patient_id == "sid-01"
-        assert pa.access_type == "read"
-
-    async def test_default_access_type_not_set_in_python(self):
-        """server_default='read' only applies on INSERT."""
-        pa = PatientAccess(user_id=1, patient_id="sid-01")
-        assert pa.access_type is None
-
-    async def test_granted_by_nullable(self):
-        pa = PatientAccess(user_id=1, patient_id="sid-01")
-        assert pa.granted_by is None
-
-    async def test_user_relationship_exists(self):
-        mapper = inspect(PatientAccess)
-        assert "user" in mapper.relationships
-
-    async def test_repr(self):
-        pa = PatientAccess(user_id=7, patient_id="sid-42", access_type="write")
-        r = repr(pa)
-        assert "7" in r
-        assert "sid-42" in r
-        assert "write" in r
-
-    async def test_persist_with_parent(self, db):
-        user = AuthUser(
-            username="accessowner",
-            email="access@test.com",
-            role="user",
-            is_superuser=False,
-            is_active=True,
-            auth_provider="local",
-        )
-        db.add(user)
-        await db.flush()
-
-        pa = PatientAccess(
-            user_id=user.id,
-            patient_id="sid-pa",
-            access_type="read",
-        )
-        db.add(pa)
-        await db.commit()
-
-        result = await db.execute(
-            select(PatientAccess).where(PatientAccess.patient_id == "sid-pa")
-        )
-        row = result.scalar_one()
-        assert row.user_id == user.id
-
-    async def test_tablename(self):
-        assert PatientAccess.__tablename__ == "patient_access"
-
-    async def test_shares_base_with_main_models(self):
-        assert issubclass(PatientAccess, Base)
 
 
 # ── Cascade: AuthUser -> AuthAPIKey ───────────────────────────────────────
@@ -271,29 +204,3 @@ class TestAuthCascades:
         )
         assert result.scalar_one_or_none() is None
 
-    async def test_delete_user_cascades_to_patient_access(self, db):
-        """Deleting an AuthUser should cascade-delete its PatientAccess rows."""
-        user = AuthUser(
-            username="cascade-pa-user",
-            email="cascadepa@test.com",
-            role="user",
-            is_superuser=False,
-            is_active=True,
-            auth_provider="local",
-        )
-        db.add(user)
-        await db.flush()
-
-        pa = PatientAccess(
-            user_id=user.id, patient_id="sid-del", access_type="read"
-        )
-        db.add(pa)
-        await db.commit()
-
-        await db.delete(user)
-        await db.commit()
-
-        result = await db.execute(
-            select(PatientAccess).where(PatientAccess.patient_id == "sid-del")
-        )
-        assert result.scalar_one_or_none() is None

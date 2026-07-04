@@ -110,7 +110,7 @@ Every **click/navigation** logs one behavior row:
 
 ## Act 9 — the gatekeeper drawers (auth · access)
 Drawers that guard who may see what:
-- `auth_user` (accounts) · `auth_api_key` (API keys) · `patient_access` (which user may see which patient).
+- `auth_user` (accounts) · `auth_api_key` (API keys).
 - (Plus `alembic_version` = a system drawer tracking the DB schema version.)
 
 ---
@@ -151,7 +151,7 @@ Drawers that guard who may see what:
             (first-visit Risk = risk_perception_2, follow-up = sdm/dcs/satisfaction)
 
 [in the background] behavior: patient_report_page_behavior·patient_followup_survey_page_behavior·doctor_behavior / recording: session_recording
-[gatekeepers] auth_user·auth_api_key·patient_access
+[gatekeepers] auth_user·auth_api_key
 ```
 
 **One-sentence summary:** a file comes in → the **receipt (①)** makes a ticket → **NLP fills sentences/probs

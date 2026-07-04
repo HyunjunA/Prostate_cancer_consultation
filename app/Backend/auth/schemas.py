@@ -72,23 +72,6 @@ class APIKeyCreated(APIKeyResponse):
 # Patient access schemas
 # ──────────────────────────────────────────────────────────────────────────────
 
-class PatientAccessGrant(BaseModel):
-    patient_id: str = Field(..., min_length=1, max_length=255)
-    access_type: str = Field(default="read", pattern="^(read|write|admin)$")
-
-
-class PatientAccessResponse(BaseModel):
-    id: int
-    user_id: int
-    patient_id: str
-    access_type: str
-    granted_at: Optional[datetime]
-    granted_by: Optional[int]
-
-    class Config:
-        from_attributes = True
-
-
 # ──────────────────────────────────────────────────────────────────────────────
 # JWT login schemas
 # ──────────────────────────────────────────────────────────────────────────────

@@ -1,10 +1,9 @@
 """Patient-side API routes + dashboard stats + REDCap integration.
 
 Authentication: every endpoint requires a valid auth header. Patient-
-specific endpoints additionally enforce per-user patient access via
-auth/access_control.check_patient_access() — non-superuser callers can
-only read patients explicitly granted to them in the patient_access
-table.
+specific endpoints additionally call auth/access_control.check_patient_access(),
+which admits superusers (admin + the API-key system user) and denies everyone
+else.
 
 Endpoint groups:
     /api/patient/summaries*       : patient consultation summaries

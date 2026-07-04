@@ -8,7 +8,6 @@ from sqlalchemy import (
     Integer,
     String,
     TIMESTAMP,
-    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import relationship
@@ -43,8 +42,6 @@ class AuthUser(Base):
     )
 
     api_keys = relationship("AuthAPIKey", back_populates="user", cascade="all, delete-orphan")
-    patient_accesses = relationship("PatientAccess", back_populates="user", cascade="all, delete-orphan",
-                                    foreign_keys="PatientAccess.user_id")
 
     def __repr__(self) -> str:
         return f"<AuthUser(id={self.id}, username={self.username}, role={self.role})>"
@@ -70,28 +67,3 @@ class AuthAPIKey(Base):
         return f"<AuthAPIKey(id={self.id}, user_id={self.user_id}, label={self.label})>"
 
 
-class PatientAccess(Base):
-    """Maps which patients a user is allowed to access."""
-
-    __tablename__ = "patient_access"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("auth_user.id", ondelete="CASCADE"), nullable=False)
-    patient_id = Column(String(255), nullable=False)
-    access_type = Column(
-        String(20),
-        nullable=False,
-        server_default="read",
-    )
-    granted_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-    granted_by = Column(Integer, ForeignKey("auth_user.id"))
-
-    __table_args__ = (
-        UniqueConstraint("user_id", "patient_id", name="uq_user_patient"),
-        CheckConstraint("access_type IN ('read','write','admin')", name="ck_patient_access_type"),
-    )
-
-    user = relationship("AuthUser", back_populates="patient_accesses", foreign_keys=[user_id])
-
-    def __repr__(self) -> str:
-        return f"<PatientAccess(user_id={self.user_id}, patient_id={self.patient_id}, access_type={self.access_type})>"

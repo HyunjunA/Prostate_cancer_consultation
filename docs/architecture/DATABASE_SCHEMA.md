@@ -1,6 +1,6 @@
 # Database Schema — Data Dictionary
 
-Complete reference for the COMPASS PostgreSQL database: **16 application tables** (plus
+Complete reference for the COMPASS PostgreSQL database: **15 application tables** (plus
 `alembic_version`) in the `public` schema. Every table and every column is documented below.
 Canonical definitions live in `app/Backend/models.py`.
 
@@ -206,7 +206,7 @@ Events on the doctor consultation dashboard.
 
 ---
 
-# Group 3 — Authentication (3 tables)
+# Group 3 — Authentication (2 tables)
 
 ## `auth_user` — accounts
 | Column | Type | Null | Key | Description |
@@ -233,18 +233,6 @@ Events on the doctor consultation dashboard.
 | `created_at` | timestamptz | yes | | Creation time. |
 | `expires_at` | timestamptz | yes | | Optional expiry. |
 | `last_used_at` | timestamptz | yes | | Last time the key authenticated. |
-
-## `patient_access` — per-user × per-patient ACL
-| Column | Type | Null | Key | Description |
-|---|---|---|---|---|
-| `id` | integer | no | **PK** | Auto-increment row id. |
-| `user_id` | integer | no | **FK→auth_user, U** | The user granted access (cascade delete). |
-| `patient_id` | varchar(255) | no | **U** | The patient they may access. Unique together with `user_id`. |
-| `access_type` | varchar(20) | no | | `read`/`write`/`admin` (CHECK); default `read`. |
-| `granted_at` | timestamptz | yes | | When access was granted. |
-| `granted_by` | integer | yes | **FK→auth_user** | Which admin granted it. |
-
----
 
 # Group 4 — Other (3 tables)
 
@@ -309,7 +297,7 @@ One row per rewrite. Composite PK `(file, i, i2, time)` keeps every revision as 
 - Pipeline: `analysis_id` and `(patient_id, …)` indexes on the child tables for fast per-run / per-patient reads.
 - Behavior: `(session_id)`, `(file, event/survey)`, `(client_timestamp)` on each behavior table.
 - Surveys: `(file, submitted_at)`, `(survey_type)`, `(speaker)` on `patient_survey_submission_log`.
-- Auth: `(user_id)`, `(key_hash)` on api keys; `(username)` on users; `(user_id)`, `(patient_id)` on access.
+- Auth: `(user_id)`, `(key_hash)` on api keys; `(username)` on users.
 
 ## See Also
 - `ARCHITECTURE.md` — system overview · `DB_TABLES_ROLES.md` — the story of one file's journey ·
