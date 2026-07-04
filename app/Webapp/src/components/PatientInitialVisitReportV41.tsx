@@ -3421,7 +3421,7 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
 
     trackReport(currentFile, currentSpeaker, {
       event_type: "page_view",
-      metadata: { page: "patient_first_visit_report" },
+      metadata: { page: "patient_report_page" },
     });
 
     const handleBeforeUnload = () => {
