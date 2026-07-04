@@ -400,11 +400,6 @@ export default function AdminTrackingPatientReport() {
                     {e.rating != null && <span className="inline-block bg-amber-100 px-2 py-0.5 rounded mr-2">★ {e.rating}</span>}
                     {e.device_type && <span className="text-slate-500">{e.device_type}</span>}
                   </div>
-                  {e.metadata && Object.keys(e.metadata).length > 0 && (
-                    <pre className="mt-1 text-xs text-slate-500 bg-slate-50 px-2 py-1 rounded overflow-x-auto">
-{JSON.stringify(e.metadata, null, 0)}
-                    </pre>
-                  )}
                 </div>
               ))}
             </div>
