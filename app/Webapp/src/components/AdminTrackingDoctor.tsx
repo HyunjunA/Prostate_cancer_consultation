@@ -90,17 +90,19 @@ export default function AdminTrackingDoctor() {
 
   useEffect(() => { reloadSessions(); /* eslint-disable-next-line */ }, []);
 
-  useEffect(() => {
+  const reloadEvents = async () => {
     if (!selectedSession) { setEvents([]); return; }
-    (async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/backend/track/doctor/session/${encodeURIComponent(selectedSession)}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        setEvents(data.events || []);
-      } catch (e) { setError(`Failed to load events: ${e}`); }
-    })();
-  }, [selectedSession]);
+    try {
+      const res = await fetch(`${API_BASE}/api/backend/track/doctor/session/${encodeURIComponent(selectedSession)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setEvents(data.events || []);
+    } catch (e) { setError(`Failed to load events: ${e}`); }
+  };
+  // Re-fetch the selected session's events whenever it changes. Doctor sessions
+  // are long-lived (one session_id accumulates many actions), so Refresh also
+  // calls this to surface newly-arrived events for the SAME selected session.
+  useEffect(() => { reloadEvents(); /* eslint-disable-next-line */ }, [selectedSession]);
 
   // The doctor aggregate is speaker-scoped (not file-scoped like follow-up), so
   // load it for the selected session's doctor. Strip any " (+N more)" label suffix
@@ -110,17 +112,16 @@ export default function AdminTrackingDoctor() {
     return s?.speaker ? s.speaker.replace(/ \(\+\d+ more\)$/, "") : null;
   }, [sessions, selectedSession]);
 
-  useEffect(() => {
+  const reloadAggregate = async () => {
     if (!selectedSpeaker) { setAggregate(null); return; }
-    (async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/backend/track/doctor/aggregate?speaker=${encodeURIComponent(selectedSpeaker)}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        setAggregate(data.sessions || []);
-      } catch (e) { setError(`Failed to load aggregate: ${e}`); }
-    })();
-  }, [selectedSpeaker]);
+    try {
+      const res = await fetch(`${API_BASE}/api/backend/track/doctor/aggregate?speaker=${encodeURIComponent(selectedSpeaker)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setAggregate(data.sessions || []);
+    } catch (e) { setError(`Failed to load aggregate: ${e}`); }
+  };
+  useEffect(() => { reloadAggregate(); /* eslint-disable-next-line */ }, [selectedSpeaker]);
 
   const totalCount = useMemo(() => sessions.reduce((sum, s) => sum + s.event_count, 0), [sessions]);
 
@@ -154,7 +155,7 @@ export default function AdminTrackingDoctor() {
             />
           </div>
           <button
-            onClick={reloadSessions}
+            onClick={() => { reloadSessions(); reloadEvents(); reloadAggregate(); }}
             disabled={loading}
             className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 disabled:opacity-50"
           >
