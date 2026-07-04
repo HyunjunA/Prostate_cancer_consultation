@@ -1,178 +1,317 @@
-# Database Schema
+# Database Schema — Data Dictionary
 
-PostgreSQL schema for COMPASS. **16 application tables** in the `public` schema (plus `alembic_version` for migration tracking → **17 tables total**). Schema lives in `app/Backend/models.py` (SQLAlchemy ORM) and is bootstrapped via `app/Backend/database_schema.sql` + Alembic migrations **001–028** (current head `028_rename_followup_behavior`).
+Complete reference for the COMPASS PostgreSQL database: **16 application tables** (plus
+`alembic_version`) in the `public` schema. Every table and every column is documented below.
+Canonical definitions live in `app/Backend/models.py`.
 
-Native deployment uses port `:5433`; Docker mode uses `:5432`.
+Native deployment: port `:5433`, database `prostatecancer_db_native`. Docker mode: `:5432`.
 
-> **Recent consolidation / cleanup:** `patient_first_visit_responses` (mig 020),
-> `patient_summary_domain.patient_scoring`/`patient_response` (mig 021), and
-> `patient_summary_domain` (mig 022) were dropped. `survey_submission_log` was
-> renamed to `patient_survey_submission_log` (mig 023). First-visit Risk answers
-> were consolidated into `patient_survey_submission_log` as
-> `survey_type='risk_perception_2'` and the `patient_first_visit_answer` table was
-> dropped (mig 024 backfill + 025 drop). `patient_first_behavior` became report-only
-> (mig 026 dropped its `mode` column + moved survey behavior to the follow-up table)
-> and was renamed to `patient_report_page_behavior` (mig 027); `patient_followup_survey`
-> was renamed to `patient_followup_survey_page_behavior` (mig 028). See the Migrations table.
+**How to read the column tables:** `Key` column — **PK** primary key, **FK→t** foreign key to
+table `t`, **U** part of a unique constraint. `Null` — whether the column may be empty.
 
 ---
 
-## First, understand the "parent–child (anchor)" pattern
-
-Some tables here hold **no data of their own** — they look empty at first ("why a table with only key columns?"). They are **anchor tables**: each defines a subject (one patient, or one pipeline run) **exactly once**, and the real detail lives in the many **child tables** that reference the anchor via a foreign key (FK).
-
-### Concrete example (`patient_summary`)
-
-**Parent `patient_summary`** — one row per patient, just the identity `(file, speaker)`:
-
-| file | speaker |
-|---|---|
-| 13475_..._07022026.csv | Patient_13475_..._07022026 |
-
-→ no data columns — just "this patient exists".
-
-**Child `patient_survey_submission_log`** — that patient's actual survey submissions, **many rows** (one per `survey_type`: risk_perception_2, sdm, dcs, satisfaction, …):
-
-| file | speaker | survey_type | answers (JSONB) |
-|---|---|---|---|
-| 13475_… | Patient_13475_… | risk_perception_2 | `{cp:{cp_timeline:…}, le:{…}, …}` |
-| 13475_… | Patient_13475_… | sdm | `{…}` |
-| … | … | … | … |
-
-Every child row points at the **same** patient, so the patient is **defined once** in the parent.
-
-### Why split into anchor + children — 3 payoffs
-1. **Referential integrity** — a child row can only exist for a real subject; the DB blocks data attaching to a non-existent patient/run.
-2. **Cascade delete** — deleting one anchor row removes **all** its child data at once.
-3. **Survives re-processing (UPSERT)** — re-running the same file UPSERTs the anchor row so existing referrers (survey submissions) stay valid.
-
-The two anchors in this schema:
-- **`patient_summary`** `(file, speaker)` → anchor for patient-side children: `patient_survey_submission_log` (all patient survey answers, first-visit + follow-up).
-- **`transcript_analysis_log`** `id` → anchor for pipeline-output children (sentence predictions, NLP/AI intermediate + final).
+## The parent–child (anchor) pattern
+Two tables hold **identity only** and act as anchors that other tables reference by foreign key:
+- **`transcript_analysis_log`** (PK `id`) — one row per pipeline run; every NLP/AI result row points
+  back to it via `analysis_id`. Deleting a run cascade-deletes all its results.
+- **`patient_summary`** (PK `file, speaker`) — one row per patient; the patient's survey submissions
+  reference it. This gives referential integrity, cascade delete, and survival across re-processing.
 
 ---
 
-## Table Groups
+# Group 1 — Pipeline persistence (7 tables)
+The NLP + AI pipeline output. All are tied to one run via `analysis_id → transcript_analysis_log.id`.
 
-| Group | Tables | Purpose |
-|---|---|---|
-| Pipeline persistence | 7 | NLP + AI pipeline outputs |
-| Behavior tracking | 3 | Per-page user behavior (patient first/followup, doctor) |
-| Authentication | 3 | API key auth + per-patient access control |
-| Other | 3 | Audio recordings, survey submissions, doctor rewrite log |
+## `transcript_analysis_log` — pipeline run header · **anchor**
+One row per analysis run of one transcript file. Parent of every pipeline result table.
 
-> Each table below lists its **purpose** and **why it exists** (what breaks without it).
+| Column | Type | Null | Key | Description |
+|---|---|---|---|---|
+| `id` | integer | no | **PK** | Auto-increment run id. Used as `analysis_id` by all child tables. |
+| `patient_id` | varchar(255) | no | | Patient identifier (hashed) parsed from the file name. |
+| `total_sentences` | integer | no | | Number of sentences the transcript segmented into. |
+| `top_n` | integer | no | | How many top sentences per model were selected (e.g. 10). |
+| `context_window` | integer | no | | How many neighboring sentences of context were attached (default 3). |
+| `model_results` | jsonb | yes | | Per-model NLP result payload (validated JSON) kept for reference. |
+| `xlsx_data` | bytea | yes | | The exported results xlsx stored inline, so downloads work without a filesystem. |
+| `source_filename` | varchar(500) | yes | | Original uploaded file name. |
+| `pipeline_started_at` | timestamptz | yes | | When the pipeline orchestrator began this file. |
+| `analyzed_at` | timestamptz | yes | | When NLP results were saved (default now()). |
+| `ai_overall_score` | double | yes | | Mean AI score across domains, written when the AI stage finishes. |
+| `processed` | boolean | yes | | True once the full AI pipeline completed for this run. |
+| `processed_at` | timestamptz | yes | | When the AI stage completed. |
+| `doctor_id` | varchar(255) | yes | | Doctor identifier (hashed) parsed from the file name. |
+
+## `nlp_all_predictions` — every sentence × 5 model scores
+One row per sentence, carrying all five model probabilities. The full raw NLP output.
+
+| Column | Type | Null | Key | Description |
+|---|---|---|---|---|
+| `id` | integer | no | **PK** | Auto-increment row id. |
+| `analysis_id` | integer | no | **FK→transcript_analysis_log** | The run this sentence belongs to. |
+| `patient_id` | varchar(255) | no | | Patient identifier (denormalized for fast filtering). |
+| `sentence_index` | integer | no | | Global sentence position in the transcript. |
+| `utterance_index` | integer | no | | Utterance (turn) number the sentence came from. |
+| `sentence_in_utterance` | integer | no | | Position of the sentence within its utterance. |
+| `speaker` | varchar(255) | yes | | Speaker label (doctor/patient) of the sentence. |
+| `sentence_text` | text | yes | | The sentence text. |
+| `pred_cp` | double | yes | | Probability the sentence is about Cancer Prognosis. |
+| `pred_le` | double | yes | | Probability — Life Expectancy. |
+| `pred_ed` | double | yes | | Probability — Erectile Dysfunction. |
+| `pred_inc` | double | yes | | Probability — Urinary Incontinence. |
+| `pred_ius` | double | yes | | Probability — Irritative Urinary Symptoms. |
+| `created_at` | timestamptz | no | | Row insert time (default now()). |
+
+*(`pred_*` are NLP probabilities in [0,1], not scores.)*
+
+## `sentence_prediction` — top-N selected sentences (per model)
+The per-domain representative sentences shown to the doctor. One row per (sentence × model) that made a model's top-N.
+
+| Column | Type | Null | Key | Description |
+|---|---|---|---|---|
+| `id` | integer | no | **PK** | Auto-increment row id. |
+| `analysis_id` | integer | no | **FK→transcript_analysis_log** | The run. |
+| `patient_id` | varchar(255) | no | | Patient identifier (denormalized). |
+| `model` | varchar(10) | no | | Domain/model this row is for: `cp`/`le`/`ed`/`inc`/`ius`. |
+| `sentence_index` | integer | no | | Global sentence position. |
+| `utterance_index` | integer | no | | Utterance number. |
+| `sentence_in_utterance` | integer | no | | Position within the utterance. |
+| `speaker` | varchar(100) | yes | | Speaker label. |
+| `sentence_text` | text | yes | | The selected sentence text. |
+| `pred_score` | double | no | | This model's probability for the sentence (the ranking value). |
+| `context` | text | yes | | Neighboring sentences; the focus sentence wrapped in `<main>…</main>`. |
+
+## `nlp_pipeline_intermediate` — NLP step-state snapshots
+One JSONB snapshot per NLP step for debugging / reproduction.
+
+| Column | Type | Null | Key | Description |
+|---|---|---|---|---|
+| `id` | integer | no | **PK** | Auto-increment row id. |
+| `analysis_id` | integer | no | **FK→transcript_analysis_log** | The run. |
+| `patient_id` | varchar(255) | no | | Patient identifier. |
+| `step` | varchar(20) | no | | NLP step name: `raw`/`filtered`/`sentences`/`top_by_model` (CHECK-constrained). |
+| `payload` | jsonb | no | | The step's input/output data. |
+| `row_count` | integer | yes | | Number of rows in the payload (quick size indicator). |
+| `created_at` | timestamptz | no | | Insert time. |
+
+## `llm_pipeline_intermediate` — per-domain AI intermediate state
+One row per AI candidate (domain × sentence) recording how the AI scored/filtered it.
+
+| Column | Type | Null | Key | Description |
+|---|---|---|---|---|
+| `id` | integer | no | **PK** | Auto-increment row id. |
+| `analysis_id` | integer | no | **FK→transcript_analysis_log** | The run. |
+| `patient_id` | varchar(255) | no | | Patient identifier. |
+| `domain` | varchar(10) | no | | Domain: `cp`/`le`/`ed`/`inc`/`ius` (CHECK). |
+| `step` | varchar(20) | no | | AI step; currently always `extraction` (CHECK). |
+| `sentence_index` | integer | no | | Global sentence position of the candidate. |
+| `sentence_text` | text | yes | | Candidate sentence text. |
+| `context` | text | yes | | Surrounding context. |
+| `pred_score` | double | yes | | Upstream NLP probability of the candidate. |
+| `ai_score` | smallint | yes | | GPT-4o score 0–5 for the candidate. |
+| `score_explanation` | text | yes | | The model's reasoning for the score. |
+| `estimate` | text | yes | | Extracted numeric estimate (long text; TEXT to avoid overflow). |
+| `treatment` | text | yes | | Extracted treatment context. |
+| `survived_filter` | boolean | no | | Whether this candidate passed the filter step (default false). |
+| `created_at` | timestamptz | no | | Insert time. |
+
+## `llm_domain_scoring_and_summary` — final patient-visible AI output
+One row per domain (a domain may have several rows when the treatment branches). This is what the patient/doctor screens display.
+
+| Column | Type | Null | Key | Description |
+|---|---|---|---|---|
+| `id` | integer | no | **PK** | Auto-increment row id. |
+| `analysis_id` | integer | no | **FK→transcript_analysis_log** | The run. |
+| `patient_id` | varchar(255) | no | | Patient identifier. |
+| `domain` | varchar(10) | no | | Domain: `cp`/`le`/`ed`/`inc`/`ius`. |
+| `ai_score` | integer | yes | | Final 0–5 AI score for the domain. |
+| `score_explanation` | text | yes | | Reasoning behind the score. |
+| `extracted_estimate` | text | yes | | The final extracted numeric estimate. |
+| `treatment` | text | yes | | Treatment this row pertains to (for treatment-branched domains). |
+| `source_sentence` | text | yes | | The consultation sentence the AI chose as the source. |
+| `source_context` | text | yes | | Context with `<main>` markers; the screen's "From your consultation". |
+| `reformat_sentence` | text | yes | | The patient-friendly rewrite shown in the report. |
+| `source_filename` | varchar(500) | yes | | Original file name (denormalized). |
+| `created_at` | timestamptz | yes | | Insert time. |
+
+## `patient_summary` — patient parent key · **anchor**
+One row per patient. Holds only the identity; patient survey submissions FK to it.
+
+| Column | Type | Null | Key | Description |
+|---|---|---|---|---|
+| `file` | varchar(255) | no | **PK** | The patient's file name (patient+doctor+date key). |
+| `speaker` | varchar(100) | no | **PK** | The patient speaker label inside that file. |
 
 ---
 
-## Pipeline Persistence (7 tables)
+# Group 2 — Behavior tracking (3 tables)
+UI-interaction events (how the user navigated), not answer values. All three share
+`session_id, file, speaker, event_type, metadata, device_type, client_timestamp, created_at`
+plus per-area extras. `event_type` is CHECK-constrained to each area's vocabulary.
 
-### `transcript_analysis_log` — pipeline run header · **pipeline anchor**
-PK `id`. Run metadata: `patient_id`, `source_filename`, `total_sentences`, `top_n`, `context_window`, `model_results` (jsonb), `xlsx_data` (bytea, download fallback), timestamps, `ai_overall_score`, `processed`.
-**Why it exists:** every pipeline output references this `id` — the anchor tying all results of one run to one patient, and the basis for download / history / re-processing.
+## `patient_report_page_behavior` — first-visit report page behavior
+Events on the first-visit **report** page (reading AI summaries). Report-only.
 
-### `sentence_prediction` — top-N selected sentences (per analysis × model)
-PK `id`, FK `analysis_id`. `model` (cp/le/ed/inc/ius), `sentence_index`, `pred_score`, `sentence_text`, `context`.
-**Why it exists:** the evidence sentences shown in the patient summary / doctor view; the per-domain representatives, read quickly instead of re-selected each time.
+| Column | Type | Null | Key | Description |
+|---|---|---|---|---|
+| `id` | integer | no | **PK** | Auto-increment row id. |
+| `session_id` | varchar(100) | no | | One id per page mount; groups a visit's events. |
+| `file` | varchar(255) | no | | Patient file. |
+| `speaker` | varchar(100) | no | | Patient speaker. |
+| `event_type` | varchar(30) | no | | Interaction type: `page_view`/`topic_open`/`topic_close`/`evidence_open`/`evidence_close`/`summary_open`/`summary_close`/`rating_click`/`slider_moved`/`answer_changed`/`domain_submitted`/`session_end` (CHECK). |
+| `domain` | varchar(50) | yes | | Domain the event is about (`cp`/`le`/`ed`/`inc`/`ius`); required for topic/evidence/rating events. |
+| `rating` | smallint | yes | | 1–5 rating (for `rating_click`; CHECK 1–5). |
+| `metadata` | jsonb | no | | Free-form event details (timing, screen, etc.); default `{}`. |
+| `device_type` | varchar(20) | yes | | `mobile`/`tablet`/`desktop`. |
+| `client_timestamp` | timestamptz | no | | When the event happened on the client. |
+| `created_at` | timestamptz | no | | Server insert time. |
 
-### `nlp_all_predictions` — every sentence × 5 model scores
-PK `id`, FK `analysis_id`. One row per sentence carries `pred_cp…pred_ius`.
-**Why it exists:** the full raw probabilities, so a threshold change / re-analysis re-selects from here without re-running the pipeline. Reproducibility backbone.
+## `patient_followup_survey_page_behavior` — survey page behavior
+Events on the survey pages: follow-up (SDM/DCS/Risk/Satisfaction) **and** the first-visit Risk survey.
 
-### `nlp_pipeline_intermediate` — NLP step-state snapshots (JSONB)
-PK `id`, FK `analysis_id`. One row per step; `payload` jsonb.
-**Why it exists:** each NLP step's I/O for debugging / reproduction / verification.
+| Column | Type | Null | Key | Description |
+|---|---|---|---|---|
+| `id` | integer | no | **PK** | Auto-increment row id. |
+| `session_id` | varchar(100) | no | | Session grouping id. |
+| `file` | varchar(255) | no | | Patient file. |
+| `speaker` | varchar(100) | no | | Patient speaker. |
+| `event_type` | varchar(30) | no | | `page_view`/`survey_step_view`/`survey_answer`/`survey_complete`/`session_end` (+ the report-page vocabulary for the embedded Risk step); CHECK. |
+| `survey_type` | varchar(30) | yes | | Which survey: `sdm`/`dcs`/`risk_perception`/`satisfaction` (CHECK). Required for `survey_answer`. |
+| `question_id` | varchar(50) | yes | | Question the event refers to. Required for `survey_answer`. |
+| `step_number` | smallint | yes | | Survey step index (only for `survey_step_view`). |
+| `metadata` | jsonb | no | | Free-form details; default `{}`. |
+| `device_type` | varchar(20) | yes | | Device type. |
+| `client_timestamp` | timestamptz | no | | Client event time. |
+| `created_at` | timestamptz | no | | Server insert time. |
+| `domain` | varchar(50) | yes | | Domain (used by the embedded first-visit Risk step). |
+| `rating` | smallint | yes | | Rating (used by the embedded Risk step). |
 
-### `llm_pipeline_intermediate` — per-domain AI step state
-PK `id`, FK `analysis_id`. One row per (domain × step × sentence). `survived_filter`, `ai_score` (0-5), `estimate`/`treatment` (TEXT since mig 009).
-**Why it exists:** records how the AI summary was produced, step by step — verification / debugging / quality audit.
+## `doctor_behavior` — doctor dashboard behavior
+Events on the doctor consultation dashboard.
 
-### `llm_domain_scoring_and_summary` — final patient-visible AI output
-PK `id`, FK `analysis_id`. Per-domain `ai_score`, `score_explanation`, `extracted_estimate`, `treatment`, `source_sentence`, `source_context`, `reformat_sentence` (patient-facing summary).
-**Why it exists:** caches the final summary shown to the patient (fast, cheaper, reproducible) and drives the domain view on the active patient pages (V41 / V31Re).
-
-### `patient_summary` — parent for patient-side data · **patient anchor**
-PK `(file, speaker)`. No data columns.
-**Why it exists:** defines one patient exactly once as the anchor for `patient_survey_submission_log` (integrity, cascade delete, UPSERT survival). See the parent–child section. *(Its former child `patient_summary_domain` was dropped in migration 022.)*
-
----
-
-## Behavior Tracking (3 tables)
-
-Three sibling tables sharing `id, session_id, file, speaker, event_type, metadata (jsonb), device_type, client_timestamp, created_at` plus per-area extras.
-**Why behavior tracking exists:** which areas a patient opens first/most is a **secondary outcome** — a proxy for what matters most to this patient. These store interaction *events* (how the patient interacted); the *answers* live in `patient_survey_submission_log`.
-
-| Table | Extra columns | Used by |
-|---|---|---|
-| `patient_report_page_behavior` | `domain`, `rating` | First-visit **report** page (report-only; renamed from `patient_first_behavior`, mig 026 dropped `mode` + moved survey behavior out, mig 027 renamed) |
-| `patient_followup_survey_page_behavior` | `survey_type`, `question_id`, `step_number`, `domain`, `rating` | Follow-up survey pages (DCS/SDM/Sat) **+ the first-visit Risk survey** (`survey_type='risk_perception'`, redirected from the report page); `domain`/`rating` from mig 019; renamed from `patient_followup_survey` (mig 028) |
-| `doctor_behavior` | `target_type`, `target_id` | Doctor dashboard |
-
----
-
-## Authentication (3 tables)
-
-### `auth_user`
-PK `id`. `username`, `email`, `password_hash`, `role`, `is_superuser`, `is_active`, `auth_provider`.
-**Why it exists:** the source of who can log in and with what role. Without it there is no access control or audit.
-
-### `auth_api_key`
-PK `id`, FK `user_id`. Hashed key (`key_hash`), `label`, `is_active`, `expires_at`, `last_used_at`. Checked with `hmac.compare_digest`.
-**Why it exists:** the credential the frontend/pipeline present. The hash avoids exposing the raw key if the DB leaks; allows per-key revocation/expiry.
-
-### `patient_access`
-PK `id`. Maps `user_id` → `patient_id` with `access_type`.
-**Why it exists:** restricts a user to their assigned patients (least-privilege ACL) — central to trial PHI protection.
-
----
-
-## Other (3 tables)
-
-### `session_recording`
-PK `id`. Audio chunks (`recording_data` bytea) per session × file × area, with `event_count`.
-**Why it exists:** archives the raw consultation audio for re-analysis, verification, compliance.
-
-### `patient_survey_submission_log` — all patient survey answers
-PK `id`. One row per submission: `survey_type`, `answers` (jsonb), `extra_data`, `submitted_at`, plus REDCap fields `redcap_synced`, `redcap_record_id`, `redcap_error`. FK `(file, speaker) → patient_summary`.
-**Why it exists:** the single source of truth for **every patient survey answer** — follow-up surveys (`sdm`, `dcs`, `satisfaction`) *and* the first-visit Risk cognition answers (`survey_type='risk_perception_2'`, nested `answers` domain→question_id, written per-domain by `PUT /api/patient/first-visit-answers`, mirrored to REDCap `post_risk_perception_2`). `redcap_error` records failures for retry. *(The dedicated `patient_first_visit_answer` table was consolidated in here — mig 024/025.)*
-
-### `doctor_rewrite_log`
-PK `(file, i, i2, speaker, time)`. One row = one AI-assisted sentence rewrite (`original_sentence`, `revised_sentence`, `score`, `class`).
-**Why it exists:** records how the doctor rewrote a sentence — intervention/learning data + audit trail.
+| Column | Type | Null | Key | Description |
+|---|---|---|---|---|
+| `id` | integer | no | **PK** | Auto-increment row id. |
+| `session_id` | varchar(100) | no | | Session grouping id. |
+| `file` | varchar(255) | yes | | Patient file (null on the dashboard list view). |
+| `speaker` | varchar(100) | no | | Doctor identifier. |
+| `event_type` | varchar(30) | no | | `page_view`/`view_change`/`patient_select`/`topic_select`/`sentence_select`/`rewrite_open`/`rewrite_input`/`rewrite_apply`/`rubric_open`/`rubric_close`/`rubric_score_lock`/`tour_open`/`tour_end`/`session_end` (CHECK). |
+| `target_type` | varchar(20) | yes | | What the event targets: `patient`/`topic`/`sentence` (CHECK). |
+| `target_id` | varchar(255) | yes | | Identifier of the target (patient/topic/sentence). |
+| `metadata` | jsonb | no | | Free-form details; default `{}`. |
+| `device_type` | varchar(20) | yes | | Device type. |
+| `client_timestamp` | timestamptz | no | | Client event time. |
+| `created_at` | timestamptz | no | | Server insert time. |
 
 ---
 
-## System (1 table)
+# Group 3 — Authentication (3 tables)
 
-### `alembic_version`
-Migration-tracking table; single column `version_num` (VARCHAR(32); current head `028_rename_followup_behavior`).
-**Why it exists:** records which migration the DB is at, so the next can be applied/rolled back safely. (Used by Alembic, not the app.)
+## `auth_user` — accounts
+| Column | Type | Null | Key | Description |
+|---|---|---|---|---|
+| `id` | integer | no | **PK** | Auto-increment user id. |
+| `username` | varchar(150) | no | | Login name. |
+| `email` | varchar(255) | yes | **U** | Email (unique). |
+| `password_hash` | varchar(255) | yes | | Hashed password (null for external auth providers). |
+| `role` | varchar(20) | no | | `admin`/`user`/`readonly` (CHECK); default `user`. |
+| `is_superuser` | boolean | no | | Superuser flag; default false. |
+| `is_active` | boolean | no | | Whether the account is enabled; default true. |
+| `auth_provider` | varchar(50) | no | | `local` or an external provider; default `local`. |
+| `created_at` | timestamptz | yes | | Creation time. |
+| `updated_at` | timestamptz | yes | | Last update time. |
+
+## `auth_api_key` — API keys
+| Column | Type | Null | Key | Description |
+|---|---|---|---|---|
+| `id` | integer | no | **PK** | Auto-increment key id. |
+| `user_id` | integer | no | **FK→auth_user** | Owner (cascade delete). |
+| `key_hash` | varchar(255) | no | | Hashed API key (raw key never stored); compared with `hmac.compare_digest`. |
+| `label` | varchar(100) | yes | | Human label for the key. |
+| `is_active` | boolean | no | | Whether the key is enabled; default true. |
+| `created_at` | timestamptz | yes | | Creation time. |
+| `expires_at` | timestamptz | yes | | Optional expiry. |
+| `last_used_at` | timestamptz | yes | | Last time the key authenticated. |
+
+## `patient_access` — per-user × per-patient ACL
+| Column | Type | Null | Key | Description |
+|---|---|---|---|---|
+| `id` | integer | no | **PK** | Auto-increment row id. |
+| `user_id` | integer | no | **FK→auth_user, U** | The user granted access (cascade delete). |
+| `patient_id` | varchar(255) | no | **U** | The patient they may access. Unique together with `user_id`. |
+| `access_type` | varchar(20) | no | | `read`/`write`/`admin` (CHECK); default `read`. |
+| `granted_at` | timestamptz | yes | | When access was granted. |
+| `granted_by` | integer | yes | **FK→auth_user** | Which admin granted it. |
 
 ---
 
-## Migrations
+# Group 4 — Other (3 tables)
 
-| Revision | Purpose |
-|---|---|
-| 001–009 | baseline + behavior tracking + NLP/AI intermediates + widen LLM text (see git history) |
-| 010–019 | first-visit responses/answers, behavior `event_type` extensions, recording split, doctor scoping, follow-up Risk expand |
-| **020_drop_first_visit_responses** | drop `patient_first_visit_responses` (superseded by `_answer`) |
-| **021_drop_domain_scoring_resp** | drop `patient_summary_domain.patient_scoring`/`patient_response` |
-| **022_drop_patient_summary_domain** | drop `patient_summary_domain` (per-domain view now from the AI tables) |
-| **023_rename_survey_submission_log** | rename `survey_submission_log` → `patient_survey_submission_log` |
-| **024_backfill_risk_answers** | backfill first-visit answers into `patient_survey_submission_log` (`risk_perception_2`) |
-| **025_drop_first_visit_answer** | drop `patient_first_visit_answer` (consolidated into the survey log) |
-| **026_first_behavior_report_only** | drop `patient_first_behavior.mode` + delete legacy survey rows (survey behavior → follow-up table) |
-| **027_rename_report_page_behavior** | rename `patient_first_behavior` → `patient_report_page_behavior` |
-| **028_rename_followup_behavior** | rename `patient_followup_survey` → `patient_followup_survey_page_behavior` |
+## `patient_survey_submission_log` — all patient survey answers
+One row per submission. The single source of truth for **every** patient survey answer:
+follow-up surveys (`sdm`/`dcs`/`satisfaction`) and the first-visit Risk cognition survey
+(`risk_perception_2`). FK to `patient_summary`.
 
-`alembic upgrade head` brings a fresh DB to revision **028** (`028_rename_followup_behavior`). `init-db-native.sh` does this end-to-end.
+| Column | Type | Null | Key | Description |
+|---|---|---|---|---|
+| `id` | integer | no | **PK** | Auto-increment row id. |
+| `file` | varchar(255) | no | **FK→patient_summary** | Patient file. |
+| `speaker` | varchar(100) | no | **FK→patient_summary** | Patient speaker. |
+| `survey_type` | varchar(50) | no | | `risk_perception_2` (first-visit Risk), `sdm`, `dcs`, `satisfaction`, … |
+| `answers` | jsonb | no | | The submitted answers (shape depends on survey_type; risk_perception_2 nests domain→question_id). |
+| `extra_data` | jsonb | yes | | Optional extra payload. |
+| `submitted_at` | timestamptz | yes | | Submission time (default now()). |
+| `redcap_synced` | boolean | yes | | Whether the row was pushed to REDCap; default false. |
+| `redcap_record_id` | varchar(255) | yes | | REDCap-side record id after sync. |
+| `redcap_error` | text | yes | | Last REDCap sync error (for retry), if any. |
+
+## `session_recording` — consultation audio/replay chunks
+| Column | Type | Null | Key | Description |
+|---|---|---|---|---|
+| `id` | integer | no | **PK** | Auto-increment row id. |
+| `session_id` | varchar(100) | no | | Recording session id. |
+| `chunk_index` | integer | no | | Ordering index of this chunk; default 0. |
+| `file` | varchar(255) | yes | | Patient file the recording belongs to. |
+| `visit_type` | varchar(20) | yes | | Which visit produced it. |
+| `recording_data` | bytea | yes | | The raw recorded bytes. |
+| `event_count` | integer | no | | Number of captured events in the chunk; default 0. |
+| `created_at` | timestamptz | yes | | Insert time. |
+| `area` | varchar(40) | no | | Capture area: `patient_first`/`patient_first_report`/`patient_first_survey`/`patient_followup`/`doctor`/`physician`/`unknown` (CHECK). |
+
+## `doctor_rewrite_log` — AI-assisted sentence rewrites
+One row per rewrite. Composite PK `(file, i, i2, time)` keeps every revision as a separate audit row.
+
+| Column | Type | Null | Key | Description |
+|---|---|---|---|---|
+| `file` | varchar(255) | no | **PK** | Patient file. |
+| `i` | integer | no | **PK** | Utterance index of the sentence. |
+| `i2` | integer | no | **PK** | In-utterance index of the sentence. |
+| `time` | timestamptz | no | **PK** | Rewrite time — part of the PK so revisions don't overwrite each other. |
+| `speaker` | varchar(100) | yes | | Speaker label of the sentence. |
+| `original_sentence` | text | yes | | The sentence before the rewrite. |
+| `revised_sentence` | text | yes | | The doctor's rewritten sentence. |
+| `score` | double | yes | | Score associated with the rewrite. |
+| `class` | varchar(100) | yes | | Domain/class of the sentence. |
 
 ---
+
+# Group 5 — System (1 table)
+
+## `alembic_version`
+| Column | Type | Null | Key | Description |
+|---|---|---|---|---|
+| `version_num` | varchar(32) | no | **PK** | The migration revision the DB is currently at. Managed by Alembic, not the app. |
+
+---
+
+## Key indexes (beyond primary keys)
+- Pipeline: `analysis_id` and `(patient_id, …)` indexes on the child tables for fast per-run / per-patient reads.
+- Behavior: `(session_id)`, `(file, event/survey)`, `(client_timestamp)` on each behavior table.
+- Surveys: `(file, submitted_at)`, `(survey_type)`, `(speaker)` on `patient_survey_submission_log`.
+- Auth: `(user_id)`, `(key_hash)` on api keys; `(username)` on users; `(user_id)`, `(patient_id)` on access.
 
 ## See Also
-
-- [`ARCHITECTURE.md`](ARCHITECTURE.md) — system-level overview, deployment, module layout
-- [`../ml-pipeline/ML_PIPELINE.md`](../ml-pipeline/ML_PIPELINE.md) — which tables each pipeline step writes to
-- `app/Backend/models.py` — canonical SQLAlchemy definitions
-- `app/Backend/migrations/versions/` — migration source
+- `ARCHITECTURE.md` — system overview · `DB_TABLES_ROLES.md` — the story of one file's journey ·
+  `AI_PIPELINE_NLP_DB_TABLES.md` — pipeline→table mapping · `INDEX.md` — one-page overview.
+- `app/Backend/models.py` — canonical SQLAlchemy definitions.
