@@ -75,6 +75,10 @@ function durationSecs(start: string | null, end: string | null): string {
 export default function AdminTrackingPatientFollowup() {
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  // Auto-follow the newest session (sessions are newest-first) until the user
+  // manually picks one, so a Refresh surfaces newly-arrived events without an
+  // extra click. Manual selection turns this off (to inspect an older session).
+  const [followLatest, setFollowLatest] = useState(true);
   const [events, setEvents] = useState<EventRow[]>([]);
   const [aggregate, setAggregate] = useState<AggregateSession[] | null>(null);
   const [fileFilter, setFileFilter] = useState<string>("");
@@ -90,7 +94,9 @@ export default function AdminTrackingPatientFollowup() {
       const res = await fetch(url.toString());
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setSessions(data.sessions || []);
+      const list = data.sessions || [];
+      setSessions(list);
+      if (followLatest && list.length > 0) setSelectedSession(list[0].session_id);
     } catch (e) {
       setError(`Failed to load sessions: ${e}`);
     } finally { setLoading(false); }
@@ -173,7 +179,7 @@ export default function AdminTrackingPatientFollowup() {
                 return (
                   <button
                     key={s.session_id}
-                    onClick={() => setSelectedSession(s.session_id)}
+                    onClick={() => { setSelectedSession(s.session_id); setFollowLatest(false); }}
                     className={`w-full text-left px-4 py-3 hover:bg-slate-50 ${active ? "bg-indigo-50 border-l-4 border-indigo-500" : ""}`}
                   >
                     <div className="text-xs font-mono text-slate-500 truncate">{s.session_id}</div>
