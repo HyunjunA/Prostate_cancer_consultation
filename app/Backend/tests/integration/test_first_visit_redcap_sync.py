@@ -184,6 +184,36 @@ async def _fetch_risk2_row(db):
 @pytest.mark.integration
 @pytest.mark.asyncio
 @respx.mock
+async def test_redcap_record_id_is_unhashed_sid(client, api_headers, enable_redcap, db):
+    # A realistic hashed speaker must be posted to REDCap under its UN-HASHED SID,
+    # and the row must store the attribution (sid/doctor).
+    from models import PatientSummary
+    db.add(PatientSummary(file="13511_13571_07022026.csv", speaker="Patient_13511_13571_07022026"))
+    await db.commit()
+    route = respx.post(FAKE_REDCAP_URL).mock(return_value=httpx.Response(200, json={"count": 1}))
+
+    resp = await client.put(URL_PUT, headers=api_headers, json={
+        "file": "13511_13571_07022026.csv", "speaker": "Patient_13511_13571_07022026", "domain": "cp",
+        "answers": [{"question_id": "cp_timeline", "field": "timeline", "value": "Over next 5 years"}],
+    })
+
+    assert resp.status_code == 200, resp.text
+    record = _posted_record(route)
+    assert record["record_id"] == "SID_22"  # un-hashed, NOT "Patient_13511_..."
+
+    from sqlalchemy import select
+    from models import PatientSurveySubmissionLog
+    db.expire_all()
+    row = (await db.execute(select(PatientSurveySubmissionLog).where(
+        PatientSurveySubmissionLog.speaker == "Patient_13511_13571_07022026"))).scalars().first()
+    assert row.sid == "SID_22"
+    assert row.doctor == "doc2"
+    assert row.redcap_record_id == "SID_22"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@respx.mock
 async def test_sync_success_recorded_on_row(client, patient_row, api_headers, enable_redcap, db):
     # A successful REDCap import records synced=True + record_id on the DB row.
     respx.post(FAKE_REDCAP_URL).mock(return_value=httpx.Response(200, json={"count": 1}))

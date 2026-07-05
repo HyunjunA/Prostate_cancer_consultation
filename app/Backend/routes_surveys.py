@@ -61,6 +61,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_user
 from db import get_db
+from deid import unhash_patient_sid, unhash_doctor_num
 from models import PatientSurveySubmissionLog
 
 logger = logging.getLogger(__name__)
@@ -380,7 +381,10 @@ async def import_to_redcap(submission: SurveySubmission, timestamp: str) -> dict
 
     print("[CONFIG] [OK] REDCap is enabled")
 
-    record_id = submission.speaker
+    # Attribute to the real subject: un-hash the composite speaker to its SID and
+    # use that as the REDCap record_id (falls back to the raw speaker if un-hashing
+    # does not resolve, so a REDCap push is never blocked).
+    record_id = unhash_patient_sid(submission.speaker) or submission.speaker
     survey_type = submission.survey_type
 
     # Step 1: Get field mapping
@@ -502,13 +506,16 @@ async def submit_survey(
     print(json.dumps(submission.answers, indent=2, ensure_ascii=False))
     print("=" * 80 + "\n")
 
-    # Save to PostgreSQL
+    # Save to PostgreSQL. sid/doctor are the real-subject attribution recovered by
+    # un-hashing the composite speaker (see deid.py).
     db_record = PatientSurveySubmissionLog(
         file=submission.file,
         speaker=submission.speaker,
         survey_type=submission.survey_type,
         answers=submission.answers,        # JSONB column — dict stored directly
         extra_data=submission.metadata,    # JSONB column — dict stored directly
+        sid=unhash_patient_sid(submission.speaker),
+        doctor=unhash_doctor_num(submission.speaker),
         redcap_synced=False
     )
 
@@ -548,6 +555,7 @@ async def get_submissions(
     speaker: Optional[str] = Query(None, description="Filter by speaker"),
     survey_type: Optional[str] = Query(None, description="Filter by survey type"),
     redcap_synced: Optional[bool] = Query(None, description="Filter by REDCap sync status"),
+    status: Optional[str] = Query(None, description="REDCap sync status: synced | pending | error"),
     page: int = Query(1, ge=1, description="Page number"),
     size: int = Query(20, ge=1, le=100, description="Page size"),
     db: AsyncSession = Depends(get_db)
@@ -569,6 +577,14 @@ async def get_submissions(
         filters.append(PatientSurveySubmissionLog.survey_type == survey_type)
     if redcap_synced is not None:
         filters.append(PatientSurveySubmissionLog.redcap_synced == redcap_synced)
+    # Tri-state sync status (synced / errored / pending = neither).
+    if status == "synced":
+        filters.append(PatientSurveySubmissionLog.redcap_synced.is_(True))
+    elif status == "error":
+        filters.append(PatientSurveySubmissionLog.redcap_error.isnot(None))
+    elif status == "pending":
+        filters.append(PatientSurveySubmissionLog.redcap_synced.isnot(True))
+        filters.append(PatientSurveySubmissionLog.redcap_error.is_(None))
 
     if filters:
         query = query.where(and_(*filters))
@@ -601,8 +617,11 @@ async def get_submissions(
                 "answers": r.answers,            # JSONB — already a dict
                 "extra_data": r.extra_data,      # JSONB — already a dict or None
                 "submitted_at": r.submitted_at.isoformat() if r.submitted_at else None,
+                "sid": r.sid,
+                "doctor": r.doctor,
                 "redcap_synced": r.redcap_synced,
-                "redcap_record_id": r.redcap_record_id
+                "redcap_record_id": r.redcap_record_id,
+                "redcap_error": r.redcap_error
             }
             for r in records
         ]
@@ -790,6 +809,14 @@ async def get_survey_stats(
     )
     synced_count = synced_result.scalar()
 
+    # Count of errored syncs (redcap_error set). Disjoint from synced (a failed push
+    # leaves synced=false + error set); frontend shows pending = total - synced - error.
+    error_result = await db.execute(
+        select(func.count(PatientSurveySubmissionLog.id))
+        .where(PatientSurveySubmissionLog.redcap_error.isnot(None))
+    )
+    error_count = error_result.scalar()
+
     # Unique speakers
     speakers_result = await db.execute(
         select(func.count(func.distinct(PatientSurveySubmissionLog.speaker)))
@@ -816,6 +843,7 @@ async def get_survey_stats(
         "unique_files": unique_files,
         "redcap_synced": synced_count,
         "redcap_pending": total - synced_count,
+        "redcap_error": error_count,
         "by_survey_type": by_type,
         "recent_submissions": [
             {

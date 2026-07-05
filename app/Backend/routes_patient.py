@@ -39,6 +39,7 @@ from auth import get_current_user
 from auth.access_control import check_patient_access
 from auth.base import AuthUser
 from db import get_db
+from deid import unhash_patient_sid, unhash_doctor_num
 from models import (
     DoctorRewriteLog,
     PatientSurveySubmissionLog,
@@ -844,6 +845,10 @@ async def upsert_first_visit_answers(
         for a in body.answers
     }
 
+    # Real-subject attribution: un-hash the composite speaker to its SID (see deid.py).
+    sid = unhash_patient_sid(body.speaker)
+    doctor = unhash_doctor_num(body.speaker)
+
     stmt = select(PatientSurveySubmissionLog).where(
         PatientSurveySubmissionLog.file == body.file,
         PatientSurveySubmissionLog.speaker == body.speaker,
@@ -855,19 +860,23 @@ async def upsert_first_visit_answers(
         answers[body.domain] = {**answers.get(body.domain, {}), **domain_answers}
         record.answers = answers
         record.submitted_at = func.now()
+        record.sid = sid
+        record.doctor = doctor
     else:
         db.add(PatientSurveySubmissionLog(
             file=body.file,
             speaker=body.speaker,
             survey_type=_RISK2_SURVEY_TYPE,
             answers={body.domain: domain_answers},
+            sid=sid,
+            doctor=doctor,
         ))
 
     await db.commit()
 
     # Best-effort mirror to REDCap "post_risk_perception_2" (never breaks the DB
-    # write). record_id follows the existing survey flow: the patient 'speaker'.
-    redcap_result = await _sync_first_visit_answers_to_redcap(body.speaker, body.answers)
+    # write). record_id = the un-hashed SID (falls back to the raw speaker).
+    redcap_result = await _sync_first_visit_answers_to_redcap(sid or body.speaker, body.answers)
 
     # Record the sync outcome on the submission row so the DB self-reports REDCap
     # status (redcap_synced / redcap_record_id / redcap_error), mirroring the

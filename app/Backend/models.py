@@ -154,6 +154,12 @@ class PatientSurveySubmissionLog(Base):
     extra_data = Column(JSONB_COMPAT)
     submitted_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
+    # Real-subject attribution: the hashed `speaker` un-hashed to its SID
+    # (e.g. "SID_22") — meaningful, and used as the REDCap record_id. `doctor`
+    # is the un-hashed doctor number ("doc2"), carried as state. See deid.py.
+    sid = Column(String(50), index=True)
+    doctor = Column(String(50))
+
     redcap_synced = Column(Boolean, default=False)
     redcap_record_id = Column(String(255))
     redcap_error = Column(Text)
