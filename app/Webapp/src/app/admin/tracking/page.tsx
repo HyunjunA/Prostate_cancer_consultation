@@ -52,6 +52,20 @@ const AREAS = [
       "Consultation navigation, patient and topic selection, AI rewrite usage, rubric scoring activity.",
     color: "from-sky-500 to-cyan-500",
   },
+  {
+    href: "/admin/tracking/redcap-sync",
+    title: "REDCap Sync Status",
+    description:
+      "Per-submission REDCap synchronization: synced / pending / errored survey answers, by SID record_id.",
+    color: "from-teal-500 to-emerald-500",
+  },
+  {
+    href: "/admin/tracking/data-integrity",
+    title: "Data Integrity",
+    description:
+      "Automated checks: DB invariants, DB↔REDCap reconciliation, and activity cross-check. Review flagged exceptions only.",
+    color: "from-slate-600 to-slate-800",
+  },
   // Session Recordings (rrweb) — hidden from the admin hub (commented out).
   // The /admin/tracking/recordings route still exists; uncomment to show the card again.
   // {

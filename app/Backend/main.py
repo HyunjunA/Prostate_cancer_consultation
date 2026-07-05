@@ -51,6 +51,7 @@ from core.settings import get_settings
 from auth.admin_auth_routes import router as admin_auth_router
 from auth.admin_routes import router as auth_router
 from routes_admin_pipeline import router as admin_pipeline_router
+from routes_admin_integrity import router as admin_integrity_router
 from routes_doctor import router as doctor_router
 from routes_patient import router as patient_router
 from routes_surveys import router as surveys_router
@@ -100,6 +101,7 @@ ROUTERS = [
     auth_router,
     admin_auth_router,
     admin_pipeline_router,
+    admin_integrity_router,
 ]
 
 
