@@ -104,29 +104,29 @@ export default function AdminTrackingPatientFollowup() {
 
   useEffect(() => { reloadSessions(); /* eslint-disable-next-line */ }, []);
 
-  useEffect(() => {
+  // Named so Refresh can re-fetch events for the SAME selected session (a session
+  // accumulates events, so its id can stay put while new events arrive).
+  const reloadEvents = async () => {
     if (!selectedSession) { setEvents([]); return; }
-    (async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/backend/track/patient-followup/session/${encodeURIComponent(selectedSession)}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        setEvents(data.events || []);
-      } catch (e) { setError(`Failed to load events: ${e}`); }
-    })();
-  }, [selectedSession]);
+    try {
+      const res = await fetch(`${API_BASE}/api/backend/track/patient-followup/session/${encodeURIComponent(selectedSession)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setEvents(data.events || []);
+    } catch (e) { setError(`Failed to load events: ${e}`); }
+  };
+  useEffect(() => { reloadEvents(); /* eslint-disable-next-line */ }, [selectedSession]);
 
-  useEffect(() => {
+  const reloadAggregate = async () => {
     if (!fileFilter) { setAggregate(null); return; }
-    (async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/backend/track/patient-followup/aggregate?file=${encodeURIComponent(fileFilter)}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        setAggregate(data.sessions || []);
-      } catch (e) { setError(`Failed to load aggregate: ${e}`); }
-    })();
-  }, [fileFilter]);
+    try {
+      const res = await fetch(`${API_BASE}/api/backend/track/patient-followup/aggregate?file=${encodeURIComponent(fileFilter)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setAggregate(data.sessions || []);
+    } catch (e) { setError(`Failed to load aggregate: ${e}`); }
+  };
+  useEffect(() => { reloadAggregate(); /* eslint-disable-next-line */ }, [fileFilter]);
 
   const totalCount = useMemo(() => sessions.reduce((sum, s) => sum + s.event_count, 0), [sessions]);
 
@@ -153,7 +153,7 @@ export default function AdminTrackingPatientFollowup() {
             />
           </div>
           <button
-            onClick={reloadSessions}
+            onClick={() => { reloadSessions(); reloadEvents(); reloadAggregate(); }}
             disabled={loading}
             className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 disabled:opacity-50"
           >
