@@ -187,15 +187,23 @@ async def test_redcap_failure_does_not_break_db(client, patient_row, api_headers
 
 
 async def _fetch_risk2_row(db):
-    """Read back the patient's single risk_perception_2 submission row."""
+    """Read back the patient's LATEST risk_perception_2 submission row.
+
+    Each domain Submit now appends its own row, so order by submitted_at DESC to
+    get the row that carries the most recent submit's REDCap sync state.
+    """
     from sqlalchemy import select
     from models import PatientSurveySubmissionLog
 
     db.expire_all()
-    stmt = select(PatientSurveySubmissionLog).where(
-        PatientSurveySubmissionLog.file == "f.xlsx",
-        PatientSurveySubmissionLog.speaker == "Patient",
-        PatientSurveySubmissionLog.survey_type == "risk_perception_2",
+    stmt = (
+        select(PatientSurveySubmissionLog)
+        .where(
+            PatientSurveySubmissionLog.file == "f.xlsx",
+            PatientSurveySubmissionLog.speaker == "Patient",
+            PatientSurveySubmissionLog.survey_type == "risk_perception_2",
+        )
+        .order_by(PatientSurveySubmissionLog.submitted_at.desc(), PatientSurveySubmissionLog.id.desc())
     )
     return (await db.execute(stmt)).scalars().first()
 
@@ -247,6 +255,9 @@ async def test_sync_success_recorded_on_row(client, patient_row, api_headers, en
     assert row.redcap_synced is True
     assert row.redcap_record_id == "3"
     assert row.redcap_error is None
+    # Uniform extra_data shape across all survey types: risk_perception_2 is a
+    # completed submission -> {partial: false} (no longer NULL).
+    assert row.extra_data == {"partial": False}
 
 
 @pytest.mark.integration
@@ -302,3 +313,42 @@ async def test_unmapped_sid_is_pending(client, patient_row, api_headers, enable_
     assert row.redcap_synced is False
     assert row.redcap_record_id is None
     assert "not registered in REDCap" in (row.redcap_error or "")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@respx.mock
+async def test_each_submit_appends_its_own_row(client, patient_row, api_headers, enable_redcap, db):
+    """Every domain Submit appends a new risk_perception_2 row (full history);
+    the GET response still merges them by domain with the latest value winning."""
+    respx.post(FAKE_REDCAP_URL).mock(return_value=httpx.Response(200, json={"count": 1}))
+
+    async def _put(domain, qid, field, value):
+        r = await client.put(URL_PUT, headers=api_headers, json={
+            "file": "f.xlsx", "speaker": "Patient", "domain": domain,
+            "answers": [{"question_id": qid, "field": field, "value": value}],
+        })
+        assert r.status_code == 200, r.text
+
+    await _put("cp", "cp_timeline", "timeline", "Over next 5 years")
+    await _put("le", "le_timeline", "timeline", "10 years")
+    await _put("cp", "cp_timeline", "timeline", "Over next 10 years")  # cp re-submit -> new row
+
+    # Full history: three separate rows (not one accumulated / not overwritten).
+    from sqlalchemy import func as safunc, select
+    from models import PatientSurveySubmissionLog
+    db.expire_all()
+    count = (await db.execute(
+        select(safunc.count()).select_from(PatientSurveySubmissionLog).where(
+            PatientSurveySubmissionLog.survey_type == "risk_perception_2",
+            PatientSurveySubmissionLog.speaker == "Patient",
+        )
+    )).scalar_one()
+    assert count == 3
+
+    # GET merges by domain; the latest cp submit wins.
+    got = await client.get(URL_GET.format(file="f.xlsx", speaker="Patient"), headers=api_headers)
+    assert got.status_code == 200
+    responses = got.json()["responses"]
+    assert responses["cp"]["cp_timeline"]["value"] == "Over next 10 years"
+    assert responses["le"]["le_timeline"]["value"] == "10 years"

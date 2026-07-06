@@ -586,26 +586,36 @@ async def get_first_visit_answers(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Return all first-visit answers for one patient, nested domain -> question_id."""
+    """Return all first-visit answers for one patient, nested domain -> question_id.
+
+    Each domain Submit is appended as its own row (see the PUT handler), so a patient
+    may have several ``risk_perception_2`` rows. We merge them oldest-first so the
+    latest submission for a given domain/question wins — restoring the same single
+    ``{domain: {question_id: ...}}`` view the frontend expects.
+    """
     await check_patient_access(file, user, db)
 
-    stmt = select(PatientSurveySubmissionLog).where(
-        PatientSurveySubmissionLog.file == file,
-        PatientSurveySubmissionLog.speaker == speaker,
-        PatientSurveySubmissionLog.survey_type == _RISK2_SURVEY_TYPE,
+    stmt = (
+        select(PatientSurveySubmissionLog)
+        .where(
+            PatientSurveySubmissionLog.file == file,
+            PatientSurveySubmissionLog.speaker == speaker,
+            PatientSurveySubmissionLog.survey_type == _RISK2_SURVEY_TYPE,
+        )
+        .order_by(PatientSurveySubmissionLog.submitted_at.asc())
     )
-    record = (await db.execute(stmt)).scalars().first()
+    records = (await db.execute(stmt)).scalars().all()
 
     by_domain: Dict[str, Dict[str, AnswerRead]] = {d: {} for d in _DOMAIN_ORDER}
-    stored = (record.answers or {}) if record else {}
-    for domain, qmap in stored.items():
-        for qid, a in (qmap or {}).items():
-            by_domain.setdefault(domain, {})[qid] = AnswerRead(
-                question_id=a.get("question_id", qid),
-                field=a.get("field"),
-                value=a.get("value"),
-                submitted_at=a.get("submitted_at", ""),
-            )
+    for record in records:  # oldest -> newest, so later rows overwrite earlier
+        for domain, qmap in (record.answers or {}).items():
+            for qid, a in (qmap or {}).items():
+                by_domain.setdefault(domain, {})[qid] = AnswerRead(
+                    question_id=a.get("question_id", qid),
+                    field=a.get("field"),
+                    value=a.get("value"),
+                    submitted_at=a.get("submitted_at", ""),
+                )
     return FirstVisitAnswersGet(responses=by_domain)
 
 
@@ -823,19 +833,18 @@ async def upsert_first_visit_answers(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Upsert one domain's answers (one row per question_id).
+    """Append one domain's answers as a new risk_perception_2 row.
 
-    Called when the patient clicks Submit on a domain card. Each answer is
-    upserted by (file, speaker, domain, question_id); re-Submits overwrite the
-    matching rows and reset their submitted_at. Returns the full answer set for
-    the patient so the caller can refresh its cache.
+    Called when the patient clicks Submit on a domain card. Every Submit inserts a
+    NEW row in patient_survey_submission_log (survey_type='risk_perception_2',
+    answers JSONB = {domain: {question_id: ...}} for just this domain), so re-Submits
+    accumulate as full history rather than overwriting. The GET handler merges a
+    patient's rows by domain (latest wins). Returns that merged answer set so the
+    caller can refresh its cache.
     """
     await check_patient_access(body.file, user, db)
 
-    # Merge this domain's answers into the patient's single risk_perception_2
-    # submission row in patient_survey_submission_log. One row per patient
-    # accumulates all five domains (answers JSONB nested domain -> question_id);
-    # re-Submits overwrite the matching question_ids.
+    # Build this domain's answers (nested question_id -> answer) for the new row.
     now_iso = datetime.now(timezone.utc).isoformat()
     domain_answers = {
         a.question_id: {
@@ -858,45 +867,35 @@ async def upsert_first_visit_answers(
         raise HTTPException(status_code=404,
                             detail=f"No patient record for speaker '{body.speaker}'")
 
-    stmt = select(PatientSurveySubmissionLog).where(
-        PatientSurveySubmissionLog.file == parent_file,
-        PatientSurveySubmissionLog.speaker == body.speaker,
-        PatientSurveySubmissionLog.survey_type == _RISK2_SURVEY_TYPE,
+    # Append a new row for THIS domain submit (one row per submit, full history).
+    # The GET handler merges all of a patient's risk_perception_2 rows by domain
+    # (latest wins), so the frontend still sees one accumulated answer set.
+    row = PatientSurveySubmissionLog(
+        file=parent_file,
+        speaker=body.speaker,
+        survey_type=_RISK2_SURVEY_TYPE,
+        answers={body.domain: domain_answers},  # this domain only
+        extra_data={"partial": False},          # uniform {partial: bool}; each submit is a completed row
+        sid=sid,
+        doctor=doctor,
     )
-    record = (await db.execute(stmt)).scalars().first()
-    if record:
-        answers = dict(record.answers or {})
-        answers[body.domain] = {**answers.get(body.domain, {}), **domain_answers}
-        record.answers = answers
-        record.submitted_at = func.now()
-        record.sid = sid
-        record.doctor = doctor
-    else:
-        db.add(PatientSurveySubmissionLog(
-            file=parent_file,
-            speaker=body.speaker,
-            survey_type=_RISK2_SURVEY_TYPE,
-            answers={body.domain: domain_answers},
-            sid=sid,
-            doctor=doctor,
-        ))
-
+    db.add(row)
     await db.commit()
+    await db.refresh(row)
 
     # Resolve the study SID to REDCap's own auto-numbered record_id. If the SID is
     # not registered in REDCap yet, mark the row pending (no push) rather than
-    # inventing an id. Otherwise mirror to REDCap under the real record_id.
+    # inventing an id. Otherwise mirror to REDCap under the real record_id. The
+    # sync outcome is recorded on the row just inserted for this submit.
     redcap_record_id = await resolve_record_id(sid)
-    row = (await db.execute(stmt)).scalars().first()
     if redcap_record_id is None:
-        if row is not None:
-            row.redcap_synced = False
-            row.redcap_record_id = None
-            row.redcap_error = f"SID {sid or body.speaker!r} not registered in REDCap"
-            await db.commit()
+        row.redcap_synced = False
+        row.redcap_record_id = None
+        row.redcap_error = f"SID {sid or body.speaker!r} not registered in REDCap"
+        await db.commit()
     else:
         redcap_result = await _sync_first_visit_answers_to_redcap(redcap_record_id, body.answers)
-        if redcap_result["attempted"] and row is not None:
+        if redcap_result["attempted"]:
             row.redcap_synced = redcap_result["success"]
             row.redcap_record_id = redcap_result["record_id"]
             row.redcap_error = redcap_result["error"]
