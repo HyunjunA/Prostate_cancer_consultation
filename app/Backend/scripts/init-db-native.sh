@@ -5,7 +5,7 @@
 #  - Creates the postgres role (if missing) and sets its password
 #  - Creates the database (if missing)
 #  - Runs `alembic upgrade head` against the new database
-#  - Verifies that all 19 tables + alembic_version are present
+#  - Verifies the schema (15 app tables + alembic_version at head 030)
 #
 #  Idempotent: safe to re-run.
 #
@@ -197,10 +197,10 @@ section "Step 6: Verify schema"
 TABLE_COUNT=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM pg_tables WHERE schemaname='public'")
 info "Tables in public schema: $TABLE_COUNT"
 
-if [[ "$TABLE_COUNT" -ge 19 ]]; then
-    ok "Schema has $TABLE_COUNT tables (>= 19 expected)"
+if [[ "$TABLE_COUNT" -ge 16 ]]; then
+    ok "Schema has $TABLE_COUNT tables (>= 16 expected: 15 app tables + alembic_version at head 030)"
 else
-    fail "Schema has only $TABLE_COUNT tables (expected at least 19). Migrations may have failed."
+    fail "Schema has only $TABLE_COUNT tables (expected at least 16). Migrations may have failed."
 fi
 
 # Check for the new pipeline tables specifically

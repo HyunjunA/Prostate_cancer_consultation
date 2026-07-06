@@ -126,7 +126,8 @@
       $ PGPASSWORD=$PW psql "$PG dbname=prostatecancer_db_native" -f app/Backend/database_schema.sql
       $ cd app/Backend
       $ ../../.venv/bin/alembic stamp 001_baseline
-      $ ../../.venv/bin/alembic upgrade head          # -> 017_recording_area_split
+      $ ../../.venv/bin/alembic upgrade head          # -> 030_add_sid_to_survey_log (head)
+      $ ../../.venv/bin/python scripts/create_admin.py --username admin   # first admin (JWT login)
       $ cd /home/choih2/test-prostate-cancer/Prostate_cancer_consultation_dashboard
 
     (Full DB reset details + a DATA-ONLY wipe option are in

@@ -15,7 +15,7 @@
 | Phase | What | Command | Port |
 |---|---|---|---|
 | **Phase 1** | DB + Backend (FastAPI/uvicorn, native) | `init-db-native.sh` (1-a, DB) → `run-backend.sh` (1-b, backend) | `:18000` |
-| **Phase 2** | Transcript processing (NLP + AI → DB) | `bash scripts/run-pipeline-watch.sh` (AI repo) | — |
+| **Phase 2** | Transcript processing (de-identify + NLP + AI → DB) | `bash scripts/run-pipeline-deid.sh` (AI repo) | — |
 | **Phase 3** | Webapp Dashboard (Docker container) | `bash app/Webapp/scripts/run-webapp.sh` | `:3001` |
 
 These map 1:1 to the cross-reference headers inside each script.
@@ -43,7 +43,7 @@ Generate secrets with `openssl rand -hex 32` (API_KEY) / `-hex 16` (DB password)
 
 | # | File | Holds | Key variables |
 |---|---|---|---|
-| 2.1 | `app/Backend/.env` | dashboard backend | `DATABASE_URL`(+`_SYNC`), `POSTGRES_PASSWORD` (!), `API_KEY` (!), `AZURE_OPENAI_*` (!) (Try & Score), `CORS_ORIGINS`, `REDCAP_*` (optional) |
+| 2.1 | `app/Backend/.env` | dashboard backend | `DATABASE_URL`(+`_SYNC`), `POSTGRES_PASSWORD` (!), `API_KEY` (!), `AZURE_OPENAI_*` (!) (Try & Score), `CORS_ORIGINS`, `REDCAP_*` (optional), `REDCAP_RECORD_ID_MODE` (`test` default / `production`) |
 | 2.2 | `app/Webapp/.env` | webapp → backend | `NEXT_PUBLIC_API_URL=http://host.docker.internal:18000`, `API_KEY` (!) **must equal 2.1** |
 | 2.3 | AI repo `.env` | pipeline DB + local NLP | `DATABASE_URL`(+`_SYNC`) **same DB as 2.1**, `NLP_API_URL` (local only), `TRANSCRIPTS_DIR`, `OUTPUT_DIR` |
 | 2.4 | AI repo `nlp_classifier_server/gateway/.env` | Phase 2 gateway secret | `NLP_GATEWAY_API_KEY` (!) — auto-read by `run-pipeline-watch.sh` |
@@ -86,9 +86,14 @@ bash app/Backend/scripts/init-db-native.sh
 # ── Phase 1-b — start the backend (detached uvicorn :18000) ──
 nohup bash app/Backend/scripts/run-backend.sh > /tmp/backend.log 2>&1 & disown
 
-# ── Phase 2 — process transcripts (REMOTE gateway default) -> writes to DB ──
+# ── Phase 2 — de-identify + process transcripts -> writes to DB ──
+# run-pipeline-deid.sh hashes the patient ID in each filename FIRST (-> "<hash>_<hash>_<date>.csv"),
+# then runs the pipeline. This is REQUIRED so the DB stores DE-IDENTIFIED patient keys and the
+# stored file (".csv") matches what the webapp submits — using the raw run-pipeline-watch.sh on
+# ".xlsx" input leaves un-de-identified keys and breaks survey submit (FK mismatch).
 cd ../AI_physician_patient_communication
-bash scripts/run-pipeline-watch.sh --dir data/input           # one-shot, then exit
+PIPELINE_REMOTE=0 bash scripts/run-pipeline-deid.sh           # de-identify -> pipeline (LOCAL NLP)
+# (Only if input is ALREADY de-identified .csv: bash scripts/run-pipeline-watch.sh --dir data/input)
 
 # ── Phase 3 — start the webapp (image was removed by teardown -> --build) :3001 ──
 cd ../Prostate_cancer_consultation_dashboard
@@ -164,7 +169,15 @@ psql -h localhost -p 5433 -U "$(whoami)" -d postgres -c \
   "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='prostatecancer_db_native' AND pid<>pg_backend_pid();"
 psql -h localhost -p 5433 -U "$(whoami)" -d postgres -c "DROP DATABASE IF EXISTS prostatecancer_db_native;"
 bash app/Backend/scripts/init-db-native.sh        # recreates the DB + runs alembic to head
+
+# Seed the first admin (JWT /admin login) — not created by any script.
+cd app/Backend && python scripts/create_admin.py --username admin && cd ../..
 ```
+
+> REDCap `record_id` mode: the fresh DB defaults to `REDCAP_RECORD_ID_MODE=test`
+> (record_id == SID). To use production mode, add a SID field to each REDCap record,
+> set `REDCAP_RECORD_ID_MODE=production` + `REDCAP_SID_FIELD` in `app/Backend/.env`,
+> and restart — see `docs/architecture/REDCAP_RECORD_ID_MAPPING.md`.
 
 ### 0c. Stage transcripts for Phase 2
 
@@ -217,9 +230,9 @@ bash app/Backend/scripts/init-db-native.sh    # -> empty DB + full schema (alemb
   ✓ database_schema.sql applied
 === Step 5b: alembic upgrade head
   ✓ alembic upgrade head complete
-  ▸ Current alembic revision (after):  016 (head)
+  ▸ Current alembic revision (after):  030_add_sid_to_survey_log (head)
 === Step 6: Verify schema
-  ✓ Schema has 19 tables (>= 19 expected)
+  ✓ Schema has 16 tables (>= 16 expected: 15 app + alembic_version)
 ```
 
 > For a truly fresh DB, DROP it first — see Phase 0b. `init-db-native.sh` does
@@ -251,7 +264,7 @@ nohup bash app/Backend/scripts/run-backend.sh > /tmp/backend.log 2>&1 & disown
     start fine; Phase 2 runs need it.        <-- THIS WARNING IS NORMAL in
                                                  REMOTE mode (no local container)
 === Alembic migration check
-  ✓ alembic at head: 016...
+  ✓ alembic at head: 030...
   ✓ preflight passed
 ===============================================================
   Backend FastAPI (native) starting
