@@ -7,7 +7,8 @@ only the outbound REDCap call via respx, asserting:
   - the inc->ui / ius->il rename appears in the payload,
   - multi-select factors send every selection as a `field___<code>`=1 checkbox pair,
   - REDCap being disabled makes NO outbound call,
-  - a REDCap failure never breaks the primary DB write (best-effort mirror).
+  - a REDCap failure never breaks the primary DB write (best-effort mirror),
+  - each domain is saved as its own row (own timestamp) and rows accumulate.
 """
 
 import json
@@ -25,6 +26,17 @@ URL_GET = "/api/patient/first-visit-answers/{file}/{speaker}"
 
 FAKE_REDCAP_URL = "https://redcap.example.com/api/"
 FAKE_REDCAP_TOKEN = "FAKE_TOKEN_1234567890"
+
+
+def _body(domain, answers, *, file="f.xlsx", speaker="Patient", partial=False):
+    """Build a single-domain PUT body — this domain is saved as its own row."""
+    return {
+        "file": file,
+        "speaker": speaker,
+        "domain": domain,
+        "answers": answers,
+        "partial": partial,
+    }
 
 
 @pytest.fixture
@@ -59,7 +71,6 @@ def unmapped(monkeypatch):
     async def _resolve(_sid):
         return None
     monkeypatch.setattr("routes_patient.resolve_record_id", _resolve)
-    monkeypatch.setattr("routes_surveys.resolve_record_id", _resolve)
 
 
 @pytest_asyncio.fixture
@@ -83,14 +94,11 @@ def _posted_record(route):
 async def test_cp_submit_posts_mapped_payload(client, patient_row, api_headers, enable_redcap):
     route = respx.post(FAKE_REDCAP_URL).mock(return_value=httpx.Response(200, json={"count": 1}))
 
-    resp = await client.put(URL_PUT, headers=api_headers, json={
-        "file": "f.xlsx", "speaker": "Patient", "domain": "cp",
-        "answers": [
-            {"question_id": "cp_risk_without_treatment", "field": "vas", "value": 35},
-            {"question_id": "cp_risk_with_treatment", "field": "vas", "value": 60},
-            {"question_id": "cp_timeline", "field": "timeline", "value": "Over next 5 years"},
-        ],
-    })
+    resp = await client.put(URL_PUT, headers=api_headers, json=_body("cp", [
+        {"question_id": "cp_risk_without_treatment", "field": "vas", "value": 35},
+        {"question_id": "cp_risk_with_treatment", "field": "vas", "value": 60},
+        {"question_id": "cp_timeline", "field": "timeline", "value": "Over next 5 years"},
+    ]))
 
     assert resp.status_code == 200, resp.text
     assert route.called
@@ -108,13 +116,10 @@ async def test_cp_submit_posts_mapped_payload(client, patient_row, api_headers, 
 async def test_factor_multiselect_sends_all(client, patient_row, api_headers, enable_redcap):
     route = respx.post(FAKE_REDCAP_URL).mock(return_value=httpx.Response(200, json={"count": 1}))
 
-    resp = await client.put(URL_PUT, headers=api_headers, json={
-        "file": "f.xlsx", "speaker": "Patient", "domain": "le",
-        "answers": [
-            {"question_id": "le_timeline", "field": "timeline", "value": "16-20 years"},
-            {"question_id": "le_factors", "field": "factors", "value": ["Age", "Tumor stage"]},
-        ],
-    })
+    resp = await client.put(URL_PUT, headers=api_headers, json=_body("le", [
+        {"question_id": "le_timeline", "field": "timeline", "value": "16-20 years"},
+        {"question_id": "le_factors", "field": "factors", "value": ["Age", "Tumor stage"]},
+    ]))
 
     assert resp.status_code == 200, resp.text
     record = _posted_record(route)
@@ -131,14 +136,11 @@ async def test_factor_multiselect_sends_all(client, patient_row, api_headers, en
 async def test_inc_domain_rename_in_payload(client, patient_row, api_headers, enable_redcap):
     route = respx.post(FAKE_REDCAP_URL).mock(return_value=httpx.Response(200, json={"count": 1}))
 
-    resp = await client.put(URL_PUT, headers=api_headers, json={
-        "file": "f.xlsx", "speaker": "Patient", "domain": "inc",
-        "answers": [
-            {"question_id": "inc_risk", "field": "vas", "value": 20},
-            {"question_id": "inc_timeline", "field": "timeline", "value": "6 months"},
-            {"question_id": "inc_factors", "field": "factors", "value": ["Tumor stage"]},
-        ],
-    })
+    resp = await client.put(URL_PUT, headers=api_headers, json=_body("inc", [
+        {"question_id": "inc_risk", "field": "vas", "value": 20},
+        {"question_id": "inc_timeline", "field": "timeline", "value": "6 months"},
+        {"question_id": "inc_factors", "field": "factors", "value": ["Tumor stage"]},
+    ]))
 
     assert resp.status_code == 200, resp.text
     record = _posted_record(route)
@@ -156,10 +158,8 @@ async def test_redcap_disabled_makes_no_call(client, patient_row, api_headers):
     # No enable_redcap fixture -> REDCAP_API_URL/TOKEN are None -> sync is a no-op.
     route = respx.post(FAKE_REDCAP_URL).mock(return_value=httpx.Response(200, json={"count": 1}))
 
-    resp = await client.put(URL_PUT, headers=api_headers, json={
-        "file": "f.xlsx", "speaker": "Patient", "domain": "cp",
-        "answers": [{"question_id": "cp_timeline", "field": "timeline", "value": "Over my lifetime"}],
-    })
+    resp = await client.put(URL_PUT, headers=api_headers, json=_body(
+        "cp", [{"question_id": "cp_timeline", "field": "timeline", "value": "Over my lifetime"}]))
 
     assert resp.status_code == 200, resp.text
     assert not route.called
@@ -172,13 +172,10 @@ async def test_redcap_failure_does_not_break_db(client, patient_row, api_headers
     # REDCap rejects the import, but the DB write (and the 200) must stand.
     respx.post(FAKE_REDCAP_URL).mock(return_value=httpx.Response(500, text="boom"))
 
-    resp = await client.put(URL_PUT, headers=api_headers, json={
-        "file": "f.xlsx", "speaker": "Patient", "domain": "ius",
-        "answers": [
-            {"question_id": "ius_risk", "field": "vas", "value": 29},
-            {"question_id": "ius_timeline", "field": "timeline", "value": "Lifetime"},
-        ],
-    })
+    resp = await client.put(URL_PUT, headers=api_headers, json=_body("ius", [
+        {"question_id": "ius_risk", "field": "vas", "value": 29},
+        {"question_id": "ius_timeline", "field": "timeline", "value": "Lifetime"},
+    ]))
 
     assert resp.status_code == 200, resp.text
     # The answer is persisted regardless of the REDCap outcome.
@@ -189,8 +186,8 @@ async def test_redcap_failure_does_not_break_db(client, patient_row, api_headers
 async def _fetch_risk2_row(db):
     """Read back the patient's LATEST risk_perception_2 submission row.
 
-    Each domain Submit now appends its own row, so order by submitted_at DESC to
-    get the row that carries the most recent submit's REDCap sync state.
+    Each domain save appends its own row, so order by submitted_at DESC to get the
+    row that carries the most recent submit's REDCap sync state.
     """
     from sqlalchemy import select
     from models import PatientSurveySubmissionLog
@@ -219,10 +216,10 @@ async def test_redcap_record_id_is_mapped_auto_number(client, api_headers, enabl
     await db.commit()
     route = respx.post(FAKE_REDCAP_URL).mock(return_value=httpx.Response(200, json={"count": 1}))
 
-    resp = await client.put(URL_PUT, headers=api_headers, json={
-        "file": "13511_13571_07022026.csv", "speaker": "Patient_13511_13571_07022026", "domain": "cp",
-        "answers": [{"question_id": "cp_timeline", "field": "timeline", "value": "Over next 5 years"}],
-    })
+    resp = await client.put(URL_PUT, headers=api_headers, json=_body(
+        "cp", [{"question_id": "cp_timeline", "field": "timeline", "value": "Over next 5 years"}],
+        file="13511_13571_07022026.csv", speaker="Patient_13511_13571_07022026",
+    ))
 
     assert resp.status_code == 200, resp.text
     record = _posted_record(route)
@@ -245,18 +242,15 @@ async def test_sync_success_recorded_on_row(client, patient_row, api_headers, en
     # A successful REDCap import records synced=True + record_id on the DB row.
     respx.post(FAKE_REDCAP_URL).mock(return_value=httpx.Response(200, json={"count": 1}))
 
-    resp = await client.put(URL_PUT, headers=api_headers, json={
-        "file": "f.xlsx", "speaker": "Patient", "domain": "cp",
-        "answers": [{"question_id": "cp_timeline", "field": "timeline", "value": "Over next 5 years"}],
-    })
+    resp = await client.put(URL_PUT, headers=api_headers, json=_body(
+        "cp", [{"question_id": "cp_timeline", "field": "timeline", "value": "Over next 5 years"}]))
 
     assert resp.status_code == 200, resp.text
     row = await _fetch_risk2_row(db)
     assert row.redcap_synced is True
     assert row.redcap_record_id == "3"
     assert row.redcap_error is None
-    # Uniform extra_data shape across all survey types: risk_perception_2 is a
-    # completed submission -> {partial: false} (no longer NULL).
+    # Uniform extra_data shape across all survey types: a final Submit -> {partial: false}.
     assert row.extra_data == {"partial": False}
 
 
@@ -267,10 +261,8 @@ async def test_sync_failure_recorded_on_row(client, patient_row, api_headers, en
     # A REDCap failure records synced=False + the error on the DB row (visible for retry).
     respx.post(FAKE_REDCAP_URL).mock(return_value=httpx.Response(500, text="boom"))
 
-    resp = await client.put(URL_PUT, headers=api_headers, json={
-        "file": "f.xlsx", "speaker": "Patient", "domain": "cp",
-        "answers": [{"question_id": "cp_timeline", "field": "timeline", "value": "Over next 5 years"}],
-    })
+    resp = await client.put(URL_PUT, headers=api_headers, json=_body(
+        "cp", [{"question_id": "cp_timeline", "field": "timeline", "value": "Over next 5 years"}]))
 
     assert resp.status_code == 200, resp.text
     row = await _fetch_risk2_row(db)
@@ -283,10 +275,8 @@ async def test_sync_failure_recorded_on_row(client, patient_row, api_headers, en
 @pytest.mark.asyncio
 async def test_sync_disabled_leaves_flags_untouched(client, patient_row, api_headers, db, disable_redcap):
     # REDCap disabled -> no push attempted -> the row's sync flags stay at their defaults.
-    resp = await client.put(URL_PUT, headers=api_headers, json={
-        "file": "f.xlsx", "speaker": "Patient", "domain": "cp",
-        "answers": [{"question_id": "cp_timeline", "field": "timeline", "value": "Over my lifetime"}],
-    })
+    resp = await client.put(URL_PUT, headers=api_headers, json=_body(
+        "cp", [{"question_id": "cp_timeline", "field": "timeline", "value": "Over my lifetime"}]))
 
     assert resp.status_code == 200, resp.text
     row = await _fetch_risk2_row(db)
@@ -302,10 +292,8 @@ async def test_unmapped_sid_is_pending(client, patient_row, api_headers, enable_
     # SID not registered in REDCap -> no push, row marked pending with an error.
     route = respx.post(FAKE_REDCAP_URL).mock(return_value=httpx.Response(200, json={"count": 1}))
 
-    resp = await client.put(URL_PUT, headers=api_headers, json={
-        "file": "f.xlsx", "speaker": "Patient", "domain": "cp",
-        "answers": [{"question_id": "cp_timeline", "field": "timeline", "value": "Over next 5 years"}],
-    })
+    resp = await client.put(URL_PUT, headers=api_headers, json=_body(
+        "cp", [{"question_id": "cp_timeline", "field": "timeline", "value": "Over next 5 years"}]))
 
     assert resp.status_code == 200, resp.text  # the DB write still succeeds
     assert not route.called                    # nothing pushed to REDCap
@@ -318,35 +306,37 @@ async def test_unmapped_sid_is_pending(client, patient_row, api_headers, enable_
 @pytest.mark.integration
 @pytest.mark.asyncio
 @respx.mock
-async def test_each_submit_appends_its_own_row(client, patient_row, api_headers, enable_redcap, db):
-    """Every domain Submit appends a new risk_perception_2 row (full history);
-    the GET response still merges them by domain with the latest value winning."""
+async def test_saves_accumulate_as_history(client, patient_row, api_headers, enable_redcap, db):
+    """Every save APPENDS a new risk_perception_2 row (each domain saved when answered,
+    own timestamp); partial flag distinguishes auto-save (true) from final Submit (false)."""
     respx.post(FAKE_REDCAP_URL).mock(return_value=httpx.Response(200, json={"count": 1}))
 
-    async def _put(domain, qid, field, value):
-        r = await client.put(URL_PUT, headers=api_headers, json={
-            "file": "f.xlsx", "speaker": "Patient", "domain": domain,
-            "answers": [{"question_id": qid, "field": field, "value": value}],
-        })
+    async def _put(domain, value, partial):
+        r = await client.put(URL_PUT, headers=api_headers, json=_body(
+            domain,
+            [{"question_id": f"{domain}_timeline", "field": "timeline", "value": value}],
+            partial=partial,
+        ))
         assert r.status_code == 200, r.text
 
-    await _put("cp", "cp_timeline", "timeline", "Over next 5 years")
-    await _put("le", "le_timeline", "timeline", "10 years")
-    await _put("cp", "cp_timeline", "timeline", "Over next 10 years")  # cp re-submit -> new row
+    await _put("cp", "Over next 5 years", True)    # auto-save change
+    await _put("le", "10 years", True)             # auto-save change
+    await _put("cp", "Over next 10 years", False)  # final Submit
 
-    # Full history: three separate rows (not one accumulated / not overwritten).
-    from sqlalchemy import func as safunc, select
+    # All three saves are kept as separate rows (accumulated history).
+    from sqlalchemy import select
     from models import PatientSurveySubmissionLog
     db.expire_all()
-    count = (await db.execute(
-        select(safunc.count()).select_from(PatientSurveySubmissionLog).where(
+    rows = (await db.execute(
+        select(PatientSurveySubmissionLog).where(
             PatientSurveySubmissionLog.survey_type == "risk_perception_2",
             PatientSurveySubmissionLog.speaker == "Patient",
-        )
-    )).scalar_one()
-    assert count == 3
+        ).order_by(PatientSurveySubmissionLog.id)
+    )).scalars().all()
+    assert len(rows) == 3
+    assert [r.extra_data.get("partial") for r in rows] == [True, True, False]
 
-    # GET merges by domain; the latest cp submit wins.
+    # GET still merges by domain; the latest cp value wins.
     got = await client.get(URL_GET.format(file="f.xlsx", speaker="Patient"), headers=api_headers)
     assert got.status_code == 200
     responses = got.json()["responses"]

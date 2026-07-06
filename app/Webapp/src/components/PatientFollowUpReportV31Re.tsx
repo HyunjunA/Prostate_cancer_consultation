@@ -631,6 +631,15 @@ const CompleteStep: React.FC<CompleteStepProps> = ({ isDark }) => {
         experience for future patients.
       </p>
 
+      <p
+        className={cx(
+          "text-base font-medium mb-8",
+          isDark ? "text-slate-200" : "text-gray-800",
+        )}
+      >
+        You may now safely close this window.
+      </p>
+
       <div
         className={cx(
           "p-4 rounded-lg text-left",
@@ -703,6 +712,10 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
   const [satisfactionAnswers, setSatisfactionAnswers] =
     useState<PatientSatisfactionAnswers>(INITIAL_SATISFACTION_ANSWERS);
 
+  // Submit-success popup: message shown in a modal on submit, dismissed with OK.
+  // Replaces the old persistent inline "submitted successfully" boxes.
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
   // Submission State
   const [isSubmittingSDM, setIsSubmittingSDM] = useState(false);
   const [sdmSubmitted, setSdmSubmitted] = useState(false);
@@ -773,9 +786,18 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
           restored.add("dcs");
         }
 
-        if (submissions.submissions_by_type["risk_perception"]?.length) {
-          const latest = submissions.submissions_by_type["risk_perception"][0];
-          setRiskAnswers(latest.answers as RiskPerceptionAnswers);
+        // Risk completion can be stored under either survey_type:
+        //  - "risk_perception"   : the standalone follow-up Risk survey.
+        //  - "risk_perception_2" : the Total-survey Risk step, which renders the
+        //    V41 first-visit component (see the `combined` branch below). V41 owns
+        //    its own answers via useFirstVisitAnswers, so here we only need to mark
+        //    the step complete so the progress checkmark survives a refresh.
+        const riskRows = submissions.submissions_by_type["risk_perception"];
+        const riskV41Rows = submissions.submissions_by_type["risk_perception_2"];
+        if (riskRows?.length) {
+          setRiskAnswers(riskRows[0].answers as RiskPerceptionAnswers);
+        }
+        if (riskRows?.length || riskV41Rows?.length) {
           setRiskSubmitted(true);
           restored.add("risk");
         }
@@ -789,6 +811,19 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
 
         if (restored.size > 0) {
           setCompletedSteps(restored);
+          // If every survey in this flow has been submitted, land back on the
+          // Thank-You ("complete") page on refresh instead of resetting to
+          // "welcome" — otherwise the completion screen (and its green check)
+          // vanishes after a reload.
+          const requiredSurveys = steps.filter(
+            (s) => s !== "welcome" && s !== "complete",
+          );
+          if (
+            requiredSurveys.length > 0 &&
+            requiredSurveys.every((s) => restored.has(s))
+          ) {
+            setCurrentStep("complete");
+          }
           console.log(`Restored ${restored.size} survey submissions from DB`);
         }
       } catch (err) {
@@ -1047,6 +1082,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
       });
 
       setSdmSubmitted(true);
+      setSuccessMsg("Responses submitted successfully!");
     } catch (error) {
       console.error("SDM submission error:", error);
       alert("Failed to submit. Please try again.");
@@ -1079,6 +1115,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
       });
 
       setDcsSubmitted(true);
+      setSuccessMsg("Responses submitted successfully!");
     } catch (error) {
       console.error("DCS submission error:", error);
       alert("Failed to submit. Please try again.");
@@ -1111,6 +1148,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
       });
 
       setRiskSubmitted(true);
+      setSuccessMsg("Responses submitted successfully!");
     } catch (error) {
       console.error("Risk submission error:", error);
       alert("Failed to submit. Please try again.");
@@ -1152,6 +1190,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
       });
 
       setSatisfactionSubmitted(true);
+      setSuccessMsg("Feedback submitted successfully!");
     } catch (error) {
       console.error("Satisfaction submission error:", error);
       alert("Failed to submit. Please try again.");
@@ -1237,6 +1276,51 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
         isDarkMode ? "bg-slate-950" : "bg-gray-50",
       )}
     >
+      {/* Submit-success modal — shown on Submit, dismissed with OK. */}
+      {successMsg && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setSuccessMsg(null)}
+        >
+          <div
+            className={cx(
+              "w-full max-w-sm rounded-2xl p-6 text-center shadow-xl",
+              isDarkMode ? "bg-slate-900" : "bg-white",
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              className={cx(
+                "w-14 h-14 mx-auto mb-4 rounded-full flex items-center justify-center",
+                isDarkMode ? "bg-green-900/50" : "bg-green-50",
+              )}
+            >
+              <CheckCircle
+                size={28}
+                className={isDarkMode ? "text-green-400" : "text-green-600"}
+              />
+            </div>
+            <p
+              className={cx(
+                "text-base font-medium mb-6",
+                isDarkMode ? "text-slate-100" : "text-gray-900",
+              )}
+            >
+              {successMsg}
+            </p>
+            <button
+              type="button"
+              onClick={() => setSuccessMsg(null)}
+              className="px-6 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* COMPASS header — brand name on top with the full mixed-case
           expansion underneath, matching the Patient first-visit welcome
           card so returning patients see consistent branding. */}
@@ -1342,32 +1426,6 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
                   }
                 />
 
-                {sdmSubmitted && (
-                  <div
-                    className={cx(
-                      "mt-6 p-4 rounded-lg flex items-center gap-3",
-                      isDarkMode
-                        ? "bg-green-900/30 border border-green-700"
-                        : "bg-green-50 border border-green-200",
-                    )}
-                  >
-                    <CheckCircle
-                      size={20}
-                      className={
-                        isDarkMode ? "text-green-400" : "text-green-600"
-                      }
-                    />
-                    <span
-                      className={cx(
-                        "text-sm font-medium",
-                        isDarkMode ? "text-green-300" : "text-green-700",
-                      )}
-                    >
-                      Responses submitted successfully!
-                    </span>
-                  </div>
-                )}
-
                 <NavigationButtons
                   onBack={goBack}
                   onNext={goNext}
@@ -1398,32 +1456,6 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
                     })
                   }
                 />
-
-                {dcsSubmitted && (
-                  <div
-                    className={cx(
-                      "mt-6 p-4 rounded-lg flex items-center gap-3",
-                      isDarkMode
-                        ? "bg-green-900/30 border border-green-700"
-                        : "bg-green-50 border border-green-200",
-                    )}
-                  >
-                    <CheckCircle
-                      size={20}
-                      className={
-                        isDarkMode ? "text-green-400" : "text-green-600"
-                      }
-                    />
-                    <span
-                      className={cx(
-                        "text-sm font-medium",
-                        isDarkMode ? "text-green-300" : "text-green-700",
-                      )}
-                    >
-                      Responses submitted successfully!
-                    </span>
-                  </div>
-                )}
 
                 <NavigationButtons
                   onBack={goBack}
@@ -1488,32 +1520,6 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
                   }
                 />
 
-                {riskSubmitted && (
-                  <div
-                    className={cx(
-                      "mt-6 p-4 rounded-lg flex items-center gap-3 max-w-2xl mx-auto",
-                      isDarkMode
-                        ? "bg-green-900/30 border border-green-700"
-                        : "bg-green-50 border border-green-200",
-                    )}
-                  >
-                    <CheckCircle
-                      size={20}
-                      className={
-                        isDarkMode ? "text-green-400" : "text-green-600"
-                      }
-                    />
-                    <span
-                      className={cx(
-                        "text-sm font-medium",
-                        isDarkMode ? "text-green-300" : "text-green-700",
-                      )}
-                    >
-                      Responses submitted successfully!
-                    </span>
-                  </div>
-                )}
-
                 <div className="max-w-2xl mx-auto">
                   <NavigationButtons
                     onBack={goBack}
@@ -1538,32 +1544,6 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
                   isDark={isDarkMode}
                   onTrackEvent={handleTrackEvent}
                 />
-
-                {satisfactionSubmitted && (
-                  <div
-                    className={cx(
-                      "mt-6 p-4 rounded-lg flex items-center gap-3",
-                      isDarkMode
-                        ? "bg-green-900/30 border border-green-700"
-                        : "bg-green-50 border border-green-200",
-                    )}
-                  >
-                    <CheckCircle
-                      size={20}
-                      className={
-                        isDarkMode ? "text-green-400" : "text-green-600"
-                      }
-                    />
-                    <span
-                      className={cx(
-                        "text-sm font-medium",
-                        isDarkMode ? "text-green-300" : "text-green-700",
-                      )}
-                    >
-                      Feedback submitted successfully!
-                    </span>
-                  </div>
-                )}
 
                 <NavigationButtons
                   onBack={goBack}

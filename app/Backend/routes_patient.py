@@ -541,6 +541,9 @@ class FirstVisitAnswersUpsert(BaseModel):
     speaker: str = Field(..., min_length=1, max_length=100)
     domain: DomainLiteral
     answers: List[AnswerItem] = Field(..., min_length=1, max_length=50)
+    # true = an auto-save while the patient is still editing; false = the final Submit.
+    # Stored on the appended row as extra_data.partial (accumulated history).
+    partial: bool = False
 
     @field_validator("answers")
     @classmethod
@@ -833,14 +836,14 @@ async def upsert_first_visit_answers(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user),
 ):
-    """Append one domain's answers as a new risk_perception_2 row.
+    """Append one domain's answers as a new risk_perception_2 row (full history).
 
-    Called when the patient clicks Submit on a domain card. Every Submit inserts a
-    NEW row in patient_survey_submission_log (survey_type='risk_perception_2',
-    answers JSONB = {domain: {question_id: ...}} for just this domain), so re-Submits
-    accumulate as full history rather than overwriting. The GET handler merges a
-    patient's rows by domain (latest wins). Returns that merged answer set so the
-    caller can refresh its cache.
+    Called on every answer change (auto-save, partial=true) and on the final Submit
+    (partial=false). Each call INSERTS a new row (survey_type='risk_perception_2',
+    answers = {domain: {question_id: ...}}, extra_data.partial), so each domain is
+    saved WHEN it is answered — the row's submitted_at is that moment, and different
+    domains keep different times. The GET handler merges a patient's rows by domain
+    (latest wins) to restore the current answers.
     """
     await check_patient_access(body.file, user, db)
 
@@ -867,15 +870,16 @@ async def upsert_first_visit_answers(
         raise HTTPException(status_code=404,
                             detail=f"No patient record for speaker '{body.speaker}'")
 
-    # Append a new row for THIS domain submit (one row per submit, full history).
-    # The GET handler merges all of a patient's risk_perception_2 rows by domain
-    # (latest wins), so the frontend still sees one accumulated answer set.
+    # APPEND a new row for every save — each domain is saved WHEN it is answered, so
+    # the row's submitted_at captures that moment and different domains keep different
+    # times. An auto-save (partial=true) or the final Submit (partial=false) each
+    # appends its own row; the GET handler merges a patient's rows by domain.
     row = PatientSurveySubmissionLog(
         file=parent_file,
         speaker=body.speaker,
         survey_type=_RISK2_SURVEY_TYPE,
-        answers={body.domain: domain_answers},  # this domain only
-        extra_data={"partial": False},          # uniform {partial: bool}; each submit is a completed row
+        answers={body.domain: domain_answers},  # this domain, this save
+        extra_data={"partial": bool(body.partial)},  # true=auto-save change, false=final Submit
         sid=sid,
         doctor=doctor,
     )
@@ -885,8 +889,8 @@ async def upsert_first_visit_answers(
 
     # Resolve the study SID to REDCap's own auto-numbered record_id. If the SID is
     # not registered in REDCap yet, mark the row pending (no push) rather than
-    # inventing an id. Otherwise mirror to REDCap under the real record_id. The
-    # sync outcome is recorded on the row just inserted for this submit.
+    # inventing an id. Otherwise mirror to REDCap under the real record_id. The sync
+    # outcome is recorded on the row just inserted for this domain.
     redcap_record_id = await resolve_record_id(sid)
     if redcap_record_id is None:
         row.redcap_synced = False

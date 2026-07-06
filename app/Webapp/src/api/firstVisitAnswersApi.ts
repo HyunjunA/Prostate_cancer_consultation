@@ -56,6 +56,7 @@ export const firstVisitAnswersApi = {
     speaker: string;
     domain: Domain;
     answers: AnswerItem[];
+    partial?: boolean; // true = auto-save change, false = final Submit (accumulated history)
   }): Promise<FirstVisitAnswersGet> {
     const resp = await fetch(BASE, {
       method: "PUT",

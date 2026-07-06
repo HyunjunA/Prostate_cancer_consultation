@@ -108,6 +108,7 @@ import React, {
 } from "react";
 import { usePatientData } from "@/hooks/usePatientData";
 import { useFirstVisitAnswers } from "@/hooks/useFirstVisitAnswers";
+import { useDebounce } from "@/hooks/useDebounce";
 // First-visit Risk answers persist per-domain to patient_survey_submission_log
 // (survey_type=risk_perception_2) via the useFirstVisitAnswers hook's saveDomain
 // (PUT /api/patient/first-visit-answers), so no separate submitSurvey is needed.
@@ -972,12 +973,12 @@ interface TopicCardProps {
    * used to prefill state on mount. */
   prefill?: DomainAnswers | null;
   /**
-   * Persistence callback. Called with this domain's answers (one entry per
-   * question_id) when the patient clicks Submit. If it resolves, the parent
-   * will call onSubmit() to flip the submittedDomains flag; if it rejects,
-   * the flag stays unchanged so progress reflects the server-confirmed state.
+   * Persistence callback. Called with this domain's answers when the patient
+   * changes an answer (partial=true, auto-save) or on the final Submit
+   * (partial=false). Each call saves this domain as its own row, timestamped
+   * with the moment it was answered.
    */
-  onSave?: (answers: AnswerItem[]) => Promise<void>;
+  onSave?: (answers: AnswerItem[], partial?: boolean) => Promise<void>;
   isDark?: boolean;
   patientId?: string;
   visitId?: string;
@@ -1032,7 +1033,18 @@ const SourceQuote: React.FC<{
   </p>
 );
 
-const TopicCard: React.FC<TopicCardProps> = ({
+/** Imperative handle the parent's single "Submit" uses to persist each domain.
+    submit() runs the same validate -> save flow as the old per-card button but
+    returns the outcome (so the batch caller can aggregate) instead of popping
+    the card's own incomplete dialog. */
+type TopicCardHandle = {
+  submit: () => Promise<{
+    status: "saved" | "empty" | "missing" | "error";
+    missing?: string[];
+  }>;
+};
+
+const TopicCard = React.forwardRef<TopicCardHandle, TopicCardProps>(({
   topicName,
   topicIndex,
   aiSummary,
@@ -1064,7 +1076,7 @@ const TopicCard: React.FC<TopicCardProps> = ({
   trackSpeaker,
   trackDomain,
   trackScreen,
-}) => {
+}, ref) => {
   const topicId = topicName.replace(/\s+/g, "");
   const colors = TOPIC_COLORS[topicName] || TOPIC_COLORS["Cancer Prognosis"];
 
@@ -1350,45 +1362,64 @@ const TopicCard: React.FC<TopicCardProps> = ({
     }
   };
 
-  // [V37] Submit click handler — validate first, then persist. On any
-  // missing required field, open the incomplete-questions popup and
-  // skip onSave entirely so nothing lands in the DB. If onSave is not
-  // wired (test rigs / pages without backend access) fall back to the
-  // legacy local-only behaviour.
-  const handleSubmitClick = async () => {
-    const missing = getMissingRequired();
-    if (missing.length > 0) {
-      setIncompleteDialog({ open: true, missing });
+  // Auto-save: persist THIS domain shortly after the patient stops editing (each
+  // answer change), not only on the final Submit. The debounce avoids a PUT/REDCap
+  // POST on every slider tick; the backend appends this domain as its own row,
+  // timestamped with the moment it was answered (so domains keep different times).
+  const answersSig = JSON.stringify(buildAnswers());
+  const debouncedSig = useDebounce(answersSig, 700);
+  const autosaveBaseline = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    // First settle establishes the baseline (post-hydration state) without saving;
+    // only genuine subsequent edits trigger an auto-save.
+    if (autosaveBaseline.current === null) {
+      autosaveBaseline.current = debouncedSig;
       return;
     }
+    if (debouncedSig === autosaveBaseline.current) return;
+    autosaveBaseline.current = debouncedSig;
+    if (!onSave) return;
+    let answers: AnswerItem[];
+    try {
+      answers = JSON.parse(debouncedSig) as AnswerItem[];
+    } catch {
+      return;
+    }
+    if (answers.length === 0) return;
+    // Best-effort: the final Submit still validates and re-saves.
+    onSave(answers, true).catch(() => {}); // partial = auto-save change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSig]);
+
+  // Single-Submit flow: the parent's one "Submit" button persists each domain via
+  // this card's submit() (exposed below). Same validate -> persist logic, but
+  // RETURNS the outcome instead of popping this card's own incomplete dialog (the
+  // parent aggregates and shows one message).
+  const submitForBatch = async (): Promise<{
+    status: "saved" | "empty" | "missing" | "error";
+    missing?: string[];
+  }> => {
+    const missing = getMissingRequired();
+    if (missing.length > 0) return { status: "missing", missing };
     if (!onSave) {
       onSubmit();
-      return;
+      return { status: "empty" };
     }
     const answers = buildAnswers();
     if (answers.length === 0) {
       onSubmit();
-      return;
+      return { status: "empty" };
     }
     try {
-      await onSave(answers);
-      // [V38] Record one domain_submitted behavior event per successful
-      // Submit, carrying the question_id-keyed answer snapshot persisted this
-      // time. This makes each Submit — and each re-Submit after editing — show
-      // up in the admin as its own row, alongside the final answers.
-      if (trackFile && trackSpeaker && trackDomain) {
-        trackReport(trackFile, trackSpeaker, {
-          event_type: "domain_submitted",
-          domain: trackDomain,
-          metadata: { answers, screen: trackScreen },
-        });
-      }
+      await onSave(answers, false); // final Submit
       onSubmit();
+      return { status: "saved" };
     } catch {
-      // Hook surfaces the error; the card stays in its un-submitted
-      // visual state so progress reflects only persisted Submits.
+      return { status: "error" };
     }
   };
+
+  React.useImperativeHandle(ref, () => ({ submit: submitForBatch }));
 
   return (
     <div
@@ -3265,32 +3296,9 @@ const TopicCard: React.FC<TopicCardProps> = ({
 
           {/* Helpfulness Rating — relocated above to sit right under AI Summary. */}
 
-          {/* Per-domain Submit button. Marks this topic as completed in the
-              parent's submittedDomains map so Submission Progress can advance.
-              Re-clicking after submission is allowed: inputs stay editable
-              and the button label switches to an "Update" affordance.
-              [V38] Hidden when showQuestions=false (Overview screen). */}
-          {showQuestions && (
-            <div className="mt-6">
-              <button
-                type="button"
-                onClick={handleSubmitClick}
-                data-track-proximity={`SubmitTopic_${topicId}`}
-                className={cx(
-                  "w-full px-6 py-3 rounded-xl text-sm font-bold transition-all duration-200 border-2",
-                  isSubmitted
-                    ? isDark
-                      ? "bg-emerald-900/30 text-emerald-300 border-emerald-600 hover:bg-emerald-900/40"
-                      : "bg-emerald-50 text-emerald-700 border-emerald-400 hover:bg-emerald-100"
-                    : isDark
-                      ? "bg-indigo-600 text-white border-indigo-500 hover:bg-indigo-500 shadow-lg shadow-indigo-500/30"
-                      : "bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-500/30",
-                )}
-              >
-                {isSubmitted ? "Submitted ✓ — Click to update" : "Submit"}
-              </button>
-            </div>
-          )}
+          {/* Per-domain Submit buttons removed: the whole Risk survey is now
+              submitted once by the parent's single "Submit" (which persists each
+              domain via saveDomain, keeping one row per domain). */}
         </div>
         )}
       </div>
@@ -3368,7 +3376,8 @@ const TopicCard: React.FC<TopicCardProps> = ({
       )}
     </div>
   );
-};
+});
+TopicCard.displayName = "TopicCard";
 
 /* =============================================================================
    SECTION 5: MAIN COMPONENT
@@ -3510,6 +3519,14 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
   ] as const;
   const TOTAL_SCREENS = STEP_KEYS.length;
   const [currentScreen, setCurrentScreen] = useState<number>(0);
+
+  // Single-Submit: refs to the 5 domain cards + popup state. One "Submit" button
+  // persists every domain via each card's submit() (still one saveDomain row per
+  // domain). Aggregated outcome is shown in a modal instead of per-card dialogs.
+  const cardRefs = useRef<Record<string, TopicCardHandle | null>>({});
+  const [submitAllBusy, setSubmitAllBusy] = useState<boolean>(false);
+  const [submitSuccessOpen, setSubmitSuccessOpen] = useState<boolean>(false);
+  const [submitMissing, setSubmitMissing] = useState<string[]>([]);
 
   // [V40 / A-2] Survey mode — entered via ?survey=first-visit (new) or the
   // legacy ?mode=survey. Skips the Overview (report) screen entirely: starts at
@@ -3858,15 +3875,40 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
   // Event Handlers
 
   /**
-   * Submit handler for the per-domain Submit button.
-   * Marks this topic as submitted so Submission Progress can advance.
-   * Re-clicking after submission is a no-op for the count (already true).
+   * Submit handler for a domain. Marks this topic as submitted so Submission
+   * Progress can advance. Re-marking after submission is a no-op for the count.
    */
   const handleSubmitDomain = (topic: string): void => {
     setSubmittedDomains((prev: Record<string, boolean>) => ({
       ...prev,
       [topic]: true,
     }));
+  };
+
+  // Single "Submit" for the whole Risk survey: persist every domain via its card
+  // (each card.submit() calls saveDomain -> one row per domain). If any domain is
+  // missing a required answer, show one aggregated popup and do not report success;
+  // otherwise show the success modal.
+  const handleSubmitAll = async (): Promise<void> => {
+    if (submitAllBusy) return;
+    setSubmitAllBusy(true);
+    try {
+      const missing: string[] = [];
+      for (const topic of TOPIC_ORDER) {
+        const card = cardRefs.current[topic];
+        if (!card) continue;
+        const res = await card.submit();
+        if (res.status === "missing") missing.push(topic);
+      }
+      if (missing.length > 0) {
+        setSubmitMissing(missing);
+        return;
+      }
+      setSubmitMissing([]);
+      setSubmitSuccessOpen(true);
+    } finally {
+      setSubmitAllBusy(false);
+    }
   };
 
   /**
@@ -4191,6 +4233,105 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
           : "bg-gradient-to-br from-slate-50 via-white to-gray-100",
       )}
     >
+      {/* Single-Submit success modal — dismiss with OK; when embedded in the
+          Total survey, OK advances to the next step (marks risk_perception done). */}
+      {submitSuccessOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className={cx(
+              "w-full max-w-sm rounded-2xl p-6 text-center shadow-xl",
+              isDarkMode ? "bg-slate-900" : "bg-white",
+            )}
+          >
+            <div
+              className={cx(
+                "w-14 h-14 mx-auto mb-4 rounded-full flex items-center justify-center",
+                isDarkMode ? "bg-green-900/50" : "bg-green-50",
+              )}
+            >
+              <CheckCircle2
+                size={28}
+                className={isDarkMode ? "text-green-400" : "text-green-600"}
+              />
+            </div>
+            <p
+              className={cx(
+                "text-base font-medium mb-6",
+                isDarkMode ? "text-slate-100" : "text-gray-900",
+              )}
+            >
+              Responses submitted successfully!
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setSubmitSuccessOpen(false);
+                if (onComplete) {
+                  if (surveyMode && currentFile && currentSpeaker) {
+                    trackFollowup(currentFile, currentSpeaker, {
+                      event_type: "survey_complete",
+                      survey_type: "risk_perception",
+                    });
+                  }
+                  onComplete();
+                }
+              }}
+              className="px-6 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Incomplete-sections modal from the single Submit. */}
+      {submitMissing.length > 0 && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className={cx(
+              "w-full max-w-md rounded-2xl p-6 shadow-xl",
+              isDarkMode ? "bg-slate-900" : "bg-white",
+            )}
+          >
+            <p
+              className={cx(
+                "text-base font-semibold mb-3",
+                isDarkMode ? "text-slate-100" : "text-gray-900",
+              )}
+            >
+              Please complete these sections before submitting:
+            </p>
+            <ul
+              className={cx(
+                "list-disc pl-5 mb-6 text-sm",
+                isDarkMode ? "text-slate-300" : "text-gray-700",
+              )}
+            >
+              {submitMissing.map((d) => (
+                <li key={d}>{d}</li>
+              ))}
+            </ul>
+            <div className="text-right">
+              <button
+                type="button"
+                onClick={() => setSubmitMissing([])}
+                className="px-6 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* The inner gets `flex-1 w-full` so it absorbs V37 outer's
           remaining vertical space (matching V31Re's `flex flex-1`
           pattern). Without this, when V37 content is shorter than the
@@ -4468,6 +4609,9 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
                 style={{ display: isVisible ? "block" : "none" }}
               >
                 <TopicCard
+                  ref={(el) => {
+                    cardRefs.current[topic] = el;
+                  }}
                   topicName={topic}
                   topicIndex={index}
                   aiSummary={topicData?.aiSummary || "Summary not available."}
@@ -4496,8 +4640,12 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
                   onSubmit={() => handleSubmitDomain(topic)}
                   showQuestions={showQuestions}
                   prefill={firstVisit.responses[TOPIC_TO_DOMAIN[topic]] ?? null}
-                  onSave={(answers) =>
-                    firstVisit.saveDomain(TOPIC_TO_DOMAIN[topic], answers)
+                  onSave={(answers, partial) =>
+                    firstVisit.saveDomain(
+                      TOPIC_TO_DOMAIN[topic],
+                      answers,
+                      partial ?? false,
+                    )
                   }
                   isDark={isDarkMode}
                   patientId={currentSpeaker}
@@ -4534,8 +4682,6 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
           // [V41] Answering is OPTIONAL: Next no longer requires submitting the
           // current domain — patients can skip a section and advance. (Submit
           // still validates for those who choose to answer.)
-          const isContinueToFollowup = !!onComplete && isLastScreen;
-          const nextDisabled = isContinueToFollowup ? false : isLastScreen;
           return (
             <div
               className={cx(
@@ -4586,36 +4732,31 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
 
               <button
                 type="button"
-                disabled={nextDisabled}
+                disabled={isLastScreen && submitAllBusy}
                 onClick={() => {
-                  if (isContinueToFollowup) {
-                    // Embedded Risk step: emit the follow-up survey_complete so
-                    // risk_perception is marked complete like SDM/DCS. The answers
-                    // themselves are already persisted per-domain to
-                    // patient_survey_submission_log (survey_type=risk_perception_2)
-                    // by each domain Submit (PUT /api/patient/first-visit-answers),
-                    // so no separate final submit is needed here.
-                    if (surveyMode && currentFile && currentSpeaker) {
-                      trackFollowup(currentFile, currentSpeaker, {
-                        event_type: "survey_complete",
-                        survey_type: "risk_perception",
-                      });
-                    }
-                    onComplete!();
+                  if (isLastScreen) {
+                    // Single Submit: persist every domain (one saveDomain row
+                    // each) then show the success modal. Advancing to the next
+                    // step (for the embedded Risk survey) happens on the modal OK.
+                    void handleSubmitAll();
                   } else {
                     setCurrentScreen((s) => Math.min(TOTAL_SCREENS - 1, s + 1));
                   }
                 }}
-                data-track-proximity="WizardNext"
+                data-track-proximity={isLastScreen ? "WizardSubmit" : "WizardNext"}
                 className={cx(
                   "inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 border text-white",
-                  nextDisabled
+                  isLastScreen && submitAllBusy
                     ? "bg-gray-300 dark:bg-slate-700 border-transparent cursor-not-allowed"
                     : "bg-gradient-to-r from-indigo-500 to-violet-500 border-transparent shadow hover:from-indigo-600 hover:to-violet-600",
                 )}
               >
-                {isContinueToFollowup ? "Continue to Follow-up" : "Next"}
-                <ChevronRight size={16} />
+                {isLastScreen
+                  ? submitAllBusy
+                    ? "Submitting…"
+                    : "Submit"
+                  : "Next"}
+                {!isLastScreen && <ChevronRight size={16} />}
               </button>
             </div>
           );

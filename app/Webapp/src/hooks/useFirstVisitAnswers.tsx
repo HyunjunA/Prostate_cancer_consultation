@@ -32,8 +32,12 @@ export interface UseFirstVisitAnswers {
   isHydrated: boolean;
   /** Last error (network, server, validation). Cleared on next save. */
   error: Error | null;
-  /** Upsert one domain's answers. Rejects on failure. */
-  saveDomain: (domain: Domain, answers: AnswerItem[]) => Promise<void>;
+  /** Upsert one domain's answers (its own row, own timestamp). Rejects on failure. */
+  saveDomain: (
+    domain: Domain,
+    answers: AnswerItem[],
+    partial?: boolean,
+  ) => Promise<void>;
 }
 
 export function useFirstVisitAnswers(
@@ -76,12 +80,22 @@ export function useFirstVisitAnswers(
   }, [file, speaker]);
 
   const saveDomain = useCallback(
-    async (domain: Domain, answers: AnswerItem[]): Promise<void> => {
+    async (
+      domain: Domain,
+      answers: AnswerItem[],
+      partial = false,
+    ): Promise<void> => {
       if (!file || !speaker) {
         throw new Error("saveDomain called before file/speaker were known");
       }
       try {
-        const data = await firstVisitAnswersApi.put({ file, speaker, domain, answers });
+        const data = await firstVisitAnswersApi.put({
+          file,
+          speaker,
+          domain,
+          answers,
+          partial,
+        });
         // Refresh the whole cache from the server's authoritative response.
         setResponses(data.responses);
         setError(null);
