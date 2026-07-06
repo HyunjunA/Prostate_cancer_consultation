@@ -522,6 +522,13 @@ async def submit_survey(
         raise HTTPException(status_code=404,
                             detail=f"No patient record for speaker '{submission.speaker}'")
 
+    # Uniform extra_data shape across all survey types: always {partial: bool}.
+    # A submission is "completed" (partial=false) unless the client explicitly
+    # marked it a progress auto-save (metadata={"partial": true}). Any other
+    # client metadata keys are preserved alongside.
+    extra_meta = dict(submission.metadata or {})
+    extra_meta.setdefault("partial", False)
+
     # Save to PostgreSQL. sid/doctor are the real-subject attribution recovered by
     # un-hashing the composite speaker (see deid.py).
     db_record = PatientSurveySubmissionLog(
@@ -529,7 +536,7 @@ async def submit_survey(
         speaker=submission.speaker,
         survey_type=submission.survey_type,
         answers=submission.answers,        # JSONB column — dict stored directly
-        extra_data=submission.metadata,    # JSONB column — dict stored directly
+        extra_data=extra_meta,             # JSONB — always {partial: bool} (+ any client meta)
         sid=unhash_patient_sid(submission.speaker),
         doctor=unhash_doctor_num(submission.speaker),
         redcap_synced=False

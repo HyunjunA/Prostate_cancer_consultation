@@ -248,7 +248,7 @@ follow-up surveys (`sdm`/`dcs`/`satisfaction`) and the first-visit Risk cognitio
 | `speaker` | varchar(100) | no | **FK→patient_summary** | Patient speaker. |
 | `survey_type` | varchar(50) | no | | `risk_perception_2` (first-visit Risk), `sdm`, `dcs`, `satisfaction`, … |
 | `answers` | jsonb | no | | The submitted answers (shape depends on survey_type; risk_perception_2 nests domain→question_id). |
-| `extra_data` | jsonb | yes | | Optional extra payload. |
+| `extra_data` | jsonb | yes | | Submission status `{partial: bool}` — `true` = auto-save progress, `false` = completed submission (+ any client metadata). |
 | `submitted_at` | timestamptz | yes | | Submission time (default now()). |
 | `redcap_synced` | boolean | yes | | Whether the row was pushed to REDCap; default false. |
 | `redcap_record_id` | varchar(255) | yes | | REDCap-side record id after sync. |

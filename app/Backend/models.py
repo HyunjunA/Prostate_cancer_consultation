@@ -151,6 +151,9 @@ class PatientSurveySubmissionLog(Base):
     speaker = Column(String(100), nullable=False, index=True)
     survey_type = Column(String(50), nullable=False, index=True)
     answers = Column(JSONB_COMPAT, nullable=False)
+    # Submission status + any client metadata. Written uniformly as {"partial": bool}
+    # by the routes: partial=true for follow-up auto-saves, false for completed
+    # submissions (see routes_surveys.submit_survey / routes_patient upsert).
     extra_data = Column(JSONB_COMPAT)
     submitted_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 

@@ -16,6 +16,8 @@ Unit tests:
 
 from typing import Optional
 
+import pytest_asyncio
+
 from tests.factories import TestDataFactory
 
 
@@ -66,6 +68,14 @@ async def _seed_submissions(db, count: int = 1, **kwargs):
 
 class TestSubmitSurvey:
     """POST /api/surveys/submit"""
+
+    @pytest_asyncio.fixture(autouse=True)
+    async def _seed_parent(self, db):
+        # submit_survey resolves a patient_summary parent (FK guard in
+        # patient_lookup.resolve_patient_summary_file); seed the default
+        # (file, speaker) so the endpoint can attach the survey.
+        db.add(TestDataFactory.patient_summary())
+        await db.commit()
 
     async def test_submit_baseline_returns_200(self, client, api_headers):
         resp = await client.post(
@@ -146,34 +156,43 @@ class TestSubmitSurvey:
         assert resp.status_code == 403
 
     async def test_metadata_is_optional(self, client, api_headers, db):
-        # Without metadata
+        from sqlalchemy import select
+        from models import PatientSurveySubmissionLog
+
+        async def _extra_data(resp):
+            result = await db.execute(
+                select(PatientSurveySubmissionLog).where(
+                    PatientSurveySubmissionLog.id == resp.json()["db"]["id"]
+                )
+            )
+            return result.scalar_one().extra_data
+
+        # Without metadata → uniform default {partial: false}.
         resp1 = await client.post(
             "/api/surveys/submit",
             json=_survey_payload(),
             headers=api_headers,
         )
         assert resp1.status_code == 200
+        assert await _extra_data(resp1) == {"partial": False}
 
-        # With metadata
+        # With metadata → client keys preserved, partial defaulted to false.
         resp2 = await client.post(
             "/api/surveys/submit",
             json=_survey_payload(metadata={"source": "mobile"}),
             headers=api_headers,
         )
         assert resp2.status_code == 200
+        assert await _extra_data(resp2) == {"source": "mobile", "partial": False}
 
-        # Verify metadata stored as extra_data
-        from sqlalchemy import select
-        from models import PatientSurveySubmissionLog
-
-        result = await db.execute(
-            select(PatientSurveySubmissionLog).where(
-                PatientSurveySubmissionLog.id == resp2.json()["db"]["id"]
-            )
+        # An explicit progress-save (partial: true) is preserved.
+        resp3 = await client.post(
+            "/api/surveys/submit",
+            json=_survey_payload(metadata={"partial": True}),
+            headers=api_headers,
         )
-        row = result.scalar_one()
-        # JSONB → dict at the ORM layer, no json.loads needed.
-        assert row.extra_data == {"source": "mobile"}
+        assert resp3.status_code == 200
+        assert await _extra_data(resp3) == {"partial": True}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
