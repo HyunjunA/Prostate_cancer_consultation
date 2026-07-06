@@ -40,6 +40,8 @@ from auth.access_control import check_patient_access
 from auth.base import AuthUser
 from db import get_db
 from deid import unhash_patient_sid, unhash_doctor_num
+from redcap_mapping import resolve_record_id
+from patient_lookup import resolve_patient_summary_file
 from models import (
     DoctorRewriteLog,
     PatientSurveySubmissionLog,
@@ -849,8 +851,15 @@ async def upsert_first_visit_answers(
     sid = unhash_patient_sid(body.speaker)
     doctor = unhash_doctor_num(body.speaker)
 
+    # Resolve the patient_summary parent tolerantly (frontend "<stem>.csv" vs pipeline
+    # "<stem>.xlsx") so a file-extension drift never trips the FK; clear 404 otherwise.
+    parent_file = await resolve_patient_summary_file(db, body.file, body.speaker)
+    if parent_file is None:
+        raise HTTPException(status_code=404,
+                            detail=f"No patient record for speaker '{body.speaker}'")
+
     stmt = select(PatientSurveySubmissionLog).where(
-        PatientSurveySubmissionLog.file == body.file,
+        PatientSurveySubmissionLog.file == parent_file,
         PatientSurveySubmissionLog.speaker == body.speaker,
         PatientSurveySubmissionLog.survey_type == _RISK2_SURVEY_TYPE,
     )
@@ -864,7 +873,7 @@ async def upsert_first_visit_answers(
         record.doctor = doctor
     else:
         db.add(PatientSurveySubmissionLog(
-            file=body.file,
+            file=parent_file,
             speaker=body.speaker,
             survey_type=_RISK2_SURVEY_TYPE,
             answers={body.domain: domain_answers},
@@ -874,16 +883,20 @@ async def upsert_first_visit_answers(
 
     await db.commit()
 
-    # Best-effort mirror to REDCap "post_risk_perception_2" (never breaks the DB
-    # write). record_id = the un-hashed SID (falls back to the raw speaker).
-    redcap_result = await _sync_first_visit_answers_to_redcap(sid or body.speaker, body.answers)
-
-    # Record the sync outcome on the submission row so the DB self-reports REDCap
-    # status (redcap_synced / redcap_record_id / redcap_error), mirroring the
-    # follow-up survey flow. Only when a push was actually attempted.
-    if redcap_result["attempted"]:
-        row = (await db.execute(stmt)).scalars().first()
+    # Resolve the study SID to REDCap's own auto-numbered record_id. If the SID is
+    # not registered in REDCap yet, mark the row pending (no push) rather than
+    # inventing an id. Otherwise mirror to REDCap under the real record_id.
+    redcap_record_id = await resolve_record_id(sid)
+    row = (await db.execute(stmt)).scalars().first()
+    if redcap_record_id is None:
         if row is not None:
+            row.redcap_synced = False
+            row.redcap_record_id = None
+            row.redcap_error = f"SID {sid or body.speaker!r} not registered in REDCap"
+            await db.commit()
+    else:
+        redcap_result = await _sync_first_visit_answers_to_redcap(redcap_record_id, body.answers)
+        if redcap_result["attempted"] and row is not None:
             row.redcap_synced = redcap_result["success"]
             row.redcap_record_id = redcap_result["record_id"]
             row.redcap_error = redcap_result["error"]

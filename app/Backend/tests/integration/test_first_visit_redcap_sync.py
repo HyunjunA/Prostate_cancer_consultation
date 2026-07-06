@@ -43,6 +43,25 @@ def disable_redcap(monkeypatch):
     monkeypatch.setattr(routes_patient, "REDCAP_API_TOKEN", None)
 
 
+@pytest.fixture(autouse=True)
+def _default_mapping(monkeypatch):
+    """Resolve every SID to REDCap record_id '3' by default — prevents a real
+    REDCap export during tests and models the production SID->record_id lookup."""
+    async def _resolve(_sid):
+        return "3"
+    monkeypatch.setattr("routes_patient.resolve_record_id", _resolve)
+    monkeypatch.setattr("routes_surveys.resolve_record_id", _resolve)
+
+
+@pytest.fixture
+def unmapped(monkeypatch):
+    """Force resolve_record_id -> None (SID not registered in REDCap yet)."""
+    async def _resolve(_sid):
+        return None
+    monkeypatch.setattr("routes_patient.resolve_record_id", _resolve)
+    monkeypatch.setattr("routes_surveys.resolve_record_id", _resolve)
+
+
 @pytest_asyncio.fixture
 async def patient_row(db):
     row = PatientSummary(file="f.xlsx", speaker="Patient")
@@ -76,7 +95,7 @@ async def test_cp_submit_posts_mapped_payload(client, patient_row, api_headers, 
     assert resp.status_code == 200, resp.text
     assert route.called
     record = _posted_record(route)
-    assert record["record_id"] == "Patient"
+    assert record["record_id"] == "3"  # resolved REDCap auto id (mapped from SID)
     assert record["cp_1_rp_v2"] == "35"
     assert record["cp_2_rp_v2"] == "60"
     assert record["cp_3_rp_v2"] == "2"  # "Over next 5 years" -> code 2
@@ -184,9 +203,9 @@ async def _fetch_risk2_row(db):
 @pytest.mark.integration
 @pytest.mark.asyncio
 @respx.mock
-async def test_redcap_record_id_is_unhashed_sid(client, api_headers, enable_redcap, db):
-    # A realistic hashed speaker must be posted to REDCap under its UN-HASHED SID,
-    # and the row must store the attribution (sid/doctor).
+async def test_redcap_record_id_is_mapped_auto_number(client, api_headers, enable_redcap, db):
+    # The submission is posted under REDCap's resolved auto id ("3"), while the row
+    # keeps the study attribution (sid = SID_22, doctor = doc2).
     from models import PatientSummary
     db.add(PatientSummary(file="13511_13571_07022026.csv", speaker="Patient_13511_13571_07022026"))
     await db.commit()
@@ -199,7 +218,7 @@ async def test_redcap_record_id_is_unhashed_sid(client, api_headers, enable_redc
 
     assert resp.status_code == 200, resp.text
     record = _posted_record(route)
-    assert record["record_id"] == "SID_22"  # un-hashed, NOT "Patient_13511_..."
+    assert record["record_id"] == "3"  # REDCap's own id, NOT the SID or the hashed speaker
 
     from sqlalchemy import select
     from models import PatientSurveySubmissionLog
@@ -208,7 +227,7 @@ async def test_redcap_record_id_is_unhashed_sid(client, api_headers, enable_redc
         PatientSurveySubmissionLog.speaker == "Patient_13511_13571_07022026"))).scalars().first()
     assert row.sid == "SID_22"
     assert row.doctor == "doc2"
-    assert row.redcap_record_id == "SID_22"
+    assert row.redcap_record_id == "3"
 
 
 @pytest.mark.integration
@@ -226,7 +245,7 @@ async def test_sync_success_recorded_on_row(client, patient_row, api_headers, en
     assert resp.status_code == 200, resp.text
     row = await _fetch_risk2_row(db)
     assert row.redcap_synced is True
-    assert row.redcap_record_id == "Patient"
+    assert row.redcap_record_id == "3"
     assert row.redcap_error is None
 
 
@@ -245,7 +264,7 @@ async def test_sync_failure_recorded_on_row(client, patient_row, api_headers, en
     assert resp.status_code == 200, resp.text
     row = await _fetch_risk2_row(db)
     assert row.redcap_synced is False
-    assert row.redcap_record_id == "Patient"
+    assert row.redcap_record_id == "3"
     assert "HTTP 500" in (row.redcap_error or "")
 
 
@@ -263,3 +282,23 @@ async def test_sync_disabled_leaves_flags_untouched(client, patient_row, api_hea
     assert row.redcap_synced is False
     assert row.redcap_record_id is None
     assert row.redcap_error is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@respx.mock(assert_all_called=False)
+async def test_unmapped_sid_is_pending(client, patient_row, api_headers, enable_redcap, unmapped, db):
+    # SID not registered in REDCap -> no push, row marked pending with an error.
+    route = respx.post(FAKE_REDCAP_URL).mock(return_value=httpx.Response(200, json={"count": 1}))
+
+    resp = await client.put(URL_PUT, headers=api_headers, json={
+        "file": "f.xlsx", "speaker": "Patient", "domain": "cp",
+        "answers": [{"question_id": "cp_timeline", "field": "timeline", "value": "Over next 5 years"}],
+    })
+
+    assert resp.status_code == 200, resp.text  # the DB write still succeeds
+    assert not route.called                    # nothing pushed to REDCap
+    row = await _fetch_risk2_row(db)
+    assert row.redcap_synced is False
+    assert row.redcap_record_id is None
+    assert "not registered in REDCap" in (row.redcap_error or "")

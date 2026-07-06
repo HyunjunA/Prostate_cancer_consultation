@@ -62,6 +62,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth import get_current_user
 from db import get_db
 from deid import unhash_patient_sid, unhash_doctor_num
+from redcap_mapping import resolve_record_id
+from patient_lookup import resolve_patient_summary_file
 from models import PatientSurveySubmissionLog
 
 logger = logging.getLogger(__name__)
@@ -381,10 +383,15 @@ async def import_to_redcap(submission: SurveySubmission, timestamp: str) -> dict
 
     print("[CONFIG] [OK] REDCap is enabled")
 
-    # Attribute to the real subject: un-hash the composite speaker to its SID and
-    # use that as the REDCap record_id (falls back to the raw speaker if un-hashing
-    # does not resolve, so a REDCap push is never blocked).
-    record_id = unhash_patient_sid(submission.speaker) or submission.speaker
+    # Un-hash the composite speaker to its study SID, then resolve that SID to
+    # REDCap's own auto-numbered record_id (production: the coordinator registered
+    # the patient in REDCap and stored the SID in redcap_sid_field). If the SID is
+    # not registered in REDCap yet, do NOT push — the caller records it as pending.
+    sid = unhash_patient_sid(submission.speaker)
+    record_id = await resolve_record_id(sid)
+    if not record_id:
+        return {"success": False, "record_id": None,
+                "error": f"SID {sid or submission.speaker!r} not registered in REDCap"}
     survey_type = submission.survey_type
 
     # Step 1: Get field mapping
@@ -506,10 +513,19 @@ async def submit_survey(
     print(json.dumps(submission.answers, indent=2, ensure_ascii=False))
     print("=" * 80 + "\n")
 
+    # Resolve the patient_summary parent tolerantly so a file-extension/format drift
+    # (frontend sends "<stem>.csv", pipeline may have stored "<stem>.xlsx") never
+    # trips the FK. If the patient genuinely does not exist, return a clear 404
+    # instead of a raw 500 "Failed to submit".
+    parent_file = await resolve_patient_summary_file(db, submission.file, submission.speaker)
+    if parent_file is None:
+        raise HTTPException(status_code=404,
+                            detail=f"No patient record for speaker '{submission.speaker}'")
+
     # Save to PostgreSQL. sid/doctor are the real-subject attribution recovered by
     # un-hashing the composite speaker (see deid.py).
     db_record = PatientSurveySubmissionLog(
-        file=submission.file,
+        file=parent_file,
         speaker=submission.speaker,
         survey_type=submission.survey_type,
         answers=submission.answers,        # JSONB column — dict stored directly
