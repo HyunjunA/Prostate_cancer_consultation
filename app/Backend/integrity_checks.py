@@ -209,9 +209,9 @@ async def check_redcap_reconciliation(
     if total == 0:
         return [_ok("redcap_reconciliation", 0, "no synced submissions")]
 
-    # One read-only export of all referenced record_ids (all fields).
-    record_ids = sorted({r.redcap_record_id or unhash_patient_sid(r.speaker) for r in synced if
-                         (r.redcap_record_id or unhash_patient_sid(r.speaker))})
+    # One read-only export of all referenced record_ids (all fields). Synced rows
+    # carry the real REDCap record_id (the SID-resolved auto id).
+    record_ids = sorted({r.redcap_record_id for r in synced if r.redcap_record_id})
     data = {"token": redcap_token, "content": "record", "format": "json", "type": "flat",
             "returnFormat": "json"}
     for i, rid in enumerate(record_ids):
@@ -228,7 +228,7 @@ async def check_redcap_reconciliation(
     missing_record: List[dict] = []
     mismatches: List[dict] = []
     for r in synced:
-        rid = r.redcap_record_id or unhash_patient_sid(r.speaker)
+        rid = r.redcap_record_id
         actual = by_id.get(rid)
         if actual is None:
             missing_record.append({"id": r.id, "record_id": rid, "survey_type": r.survey_type})
