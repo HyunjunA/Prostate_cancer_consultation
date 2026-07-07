@@ -82,6 +82,7 @@ import RiskPerceptionWithSummary, {
 import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV41";
 
 import { submitSurvey, fetchSurveySubmissions } from "@/api/surveyApi";
+import { useDebounce } from "@/hooks/useDebounce";
 import { sendTrackingEvents } from "@/api/trackingApi";
 import { trackFollowup, startSession, endSession } from "@/tracking/track";
 import { getOrCreateSession } from "@/tracking/utils/session.utils";
@@ -730,6 +731,10 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
     useState(false);
   const [satisfactionSubmitted, setSatisfactionSubmitted] = useState(false);
 
+  // True once the mount-time restore fetch has resolved. Auto-save waits for this
+  // so it never re-saves the just-restored values (and works for a fresh patient).
+  const [surveyHydrated, setSurveyHydrated] = useState(false);
+
   // ─────────────────────────────────────────────────────────────────────────
   // 7.3 Load Summary Data
   // ─────────────────────────────────────────────────────────────────────────
@@ -771,19 +776,29 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
 
         const restored = new Set<SurveyStep>();
 
-        // Restore each survey type if previously submitted
-        if (submissions.submissions_by_type["sdm"]?.length) {
-          const latest = submissions.submissions_by_type["sdm"][0];
-          setSdmAnswers(latest.answers as SDMAnswers);
-          setSdmSubmitted(true);
-          restored.add("sdm");
+        // Restore each survey type. Answers come from the LATEST row (partial or
+        // final) so in-progress auto-saved input is restored; the submitted flag /
+        // completed step is set ONLY when a FINAL (partial:false) row exists, so an
+        // auto-saved partial does not falsely light the green check.
+        const isFinal = (r: { extra_data?: Record<string, any> | null }) =>
+          r.extra_data?.partial === false;
+
+        const sdmRows = submissions.submissions_by_type["sdm"];
+        if (sdmRows?.length) {
+          setSdmAnswers(sdmRows[0].answers as SDMAnswers);
+          if (sdmRows.some(isFinal)) {
+            setSdmSubmitted(true);
+            restored.add("sdm");
+          }
         }
 
-        if (submissions.submissions_by_type["dcs"]?.length) {
-          const latest = submissions.submissions_by_type["dcs"][0];
-          setDcsAnswers(latest.answers as DecisionalConflictAnswers);
-          setDcsSubmitted(true);
-          restored.add("dcs");
+        const dcsRows = submissions.submissions_by_type["dcs"];
+        if (dcsRows?.length) {
+          setDcsAnswers(dcsRows[0].answers as DecisionalConflictAnswers);
+          if (dcsRows.some(isFinal)) {
+            setDcsSubmitted(true);
+            restored.add("dcs");
+          }
         }
 
         // Risk completion can be stored under either survey_type:
@@ -797,16 +812,20 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
         if (riskRows?.length) {
           setRiskAnswers(riskRows[0].answers as RiskPerceptionAnswers);
         }
-        if (riskRows?.length || riskV41Rows?.length) {
+        // Only a FINAL submit lights the Risk checkmark — risk_perception_2 now
+        // accumulates partial auto-saves (V41), which must not mark it complete.
+        if (riskRows?.some(isFinal) || riskV41Rows?.some(isFinal)) {
           setRiskSubmitted(true);
           restored.add("risk");
         }
 
-        if (submissions.submissions_by_type["satisfaction"]?.length) {
-          const latest = submissions.submissions_by_type["satisfaction"][0];
-          setSatisfactionAnswers(latest.answers as PatientSatisfactionAnswers);
-          setSatisfactionSubmitted(true);
-          restored.add("satisfaction");
+        const satRows = submissions.submissions_by_type["satisfaction"];
+        if (satRows?.length) {
+          setSatisfactionAnswers(satRows[0].answers as PatientSatisfactionAnswers);
+          if (satRows.some(isFinal)) {
+            setSatisfactionSubmitted(true);
+            restored.add("satisfaction");
+          }
         }
 
         if (restored.size > 0) {
@@ -828,6 +847,9 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
         }
       } catch (err) {
         console.error("Error restoring survey state:", err);
+      } finally {
+        // Restore fetch resolved (with or without prior data) — enable auto-save.
+        setSurveyHydrated(true);
       }
     };
 
@@ -1232,6 +1254,66 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
       metadata: { partial: true },
     }).catch((err) => console.error("Risk progress save failed:", err));
   };
+
+  const saveSatisfactionProgress = () => {
+    submitSurvey({
+      survey_type: "satisfaction",
+      file: currentFile,
+      speaker: currentSpeaker,
+      answers: satisfactionAnswers,
+      metadata: { partial: true },
+    }).catch((err) => console.error("Satisfaction progress save failed:", err));
+  };
+
+  // ── Auto-save: persist in-progress answers (partial:true) shortly after the
+  // patient stops editing, so a refresh restores unsubmitted input (like the
+  // first-visit Risk survey). Gated on surveyHydrated so the just-restored values
+  // are not re-saved; a per-survey baseline skips the first post-restore settle.
+  // The baseline is primed from the CURRENT (restored) answers — NOT the debounced
+  // signal, which still lags at its pre-restore value when hydration flips true. Using
+  // the debounced value here would treat the restored answers settling in as an "edit"
+  // and fire a spurious partial save on every page load.
+  const sdmDebounced = useDebounce(JSON.stringify(sdmAnswers), 800);
+  const sdmAutoSaveBaseline = useRef<string | null>(null);
+  useEffect(() => {
+    if (!surveyHydrated) return;
+    if (sdmAutoSaveBaseline.current === null) {
+      sdmAutoSaveBaseline.current = JSON.stringify(sdmAnswers);
+      return;
+    }
+    if (sdmDebounced === sdmAutoSaveBaseline.current) return;
+    sdmAutoSaveBaseline.current = sdmDebounced;
+    saveSDMProgress();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sdmDebounced, surveyHydrated]);
+
+  const dcsDebounced = useDebounce(JSON.stringify(dcsAnswers), 800);
+  const dcsAutoSaveBaseline = useRef<string | null>(null);
+  useEffect(() => {
+    if (!surveyHydrated) return;
+    if (dcsAutoSaveBaseline.current === null) {
+      dcsAutoSaveBaseline.current = JSON.stringify(dcsAnswers);
+      return;
+    }
+    if (dcsDebounced === dcsAutoSaveBaseline.current) return;
+    dcsAutoSaveBaseline.current = dcsDebounced;
+    saveDCSProgress();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dcsDebounced, surveyHydrated]);
+
+  const satisfactionDebounced = useDebounce(JSON.stringify(satisfactionAnswers), 800);
+  const satisfactionAutoSaveBaseline = useRef<string | null>(null);
+  useEffect(() => {
+    if (!surveyHydrated) return;
+    if (satisfactionAutoSaveBaseline.current === null) {
+      satisfactionAutoSaveBaseline.current = JSON.stringify(satisfactionAnswers);
+      return;
+    }
+    if (satisfactionDebounced === satisfactionAutoSaveBaseline.current) return;
+    satisfactionAutoSaveBaseline.current = satisfactionDebounced;
+    saveSatisfactionProgress();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [satisfactionDebounced, surveyHydrated]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // 7.8 Loading State

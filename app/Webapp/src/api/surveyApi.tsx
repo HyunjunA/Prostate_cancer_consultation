@@ -226,6 +226,7 @@ export interface SurveySubmissionsByType {
       id: number;
       file: string;
       answers: Record<string, any>;
+      extra_data?: Record<string, any> | null; // {partial: bool} — partial vs final
       submitted_at: string | null;
       redcap_synced: boolean;
     }>

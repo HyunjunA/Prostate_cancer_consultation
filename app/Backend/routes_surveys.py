@@ -135,6 +135,12 @@ SURVEY_COMPLETE_FIELDS = {
     "satisfaction": "patient_satisfaction_complete",
 }
 
+# Surveys with FREE-TEXT fields must sync with overwriteBehavior='overwrite' so that
+# clearing the text and re-submitting blanks it in REDCap ('normal' ignores empty
+# values, leaving the old text). Radio/scale surveys keep 'normal' (they never send
+# empty strings; unanswered fields are already dropped by exclude_none).
+_OVERWRITE_SURVEYS = {"satisfaction"}
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Field Mapping: Frontend → REDCap
@@ -451,7 +457,14 @@ async def import_to_redcap(submission: SurveySubmission, timestamp: str) -> dict
         print(f"\n[STEP 5] Calling import_to_redcap_record(record_id='{record_id}', import_data=...)")
         print("-" * 70)
 
-        result = await import_to_redcap_record(record_id, import_data)
+        # Free-text surveys must use overwriteBehavior='overwrite' so that clearing
+        # the text and re-submitting actually blanks it in REDCap ('normal' ignores
+        # empty values). Radio/scale surveys keep 'normal' (they never send empty
+        # strings; unanswered fields are already dropped by exclude_none).
+        overwrite = "overwrite" if survey_type in _OVERWRITE_SURVEYS else "normal"
+        result = await import_to_redcap_record(
+            record_id, import_data, overwrite_behavior=overwrite
+        )
 
         print("-" * 70)
         print("[STEP 5] import_to_redcap_record() returned")
@@ -707,6 +720,7 @@ async def get_submissions_by_speaker(
             "id": r.id,
             "file": r.file,
             "answers": r.answers,  # JSONB — already a dict
+            "extra_data": r.extra_data,  # {partial: bool} — lets the client tell partial vs final
             "submitted_at": r.submitted_at.isoformat() if r.submitted_at else None,
             "redcap_synced": r.redcap_synced
         })
@@ -1546,7 +1560,8 @@ class REDCapBulkImportRequest(BaseModel):
 @router.post("/redcap/records/{record_id}/import")
 async def import_to_redcap_record(
     record_id: str,
-    import_data: REDCapImportData
+    import_data: REDCapImportData,
+    overwrite_behavior: str = "normal",
 ):
     """
     Import survey data to REDCap for a specific record ID
@@ -1699,7 +1714,7 @@ async def import_to_redcap_record(
             'content': 'record',
             'format': 'json',
             'type': 'flat',
-            'overwriteBehavior': 'normal',
+            'overwriteBehavior': overwrite_behavior,
             'forceAutoNumber': 'false',
             'data': json.dumps([redcap_record]),
             'returnContent': 'ids',

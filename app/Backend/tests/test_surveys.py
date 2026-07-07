@@ -16,6 +16,7 @@ Unit tests:
 
 from typing import Optional
 
+import pytest
 import pytest_asyncio
 
 from tests.factories import TestDataFactory
@@ -392,6 +393,16 @@ class TestGetBySpeaker:
         for key in ("speaker", "total_submissions", "survey_types", "submissions_by_type"):
             assert key in data, f"Missing key: {key}"
 
+    async def test_rows_expose_extra_data(self, client, api_headers, db):
+        # The client uses extra_data.partial to tell partial auto-saves from final
+        # submits when restoring survey state, so each row must carry extra_data.
+        await _seed_submissions(db, count=1, speaker="ExtraP", survey_type="sdm")
+        resp = await client.get(
+            "/api/surveys/by-speaker/ExtraP", headers=api_headers
+        )
+        row = resp.json()["submissions_by_type"]["sdm"][0]
+        assert "extra_data" in row
+
     async def test_no_auth_returns_403(self, client):
         resp = await client.get("/api/surveys/by-speaker/anyone")
         assert resp.status_code == 403
@@ -592,3 +603,56 @@ class TestTransformValue:
         from routes_surveys import transform_value
         assert transform_value("satisfaction", "feedbackText", "great") == "great"
         assert transform_value("unknown_type", "field", "val") == "val"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# REDCap overwriteBehavior: free-text (satisfaction) must clear on blank re-submit
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestRedcapOverwriteBehavior:
+    """Free-text surveys sync with overwriteBehavior='overwrite' so clearing the
+    text blanks it in REDCap; radio/scale surveys keep 'normal'.
+
+    Mocks import_to_redcap_record so we assert the overwrite_behavior it is called
+    with (the real POST + verify re-read is not exercised here)."""
+
+    @pytest_asyncio.fixture(autouse=True)
+    async def _seed_parent(self, db):
+        db.add(TestDataFactory.patient_summary())
+        await db.commit()
+
+    @pytest.fixture
+    def _capture_redcap(self, monkeypatch):
+        import routes_surveys
+        monkeypatch.setattr(routes_surveys, "REDCAP_ENABLED", True)
+
+        async def _resolve(_sid):
+            return "3"
+        monkeypatch.setattr(routes_surveys, "resolve_record_id", _resolve)
+
+        captured: dict = {}
+
+        async def _fake_import_record(record_id, import_data, overwrite_behavior="normal"):
+            captured["overwrite_behavior"] = overwrite_behavior
+            captured["data"] = import_data.model_dump(exclude_none=True)
+            return {"status": "success"}
+        monkeypatch.setattr(routes_surveys, "import_to_redcap_record", _fake_import_record)
+        return captured
+
+    @pytest.mark.asyncio
+    async def test_satisfaction_blank_uses_overwrite(self, client, api_headers, _capture_redcap):
+        # Clearing the free-text and re-submitting must use overwriteBehavior=overwrite
+        # AND include the (empty) field so REDCap actually clears it.
+        resp = await client.post("/api/surveys/submit", headers=api_headers,
+            json=_survey_payload(survey_type="satisfaction", answers={"feedbackText": ""}))
+        assert resp.status_code == 200, resp.text
+        assert _capture_redcap["overwrite_behavior"] == "overwrite"
+        assert _capture_redcap["data"].get("pt_satisfaction") == ""
+
+    @pytest.mark.asyncio
+    async def test_radio_survey_uses_normal(self, client, api_headers, _capture_redcap):
+        # A radio/scale survey (sdm) keeps overwriteBehavior=normal (unchanged).
+        resp = await client.post("/api/surveys/submit", headers=api_headers,
+            json=_survey_payload(survey_type="sdm", answers={"q1": "no"}))
+        assert resp.status_code == 200, resp.text
+        assert _capture_redcap["overwrite_behavior"] == "normal"
