@@ -196,8 +196,7 @@ interface DetailViewProps {
     revisedSentence: string,
     score: number,
     classNumber: string,
-    selected: boolean,
-  ) => Promise<any>;
+  ) => Promise<unknown>;
   fetchRewritesFiltered: (file: string, speaker: string) => void;
   fetchScoreSummary: (file: string, speaker: string) => Promise<any>;
   setScoreSummaryLoading: (loading: boolean) => void;
@@ -3695,10 +3694,14 @@ const DetailView: React.FC<DetailViewProps> = ({
 
       setRescoring(false);
 
-      // Save rewrite to DB
+      // Save rewrite to DB (score succeeded). saveRewriteWithTimestamp resolves to
+      // the saved record on success or null on failure (it swallows the error), so
+      // check the result and surface a real DB-save failure instead of a false
+      // "success" — otherwise a 404/500 on PUT /rewrites is invisible to the doctor.
       if (newScore !== null) {
+        let saved: unknown = null;
         try {
-          await saveRewriteWithTimestamp(
+          saved = await saveRewriteWithTimestamp(
             selectedFile,
             selectedSpeaker,
             currentSentence.i,
@@ -3707,21 +3710,29 @@ const DetailView: React.FC<DetailViewProps> = ({
             newSentence,
             newScore,
             classNumber,
-            true,
           );
-          // Refresh rewrites data so it persists on page reload
-          fetchRewritesFiltered(selectedFile, selectedSpeaker);
         } catch (saveErr) {
           console.error("Error saving rewrite to DB:", saveErr);
         }
+        if (saved) {
+          // Refresh rewrites data so it persists on page reload
+          fetchRewritesFiltered(selectedFile, selectedSpeaker);
+          setSaveStatus({
+            status: "success",
+            message: `Your rewrite scored: ${newScore.toFixed(1)} — saved.`,
+          });
+        } else {
+          setSaveStatus({
+            status: "error",
+            message: `Scored ${newScore.toFixed(1)}, but saving to the database failed. Please try again.`,
+          });
+        }
+      } else {
+        setSaveStatus({
+          status: "error",
+          message: "Could not score. Please try again.",
+        });
       }
-
-      setSaveStatus({
-        status: "success",
-        message: newScore !== null
-          ? `Your rewrite scored: ${newScore.toFixed(1)}`
-          : "Could not score. Please try again.",
-      });
 
       setTimeout(() => {
         setSaveStatus({ status: "idle", message: "" });
