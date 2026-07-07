@@ -124,10 +124,59 @@ async def test_factor_multiselect_sends_all(client, patient_row, api_headers, en
     assert resp.status_code == 200, resp.text
     record = _posted_record(route)
     assert record["le_1_rp_v2"] == "4"        # "16-20 years" -> 4
-    # Both selected factors are sent as checkbox options (Age -> 2, Tumor stage -> 5).
+    # Selected factors are sent as checkbox options = "1" (Age -> 2, Tumor stage -> 5)
     assert record["le_2_rp_v2___2"] == "1"
     assert record["le_2_rp_v2___5"] == "1"
-    assert "le_2_rp_v2" not in record         # no plain radio field anymore
+    # EVERY other option of the field is sent explicitly as "0" so REDCap clears
+    # any previously-checked box (Tumor grade -> 1, Marital status -> 3, Health -> 4).
+    assert record["le_2_rp_v2___1"] == "0"
+    assert record["le_2_rp_v2___3"] == "0"
+    assert record["le_2_rp_v2___4"] == "0"
+    assert "le_2_rp_v2" not in record         # no plain radio field, only ___<code>
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@respx.mock
+async def test_factor_uncheck_clears(client, patient_row, api_headers, enable_redcap):
+    """De-selecting one factor and re-submitting sends that option as "0" (cleared)."""
+    route = respx.post(FAKE_REDCAP_URL).mock(return_value=httpx.Response(200, json={"count": 1}))
+
+    # First: Age + Tumor stage checked.
+    await client.put(URL_PUT, headers=api_headers, json=_body("le", [
+        {"question_id": "le_timeline", "field": "timeline", "value": "16-20 years"},
+        {"question_id": "le_factors", "field": "factors", "value": ["Age", "Tumor stage"]},
+    ]))
+    # Then: uncheck Tumor stage (only Age remains).
+    await client.put(URL_PUT, headers=api_headers, json=_body("le", [
+        {"question_id": "le_timeline", "field": "timeline", "value": "16-20 years"},
+        {"question_id": "le_factors", "field": "factors", "value": ["Age"]},
+    ]))
+
+    record = _posted_record(route)  # the latest POST
+    assert record["le_2_rp_v2___2"] == "1"    # Age still checked
+    assert record["le_2_rp_v2___5"] == "0"    # Tumor stage now cleared (the bug fix)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@respx.mock
+async def test_factor_uncheck_all_clears(client, patient_row, api_headers, enable_redcap):
+    """Unchecking every factor sends all option codes as "0"."""
+    route = respx.post(FAKE_REDCAP_URL).mock(return_value=httpx.Response(200, json={"count": 1}))
+
+    await client.put(URL_PUT, headers=api_headers, json=_body("le", [
+        {"question_id": "le_timeline", "field": "timeline", "value": "16-20 years"},
+        {"question_id": "le_factors", "field": "factors", "value": ["Age"]},
+    ]))
+    await client.put(URL_PUT, headers=api_headers, json=_body("le", [
+        {"question_id": "le_timeline", "field": "timeline", "value": "16-20 years"},
+        {"question_id": "le_factors", "field": "factors", "value": []},
+    ]))
+
+    record = _posted_record(route)
+    assert all(record[f"le_2_rp_v2___{c}"] == "0" for c in ("1", "2", "3", "4", "5"))
+    assert record["le_1_rp_v2"] == "4"        # timeline still synced (payload non-empty)
 
 
 @pytest.mark.integration

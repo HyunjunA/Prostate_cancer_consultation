@@ -751,17 +751,18 @@ def _fv_answer_to_redcap(question_id: str, field: str, value: Any) -> List[Tuple
         return [(redcap_field, code)] if code else []
 
     if field == "factors":
-        # UI multi-select -> REDCap checkbox: one `field___<code>` = "1" per
-        # selected factor. Unknown options are skipped.
+        # UI multi-select -> REDCap checkbox. Emit EVERY option code (1=checked,
+        # 0=unchecked) for this field, not just the selected ones: REDCap keeps a
+        # checkbox option at its previous value unless it is explicitly set to "0",
+        # so de-selecting a factor only clears it when we send `field___<code>=0`.
         if not isinstance(value, list):
             return []
         codes = _FV_FACTOR_CODES.get(question_id, {})
-        pairs: List[Tuple[str, str]] = []
-        for factor in value:
-            code = codes.get(factor)
-            if code:
-                pairs.append((f"{redcap_field}___{code}", "1"))
-        return pairs
+        selected = set(value)
+        return [
+            (f"{redcap_field}___{code}", "1" if factor in selected else "0")
+            for factor, code in codes.items()
+        ]
 
     return []
 
