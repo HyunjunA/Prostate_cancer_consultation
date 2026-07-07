@@ -647,7 +647,10 @@ export default function Home() {
                             >
                               1st · Report
                             </button>
-                            {/* 1st·Survey and Follow-up buttons hidden temporarily (2026-07-02).
+                            {/* 1st·Survey re-enabled (2026-07-07): standalone
+                                first-visit Risk survey (?survey=first-visit).
+                                Saves risk_perception_2 via the same V41 path as
+                                the Total Survey Risk step. */}
                             <button
                               onClick={() => handlePatientSelect(file, "first", true)}
                               title="First visit — survey questionnaire"
@@ -659,8 +662,13 @@ export default function Home() {
                             >
                               1st · Survey
                             </button>
+                            {/* Follow-up re-enabled (2026-07-07): standalone
+                                follow-up surveys (?survey=follow-up). sdm/dcs/
+                                satisfaction save to DB + REDCap via the same
+                                submitSurvey path as the Total Survey. */}
                             <button
                               onClick={() => handlePatientSelect(file, "followup")}
+                              title="Follow-up surveys (SDM, DCS, Satisfaction)"
                               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
                                 isDarkMode
                                   ? "bg-teal-500/10 text-teal-400 hover:bg-teal-500/20 hover:text-teal-300 border border-teal-500/20"
@@ -669,7 +677,6 @@ export default function Home() {
                             >
                               Follow-up
                             </button>
-                            */}
                             {/* Total Survey entry — 1st survey then follow-up. */}
                             <button
                               onClick={() => handlePatientSelect(file, "combined")}
