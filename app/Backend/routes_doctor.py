@@ -79,7 +79,7 @@ async def get_doctor_sentences(
     db: AsyncSession = Depends(get_db),
     user: AuthUser = Depends(get_current_user)
 ):
-    """Get doctor sentence view data for specific file and speaker where class != -1"""
+    """Get doctor sentence view data for a file+speaker — one row per (sentence, model)."""
     await check_patient_access(file, user, db)
 
     # Find latest analysis for this file

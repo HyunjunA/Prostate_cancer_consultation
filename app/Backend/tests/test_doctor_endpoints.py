@@ -1,7 +1,7 @@
 """Tests for doctor interface CRUD endpoints.
 
 Endpoints tested:
-  GET  /api/doctor/sentences/{file}/{speaker}     (sentences for file+speaker, class != -1)
+  GET  /api/doctor/sentences/{file}/{speaker}     (sentences for file+speaker, one row per model)
   GET  /api/doctor/rewrites                       (paginated rewrite history, optional filters)
   PUT  /api/doctor/rewrites                       (create new DoctorRewriteLog record)
   GET  /api/doctor/rewrites/{file}/{i}/{i2}/history  (revision history for a sentence)
@@ -13,32 +13,26 @@ Endpoints tested:
 
 from datetime import datetime, timezone, timedelta
 
-import pytest
-
 from tests.factories import TestDataFactory
 
 
-# Endpoints below this comment depend on a (sentence_prediction +
-# transcript_analysis_log) join — the doctor router resolves the latest
-# `analysis_id` for `source_filename == file` first, and only then loads
-# sentence rows. The legacy tests seed only sentence_prediction rows
-# with a `file=...` -> patient_id translation, with no matching
-# transcript_analysis_log parent. The endpoint therefore returns 404
-# (no analysis_id resolved) and the assertions on populated lists fail.
-# A correct rewrite needs both rows (TranscriptAnalysisLog +
-# SentencePrediction with matching analysis_id) — not a one-line tweak.
-# Marked skip individually below; rewriting tracked as a separate task.
-_needs_analysis_log_seeding = pytest.mark.skip(
-    reason="Test setup seeds only sentence_prediction; the doctor endpoints "
-    "now resolve analysis_id via transcript_analysis_log first, so a "
-    "matching parent row is required. Pending rewrite against the "
-    "latest-analysis filter."
-)
+async def _seed_analysis(db, file: str) -> int:
+    """Seed the transcript_analysis_log parent the doctor endpoints resolve first.
+
+    GET /sentences and PUT /rewrites both look the analysis up by
+    `source_filename == file` and 404 when it is absent. Sentence rows then hang
+    off the returned `analysis_id` — `sentence_prediction.patient_id` is NOT what
+    the endpoints filter on. Returns the id so callers can link children to it.
+    """
+    analysis = TestDataFactory.transcript_analysis(source_filename=file, patient_id=file)
+    db.add(analysis)
+    await db.commit()
+    await db.refresh(analysis)
+    return analysis.id
 
 
 # ── GET /api/doctor/sentences/{file}/{speaker} ───────────────────────────────
 
-@_needs_analysis_log_seeding
 class TestGetDoctorSentences:
     """GET /api/doctor/sentences/{file}/{speaker}"""
 
@@ -50,8 +44,10 @@ class TestGetDoctorSentences:
         assert resp.status_code == 404
 
     async def test_returns_sentences_for_valid_file_and_speaker(self, client, db, api_headers):
+        aid = await _seed_analysis(db, "alpha.xlsx")
         sentences = TestDataFactory.doctor_sentence_set(
-            file="alpha.xlsx", count=3, speaker="Interviewer", class_="Cancer Prognosis",
+            analysis_id=aid, file="alpha.xlsx", count=3,
+            speaker="Interviewer", class_="Cancer Prognosis",
         )
         db.add_all(sentences)
         await db.commit()
@@ -67,22 +63,33 @@ class TestGetDoctorSentences:
         assert body["total"] == 3
         assert len(body["data"]) == 3
 
-    async def test_excludes_sentences_with_class_minus_one(self, client, db, api_headers):
-        valid = TestDataFactory.doctor_sentence(file="f.xlsx", i=1, i2=1, class_="Cancer Prognosis")
-        invalid = TestDataFactory.doctor_sentence(file="f.xlsx", i=2, i2=1, class_="-1")
-        db.add_all([valid, invalid])
+    async def test_one_row_per_model_for_a_shared_sentence(self, client, db, api_headers):
+        """A sentence selected by two models must surface once per model.
+
+        The handler warns against merging them: a multi-domain sentence would
+        then land in only one domain's bucket and the other domain's grid row
+        would silently fall back to the wrong sentence.
+        """
+        aid = await _seed_analysis(db, "multi.xlsx")
+        for model in ("cp", "le"):
+            db.add(TestDataFactory.doctor_sentence(
+                analysis_id=aid, file="multi.xlsx", i=1, i2=1,
+                class_=model, sentence_text="shared sentence",
+            ))
         await db.commit()
 
-        resp = await client.get("/api/doctor/sentences/f.xlsx/Interviewer", headers=api_headers)
+        resp = await client.get("/api/doctor/sentences/multi.xlsx/Interviewer", headers=api_headers)
         assert resp.status_code == 200
         body = resp.json()
-        assert body["total"] == 1
-        assert body["data"][0]["i"] == 1
+        assert body["total"] == 2
+        assert {row["class"] for row in body["data"]} == {"cp", "le"}
+        assert {row["sentence"] for row in body["data"]} == {"shared sentence"}
 
     async def test_orders_by_i_then_i2(self, client, db, api_headers):
-        s1 = TestDataFactory.doctor_sentence(file="ord.xlsx", i=2, i2=1)
-        s2 = TestDataFactory.doctor_sentence(file="ord.xlsx", i=1, i2=2)
-        s3 = TestDataFactory.doctor_sentence(file="ord.xlsx", i=1, i2=1)
+        aid = await _seed_analysis(db, "ord.xlsx")
+        s1 = TestDataFactory.doctor_sentence(analysis_id=aid, file="ord.xlsx", i=2, i2=1)
+        s2 = TestDataFactory.doctor_sentence(analysis_id=aid, file="ord.xlsx", i=1, i2=2)
+        s3 = TestDataFactory.doctor_sentence(analysis_id=aid, file="ord.xlsx", i=1, i2=1)
         db.add_all([s1, s2, s3])
         await db.commit()
 
@@ -92,7 +99,8 @@ class TestGetDoctorSentences:
         assert indices == [(1, 1), (1, 2), (2, 1)]
 
     async def test_response_shape(self, client, db, api_headers):
-        db.add(TestDataFactory.doctor_sentence(file="shape.xlsx", i=1, i2=1))
+        aid = await _seed_analysis(db, "shape.xlsx")
+        db.add(TestDataFactory.doctor_sentence(analysis_id=aid, file="shape.xlsx", i=1, i2=1))
         await db.commit()
 
         resp = await client.get("/api/doctor/sentences/shape.xlsx/Interviewer", headers=api_headers)
@@ -106,7 +114,10 @@ class TestGetDoctorSentences:
         assert "time" in row
 
     async def test_returns_404_for_wrong_speaker(self, client, db, api_headers):
-        db.add(TestDataFactory.doctor_sentence(file="sp.xlsx", speaker="Interviewer"))
+        aid = await _seed_analysis(db, "sp.xlsx")
+        db.add(TestDataFactory.doctor_sentence(
+            analysis_id=aid, file="sp.xlsx", speaker="Interviewer",
+        ))
         await db.commit()
 
         resp = await client.get("/api/doctor/sentences/sp.xlsx/Patient_1", headers=api_headers)
@@ -201,13 +212,11 @@ class TestGetDoctorRewrites:
 
 # ── PUT /api/doctor/rewrites ─────────────────────────────────────────────────
 
-@_needs_analysis_log_seeding
 class TestPutDoctorRewrites:
     """PUT /api/doctor/rewrites — create a new DoctorRewriteLog record."""
 
     async def test_creates_rewrite_for_existing_file(self, client, db, api_headers):
-        db.add(TestDataFactory.doctor_sentence(file="put.xlsx", i=1, i2=1))
-        await db.commit()
+        await _seed_analysis(db, "put.xlsx")
 
         payload = {
             "file": "put.xlsx",
@@ -227,6 +236,36 @@ class TestPutDoctorRewrites:
         assert body["revised_sentence"] == "Revised text."
         assert body["class"] == "Cancer Prognosis"
 
+    async def test_rewrite_is_persisted_not_just_echoed(self, client, db, api_headers):
+        """The handler builds its response from the in-memory object, so a 200 with
+        the right body proves nothing about the write. Read the row back instead."""
+        from sqlalchemy import select
+        from models import DoctorRewriteLog
+
+        await _seed_analysis(db, "persist.xlsx")
+
+        payload = {
+            "file": "persist.xlsx",
+            "i": 7,
+            "i2": 2,
+            "speaker": "Interviewer",
+            "time": "2026-02-02T11:00:00Z",
+            "original_sentence": "Original.",
+            "revised_sentence": "Stored revision.",
+            "score": 0.8,
+            "class_": "Cancer Prognosis",
+        }
+        resp = await client.put("/api/doctor/rewrites", json=payload, headers=api_headers)
+        assert resp.status_code == 200
+
+        rows = (await db.execute(
+            select(DoctorRewriteLog).where(DoctorRewriteLog.file == "persist.xlsx")
+        )).scalars().all()
+        assert len(rows) == 1
+        assert rows[0].revised_sentence == "Stored revision."
+        assert rows[0].i == 7 and rows[0].i2 == 2
+        assert rows[0].score == 0.8
+
     async def test_returns_404_for_nonexistent_file(self, client, api_headers):
         payload = {
             "file": "ghost.xlsx",
@@ -242,8 +281,7 @@ class TestPutDoctorRewrites:
 
     async def test_explicit_time_is_stored(self, client, db, api_headers):
         """When time is provided in the payload, it should be stored and returned."""
-        db.add(TestDataFactory.doctor_sentence(file="tdef.xlsx", i=1, i2=1))
-        await db.commit()
+        await _seed_analysis(db, "tdef.xlsx")
 
         payload = {
             "file": "tdef.xlsx",
@@ -261,8 +299,7 @@ class TestPutDoctorRewrites:
         assert body["time"] is not None
 
     async def test_score_is_optional(self, client, db, api_headers):
-        db.add(TestDataFactory.doctor_sentence(file="nosc.xlsx", i=1, i2=1))
-        await db.commit()
+        await _seed_analysis(db, "nosc.xlsx")
 
         payload = {
             "file": "nosc.xlsx",
@@ -280,8 +317,7 @@ class TestPutDoctorRewrites:
         assert resp.json()["score"] is None
 
     async def test_response_shape(self, client, db, api_headers):
-        db.add(TestDataFactory.doctor_sentence(file="putshape.xlsx", i=1, i2=1))
-        await db.commit()
+        await _seed_analysis(db, "putshape.xlsx")
 
         payload = {
             "file": "putshape.xlsx",

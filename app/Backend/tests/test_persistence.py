@@ -120,17 +120,6 @@ class TestTopByModelToJsonable:
 # ── file_already_processed ────────────────────────────────────────────────────
 
 
-# These two classes need a real PostgreSQL backend: models.py declares
-# `transcript_analysis_log.model_results` as JSONB, which the conftest's
-# in-memory SQLite engine cannot compile (UnsupportedCompilationError).
-# Round-trip behaviour for these helpers is already exercised by
-# tests/integration/test_transcript_db.py against a live Postgres.
-pytestmark_pg_only = pytest.mark.skip(
-    reason="Schema requires PostgreSQL JSONB; covered by tests/integration/test_transcript_db.py"
-)
-
-
-@pytestmark_pg_only
 class TestFileAlreadyProcessed:
     """file_already_processed() returns True if sentence_prediction rows exist for a filename."""
 
@@ -185,7 +174,6 @@ class TestFileAlreadyProcessed:
 # ── get_latest_analysis_id ────────────────────────────────────────────────────
 
 
-@pytestmark_pg_only
 class TestGetLatestAnalysisId:
     """get_latest_analysis_id() returns the most recent id or None."""
 
