@@ -728,11 +728,15 @@ def _fv_answer_to_redcap(question_id: str, field: str, value: Any) -> List[Tuple
 
     Returns a list of (redcap_field, redcap_value) pairs:
       - vas / timeline map to a single pair.
-      - a multi-select "factors" answer maps to ONE pair per selected factor,
-        using REDCap's checkbox import format (``field___<code>`` = "1").
+      - a multi-select "factors" answer maps to ONE pair per AVAILABLE option,
+        using REDCap's checkbox import format (``field___<code>``): "1" when the
+        option is selected, "0" when it is not. Unselected options must be sent
+        explicitly, because REDCap leaves a checkbox at its previous value
+        unless the import sets it to "0" — so an empty selection clears them all.
 
     Returns [] when the answer cannot/should not be synced: an unmapped
-    question_id, a blank value, or a text option missing from the code table.
+    question_id, a blank value, a timeline option missing from the code table,
+    or a malformed (non-list) factors value.
 
     NOTE: the factors branch requires the REDCap target field to be a CHECKBOX.
     A single radio field rejects the ``field___<code>`` import format.

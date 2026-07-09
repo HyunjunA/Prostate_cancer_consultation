@@ -10,7 +10,10 @@ Rules under test:
   - VAS sliders pass through unchanged (0..100 -> str).
   - timeline / factor TEXT -> REDCap numeric choice code (1..N), order-sensitive.
   - domain-name differences are absorbed: inc -> ui, ius -> il.
-  - factor is multi-select in the UI but single-radio in REDCap -> first wins.
+  - factors map to a REDCap CHECKBOX: every option code is emitted on every
+    sync ("1" selected, "0" not). REDCap keeps an option at its previous value
+    unless the import sets it to "0", so a de-selected factor only clears when
+    we send it explicitly — and an empty selection clears the whole question.
   - unmapped question / blank value / unknown option -> None (field not sent).
 """
 
@@ -120,39 +123,80 @@ class TestTimeline:
         assert _fv_answer_to_redcap("cp_timeline", "timeline", "not a real option") == []
 
 
-# ── factor multi-select -> one checkbox pair per selected factor ───────────────
+# ── factor multi-select -> one checkbox pair per AVAILABLE option ──────────────
+
+
+def _expected(question_id: str, selected) -> list:
+    """The full checkbox payload for `question_id` given a selection.
+
+    Derived from the production tables so a reordered or extended choice list
+    updates the expectation instead of silently drifting from it.
+    """
+    field = EXPECTED_FIELD_MAP[question_id]
+    codes = _FV_FACTOR_CODES[question_id]
+    chosen = set(selected)
+    return [
+        (f"{field}___{code}", "1" if factor in chosen else "0")
+        for factor, code in codes.items()
+    ]
+
 
 class TestFactors:
     def test_single_factor(self):
-        assert _fv_answer_to_redcap("ed_factors", "factors", ["Baseline function"]) == [("ed_3_rp_v2___5", "1")]
+        result = _fv_answer_to_redcap("ed_factors", "factors", ["Baseline function"])
+        assert result == _expected("ed_factors", ["Baseline function"])
+        # "Baseline function" is code 5 for ed; the other four are cleared.
+        assert ("ed_3_rp_v2___5", "1") in result
+        assert sum(1 for _, v in result if v == "0") == 4
 
-    def test_multi_select_sends_all(self):
-        # Every selection is emitted as its own checkbox pair, preserving order.
-        assert _fv_answer_to_redcap("le_factors", "factors", ["Marital status", "Age"]) == [
-            ("le_2_rp_v2___3", "1"),
-            ("le_2_rp_v2___2", "1"),
-        ]
-        assert _fv_answer_to_redcap("le_factors", "factors", ["Age", "Marital status"]) == [
-            ("le_2_rp_v2___2", "1"),
-            ("le_2_rp_v2___3", "1"),
-        ]
+    def test_every_option_emitted_once(self):
+        # The de-selection fix depends on this: an option that is never sent
+        # keeps whatever REDCap already had (overwriteBehavior=normal).
+        for qid in ("le_factors", "ed_factors", "inc_factors", "ius_factors"):
+            result = _fv_answer_to_redcap(qid, "factors", ["Age"])
+            fields = [f for f, _ in result]
+            assert len(result) == len(_FV_FACTOR_CODES[qid])
+            assert len(set(fields)) == len(fields)
+
+    def test_selection_order_does_not_matter(self):
+        # Output order follows the code table, not the order the patient clicked.
+        first = _fv_answer_to_redcap("le_factors", "factors", ["Marital status", "Age"])
+        second = _fv_answer_to_redcap("le_factors", "factors", ["Age", "Marital status"])
+        assert first == second == _expected("le_factors", ["Age", "Marital status"])
+        assert ("le_2_rp_v2___2", "1") in first  # Age
+        assert ("le_2_rp_v2___3", "1") in first  # Marital status
 
     def test_inc_ius_factor_codes(self):
-        assert _fv_answer_to_redcap("inc_factors", "factors", ["Tumor stage"]) == [("ui_3_rp_v2___3", "1")]
-        assert _fv_answer_to_redcap("ius_factors", "factors", ["Age"]) == [("il_3_rp_v2___2", "1")]
+        inc = _fv_answer_to_redcap("inc_factors", "factors", ["Tumor stage"])
+        assert inc == _expected("inc_factors", ["Tumor stage"])
+        assert ("ui_3_rp_v2___3", "1") in inc
+
+        ius = _fv_answer_to_redcap("ius_factors", "factors", ["Age"])
+        assert ius == _expected("ius_factors", ["Age"])
+        assert ("il_3_rp_v2___2", "1") in ius
 
     def test_unknown_factor_dropped_others_kept(self):
-        # Unknown options are skipped; valid ones still come through.
-        assert _fv_answer_to_redcap("le_factors", "factors", ["Bogus", "Age"]) == [("le_2_rp_v2___2", "1")]
+        # Unknown options are ignored; valid ones still come through as "1".
+        result = _fv_answer_to_redcap("le_factors", "factors", ["Bogus", "Age"])
+        assert result == _expected("le_factors", ["Age"])
+        assert ("le_2_rp_v2___2", "1") in result
+        assert not any("Bogus" in field for field, _ in result)
 
-    def test_empty_factor_list_skipped(self):
-        assert _fv_answer_to_redcap("le_factors", "factors", []) == []
+    def test_empty_factor_list_clears_all(self):
+        # Regression guard: returning [] here left previously-ticked boxes set
+        # in REDCap, because a checkbox option is only cleared by an explicit 0.
+        result = _fv_answer_to_redcap("le_factors", "factors", [])
+        assert result == _expected("le_factors", [])
+        assert all(v == "0" for _, v in result)
+
+    def test_unknown_factor_option_clears_all(self):
+        result = _fv_answer_to_redcap("le_factors", "factors", ["Bogus"])
+        assert result == _expected("le_factors", [])
+        assert all(v == "0" for _, v in result)
 
     def test_non_list_factor_skipped(self):
+        # A malformed payload is not a de-selection — send nothing.
         assert _fv_answer_to_redcap("le_factors", "factors", "Age") == []
-
-    def test_unknown_factor_option_skipped(self):
-        assert _fv_answer_to_redcap("le_factors", "factors", ["Bogus"]) == []
 
 
 # ── unmapped question ───────────────────────────────────────────────────────────
