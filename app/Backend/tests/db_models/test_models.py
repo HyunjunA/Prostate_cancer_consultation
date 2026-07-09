@@ -1,21 +1,17 @@
 """Tests for SQLAlchemy models defined in models.py.
 
-Models tested (7 total):
+Models tested (5 total):
   1. DoctorRewriteLog    — composite PK (file, i, i2, time)
   2. PatientSummary      — composite PK (file, speaker)
-  3. PatientSummaryScoring — FK to PatientSummary, check constraints (0-10)
-  4. PatientResponses    — FK to PatientSummary
-  5. PatientSurveySubmissionLog — FK to PatientSummary, autoincrement PK
-  6. TranscriptAnalysisLog — autoincrement PK, relationship to SentencePrediction
-  7. SentencePrediction  — FK to TranscriptAnalysisLog, cascade delete
+  3. PatientSurveySubmissionLog — FK to PatientSummary, autoincrement PK
+  4. TranscriptAnalysisLog — autoincrement PK, relationship to SentencePrediction
+  5. SentencePrediction  — FK to TranscriptAnalysisLog, cascade delete
 """
 
 import json
 from datetime import datetime, timezone
 
 from sqlalchemy import inspect, select
-
-import pytest
 
 from models import (
     Base,
@@ -26,14 +22,6 @@ from models import (
     SentencePrediction,
 )
 from tests.factories import TestDataFactory
-
-# PatientSummaryScoring / PatientResponses were dropped in migration 008
-# (per-patient scoring + responses now live as columns on PatientSummaryDomain).
-# The two test classes below still reference the old shape and are marked
-# skip until they are rewritten against the new schema.
-pytestmark_obsolete_schema = pytest.mark.skip(
-    reason="PatientSummaryScoring / PatientResponses removed in migration 008 — test pending rewrite"
-)
 
 
 # ── DoctorRewriteLog ─────────────────────────────────────────────────────
@@ -130,81 +118,6 @@ class TestPatientSummary:
         )
         row = result.scalar_one()
         assert row.file == "ps-rt.xlsx"
-
-
-# ── PatientSummaryScoring ─────────────────────────────────────────────────
-
-
-@pytestmark_obsolete_schema
-class TestPatientSummaryScoring:
-    """PatientSummaryScoring model — FK to PatientSummary, check constraints."""
-
-    async def test_instantiation(self):
-        obj = TestDataFactory.patient_scoring()
-        assert obj.class_1_patient_scoring == 5
-        assert obj.class_5_patient_scoring == 9
-
-    async def test_composite_pk(self):
-        mapper = inspect(PatientSummaryScoring)
-        pk_cols = [col.name for col in mapper.primary_key]
-        assert pk_cols == ["file", "speaker"]
-
-    async def test_persist_with_parent(self, db):
-        parent = TestDataFactory.patient_summary(file="pss.xlsx", speaker="P1")
-        db.add(parent)
-        await db.flush()
-
-        child = TestDataFactory.patient_scoring(file="pss.xlsx", speaker="P1")
-        db.add(child)
-        await db.commit()
-
-        result = await db.execute(
-            select(PatientSummaryScoring).where(
-                PatientSummaryScoring.file == "pss.xlsx"
-            )
-        )
-        row = result.scalar_one()
-        assert row.class_3_patient_scoring == 7
-
-    async def test_repr(self):
-        obj = TestDataFactory.patient_scoring(file="sc.xlsx", speaker="P3")
-        r = repr(obj)
-        assert "PatientSummaryScoring" in r
-        assert "sc.xlsx" in r
-
-
-# ── PatientResponses ──────────────────────────────────────────────────────
-
-
-@pytestmark_obsolete_schema
-class TestPatientResponses:
-    """PatientResponses model — FK to PatientSummary."""
-
-    async def test_instantiation(self):
-        obj = TestDataFactory.patient_responses()
-        assert obj.answer_1 == "Answer to question 1"
-        assert obj.answer_5 == "Answer to question 5"
-
-    async def test_persist_with_parent(self, db):
-        parent = TestDataFactory.patient_summary(file="pr.xlsx", speaker="P1")
-        db.add(parent)
-        await db.flush()
-
-        child = TestDataFactory.patient_responses(file="pr.xlsx", speaker="P1")
-        db.add(child)
-        await db.commit()
-
-        result = await db.execute(
-            select(PatientResponses).where(PatientResponses.file == "pr.xlsx")
-        )
-        row = result.scalar_one()
-        assert row.answer_3 == "Answer to question 3"
-
-    async def test_repr(self):
-        obj = TestDataFactory.patient_responses(file="resp.xlsx", speaker="P4")
-        r = repr(obj)
-        assert "PatientResponses" in r
-        assert "resp.xlsx" in r
 
 
 # ── PatientSurveySubmissionLog ───────────────────────────────────────────────────

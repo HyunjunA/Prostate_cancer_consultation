@@ -37,13 +37,6 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Tests for tables that were removed in migration 008 — kept under
-# `@pytestmark_obsolete_schema = pytest.mark.skip(...)` so they never
-# actually run, but ruff cannot statically prove the skip mark hides
-# the references. Future cleanup: rewrite these tests for the new
-# PatientSummary schema and drop this ignore.
-"tests/db_models/test_models.py" = ["F821"]
-
 # Test fixtures manipulate sys.path before importing the modules
 # under test — that requires module-level imports AFTER the path
 # tweak, which E402 forbids.
