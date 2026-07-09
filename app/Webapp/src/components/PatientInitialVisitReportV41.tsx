@@ -1929,7 +1929,7 @@ const TopicCard = React.forwardRef<TopicCardHandle, TopicCardProps>(({
                         : "bg-gray-50 text-gray-400 border border-gray-200/50",
                     )}
                   >
-                    Relevant sentences will appear here once connected to the analysis pipeline.
+                    No relevant sentences from your visit were found for this topic.
                   </div>
                 )}
               </div>
