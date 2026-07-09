@@ -56,10 +56,11 @@ Each model keeps its **top-10 sentences**, with surrounding context; the focus s
 ## Act 4 — AI (GPT-4o): summarize and score
 
 ### 4-1. score · extract · filter → drawer ④ `llm_pipeline_intermediate`
-For each domain's top-10 candidates GPT-4o records: a 0–5 score + extracted estimate/treatment +
-whether the candidate survives (`survived_filter`). One row per candidate.
+For each domain's top-10 candidates GPT-4o records: a 0–5 score + extracted estimate/treatment.
+One row per candidate. Which candidates were ultimately chosen is answered by
+`llm_domain_scoring_and_summary`, not by this table.
 
-> 🗄 a surviving cp candidate: `domain=cp`, `ai_score=2`, `estimate=<missing>`, `survived_filter=true`,
+> 🗄 a cp candidate: `domain=cp`, `ai_score=2`, `estimate=<missing>`,
 > `score_explanation="…cancer mortality/survival or metastasis risk…"`
 
 ### 4-2. pick a domain representative and rewrite for the patient → drawer ⑤ `llm_domain_scoring_and_summary`

@@ -113,7 +113,6 @@ One row per AI candidate (domain × sentence) recording how the AI scored/filter
 | `score_explanation` | text | yes | | The model's reasoning for the score. |
 | `estimate` | text | yes | | Extracted numeric estimate (long text; TEXT to avoid overflow). |
 | `treatment` | text | yes | | Extracted treatment context. |
-| `survived_filter` | boolean | no | | Whether this candidate passed the filter step (default false). |
 | `created_at` | timestamptz | no | | Insert time. |
 
 ## `llm_domain_scoring_and_summary` — final patient-visible AI output

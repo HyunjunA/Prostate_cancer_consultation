@@ -117,8 +117,7 @@ tools surface automatically.
   - `survey_submission_log.redcap_synced`, `.redcap_record_id`,
     `.redcap_error`
   - `nlp_pipeline_intermediate.step`, `.payload`
-  - `llm_pipeline_intermediate.survived_filter`,
-    `llm_domain_scoring_and_summary.reformat_sentence`
+  - `llm_domain_scoring_and_summary.reformat_sentence`
 - **Why:** New contributors and analysts read the schema before the code.
   Cheap, lasting payoff.
 - **Trigger:** Any time. Excellent low-context background work.

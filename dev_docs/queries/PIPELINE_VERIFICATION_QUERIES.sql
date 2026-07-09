@@ -35,13 +35,12 @@ SELECT
   (SELECT count(*) FROM nlp_all_predictions       WHERE analysis_id=tal.id) AS nlp_step3_rows,
   (SELECT count(*) FROM sentence_prediction       WHERE analysis_id=tal.id) AS nlp_step5_topN,
   (SELECT count(*) FROM llm_pipeline_intermediate WHERE analysis_id=tal.id) AS ai_candidates,
-  (SELECT count(*) FROM llm_pipeline_intermediate WHERE analysis_id=tal.id AND survived_filter) AS ai_survived,
   (SELECT count(*) FROM llm_domain_scoring_and_summary WHERE analysis_id=tal.id) AS ai_final_rows,
   octet_length(tal.xlsx_data) AS xlsx_bytes
 FROM transcript_analysis_log tal
 ORDER BY tal.id;
 -- Expected: nlp_jsonb_blobs=4, nlp_step5_topN=50, ai_candidates=50,
---          ai_survived>=5, ai_final_rows: 5..25
+--          ai_final_rows: 5..25
 
 
 -- ====================================================================
@@ -119,37 +118,49 @@ LIMIT 10;
 
 
 -- ====================================================================
--- 6. AI candidate survival rate per domain
+-- 6. AI candidate selection rate per domain
+-- Migration 031 dropped `survived_filter`; whether a candidate was chosen is
+-- answered by joining to the final table on (estimate, treatment).
 -- ====================================================================
 SELECT
-  analysis_id,
-  domain,
-  count(*)                              AS total_candidates,
-  count(*) FILTER (WHERE survived_filter) AS survived,
-  round(100.0 * count(*) FILTER (WHERE survived_filter) / count(*), 1) AS survival_pct,
-  avg(ai_score)::numeric(3,2)           AS avg_ai_score,
-  max(ai_score)                         AS max_ai_score
-FROM llm_pipeline_intermediate
-GROUP BY analysis_id, domain
-ORDER BY analysis_id, domain;
+  i.analysis_id,
+  i.domain,
+  count(*)                                  AS total_candidates,
+  count(f.id)                               AS selected,
+  round(100.0 * count(f.id) / count(*), 1)  AS selection_pct,
+  avg(i.ai_score)::numeric(3,2)             AS avg_ai_score,
+  max(i.ai_score)                           AS max_ai_score
+FROM llm_pipeline_intermediate i
+LEFT JOIN llm_domain_scoring_and_summary f
+       ON f.analysis_id = i.analysis_id
+      AND f.domain      = i.domain
+      AND f.extracted_estimate IS NOT DISTINCT FROM i.estimate
+      AND f.treatment          IS NOT DISTINCT FROM i.treatment
+GROUP BY i.analysis_id, i.domain
+ORDER BY i.analysis_id, i.domain;
 
 
 -- ====================================================================
--- 7. Insight — high-scoring candidates that didn't survive ("why?")
+-- 7. Insight — high-scoring candidates that were not selected ("why?")
 -- ====================================================================
 SELECT
-  analysis_id,
-  domain,
-  sentence_index,
-  ai_score,
-  estimate,
-  treatment,
-  substr(score_explanation, 1, 120) AS reason_preview,
-  substr(sentence_text, 1, 100)     AS text
-FROM llm_pipeline_intermediate
-WHERE ai_score >= 4
-  AND NOT survived_filter
-ORDER BY analysis_id, ai_score DESC, domain;
+  i.analysis_id,
+  i.domain,
+  i.sentence_index,
+  i.ai_score,
+  i.estimate,
+  i.treatment,
+  substr(i.score_explanation, 1, 120) AS reason_preview,
+  substr(i.sentence_text, 1, 100)     AS text
+FROM llm_pipeline_intermediate i
+LEFT JOIN llm_domain_scoring_and_summary f
+       ON f.analysis_id = i.analysis_id
+      AND f.domain      = i.domain
+      AND f.extracted_estimate IS NOT DISTINCT FROM i.estimate
+      AND f.treatment          IS NOT DISTINCT FROM i.treatment
+WHERE i.ai_score >= 4
+  AND f.id IS NULL
+ORDER BY i.analysis_id, i.ai_score DESC, i.domain;
 
 
 -- ====================================================================

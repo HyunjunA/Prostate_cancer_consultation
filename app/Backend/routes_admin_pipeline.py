@@ -140,21 +140,20 @@ async def _check_one_analysis(db: AsyncSession, aid: int) -> Dict[str, Any]:
     })
 
     # ── 5. llm_pipeline_intermediate: per-domain LLM trace ─────────────
-    # We expect one LLM trace per domain (5 total). At least one row per
-    # domain must have survived_filter=True so we know the LLM stage
-    # actually picked candidates rather than rejecting everything.
+    # We expect one LLM trace per domain (5 total). Whether the LLM stage
+    # actually picked candidates rather than rejecting everything is covered
+    # by ai_final_summary_rows below.
     ai = (await db.execute(text(
         """
         SELECT count(*) AS total,
-               count(DISTINCT domain) AS distinct_domains,
-               count(*) FILTER (WHERE survived_filter) AS survived
+               count(DISTINCT domain) AS distinct_domains
         FROM llm_pipeline_intermediate WHERE analysis_id = :aid
         """
     ), {"aid": aid})).one()
     checks.append({
         "name": "ai_intermediates_per_domain",
-        "pass": ai.distinct_domains == 5 and ai.total > 0 and ai.survived > 0,
-        "observed": {"total": ai.total, "distinct_domains": ai.distinct_domains, "survived": ai.survived},
+        "pass": ai.distinct_domains == 5 and ai.total > 0,
+        "observed": {"total": ai.total, "distinct_domains": ai.distinct_domains},
     })
 
     # ── 6. llm_domain_scoring_and_summary: final user-visible output ───

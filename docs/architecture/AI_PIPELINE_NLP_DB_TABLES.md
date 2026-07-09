@@ -31,7 +31,7 @@ dashboard (doctor/patient)
 | NLP 3 classify ×5 | `nlp_all_predictions` | every sentence × 5-model probs (`pred_cp/le/ed/inc/ius`) 1 row/sentence | ~424 rows |
 | NLP 4 top-N + 5 context | `sentence_prediction` | per-domain top-N + context (`<main>`). 1 row/sentence·domain | 50 rows (5×10) |
 | NLP 6 export / 7 persist | `transcript_analysis_log` · `patient_summary` | store xlsx (`xlsx_data`) · create patient **parent row** | 1 + 1 |
-| AI 1 score · 2 extract · 3 filter · 4 select | `llm_pipeline_intermediate` | per-candidate intermediate: `ai_score` · `estimate` · `treatment` · `survived_filter` | 50 rows |
+| AI 1 score · 2 extract · 3 filter · 4 select | `llm_pipeline_intermediate` | per-candidate intermediate: `ai_score` · `estimate` · `treatment` | 50 rows |
 | AI 4 select + 5 reformat | `llm_domain_scoring_and_summary` | final domain output (patient-facing): `source_sentence` · `source_context`(`<main>`) · `reformat_sentence` · `ai_score` · `treatment` | ~6 (treatment branches) |
 | AI end | `transcript_analysis_log` UPDATE | `ai_overall_score`, `processed=true` | — |
 
@@ -47,7 +47,7 @@ transcript_analysis_log (id PK, patient_id, source_filename, total_sentences, to
    ├─ nlp_all_predictions        (id, analysis_id, sentence_index, sentence_text, pred_cp/le/ed/inc/ius, context)
    ├─ sentence_prediction        (id, analysis_id, model[cp/le/ed/inc/ius], sentence_index, pred_score, sentence_text, context<main>)
    ├─ nlp_pipeline_intermediate  (id, analysis_id, step, payload jsonb, row_count)
-   ├─ llm_pipeline_intermediate  (id, analysis_id, domain, ai_score, estimate, treatment, survived_filter, score_explanation)
+   ├─ llm_pipeline_intermediate  (id, analysis_id, domain, ai_score, estimate, treatment, score_explanation)
    └─ llm_domain_scoring_and_summary (id, analysis_id, domain, ai_score, treatment, source_sentence, source_context, reformat_sentence)
 
 patient_summary (file PK, speaker PK)

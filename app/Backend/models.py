@@ -457,10 +457,15 @@ class NLPPipelineIntermediate(Base):
 class LLMPipelineIntermediate(Base):
     """AI pipeline intermediate per-candidate-sentence rows.
 
-    Captures Guillermo's `df_extraction` (every candidate after scoring +
-    extraction) plus a `survived_filter` flag derived from `df_filtering`.
-    Lets analysts answer "what scores did the rejected sentences get?",
-    "estimate-missing rate per domain?", etc.
+    Captures the AI pipeline's `df_extraction` — every candidate after scoring +
+    extraction. Lets analysts answer "what scores did the rejected sentences
+    get?", "estimate-missing rate per domain?", etc.
+
+    Migration 031 dropped a `survived_filter` flag that claimed to mark the
+    candidates that cleared the filtering step. It was derived from
+    `df_filtering.index`, which the pipeline re-indexes for the treatment-aware
+    domains, so it pointed at unrelated rows. Whether a candidate was ultimately
+    chosen is answered by `llm_domain_scoring_and_summary` instead.
     """
     __tablename__ = 'llm_pipeline_intermediate'
 
@@ -477,5 +482,4 @@ class LLMPipelineIntermediate(Base):
     score_explanation = Column(Text)
     estimate = Column(Text)                                  # LLM extracted estimate — verbose responses possible
     treatment = Column(Text)                                 # LLM extracted treatment — verbose responses possible
-    survived_filter = Column(Boolean, nullable=False, default=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())

@@ -25,8 +25,7 @@ What it checks (per analysis_id):
        fully populated (no NULL leaks — Bug 1 regression guard).
     4. sentence_prediction has 50 rows (5 domains x 10) and a non-empty
        context column on each.
-    5. llm_pipeline_intermediate has rows for every domain with
-       at least 1 candidate flagged survived_filter=true on average.
+    5. llm_pipeline_intermediate has candidate rows for every domain.
     6. llm_domain_scoring_and_summary has between 5 and 25 rows (one per
        selected candidate, with optional multi-row selection).
     7. patient_summary has exactly 1 row per analysis filename
@@ -190,23 +189,22 @@ async def _check_analysis(db, analysis_id: int) -> list[CheckResult]:
     ))
 
     # ── 5. llm_pipeline_intermediate: per-domain LLM trace ──────────
-    # 5 distinct domains AND at least one row passed survived_filter.
-    # Domains 5 with 0 survived = LLM rejected EVERYTHING, which is
-    # almost always a prompt or threshold regression.
+    # 5 distinct domains, each with candidates. "The LLM rejected EVERYTHING"
+    # — almost always a prompt or threshold regression — surfaces in check 6,
+    # which requires final rows for the same analysis.
     ai_stats = (await db.execute(text(
         """
         SELECT count(*)                                      AS total,
-               count(DISTINCT domain)                        AS distinct_domains,
-               count(*) FILTER (WHERE survived_filter)       AS survived
+               count(DISTINCT domain)                        AS distinct_domains
         FROM llm_pipeline_intermediate
         WHERE analysis_id = :aid
         """
     ), {"aid": analysis_id})).one()
     results.append(CheckResult(
-        f"analysis_id={analysis_id} llm_pipeline_intermediate: 5 domains, candidates + survival",
-        passed=(ai_stats.distinct_domains == 5 and ai_stats.total > 0 and ai_stats.survived > 0),
-        observed=f"total={ai_stats.total} distinct_domains={ai_stats.distinct_domains} survived={ai_stats.survived}",
-        expected="distinct_domains=5 AND total>0 AND survived>0",
+        f"analysis_id={analysis_id} llm_pipeline_intermediate: 5 domains, candidates",
+        passed=(ai_stats.distinct_domains == 5 and ai_stats.total > 0),
+        observed=f"total={ai_stats.total} distinct_domains={ai_stats.distinct_domains}",
+        expected="distinct_domains=5 AND total>0",
     ))
 
     # ── 6. llm_domain_scoring_and_summary: 5..25 final rows ────────

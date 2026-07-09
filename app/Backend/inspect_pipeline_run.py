@@ -244,7 +244,7 @@ async def _dump_ai_intermediate(db, aid: int, full: bool) -> dict:
         .order_by(M.LLMPipelineIntermediate.domain, M.LLMPipelineIntermediate.ai_score.desc().nulls_last())
     )).scalars().all()
 
-    _sub("AI Sub 1-3 — llm_pipeline_intermediate (scoring + extraction + filtering)", len(rows),
+    _sub("AI Sub 1-2 — llm_pipeline_intermediate (scoring + extraction)", len(rows),
          note="(MISSING — pre-migration analysis)" if not rows else "")
     if not rows:
         return {"ai_intermediate_rows": 0}
@@ -254,18 +254,15 @@ async def _dump_ai_intermediate(db, aid: int, full: bool) -> dict:
         by_domain.setdefault(r.domain, []).append({
             "idx": r.sentence_index, "ai": r.ai_score, "pred": r.pred_score,
             "estimate": r.estimate, "treatment": r.treatment,
-            # Y/N is more readable than True/False in the table.
-            "survived": "Y" if r.survived_filter else "N",
             "text": r.sentence_text,
         })
     for domain, items in by_domain.items():
-        survived = sum(1 for i in items if i["survived"] == "Y")
-        print(f"\n  domain='{domain}' ({len(items)} candidates, {survived} survived):")
-        _kv(items, ["idx", "ai", "survived", "estimate", "treatment", "text"],
+        print(f"\n  domain='{domain}' ({len(items)} candidates):")
+        _kv(items, ["idx", "ai", "estimate", "treatment", "text"],
             limit=(len(items) if full else 5))
     return {
         "ai_intermediate_rows": len(rows),
-        "ai_intermediate_per_domain": {d: {"total": len(v), "survived": sum(1 for i in v if i["survived"] == "Y")} for d, v in by_domain.items()},
+        "ai_intermediate_per_domain": {d: {"total": len(v)} for d, v in by_domain.items()},
     }
 
 

@@ -145,7 +145,7 @@ async def main(args) -> int:
         # AI intermediate
         _h("AI PIPELINE — intermediate + final")
         rows = (await db.execute(text("""
-            SELECT domain, sentence_index, ai_score, estimate, treatment, survived_filter, sentence_text
+            SELECT domain, sentence_index, ai_score, estimate, treatment, sentence_text
             FROM llm_pipeline_intermediate WHERE analysis_id=:aid
             ORDER BY domain, ai_score DESC NULLS LAST
         """), {"aid": aid})).all()
@@ -155,8 +155,7 @@ async def main(args) -> int:
             if r.domain != cur:
                 print(f"\n  domain='{r.domain}':")
                 cur = r.domain
-            survived = "Y" if r.survived_filter else "N"
-            print(f"    idx={r.sentence_index:<4} ai={r.ai_score} survived={survived} estimate={_trunc(r.estimate, 40)} treatment={_trunc(r.treatment, 20)}")
+            print(f"    idx={r.sentence_index:<4} ai={r.ai_score} estimate={_trunc(r.estimate, 40)} treatment={_trunc(r.treatment, 20)}")
 
         # AI final
         rows = (await db.execute(text("""

@@ -130,15 +130,14 @@ async def _check(db, aid: int) -> list[CheckResult]:
 
     ai = (await db.execute(text("""
         SELECT count(*) AS total,
-               count(DISTINCT domain) AS distinct_domains,
-               count(*) FILTER (WHERE survived_filter) AS survived
+               count(DISTINCT domain) AS distinct_domains
         FROM llm_pipeline_intermediate WHERE analysis_id=:aid
     """), {"aid": aid})).one()
     out.append(CheckResult(
-        f"analysis_id={aid} llm_pipeline_intermediate: 5 domains + survival",
-        ai.distinct_domains == 5 and ai.total > 0 and ai.survived > 0,
-        f"total={ai.total} distinct_domains={ai.distinct_domains} survived={ai.survived}",
-        "distinct_domains=5 AND total>0 AND survived>0",
+        f"analysis_id={aid} llm_pipeline_intermediate: 5 domains",
+        ai.distinct_domains == 5 and ai.total > 0,
+        f"total={ai.total} distinct_domains={ai.distinct_domains}",
+        "distinct_domains=5 AND total>0",
     ))
 
     final = (await db.execute(text("SELECT count(*) FROM llm_domain_scoring_and_summary WHERE analysis_id=:aid"),
