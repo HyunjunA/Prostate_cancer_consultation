@@ -530,7 +530,7 @@ export default function Home() {
               isDarkMode ? "text-slate-400" : "text-slate-500"
             }`}>
               Pick a patient, then an entry point: 1st · Report (read-only AI
-              summary), 1st · Survey (questionnaire), or Follow-up.
+              summary) or Total Survey (the full questionnaire flow).
             </p>
           </div>
 
@@ -647,10 +647,10 @@ export default function Home() {
                             >
                               1st · Report
                             </button>
-                            {/* 1st·Survey re-enabled (2026-07-07): standalone
-                                first-visit Risk survey (?survey=first-visit).
-                                Saves risk_perception_2 via the same V41 path as
-                                the Total Survey Risk step. */}
+                            {/* Hidden (2026-07-09): standalone 1st·Survey
+                                (?survey=first-visit). The Total Survey already
+                                runs these Risk questions as its first step. The
+                                URL still works; un-comment to show the button.
                             <button
                               onClick={() => handlePatientSelect(file, "first", true)}
                               title="First visit — survey questionnaire"
@@ -662,10 +662,11 @@ export default function Home() {
                             >
                               1st · Survey
                             </button>
-                            {/* Follow-up re-enabled (2026-07-07): standalone
-                                follow-up surveys (?survey=follow-up). sdm/dcs/
-                                satisfaction save to DB + REDCap via the same
-                                submitSurvey path as the Total Survey. */}
+                            */}
+                            {/* Hidden (2026-07-09): standalone follow-up surveys
+                                (?survey=follow-up). The Total Survey already runs
+                                sdm/dcs/satisfaction after the Risk step. The URL
+                                still works; un-comment to show the button.
                             <button
                               onClick={() => handlePatientSelect(file, "followup")}
                               title="Follow-up surveys (SDM, DCS, Satisfaction)"
@@ -677,6 +678,7 @@ export default function Home() {
                             >
                               Follow-up
                             </button>
+                            */}
                             {/* Total Survey entry — 1st survey then follow-up. */}
                             <button
                               onClick={() => handlePatientSelect(file, "combined")}
@@ -689,9 +691,11 @@ export default function Home() {
                             >
                               Total Survey
                             </button>
-                            {/* Combined (2-step) — previous form: 1st survey as
-                                its own screen, then a normal follow-up (Risk not
-                                embedded). Distinct ?seq=1 marker. */}
+                            {/* Hidden (2026-07-09): Combined (2-step) — the 1st
+                                survey as its own screen, then a normal follow-up
+                                with the Risk step not embedded (?seq=1). Superseded
+                                by the single-flow Total Survey. The URL still works;
+                                un-comment to show the button.
                             <button
                               onClick={() => handlePatientSelect(file, "sequential")}
                               title="Combined — 1st·Survey screen first, then the Follow-up surveys (2-step)"
@@ -703,6 +707,7 @@ export default function Home() {
                             >
                               Combined
                             </button>
+                            */}
                           </div>
                         </td>
                       </tr>
