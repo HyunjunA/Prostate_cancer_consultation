@@ -6,9 +6,11 @@
  * First Visit Patient Dashboard.
  *
  * [V41] Side-effect domains (ED / Urinary Incontinence / Irritative Symptoms)
- * now show ONLY the designated treatment per the 2026-06-02 decision
- * (ED & incontinence -> surgery, irritative symptoms -> radiation), instead of
- * every treatment. See DESIGNATED_TREATMENT in the AI-summary grouping useMemo.
+ * apply the 2026-06-02 "one designated treatment" decision (ED & incontinence ->
+ * surgery, irritative symptoms -> radiation) to the SURVEY QUESTION only, so risk
+ * perception stays a single scoreable outcome. The REPORT shows every treatment,
+ * each as its own evidence block, as the same meeting requested. The filter is
+ * therefore gated on surveyMode in the AI-summary grouping useMemo.
  *
  * ============================================================================
  * V40 CHANGES — 2026-06-02 Tuesday meeting, item A-1 (report screen)
@@ -588,6 +590,15 @@ const TOPIC_COLORS: Record<
     border: "border-amber-200/50 dark:border-amber-500/20",
   },
 };
+
+/**
+ * Shown in the treatment-name slot when the AI found a relevant sentence but
+ * could not tie it to a specific treatment (`treatment === "<missing>"`), so the
+ * slot never renders a misleading badge. Used by both the sub-domain header and
+ * the single-domain source label, which must not drift apart.
+ */
+const UNLABELLED_TREATMENT_NOTE =
+  "No specific treatment was identified, so this is not labelled by treatment.";
 
 /**
  * Helpfulness Scale Labels (NIH PROMIS Unipolar Scale)
@@ -1641,7 +1652,7 @@ const TopicCard = React.forwardRef<TopicCardHandle, TopicCardProps>(({
                           isDark ? "text-slate-500" : "text-gray-400",
                         )}
                       >
-                        No specific treatment identified
+                        {UNLABELLED_TREATMENT_NOTE}
                       </p>
                     ) : null}
 
@@ -1835,8 +1846,7 @@ const TopicCard = React.forwardRef<TopicCardHandle, TopicCardProps>(({
                               isDark ? "text-slate-500" : "text-gray-400",
                             )}
                           >
-                            No specific treatment was identified for this
-                            sentence, so it is not labelled by treatment.
+                            {UNLABELLED_TREATMENT_NOTE}
                           </p>
                         ) : null}
                         <p
@@ -3749,15 +3759,15 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
         "Urinary Incontinence": "Urinary Incontinence",
         "Irritative Urinary Symptoms": "Irritative Urinary Symptoms",
       };
-      // [V41] Side-effect domains carry one row per treatment, but the risk-
-      // perception survey targets ONE designated treatment per domain (2026-06-02
-      // decision: ED/incontinence -> surgery, irritative symptoms -> radiation).
-      // Keep only the designated treatment's row(s); other treatments and
-      // <missing> rows are dropped here so every downstream structure (summary,
-      // sources, sub-domains, scores) reflects the designated treatment only.
-      // cp/le have no designated treatment -> pass through unchanged. If the
-      // designated treatment was never discussed, the domain ends up with no AI
-      // rows and renders as "not discussed".
+      // Side-effect domains carry one row per treatment. The 2026-06-02 decision
+      // scoped "one designated treatment" (ED/incontinence -> surgery, irritative
+      // symptoms -> radiation) to the SURVEY QUESTION only: a single treatment is
+      // assumed so risk perception stays one scoreable outcome. The REPORT is the
+      // opposite — the same meeting asked for every treatment's estimate to be
+      // shown, each as its own block, however many there are. So the filter runs
+      // in survey mode only; the report keeps every row, and each treatment gets
+      // its own evidence block (a <missing> row shows its source context without
+      // a treatment badge). cp/le have no designated treatment either way.
       const DESIGNATED_TREATMENT: Record<string, string> = {
         "Erectile Dysfunction": "surgery",
         "Urinary Incontinence": "surgery",
@@ -3765,8 +3775,10 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
       };
       for (const d of aiSummaryData.domains) {
         const topic = domainToTopic[d.domain_name] || d.domain_name;
-        const designated = DESIGNATED_TREATMENT[d.domain_name];
-        if (designated && (d.treatment ?? null) !== designated) continue;
+        if (surveyMode) {
+          const designated = DESIGNATED_TREATMENT[d.domain_name];
+          if (designated && (d.treatment ?? null) !== designated) continue;
+        }
         // [DEBUG] collect this row's ai_score as-is (one entry per row/treatment).
         if (!scoreListMap[topic]) scoreListMap[topic] = [];
         scoreListMap[topic].push(d.ai_score ?? null);
@@ -3834,7 +3846,7 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
       aiScoreListByTopic: scoreListMap,
       aiSubDomainsByTopic: subDomainMap,
     };
-  }, [aiSummaryData]);
+  }, [aiSummaryData, surveyMode]);
 
   // Derived Data — aiSourceContext now comes straight from the AI summary's
   // source_context (persisted WITH <main>...</main> markers). No matching
@@ -4785,21 +4797,24 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
         </div> */}
       </div>
 
-      {/* [V35] Scroll Indicator — "there's more below" */}
+      {/* [V35] Scroll Indicator — "there's more below".
+          Purely visual: it floats over the page and, depending on scroll
+          position, lands on top of a topic header or a "View relevant
+          sentences" toggle. It used to be clickable (pointer-events-auto +
+          onClick scrollBy), which meant it swallowed the click meant for the
+          control underneath. Both layers are now pointer-events-none, so
+          clicks fall through to whatever the patient actually aimed at. */}
       {showScrollIndicator && (
         <div
           className="fixed bottom-20 left-0 right-0 flex justify-center z-30 pointer-events-none"
         >
           <div
             className={cx(
-              "flex items-center gap-2 px-3 py-2 sm:px-5 sm:py-3 rounded-full shadow-lg border backdrop-blur-md cursor-pointer pointer-events-auto animate-bounce",
+              "flex items-center gap-2 px-3 py-2 sm:px-5 sm:py-3 rounded-full shadow-lg border backdrop-blur-md pointer-events-none animate-bounce",
               isDarkMode
                 ? "bg-slate-800/90 border-slate-700 text-slate-300"
                 : "bg-white/90 border-gray-200 text-gray-600 shadow-gray-300/50",
             )}
-            onClick={() => {
-              window.scrollBy({ top: 300, behavior: "smooth" });
-            }}
           >
             <ChevronDown size={18} className="opacity-70" />
             <span className="text-sm font-medium">More topics below</span>
