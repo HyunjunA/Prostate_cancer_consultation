@@ -331,10 +331,8 @@ class PatientFollowupSurveyPageBehavior(Base):
     survey_type = Column(String(30))
     question_id = Column(String(50))
     step_number = Column(Integer)  # SMALLINT in DB
-    # domain/rating: only populated when the embedded 1st survey (V41) tracks the
-    # combined-flow Risk step here as survey_type='risk_perception' (migration 019).
-    domain = Column(String(50))
-    rating = Column(Integer)  # SMALLINT in DB
+    # Migration 032 dropped domain/rating. The combined-flow Risk step records the
+    # domain in `question_id`, and its answers live in patient_survey_submission_log.
     event_metadata = Column('metadata', JSONB_COMPAT, nullable=False, server_default='{}')
     device_type = Column(String(20))
     client_timestamp = Column(TIMESTAMP(timezone=True), nullable=False)

@@ -183,8 +183,6 @@ Events on the survey pages: follow-up (SDM/DCS/Risk/Satisfaction) **and** the fi
 | `device_type` | varchar(20) | yes | | Device type. |
 | `client_timestamp` | timestamptz | no | | Client event time. |
 | `created_at` | timestamptz | no | | Server insert time. |
-| `domain` | varchar(50) | yes | | Domain (used by the embedded first-visit Risk step). |
-| `rating` | smallint | yes | | Rating (used by the embedded Risk step). |
 
 ## `doctor_behavior` — doctor dashboard behavior
 Events on the doctor consultation dashboard.
@@ -252,6 +250,8 @@ follow-up surveys (`sdm`/`dcs`/`satisfaction`) and the first-visit Risk cognitio
 | `redcap_synced` | boolean | yes | | Whether the row was pushed to REDCap; default false. |
 | `redcap_record_id` | varchar(255) | yes | | REDCap-side record id after sync. |
 | `redcap_error` | text | yes | | Last REDCap sync error (for retry), if any. |
+| `sid` | varchar(50) | yes | | Un-hashed subject id (e.g. `SID_22`), recovered from the hashed speaker composite `Patient_<hashedPatient>_<hashedDoctor>_<date>` via `deid.py`; also the REDCap `record_id`. Indexed (`idx_survey_submission_sid`). Nullable — the un-hash may not resolve. |
+| `doctor` | varchar(50) | yes | | Un-hashed doctor number (e.g. `doc2`) from the same composite, carried as attribution state. Nullable for the same reason. |
 
 ## `session_recording` — consultation audio/replay chunks
 | Column | Type | Null | Key | Description |
