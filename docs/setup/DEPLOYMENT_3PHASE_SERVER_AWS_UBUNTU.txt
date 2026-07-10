@@ -1,0 +1,433 @@
+===============================================================================
+ PROSTATE CANCER CONSULTATION DASHBOARD
+ DEPLOYMENT_3PHASE_SERVER_AWS_UBUNTU  --  THIS HOST (AWS EC2 ubuntu) runbook
+===============================================================================
+
+ This is the AWS/ubuntu companion to docs/setup/DEPLOYMENT_3PHASE_SERVER.txt
+ (which targets caire-server) and docs/setup/DEPLOYMENT_3PHASE.txt (the clean
+ Mac/local default-port runbook). It contains the exact commands that were run
+ to bring the stack up FROM ZERO on this host and verified working end-to-end.
+
+ HOST REALITY (how this box differs from BOTH other runbooks)
+   - Fresh cloud VM: Postgres, skopeo NOT pre-installed; no native services up.
+   - Passwordless sudo IS available here  (caire-server had none). So Postgres
+     is installed + configured natively, not worked around.
+   - Ports are mostly the DEFAULTS, NOT caire-server's 5439/6380/18001:
+       Postgres 5433   Backend 18000   Webapp 3001   NLP gateway 18080
+     EXCEPTION — Redis 6380: a system Redis already runs on 6379 but it is
+     password-protected and NOT ours (NOAUTH on ping). We run a DEDICATED
+     Redis on 6380 and point .env at it.
+   - Python 3.10 is absent. Python 3.12 is used. IMPORTANT: the SYSTEM
+     /usr/bin/python3 has NO venv/ensurepip; the `python3` on PATH (a 3.12 with
+     ensurepip) DOES. Build every venv with plain `python3`, not /usr/bin/python3.
+   - Docker daemon runs but the login user is not in the `docker` group at
+     first. Add the user to the group, then run docker in the SAME session via
+     `sg docker -c "..."` (or log out/in).
+   - The NLP "remote" gateway in config_remote.yaml (10.226.8.205:18080) is on
+     ANOTHER network and is UNREACHABLE from here. So the NLP classifier runs
+     LOCALLY and the pipeline is pointed at localhost:18080 via NLP_GATEWAY_URL.
+
+ ABSOLUTE PATHS used below (siblings):
+   DASH=/home/ubuntu/projects/Prostate_cancer_consultation_dashboard_APP_latest/Prostate_cancer_consultation_dashboard
+   AI  =/home/ubuntu/projects/Prostate_cancer_consultation_dashboard_APP_latest/AI_physician_patient_communication
+   VENV=$DASH/.venv          (the ONE working dashboard venv; the AI repo's own .venv is broken)
+
+ Legend:  $ = shell command    (!) = secret    every block starts with `cd <dir>` or `export`.
+
+   $ export DASH=/home/ubuntu/projects/Prostate_cancer_consultation_dashboard_APP_latest/Prostate_cancer_consultation_dashboard
+   $ export AI=/home/ubuntu/projects/Prostate_cancer_consultation_dashboard_APP_latest/AI_physician_patient_communication
+
+
+===============================================================================
+ 0. WHAT IS ALREADY RUNNING (check first)
+===============================================================================
+   $ PGPASSWORD=$(grep -E '^POSTGRES_PASSWORD=' $DASH/app/Backend/.env | cut -d= -f2-) \
+       psql "host=127.0.0.1 port=5433 user=prostatecancer_user dbname=prostatecancer_db_native" \
+       -c "select 1" >/dev/null 2>&1 && echo "PG 5433 OK" || echo "PG 5433 DOWN"
+   $ redis-cli -p 6380 ping        # PONG  (our dedicated redis; 6379 is someone else's, auth-locked)
+   $ curl -s -o /dev/null -w "backend 18000 /docs -> %{http_code}\n" http://localhost:18000/docs
+   $ curl -s -o /dev/null -w "webapp  3001  /     -> %{http_code}\n" http://localhost:3001/
+   $ curl -s -o /dev/null -w "nlp gw  18080 /ping -> %{http_code}\n" http://127.0.0.1:18080/ping
+   $ sg docker -c "docker ps --format '{{.Names}}\t{{.Status}}'" | grep prostatecancer
+
+ If all answer, skip to Phase 2 (data load). Otherwise run the full order below.
+
+
+===============================================================================
+ 1. ENV FILES  -- this host uses DEFAULT ports except Redis (-> 6380)
+===============================================================================
+ The five .env already exist here with the runbook DEFAULT values
+ (Postgres 5433 / Redis 6379 / Backend 18000). The ONLY change this host needs
+ is pointing Redis at our dedicated 6380 instance (see Phase 1):
+
+   $ sed -i -E 's#^REDIS_URL=.*#REDIS_URL=redis://localhost:6380/0#; s#^REDIS_PORT=.*#REDIS_PORT=6380#' \
+         $DASH/app/Backend/.env
+   $ grep -E '^(POSTGRES_PORT|PORT|REDIS_URL|REDIS_PORT)' $DASH/app/Backend/.env
+     # expect POSTGRES_PORT=5433 ; PORT=18000 ; REDIS_URL=...:6380/0 ; REDIS_PORT=6380
+
+ Confirm the rest (do NOT rewrite to caire-server's 5439/18001):
+   $ grep NEXT_PUBLIC_API_URL $DASH/app/Webapp/.env               # host.docker.internal:18000
+   $ grep BACKEND_URL         $DASH/docker-compose-frontend.yml   # http://host.docker.internal:18000
+   $ grep -E '5433' $AI/.env $AI/ai_pipeline/.env                 # DB on 5433
+   $ grep -iE 'AZURE_OPENAI_(ENDPOINT|KEY)' $AI/.env              # (!) real Azure creds must be set
+
+ NOTE the webapp reaches the backend ONLY through its own same-origin proxy
+ (src/app/api/backend/[...path]/route.ts -> BACKEND_URL). NEXT_PUBLIC_API_URL
+ with host.docker.internal is fine — the browser never calls it directly.
+
+
+===============================================================================
+ 2. PHASE 0 -- SYSTEM PACKAGES + VENV + NLP GATEWAY
+===============================================================================
+
+ -- 2a. One-time host packages (passwordless sudo available here)
+   $ sudo apt-get update -qq
+   $ sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postgresql postgresql-contrib
+   $ sudo DEBIAN_FRONTEND=noninteractive apt-get install -y skopeo   # load-image.sh needs it
+   $ sudo usermod -aG docker ubuntu                                  # docker without sudo
+   # docker group applies to NEW sessions; for THIS one, prefix docker cmds with:  sg docker -c "..."
+
+ -- 2b. Rebuild the dashboard venv  (use `python3` = 3.12 WITH ensurepip)
+   $ cd $DASH
+   $ rm -rf .venv
+   $ python3 -m venv .venv          # NOT /usr/bin/python3 — that build has no ensurepip
+   $ .venv/bin/pip install --upgrade pip
+   $ .venv/bin/pip install -r app/Backend/requirements.txt -r app/Backend/requirements-dev.txt
+   $ .venv/bin/python -c "import fastapi, asyncpg, alembic, redis; print('venv OK')"
+   # The AI pipeline reuses THIS venv (PIPELINE_PYTHON default).
+
+ -- 2c. NLP classifier + gateway (both LOCAL; the remote gateway is unreachable here)
+   $ cd $AI/nlp_classifier_server
+   $ cp -n gateway/.env.example gateway/.env
+   $ sed -i -E 's/^NLP_GATEWAY_API_KEY=.*/NLP_GATEWAY_API_KEY=/' gateway/.env   # empty key -> AUTH OFF (test host)
+   $ python3 -m venv gateway/.venv                                             # `python3`, not /usr/bin/python3
+   $ gateway/.venv/bin/pip install -q --upgrade pip
+   $ gateway/.venv/bin/pip install -r gateway/requirements.txt
+   # start.sh: loads the OCI image (skopeo), starts the classifier container (:8888),
+   #           waits healthy, then starts the gateway (:18080).
+   $ sg docker -c "bash scripts/start.sh"
+   $ curl -s http://127.0.0.1:18080/ping; echo            # {"status":"online",...}
+   $ curl -s -o /dev/null -w "no-key /segment -> %{http_code}\n" -X POST \
+         http://127.0.0.1:18080/segment -H 'Content-Type: application/json' \
+         -d '{"texts":["hi. ok?"]}'                        # 200 (auth off)
+
+   DISK GOTCHA: the image tar is ~1.4 GB and skopeo untars it to /var/tmp. If
+   root (/) is near full, load-image.sh dies with "no space left on device".
+   Reclaim Docker space first (safe — keeps images/running containers):
+     $ sg docker -c "docker builder prune -af"     # frees build cache (often several GB)
+     $ df -h /                                       # confirm a few GB free, then re-run start.sh
+
+
+===============================================================================
+ 3. PHASE 1 -- REDIS + DB + BACKEND
+===============================================================================
+
+ -- 3a. Dedicated Redis on 6380 (the system 6379 is auth-locked and not ours)
+   $ redis-server --port 6380 --daemonize yes --dir /tmp --save ""
+   $ redis-cli -p 6380 ping        # PONG
+
+ -- 3b. Native Postgres on 5433  (apt installs a cluster on 5432 by default)
+   $ sudo sed -i "s/^port = 5432/port = 5433/" /etc/postgresql/16/main/postgresql.conf
+   $ sudo pg_ctlcluster 16 main restart
+   $ sudo pg_lsclusters            # 16 main 5433 online
+
+ -- 3c. Create role + database  (passwordless sudo -> act as the postgres superuser)
+   $ PW=<POSTGRES_PASSWORD>        # (!) = POSTGRES_PASSWORD in app/Backend/.env — never hardcode
+   $ sudo -u postgres psql -p 5433 -c \
+       "CREATE ROLE prostatecancer_user LOGIN PASSWORD '$PW' CREATEDB;"     # skip if it exists
+   $ sudo -u postgres psql -p 5433 -c \
+       "CREATE DATABASE prostatecancer_db_native OWNER prostatecancer_user;"
+   $ PGPASSWORD=$PW psql "host=127.0.0.1 port=5433 user=prostatecancer_user dbname=prostatecancer_db_native" \
+       -c "select current_user, current_database();"     # confirm TCP login
+
+ -- 3d. Schema + migrations + first admin
+   $ cd $DASH
+   $ PGPASSWORD=$PW psql "host=127.0.0.1 port=5433 user=prostatecancer_user dbname=prostatecancer_db_native" \
+       -v ON_ERROR_STOP=1 -f app/Backend/database_schema.sql
+   $ cd app/Backend
+   $ ../../.venv/bin/alembic stamp 001_baseline
+   $ ../../.venv/bin/alembic upgrade head       # -> 032_drop_followup_domain_rating (current head)
+   # create_admin.py prompts via getpass and FAILS non-interactively — pass --password:
+   $ ../../.venv/bin/python scripts/create_admin.py --username admin --password '<ADMIN_PW min 8 chars>'
+   $ cd $DASH
+
+   (Full drop/recreate reset details are in docs/setup/DB_RESET_SHARED_HOST.md.
+    init-db-native.sh MAY work here since sudo exists, but the manual steps
+    above are what was verified on this host.)
+
+ -- 3e. Start the backend (native uvicorn :18000)
+   $ cd $DASH
+   $ nohup bash app/Backend/scripts/run-backend.sh > /tmp/backend_18000.log 2>&1 & disown
+   $ sleep 6; curl -s http://localhost:18000/health; echo
+   # expect {"status":"healthy","components":{"database":"healthy","redis":"healthy"}}
+
+
+===============================================================================
+ 4. PHASE 2 -- TRANSCRIPTS  (de-identify -> pipeline -> DB)
+===============================================================================
+
+ -- 4a. De-identify the input folder (MANUAL pre-step; short 5-digit codes)
+   $ cd $AI
+   $ mkdir -p data/input_deid && rm -f data/input_deid/*.csv
+   $ $DASH/.venv/bin/python scripts/deidentify_transcript_simple.py \
+         --dir data/input --out-dir data/input_deid
+   $ ls data/input_deid/            # <patientCode>_<doctorCode>_<MMDDYYYY>.csv
+   # reverse a code:  ... scripts/deidentify_transcript_simple.py --decode <code>
+
+ -- 4b. Run the pipeline — LOCAL gateway, so OVERRIDE the remote URL
+   # config_remote.yaml's model_uri points at 10.226.8.205:18080 (unreachable here).
+   # NLP_GATEWAY_URL overrides it per-run to our local gateway:
+   $ cd $AI
+   $ export NLP_GATEWAY_URL=http://localhost:18080
+   $ bash scripts/run-pipeline-watch.sh --dir data/input_deid
+   # REMOTE mode over HTTP to the LOCAL gateway; auth is OFF so no key needed.
+   # Runs NLP 7-step (segment/classify x5/select/context/export) + AI 5-step
+   # (Azure GPT-4o score/extract/filter/select/reformat), then writes the DB and exits.
+
+ -- 4c. Verify rows landed (patient_id = the codes)
+   $ PGPASSWORD=$PW psql "host=127.0.0.1 port=5433 user=prostatecancer_user dbname=prostatecancer_db_native" \
+         -c "select patient_id, source_filename, processed from transcript_analysis_log order by id;"
+
+
+===============================================================================
+ 5. PHASE 3 -- WEBAPP  (Docker :3001)
+===============================================================================
+
+ -- 5a. Fix the healthcheck (one-time): container `localhost` resolves to IPv6,
+   Next.js listens on IPv4 -> healthcheck "connection refused" forever (serves
+   200 fine though). Use 127.0.0.1:
+   $ sed -i 's#wget -qO- http://localhost:3000/#wget -qO- http://127.0.0.1:3000/#' \
+         $DASH/docker-compose-frontend.yml
+
+ -- 5b. Build + start  (run-backend must be up first for ${API_KEY} + the proxy)
+   $ cd $DASH
+   $ sg docker -c "bash app/Webapp/scripts/run-webapp.sh --build"   # NEXT_PUBLIC_API_URL=18000 baked in
+   $ sg docker -c "docker inspect --format '{{.State.Health.Status}}' prostatecancer-webapp-native"  # healthy
+
+ -- 5c. Apply compose-only changes without a rebuild
+   $ cd $DASH
+   $ sg docker -c "set -a; source app/Backend/.env; set +a; docker compose -f docker-compose-frontend.yml up -d"
+
+
+===============================================================================
+ 6. FULL VERIFICATION
+===============================================================================
+   $ curl -s -o /dev/null -w "backend  %{http_code}\n" http://localhost:18000/docs                      # 200
+   $ curl -s -o /dev/null -w "webapp   %{http_code}\n" http://localhost:3001/                            # 200
+   $ curl -s -o /dev/null -w "proxy    %{http_code}\n" http://localhost:3001/api/backend/doctor/list     # 200
+   $ curl -s -o /dev/null -w "nlp gw   %{http_code}\n" http://127.0.0.1:18080/ping                       # 200
+   $ cd $DASH && .venv/bin/python app/Backend/scripts/verify_db.py
+
+
+===============================================================================
+ 7. HOW TO REACH THE DASHBOARD  (three methods — pick by need)
+===============================================================================
+ The webapp defaults to 127.0.0.1:3001 (loopback only) — correct for PHI. On
+ this box the SG has no inbound rule for 3001, and the instance has NO AWS
+ credentials/role, so the SG cannot be edited from the server. The three access
+ routes actually used/validated on this host, from safest to most exposed:
+
+ --- 7a. METHOD B — SSH tunnel (safest; no console, no exposure) ------------
+   # this EC2's public IP is dynamic — read it live:
+   $ TOK=$(curl -s -X PUT http://169.254.169.254/latest/api/token \
+         -H "X-aws-ec2-metadata-token-ttl-seconds: 60"); \
+     curl -s -H "X-aws-ec2-metadata-token: $TOK" \
+         http://169.254.169.254/latest/meta-data/public-ipv4; echo
+   # on YOUR laptop (needs the instance SSH key):
+   #   ssh -i <key.pem> -L 3001:localhost:3001 ubuntu@<public-ip>
+   #   then open http://localhost:3001   (admin login: admin / <ADMIN_PW>)
+
+ --- 7c. METHOD C — Cloudflare quick tunnel (public URL, NO SG change) ------
+   Outbound-only, so it needs NO inbound SG rule and NO AWS credentials. Gives
+   a public HTTPS URL. URL is EPHEMERAL (changes when cloudflared restarts) and
+   PUBLIC (anyone with the link) — fine for a de-identified demo, tear down after.
+   $ curl -sL -o /tmp/cloudflared \
+       https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+   $ chmod +x /tmp/cloudflared
+   $ nohup /tmp/cloudflared tunnel --url http://localhost:3001 --no-autoupdate \
+         > /tmp/cf.log 2>&1 &
+   $ sleep 8; grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' /tmp/cf.log | head -1
+   # open that URL in any browser. Tear down:  pkill -f "cloudflared tunnel"
+   # NOTE: localhost.run (ssh -R 80:localhost:3001 nokey@localhost.run) also works
+   #       in theory but its free no-key sessions were unreliable here — use cloudflared.
+
+ --- 7d. METHOD A — open the SG (direct public-IP access; you do this in AWS) -
+   Server side is already prepared once you flip the webapp to all-interfaces:
+   $ sed -i 's#127.0.0.1:3001:3000#0.0.0.0:3001:3000#' $DASH/docker-compose-frontend.yml
+   $ cd $DASH && sg docker -c "set -a; source app/Backend/.env; set +a; \
+         docker compose -f docker-compose-frontend.yml up -d"
+   $ ss -ltn | grep ':3001'          # expect 0.0.0.0:3001 LISTEN
+   Then in the AWS Console (the server has no creds to do this itself):
+     EC2 -> Security Groups -> sg-0ab9ed19ea42c5b20 (launch-wizard-4)
+       -> Inbound rules -> Edit -> Add rule:
+          Type = Custom TCP, Port = 3001, Source = My IP (NOT 0.0.0.0/0) -> Save
+   Open http://<public-ip>:3001   (force http://, browsers may auto-upgrade to https).
+   Self-test from the instance to its OWN public IP returns 000 (AWS hairpin-NAT
+   limitation) — that is NOT a failure; verify from an external browser.
+   Public IP changes on stop/start — attach an Elastic IP to pin it.
+   PHI: revert to 127.0.0.1:3001:3000 (Section 10i) after the demo.
+
+
+===============================================================================
+ 8. STOP / RESTART
+===============================================================================
+   # stop (keep data)
+   $ pkill -f "uvicorn main:app .* --port 18000"                                   # backend
+   $ cd $DASH && sg docker -c "docker compose -f docker-compose-frontend.yml stop webapp"
+   $ pkill -f "uvicorn app:app --host 0.0.0.0 --port 18080"                         # NLP gateway
+   $ sg docker -c "docker stop prostatecancer-nlp-native"                           # classifier
+   # (redis 6380 + postgres are services/daemons; leave them or: redis-cli -p 6380 shutdown nosave)
+
+   # restart
+   $ redis-server --port 6380 --daemonize yes --dir /tmp --save "" 2>/dev/null || true
+   $ cd $DASH && nohup bash app/Backend/scripts/run-backend.sh > /tmp/backend_18000.log 2>&1 & disown
+   $ sg docker -c "docker compose -f docker-compose-frontend.yml up -d"
+   $ cd $AI/nlp_classifier_server && sg docker -c "bash scripts/start.sh"           # classifier + gateway
+
+
+===============================================================================
+ 9. TROUBLESHOOTING (this host)
+===============================================================================
+   "no space left on device" during NLP image load
+       -> root fs full. `sg docker -c "docker builder prune -af"`, confirm
+          `df -h /` shows free GB, re-run start.sh (Phase 0, 2c).
+
+   `python3 -m venv` -> "ensurepip is not available"
+       -> you used /usr/bin/python3 (no venv module). Use plain `python3`
+          (the 3.12 on PATH has ensurepip). Rebuild the venv.
+
+   "permission denied ... /var/run/docker.sock"
+       -> user not in docker group yet in THIS shell. Prefix with `sg docker -c`,
+          or open a new session after `sudo usermod -aG docker ubuntu`.
+
+   redis: "NOAUTH Authentication required" on 6379
+       -> 6379 is another (password-protected) Redis, not ours. Run our own on
+          6380 and point .env at it (Phase 1, 3a + Section 1).
+
+   create_admin.py hangs / EOFError
+       -> it prompts via getpass. Pass --password '<>=8 chars>' explicitly.
+
+   pipeline: /segment times out or hits 10.226.8.205
+       -> config_remote.yaml's model_uri is the (unreachable) remote gateway.
+          export NLP_GATEWAY_URL=http://localhost:18080 before the run (4b).
+
+   webapp "unhealthy" but serves 200
+       -> healthcheck used `localhost` (IPv6). Switch to 127.0.0.1 (5a), recreate.
+
+   alembic upgrade stops before head
+       -> current head on this codebase is 032_drop_followup_domain_rating
+          (NOT 030 as older runbooks say). Re-run `alembic upgrade head`.
+
+   admin login "does not work" in the browser
+       -> First confirm the SERVER side is fine (it usually is):
+            curl -s -o /dev/null -w "%{http_code}\n" -X POST \
+              http://localhost:18000/api/admin-auth/login -H 'Content-Type: application/json' \
+              -d '{"username":"admin","password":"<ADMIN_PW>"}'      # expect 200 + a JWT
+          200 here means creds + DB + JWT are all good, so the cause is client-side:
+            - wrong creds typed (Caps, trailing space, autofill) — copy/paste exactly.
+            - JWT_SECRET differs between app/Backend/.env and app/Webapp/.env ->
+              login 200 then bounces to /login. Make them equal, recreate webapp.
+          The admin_session cookie is HttpOnly; SameSite=strict; Secure follows the
+          transport (OFF over http so it IS stored on http://<ip>:3001 too).
+          Reset the password if unsure:
+            $ cd $DASH/app/Backend && ../../.venv/bin/python scripts/create_admin.py \
+                  --username admin --password '<new-pw min 8 chars>'
+
+
+===============================================================================
+ 10. PRODUCTION HARDENING  (what Sections 0-9 deliberately SKIP)
+===============================================================================
+ Sections 0-9 reproduce a WORKING dev/test deploy: open NLP auth, plaintext
+ HTTP, dev passwords, nohup processes, an ephemeral Redis in /tmp. That is fine
+ for a de-identified pilot on a private box. It is NOT production-safe. Close
+ EVERY item below before real patients or real PHI touch this host.
+
+ -- 10a. Secrets — rotate the dev defaults, stop committing them
+   The repo .env ships dev values (POSTGRES_PASSWORD, API_KEY, JWT_SECRET,
+   admin password, Azure keys). In production:
+     $ openssl rand -hex 16   # new POSTGRES_PASSWORD
+     $ openssl rand -hex 32   # new API_KEY   (MUST match Backend + Webapp .env)
+     $ openssl rand -hex 48   # new JWT_SECRET (MUST match Backend + Webapp .env)
+   Then: ALTER the DB role password, update all five .env, recreate the webapp.
+   Better: pull them from AWS Secrets Manager / SSM Parameter Store at boot
+   instead of committing .env. Rotate the Azure OpenAI key from the portal;
+   never leave it in a tracked file.
+   $ sudo -u postgres psql -p 5433 -c \
+       "ALTER ROLE prostatecancer_user PASSWORD '<new-strong-pw>';"
+
+ -- 10b. NLP gateway auth — turn it ON (it is OPEN in 2c)
+   $ cd $AI/nlp_classifier_server
+   $ KEY=$(openssl rand -hex 32)
+   $ sed -i -E "s/^NLP_GATEWAY_API_KEY=.*/NLP_GATEWAY_API_KEY=$KEY/" gateway/.env
+   $ pkill -f "uvicorn app:app --host 0.0.0.0 --port 18080"; sg docker -c "bash scripts/start.sh"
+   # clients must now send X-API-Key. run-pipeline-watch.sh auto-loads it from
+   # gateway/.env; a direct call needs: set -a; source gateway/.env; set +a
+   # /segment + /predict carry PHI — never run the gateway open on a shared net.
+
+ -- 10c. TLS — never serve PHI over plain HTTP
+   Put an HTTPS reverse proxy in front and stop publishing 3001/18000 directly.
+   Option A (AWS-native): Application Load Balancer with an ACM cert ->
+     target group -> instance :3001; SG only allows the ALB.
+   Option B (on-box nginx + certbot):
+     $ sudo apt-get install -y nginx
+     # server { listen 443 ssl; server_name <fqdn>;
+     #          location / { proxy_pass http://127.0.0.1:3001; } ... }
+     $ sudo certbot --nginx -d <fqdn>
+   Rebind the webapp back to 127.0.0.1:3001:3000 so ONLY the proxy reaches it.
+
+ -- 10d. Process supervision — systemd, not nohup (survives reboot + auto-restart)
+   Redis (replace the /tmp one-liner):
+     /etc/systemd/system/prostatecancer-redis.service
+       [Service] ExecStart=/usr/bin/redis-server --port 6380 \
+         --dir /var/lib/prostatecancer-redis --appendonly yes
+   Backend:
+     /etc/systemd/system/prostatecancer-backend.service
+       [Service] WorkingDirectory=$DASH
+                 ExecStart=$DASH/.venv/bin/... (see run-backend.sh exec line)
+                 Restart=always
+   NLP gateway: a unit running gateway/.venv/bin/uvicorn app:app --port 18080.
+     $ sudo systemctl daemon-reload && sudo systemctl enable --now \
+         prostatecancer-redis prostatecancer-backend prostatecancer-nlp-gateway
+   Docker containers already have `restart: unless-stopped`; enable docker at boot:
+     $ sudo systemctl enable docker
+
+ -- 10e. Redis persistence — the dev instance loses everything on reboot
+   `--save "" --dir /tmp` = no persistence + wiped on reboot. Use appendonly on
+   a real path (see 10d) OR a managed Redis (ElastiCache). Confirm the backend
+   only uses Redis as a cache/rate-limiter (no source-of-truth data) — it does.
+
+ -- 10f. Database backups
+   $ # nightly logical dump (cron):
+   $ pg_dump "host=127.0.0.1 port=5433 user=prostatecancer_user \
+       dbname=prostatecancer_db_native" -Fc -f /backup/pcd_$(date +\%F).dump
+   Add EBS snapshots and TEST a restore. PHI dumps are themselves PHI — encrypt
+   at rest, restrict the /backup dir, never let it into git.
+
+ -- 10g. Disk + monitoring
+   Root hit 100% during the NLP image load here. Give / >= 40 GB headroom or a
+   separate volume for /var/lib/docker, and alarm on disk/CPU/mem (CloudWatch).
+
+ -- 10h. Python runtime — remove the miniconda dependency
+   Sections 2b/2c build venvs with `python3` = a miniconda 3.12 (the SYSTEM
+   /usr/bin/python3 lacks venv). For production, install a first-class
+   interpreter and pin it:
+     $ sudo apt-get install -y python3.12-venv     # gives /usr/bin/python3 a venv module
+   then rebuild both venvs with an explicit, known python.
+
+ -- 10i. Network exposure
+   Do NOT leave 3001/18000/18080/8888/5433/6380 open to 0.0.0.0/0. Only the
+   HTTPS proxy (443) faces the world; everything else stays on 127.0.0.1 or the
+   SG's own-IP allowlist. If Section 5/7 was used to expose 3001 for a demo,
+   revert it (ports back to 127.0.0.1:3001:3000) afterwards.
+
+ -- 10j. Access control & audit
+   One shared `admin` is not production auth. Provision per-user accounts, review
+   is_superuser, and confirm doctor_rewrite_log / patient_survey_submission_log
+   audit trails are retained per policy.
+
+
+ See also:
+   docs/setup/DEPLOYMENT_3PHASE_SERVER.txt   -- caire-server (no sudo, ports 5439/6380/18001)
+   docs/setup/DEPLOYMENT_3PHASE.txt          -- ORIGINAL Mac/local, default ports
+   docs/setup/DB_RESET_SHARED_HOST.md        -- DB reset (data-only / full rebuild)
+===============================================================================

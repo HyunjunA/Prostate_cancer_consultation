@@ -52,9 +52,9 @@ services:
       # Linux: docker doesn't auto-resolve host.docker.internal — declare it.
       - "host.docker.internal:host-gateway"
     ports:
-      - "127.0.0.1:3001:3000"        # webapp directly on 3001 (no nginx in native mode)
+      - "0.0.0.0:3001:3000"          # webapp directly on 3001 (no nginx in native mode)
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 10
