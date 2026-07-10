@@ -13,7 +13,7 @@
 | `DB_TABLES_ROLES.md` / `_KR` | EN/KR | **One file's journey** — transcript→NLP→AI→screen, told as a story of which drawer (table) gets what at each step |
 | `AI_PIPELINE_NLP_DB_TABLES.md` / `_KR` | EN/KR | **Pipeline detail** — NLP 7 steps · AI 5 steps → table-fill matrix · ERD · per-table detail |
 | `SAME_PATIENT_DIFF_DOCTOR.md` / `_KR` | EN/KR | Why **same-patient/different-doctor** data never mixes (file = patient+doctor+date is the key) |
-| `REDCAP_RECORD_ID_MAPPING.md` / `_KR` | EN/KR | **REDCap record_id** — test (record_id=SID) vs production (map SID -> REDCap auto id) |
+| `REDCAP_RECORD_ID_MAPPING.md` / `_KR` | EN/KR | **REDCap record_id** — a survey is attributed to the record whose record_id is the study SID (record_id == SID) |
 | `ARCHITECTURE.md` | EN | System overview · deployment · module layout |
 
 ---

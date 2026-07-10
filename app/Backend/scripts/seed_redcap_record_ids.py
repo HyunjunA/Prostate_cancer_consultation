@@ -1,10 +1,9 @@
 """Seed REDCap with record_id-only records extracted from data/input filenames.
 
-TEST-ONLY. Production does NOT seed record_ids: REDCap auto-numbers records when a
-coordinator registers a patient, and the backend resolves each SID to that record_id
-via redcap_mapping.py (using the redcap_sid_field). This script only exists to make
-record_id == SID in a test project where we know the input files.
-
+The dashboard attributes each survey to the REDCap record whose ``record_id`` IS the
+study SID (see redcap_mapping.resolve_record_id). This script pre-creates those empty
+SID-keyed records in bulk from the transcript filenames, so a submission for e.g.
+``SID_22`` lands on an existing record. For a one-off id, use ``create_redcap_records.py``.
 
 For each transcript file in the AI repo's ``data/input`` directory, derive the study
 SID (e.g. ``SID_21``) via the canonical ``extract_patient_id()`` and create a REDCap

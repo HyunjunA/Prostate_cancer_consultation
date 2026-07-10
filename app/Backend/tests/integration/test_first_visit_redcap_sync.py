@@ -57,8 +57,8 @@ def disable_redcap(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _default_mapping(monkeypatch):
-    """Resolve every SID to REDCap record_id '3' by default — prevents a real
-    REDCap export during tests and models the production SID->record_id lookup."""
+    """Resolve every SID to REDCap record_id '3' by default — a fixed stub so the
+    tests assert against a known record_id without depending on the SID value."""
     async def _resolve(_sid):
         return "3"
     monkeypatch.setattr("routes_patient.resolve_record_id", _resolve)
@@ -67,7 +67,7 @@ def _default_mapping(monkeypatch):
 
 @pytest.fixture
 def unmapped(monkeypatch):
-    """Force resolve_record_id -> None (SID not registered in REDCap yet)."""
+    """Force resolve_record_id -> None (speaker had no parseable study SID)."""
     async def _resolve(_sid):
         return None
     monkeypatch.setattr("routes_patient.resolve_record_id", _resolve)
@@ -338,7 +338,7 @@ async def test_sync_disabled_leaves_flags_untouched(client, patient_row, api_hea
 @pytest.mark.asyncio
 @respx.mock(assert_all_called=False)
 async def test_unmapped_sid_is_pending(client, patient_row, api_headers, enable_redcap, unmapped, db):
-    # SID not registered in REDCap -> no push, row marked pending with an error.
+    # No parseable study SID -> no push, row marked pending with an error.
     route = respx.post(FAKE_REDCAP_URL).mock(return_value=httpx.Response(200, json={"count": 1}))
 
     resp = await client.put(URL_PUT, headers=api_headers, json=_body(
@@ -349,7 +349,7 @@ async def test_unmapped_sid_is_pending(client, patient_row, api_headers, enable_
     row = await _fetch_risk2_row(db)
     assert row.redcap_synced is False
     assert row.redcap_record_id is None
-    assert "not registered in REDCap" in (row.redcap_error or "")
+    assert "No study SID" in (row.redcap_error or "")
 
 
 @pytest.mark.integration

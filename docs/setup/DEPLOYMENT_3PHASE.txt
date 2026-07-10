@@ -91,8 +91,8 @@
      CORS_ORIGINS        '["http://localhost:3001","http://127.0.0.1:3001","http://host.docker.internal:3001"]'
      REDCAP_API_URL      https://iredcap.csmc.edu/api/    (optional survey sync)
      REDCAP_API_TOKEN    <REDCAP_TOKEN>              (!) optional; leave placeholder to skip sync
-     REDCAP_RECORD_ID_MODE  test                     test = record_id==SID (default) | production = map SID->REDCap auto id
-     REDCAP_SID_FIELD    study_sid                    REDCap field holding the SID (production mode only)
+                                                      record_id == study SID; pre-create records with
+                                                      scripts/seed_redcap_record_ids.py or create_redcap_records.py
                                                       see docs/architecture/REDCAP_RECORD_ID_MAPPING.md
 
    NOTE: <PW> must be IDENTICAL in DATABASE_URL, DATABASE_URL_SYNC and

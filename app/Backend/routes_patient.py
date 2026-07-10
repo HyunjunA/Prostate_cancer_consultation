@@ -892,15 +892,15 @@ async def upsert_first_visit_answers(
     await db.commit()
     await db.refresh(row)
 
-    # Resolve the study SID to REDCap's own auto-numbered record_id. If the SID is
-    # not registered in REDCap yet, mark the row pending (no push) rather than
-    # inventing an id. Otherwise mirror to REDCap under the real record_id. The sync
-    # outcome is recorded on the row just inserted for this domain.
+    # The REDCap record_id is the study SID (record_id == SID). If the speaker has
+    # no parseable SID, mark the row pending (no push) rather than inventing an id.
+    # Otherwise mirror to REDCap under that record_id. The sync outcome is recorded
+    # on the row just inserted for this domain.
     redcap_record_id = await resolve_record_id(sid)
     if redcap_record_id is None:
         row.redcap_synced = False
         row.redcap_record_id = None
-        row.redcap_error = f"SID {sid or body.speaker!r} not registered in REDCap"
+        row.redcap_error = f"No study SID for speaker {body.speaker!r}"
         await db.commit()
     else:
         redcap_result = await _sync_first_visit_answers_to_redcap(redcap_record_id, body.answers)

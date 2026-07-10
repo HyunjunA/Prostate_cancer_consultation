@@ -43,7 +43,7 @@ Generate secrets with `openssl rand -hex 32` (API_KEY) / `-hex 16` (DB password)
 
 | # | File | Holds | Key variables |
 |---|---|---|---|
-| 2.1 | `app/Backend/.env` | dashboard backend | `DATABASE_URL`(+`_SYNC`), `POSTGRES_PASSWORD` (!), `API_KEY` (!), `AZURE_OPENAI_*` (!) (Try & Score), `CORS_ORIGINS`, `REDCAP_*` (optional), `REDCAP_RECORD_ID_MODE` (`test` default / `production`) |
+| 2.1 | `app/Backend/.env` | dashboard backend | `DATABASE_URL`(+`_SYNC`), `POSTGRES_PASSWORD` (!), `API_KEY` (!), `AZURE_OPENAI_*` (!) (Try & Score), `CORS_ORIGINS`, `REDCAP_*` (optional; record_id == study SID) |
 | 2.2 | `app/Webapp/.env` | webapp → backend | `NEXT_PUBLIC_API_URL=http://host.docker.internal:18000`, `API_KEY` (!) **must equal 2.1** |
 | 2.3 | AI repo `.env` | pipeline DB + local NLP | `DATABASE_URL`(+`_SYNC`) **same DB as 2.1**, `NLP_API_URL` (local only), `TRANSCRIPTS_DIR`, `OUTPUT_DIR` |
 | 2.4 | AI repo `nlp_classifier_server/gateway/.env` | Phase 2 gateway secret | `NLP_GATEWAY_API_KEY` (!) — auto-read by `run-pipeline-watch.sh` |
@@ -174,10 +174,11 @@ bash app/Backend/scripts/init-db-native.sh        # recreates the DB + runs alem
 cd app/Backend && python scripts/create_admin.py --username admin && cd ../..
 ```
 
-> REDCap `record_id` mode: the fresh DB defaults to `REDCAP_RECORD_ID_MODE=test`
-> (record_id == SID). To use production mode, add a SID field to each REDCap record,
-> set `REDCAP_RECORD_ID_MODE=production` + `REDCAP_SID_FIELD` in `app/Backend/.env`,
-> and restart — see `docs/architecture/REDCAP_RECORD_ID_MAPPING.md`.
+> REDCap `record_id`: a survey is attributed to the REDCap record whose `record_id`
+> IS the study SID (record_id == SID). The coordinator names each record after the SID;
+> pre-create the empty records with `scripts/seed_redcap_record_ids.py` (bulk) or
+> `scripts/create_redcap_records.py` (one-off) — see
+> `docs/architecture/REDCAP_RECORD_ID_MAPPING.md`.
 
 ### 0c. Stage transcripts for Phase 2
 

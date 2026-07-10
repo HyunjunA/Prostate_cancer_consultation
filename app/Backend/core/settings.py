@@ -129,14 +129,9 @@ class Settings(BaseSettings):
     # Optional — the dashboard works without REDCap (see redcap_config.py).
     redcap_api_url: Optional[str] = None
     redcap_api_token: Optional[str] = None
-    # The REDCap field (on each record) that holds the study SID. Production
-    # resolves a submission's SID -> REDCap's own auto-numbered record_id via
-    # this field (see redcap_mapping.py). Env: REDCAP_SID_FIELD.
-    redcap_sid_field: str = Field("study_sid")
-    # record_id resolution mode (Env: REDCAP_RECORD_ID_MODE):
-    #   "test"       -> record_id == the un-hashed SID (current default; needs seeded SID records)
-    #   "production" -> map SID -> REDCap's own auto-numbered record_id via redcap_sid_field
-    redcap_record_id_mode: str = Field("test")
+    # A survey is attributed to the REDCap record whose record_id IS the study SID
+    # (e.g. SID_22): the coordinator names each record after the SID. See
+    # redcap_mapping.resolve_record_id and docs/architecture/REDCAP_RECORD_ID_MAPPING.md.
 
     @property
     def redcap_enabled(self) -> bool:

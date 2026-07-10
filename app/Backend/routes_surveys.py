@@ -389,15 +389,15 @@ async def import_to_redcap(submission: SurveySubmission, timestamp: str) -> dict
 
     print("[CONFIG] [OK] REDCap is enabled")
 
-    # Un-hash the composite speaker to its study SID, then resolve that SID to
-    # REDCap's own auto-numbered record_id (production: the coordinator registered
-    # the patient in REDCap and stored the SID in redcap_sid_field). If the SID is
-    # not registered in REDCap yet, do NOT push — the caller records it as pending.
+    # Un-hash the composite speaker to its study SID and use it as the REDCap
+    # record_id (record_id == SID; the coordinator names each record after the SID).
+    # A missing record_id means the speaker had no parseable SID — do NOT push;
+    # the caller records it as pending.
     sid = unhash_patient_sid(submission.speaker)
     record_id = await resolve_record_id(sid)
     if not record_id:
         return {"success": False, "record_id": None,
-                "error": f"SID {sid or submission.speaker!r} not registered in REDCap"}
+                "error": f"No study SID for speaker {submission.speaker!r}"}
     survey_type = submission.survey_type
 
     # Step 1: Get field mapping
