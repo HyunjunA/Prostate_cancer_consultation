@@ -15,6 +15,7 @@
 | `SAME_PATIENT_DIFF_DOCTOR.md` / `_KR` | EN/KR | Why **same-patient/different-doctor** data never mixes (file = patient+doctor+date is the key) |
 | `REDCAP_RECORD_ID_MAPPING.md` / `_KR` | EN/KR | **REDCap record_id** — a survey is attributed to the record whose record_id is the study SID (record_id == SID) |
 | `ARCHITECTURE.md` | EN | System overview · deployment · module layout |
+| `EDGE_PROXY_ARCHITECTURE.md` / `_KR` | EN/KR | **Reverse proxy vs load balancer vs API gateway** — concept primer · decision rule · where this project stands (no edge TLS proxy yet) · next step (nginx/Caddy TLS) |
 
 ---
 

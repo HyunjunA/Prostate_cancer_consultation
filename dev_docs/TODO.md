@@ -2,7 +2,33 @@
 
 > Consolidated list of outstanding items, organized by priority.  
 > Target: **Production level**  
-> Last updated: 2026-05-22
+> Last updated: 2026-07-10
+
+---
+
+## HTTPS / TLS edge reverse proxy (production, not started)
+
+> Goal: stop serving the dashboard over plain HTTP. Today the webapp is reached
+> directly on `:3001` (no TLS, no `:443` listener, no nginx/Caddy). PHI over
+> plain HTTP is not acceptable for production. Concept + rationale + decision
+> rule are in `docs/architecture/EDGE_PROXY_ARCHITECTURE.md` (§3 current state,
+> §4 next step); hardening context in
+> `docs/setup/DEPLOYMENT_3PHASE_SERVER_AWS_UBUNTU.txt` §10c. _Added 2026-07-10._
+
+- [ ] **Put a reverse proxy (nginx or Caddy) in front of the webapp for TLS
+      termination.** Users connect over `https://<name>`; the proxy forwards
+      internally to `127.0.0.1:3001`.
+- [ ] **Rebind the webapp back to loopback** — set
+      `docker-compose-frontend.yml` ports to `127.0.0.1:3001:3000` so only the
+      proxy's `:443` faces the network (it is currently `0.0.0.0:3001` for the
+      demo SG-direct access — see runbook §7d / §10i).
+- [ ] **Obtain a certificate** — pick one: (A) domain + nginx + certbot
+      (Let's Encrypt, recommended); (B) no domain → Caddy self-signed / IP cert
+      (browser warning); (C) AWS ALB + ACM certificate.
+- [ ] **Open `:443` in the EC2 security group** (and close public `:3001`).
+- [ ] Scope note: this is a **reverse proxy** only. A load balancer / API
+      gateway is NOT needed yet — revisit only when there are multiple backend
+      instances or a public multi-tenant API (see EDGE_PROXY_ARCHITECTURE §2).
 
 ---
 
