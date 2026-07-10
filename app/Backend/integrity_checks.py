@@ -205,13 +205,26 @@ async def check_redcap_reconciliation(
         select(S.id, S.speaker, S.survey_type, S.answers, S.redcap_record_id)
         .where(S.redcap_synced.is_(True))
     )).all()
-    total = len(synced)
-    if total == 0:
+    if not synced:
         return [_ok("redcap_reconciliation", 0, "no synced submissions")]
+
+    # REDCap keeps only the last write per field, so reconcile only the NEWEST
+    # submission per (record_id, survey_type) — comparing older resubmissions
+    # against the current record would flag every superseded write as a mismatch.
+    # id is autoincrement and rises with submission time (submitted_at defaults to
+    # now()), so max-id is the latest submission without any timezone/null pitfalls.
+    latest: Dict[tuple, Any] = {}
+    for r in synced:
+        key = (r.redcap_record_id, r.survey_type)
+        cur = latest.get(key)
+        if cur is None or r.id > cur.id:
+            latest[key] = r
+    targets = list(latest.values())
+    total = len(targets)
 
     # One read-only export of all referenced record_ids (all fields). Synced rows
     # carry the real REDCap record_id (the SID-resolved auto id).
-    record_ids = sorted({r.redcap_record_id for r in synced if r.redcap_record_id})
+    record_ids = sorted({r.redcap_record_id for r in targets if r.redcap_record_id})
     data = {"token": redcap_token, "content": "record", "format": "json", "type": "flat",
             "returnFormat": "json"}
     for i, rid in enumerate(record_ids):
@@ -219,21 +232,31 @@ async def check_redcap_reconciliation(
     try:
         resp = httpx.post(redcap_url, data=data, timeout=60)
         resp.raise_for_status()
+        # exported_fields = every key REDCap returned (present even when empty).
+        # A de-identified export token strips identifier / free-text fields from the
+        # payload entirely (key absent), so those fields cannot be verified and must
+        # not be counted as mismatches. A field that is merely empty still has its key.
         by_id: Dict[str, dict] = {}
+        exported_fields: set = set()
         for rec in resp.json():
+            exported_fields |= set(rec.keys())
             by_id.setdefault(rec.get("record_id"), {}).update({k: v for k, v in rec.items() if v != ""})
     except Exception as exc:  # noqa: BLE001
         return [CheckResult("redcap_reconciliation", "fail", 0, total, f"REDCap export failed: {exc}")]
 
     missing_record: List[dict] = []
     mismatches: List[dict] = []
-    for r in synced:
+    unverifiable: List[dict] = []
+    for r in targets:
         rid = r.redcap_record_id
         actual = by_id.get(rid)
         if actual is None:
             missing_record.append({"id": r.id, "record_id": rid, "survey_type": r.survey_type})
             continue
         for fld, exp in _expected_fields(r.survey_type, r.answers).items():
+            if fld not in exported_fields:
+                unverifiable.append({"id": r.id, "record_id": rid, "field": fld})
+                continue
             act = str(actual.get(fld, ""))
             if act != str(exp):
                 mismatches.append({"id": r.id, "record_id": rid, "field": fld,
@@ -248,6 +271,11 @@ async def check_redcap_reconciliation(
                                len(mismatches), total,
                                "REDCap field value differs from the DB answer", mismatches)
                    if mismatches else _ok("redcap_field_mismatch", total))
+    results.append(CheckResult("redcap_unverifiable_fields", "warn" if unverifiable else "pass",
+                               len(unverifiable), total,
+                               "field excluded by the de-identified REDCap export — cannot verify",
+                               unverifiable)
+                   if unverifiable else _ok("redcap_unverifiable_fields", total))
     return results
 
 
