@@ -3424,6 +3424,16 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
       : -1;
     // [V40 / A-2] Survey mode never shows Overview — clamp entry to >= 1 (cp).
     if (surveyMode) {
+      // [V42] The combined Total Survey Risk step (forceSurveyMode) always
+      // (re-)enters at the first domain. Re-clicking the completed Risk step in
+      // the sidebar remounts this component, so forcing screen 1 here restarts
+      // from the top instead of resuming the last-seen domain from the stale
+      // ?step=. Answers are untouched. Standalone ?survey=first-visit still
+      // deep-links via ?step=.
+      if (forceSurveyMode) {
+        setCurrentScreen(1);
+        return;
+      }
       setCurrentScreen(idx >= 1 && idx < TOTAL_SCREENS ? idx : 1);
       return;
     }
