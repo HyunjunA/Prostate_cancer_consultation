@@ -74,10 +74,6 @@ The on-the-fly endpoint hardcodes:
 - ✅ **Consistent with the batch pipeline**: the runtime batch config `ai_pipeline/config.yaml` uses
   `model_hyper_params: max_tokens 4096, temperature 0.3, top_p 0.4, seed 0` and `prompts.scoring: "1"` for
   all five domains — **identical** to the on-the-fly endpoint. `model` is `gpt-4o` on both sides.
-- ⚠️ **One minor divergence — `api_version`**: the dashboard `.env` sets
-  `AZURE_OPENAI_API_VERSION=2024-12-01-preview`, while the AI pipeline uses `2024-08-01-preview`
-  (`config.yaml` + `ai_pipeline/.env`). Same model/params/seed, so scores are not expected to differ
-  materially, but aligning the two api_versions is ideal for strict score comparability.
 
 ## Key files
 - Frontend: `app/Webapp/src/components/PhysicianReportsModifiedV41Timothy.tsx` (`TOPIC_TO_CLASS`, call site),

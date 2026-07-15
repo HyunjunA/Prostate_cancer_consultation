@@ -52,6 +52,9 @@
 
  The live .env files already carry this host's ports. Confirm (do not "fix"
  them back to 5433/6379/18000):
+ (If the .env files do NOT exist yet -- a fresh host -- create them first with
+  THIS host's values: see "1b. IF THE .env FILES DO NOT EXIST YET" below, then
+  run these grep checks.)
 
    $ cd /home/choih2/test-prostate-cancer/Prostate_cancer_consultation_dashboard
    $ grep -E 'PORT|5439|6380|18001' app/Backend/.env
@@ -65,6 +68,58 @@
    Webapp/.env  : NEXT_PUBLIC_API_URL=http://host.docker.internal:18001
    compose      : BACKEND_URL=http://host.docker.internal:18001 ; healthcheck 127.0.0.1
    AI .env + ai_pipeline/.env : DATABASE_URL/_SYNC @localhost:5439
+
+
+ ---------------------------------------------------------------------------
+ 1b. IF THE .env FILES DO NOT EXIST YET  (fresh host, from zero)
+ ---------------------------------------------------------------------------
+ Section 1 assumes the live .env already exist. If they DON'T, create all FIVE
+ from their *.example templates, then set THIS host's values (ports
+ 5439 / 6380 / 18001 -- NOT the 5433 / 6379 / 18000 runbook defaults). The full
+ key list per file is in docs/setup/DEPLOYMENT_3PHASE.txt section 2; below is
+ only what differs on caire-server, plus two keys that are easy to miss.
+
+   DASH=/home/choih2/test-prostate-cancer/Prostate_cancer_consultation_dashboard
+   AI  =/home/choih2/test-prostate-cancer/AI_physician_patient_communication
+
+ (1) $DASH/app/Backend/.env
+   $ cd $DASH && cp app/Backend/.env.example app/Backend/.env
+     DATABASE_URL       postgresql+asyncpg://prostatecancer_user:<PW>@localhost:5439/prostatecancer_db_native
+     DATABASE_URL_SYNC  postgresql+psycopg2://prostatecancer_user:<PW>@localhost:5439/prostatecancer_db_native
+     POSTGRES_PASSWORD  <PW>   (!)  same <PW> in all 3 lines above; openssl rand -hex 16
+     POSTGRES_PORT      5439        REDIS_URL redis://localhost:6380/0     REDIS_PORT 6380
+     PORT               18001       (native backend port on this host)
+     API_KEY            <KEY>  (!)  openssl rand -hex 32  -- MUST equal Webapp API_KEY (2)
+     JWT_SECRET         <JWT>  (!)  openssl rand -hex 48  -- MUST equal Webapp JWT_SECRET (2)
+     AZURE_OPENAI_ENDPOINT/KEY (!) ; AZURE_OPENAI_API_VERSION 2024-08-01-preview ; MODEL gpt-4o
+     CORS_ORIGINS '["http://localhost:3001","http://127.0.0.1:3001","http://10.226.8.205:3001"]'
+
+ (2) $DASH/app/Webapp/.env
+   $ cd $DASH && cp app/Webapp/.env.example app/Webapp/.env
+     NEXT_PUBLIC_API_URL   http://host.docker.internal:18001
+     NEXT_PUBLIC_BASE_URL  http://localhost:3001
+     API_KEY     (!)  = Backend API_KEY      (differ -> dashboard shows "No patients found")
+     JWT_SECRET  (!)  = Backend JWT_SECRET   (differ -> admin login succeeds then bounces to /login)
+
+ (3) $AI/.env
+   $ cd $AI && cp .env.example .env
+     DATABASE_URL / _SYNC   ...@localhost:5439/prostatecancer_db_native   (SAME DB as (1))
+     NLP_API_URL http://localhost:8888   TRANSCRIPTS_DIR data/input   OUTPUT_DIR data/output
+
+ (4) $AI/nlp_classifier_server/gateway/.env
+   $ cd $AI && cp nlp_classifier_server/gateway/.env.example nlp_classifier_server/gateway/.env
+     NLP_GATEWAY_API_KEY  <GATEWAY_KEY>  (!)  the X-API-Key the gateway expects.
+     NOTE: this host runs the gateway with NLP_GATEWAY_DISABLE_AUTH=1 (see 2c), so as a
+           client (running the pipeline) you can skip the key entirely.
+
+ (5) $AI/ai_pipeline/.env      (NO .env.example here -- create by hand)
+     AZURE_OPENAI_ENDPOINT (!) ; AZURE_OPENAI_KEY (!)   (same Azure resource as (1))
+     api_version is NOT read here -- it comes from ai_pipeline/config.yaml (2024-08-01-preview).
+
+ (+) $AI/config_remote.yaml    already in git (not a secret). Confirm the gateway URL is
+     http://10.226.8.205:18080  (this host's own NLP gateway).
+
+ After creating them, run the section 1 grep checks above to confirm the ports.
 
 
 ===============================================================================
