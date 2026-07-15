@@ -342,6 +342,31 @@
        # LOCAL container instead of the gateway:
        # $ PIPELINE_REMOTE=0 bash scripts/run-pipeline-watch.sh
 
+ Run (COORDINATOR UPLOAD -- admin page + auto-processing, RECOMMENDED for Ella):
+    Instead of SFTP + the CLI de-id above, the coordinator uploads through the
+    dashboard admin UI and a resident watch processes drops automatically.
+
+    1) Start a RESIDENT watch on the upload DROP FOLDER (data/input_deid). INPUT_DIR
+       points the watch at that folder (unset = default ./data/input). Needs the
+       local NLP container (:8888).
+       $ cd ../AI_physician_patient_communication
+       $ INPUT_DIR=data/input_deid PIPELINE_REMOTE=0 \
+             nohup bash scripts/run-pipeline-watch.sh > /tmp/watch.log 2>&1 & disown
+       # log shows: "Watching .../data/input_deid ... WAITING for new files"
+
+    2) Coordinator uploads at  http://<host>:3001/admin/upload  (superuser login):
+       - drag a RAW file (SID 22_doc2.xlsx): the SERVER de-identifies it (raw deleted
+         immediately -> no PHI kept; real->hash mapping shown on screen, keep it
+         clinical-side), writing "<hash>_<hash>_<date>.csv" into the drop folder; or
+       - drag an already de-identified "<hash>_<hash>_<date>.csv": stored as-is.
+
+    Full auto flow:  upload -> server de-id -> data/input_deid -> watch (5s poll)
+                     -> NLP+AI -> DB -> file moved to data/archive.
+
+    The drop folder is the BACKEND setting PIPELINE_DROP_DIR (default: sibling AI repo
+    data/input_deid). On the server set an absolute PIPELINE_DROP_DIR that MATCHES the
+    watch's INPUT_DIR so uploads land where the watch looks.
+
     Expected output (abridged) -- the wrapper prints its mode, then the pipeline runs:
        ▸ Starting drop-folder WATCH mode (Ctrl-C to stop).
          Drop .xlsx/.csv into data/input/ -- each is processed and archived automatically.

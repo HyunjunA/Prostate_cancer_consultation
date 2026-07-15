@@ -86,14 +86,27 @@ bash app/Backend/scripts/init-db-native.sh
 # ── Phase 1-b — start the backend (detached uvicorn :18000) ──
 nohup bash app/Backend/scripts/run-backend.sh > /tmp/backend.log 2>&1 & disown
 
-# ── Phase 2 — de-identify + process transcripts -> writes to DB ──
-# run-pipeline-deid.sh hashes the patient ID in each filename FIRST (-> "<hash>_<hash>_<date>.csv"),
-# then runs the pipeline. This is REQUIRED so the DB stores DE-IDENTIFIED patient keys and the
-# stored file (".csv") matches what the webapp submits — using the raw run-pipeline-watch.sh on
-# ".xlsx" input leaves un-de-identified keys and breaks survey submit (FK mismatch).
+# ── Phase 2 — process transcripts -> writes to DB ──
+# TWO ways to feed transcripts. Both end the same: a de-identified "<hash>_<hash>_<date>.csv"
+# in the drop folder is processed (NLP + AI) into the DB with DE-IDENTIFIED patient keys.
+#
+# Option A (bulk / local CLI): de-identify then process the whole input folder once.
 cd ../AI_physician_patient_communication
-PIPELINE_REMOTE=0 bash scripts/run-pipeline-deid.sh           # de-identify -> pipeline (LOCAL NLP)
+PIPELINE_REMOTE=0 bash scripts/run-pipeline-deid.sh           # de-identify data/input -> pipeline (LOCAL NLP)
 # (Only if input is ALREADY de-identified .csv: bash scripts/run-pipeline-watch.sh --dir data/input)
+#
+# Option B (RECOMMENDED for the coordinator: admin upload + auto-processing).
+# Run a RESIDENT watch on the upload DROP FOLDER (data/input_deid). It polls every 5s, processes
+# any new de-identified file, then moves it to data/archive. Requires the NLP container (:8888).
+INPUT_DIR=data/input_deid PIPELINE_REMOTE=0 nohup bash scripts/run-pipeline-watch.sh > /tmp/watch.log 2>&1 & disown
+#   Then the coordinator drops transcripts through the dashboard admin UI (no SFTP):
+#     -> http://<host>:3001/admin/upload   (superuser login)
+#     -> drag a RAW file (SID …) — the SERVER de-identifies it (raw deleted immediately, no PHI kept;
+#        the real->hash mapping is shown on screen, keep it clinical-side) — or an already
+#        de-identified <hash>_<hash>_<date>.csv, stored as-is.
+#   Full auto flow:  upload -> server de-id -> data/input_deid -> watch -> NLP+AI -> DB -> archive.
+#   The drop folder is the backend setting PIPELINE_DROP_DIR (default: the sibling AI repo's
+#   data/input_deid; set an absolute PIPELINE_DROP_DIR on the server to match the watch's INPUT_DIR).
 
 # ── Phase 3 — start the webapp (image was removed by teardown -> --build) :3001 ──
 cd ../Prostate_cancer_consultation_dashboard

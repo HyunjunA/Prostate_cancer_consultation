@@ -37,10 +37,21 @@ Why @lru_cache around get_settings:
 """
 
 from functools import lru_cache
+from pathlib import Path
 from typing import List, Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Default pipeline drop folder: the sibling AI repo's de-identified input dir
+# that the pipeline watch mode monitors. core/settings.py sits at
+# app/Backend/core/, so parents[4] is the project root that holds both repos.
+_DEFAULT_PIPELINE_DROP_DIR = str(
+    Path(__file__).resolve().parents[4]
+    / "AI_physician_patient_communication"
+    / "data"
+    / "input_deid"
+)
 
 
 class Settings(BaseSettings):
@@ -106,6 +117,12 @@ class Settings(BaseSettings):
     pipeline_top_n: int = Field(10, ge=1, le=1000)
     pipeline_context_window: int = Field(3, ge=0, le=20)
     pipeline_batch_size: int = Field(50, ge=1, le=1000)
+
+    # Drop folder that the pipeline watch mode monitors. The admin
+    # upload endpoint writes de-identified transcripts here so the running
+    # watch picks them up automatically. Override per-host with
+    # PIPELINE_DROP_DIR (e.g. an absolute server path).
+    pipeline_drop_dir: str = Field(_DEFAULT_PIPELINE_DROP_DIR)
 
     # ── Background worker (CLI watch mode) ───────────────────────────
     # Legacy knobs kept for backwards compatibility with older config
