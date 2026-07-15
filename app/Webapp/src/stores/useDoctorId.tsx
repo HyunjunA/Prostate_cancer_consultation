@@ -1,41 +1,31 @@
 // src/stores/useDoctorId.tsx
+//
+// The active doctor id is SESSION-SCOPED and derived from the URL (?doctorid).
+// It is deliberately NOT persisted to localStorage — identifiers must not leak
+// across sessions and must not live in localStorage (webapp CLAUDE.md rule).
 import { create } from "zustand";
 
 interface DoctorIdState {
   doctorId: string | null;
   setDoctorId: (id: string) => void;
   clearDoctorId: () => void;
+  // Kept for call-site compatibility (page.tsx). No-op now that the id is
+  // URL-only — there is nothing to load from storage.
   initFromStorage: () => void;
 }
-
-const STORAGE_KEY = "doctorId";
 
 export const useDoctorId = create<DoctorIdState>((set) => ({
   doctorId: null,
 
   setDoctorId: (id: string) => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(STORAGE_KEY, id);
-    }
     set({ doctorId: id });
-    console.log("👨‍⚕️ Doctor ID set:", id);
   },
 
   clearDoctorId: () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(STORAGE_KEY);
-    }
     set({ doctorId: null });
-    console.log("👨‍⚕️ Doctor ID cleared");
   },
 
   initFromStorage: () => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        set({ doctorId: stored });
-        console.log("👨‍⚕️ Doctor ID loaded from storage:", stored);
-      }
-    }
+    /* no-op: doctor id is URL-only, never read from localStorage */
   },
 }));

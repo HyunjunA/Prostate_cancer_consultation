@@ -692,13 +692,20 @@ interface PatientSatisfactionSurveyProps {
     elementId: string;
     metadata?: Record<string, any>;
   }) => void;
+  // One-way (forward-only) mode for the combined Total Survey. This survey has
+  // no internal Prev/Back button and keeps its final "Submit Feedback" label, so
+  // the flag currently makes no visual change; it is accepted for API parity with
+  // the other one-way survey sections. Defaults to false.
+  oneWay?: boolean;
 }
 
 export const PatientSatisfactionSurvey: React.FC<
   PatientSatisfactionSurveyProps
 > = ({ answers, onChange, onSubmit, isDark = false, onTrackEvent }) => {
-  // Survey is complete when feedback text has content
-  const isComplete = answers.feedbackText.trim().length > 0;
+  // Survey is complete when feedback text has content. Guard against a missing
+  // feedbackText (e.g. restored/legacy rows that never had the field) so the
+  // component never crashes on `.trim()` of undefined.
+  const isComplete = (answers.feedbackText ?? "").trim().length > 0;
 
   // Empty-feedback gate — keep button clickable so handleSubmitClick
   // can show this popup; the gray styling stays as a visual cue.
@@ -719,7 +726,7 @@ export const PatientSatisfactionSurvey: React.FC<
         <FeedbackTextInput
           label="Please share your feedback"
           placeholder="Please share any feedback about your experience with the consultation report..."
-          value={answers.feedbackText}
+          value={answers.feedbackText ?? ""}
           onChange={(v) => onChange("feedbackText", v)}
           isDark={isDark}
           trackingName="Satisfaction_FeedbackText"

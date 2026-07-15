@@ -366,6 +366,11 @@ interface RiskPerceptionWithSummaryProps {
   }) => void;
   // Pattern A behavior tracking — fires whenever the visible question changes.
   onQuestionView?: (questionId: string, index: number) => void;
+  // One-way (forward-only) mode for the combined Total Survey. When true, the
+  // internal Previous button is hidden and the final Submit button is relabelled
+  // to make clear it also advances to the next survey section. Defaults to false
+  // so existing callers keep the current two-way behavior.
+  oneWay?: boolean;
 }
 
 const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
@@ -379,6 +384,7 @@ const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
   trackingManager,
   onTrackEvent,
   onQuestionView,
+  oneWay = false,
 }) => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = React.useState(0);
 
@@ -710,7 +716,7 @@ const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
 
       {/* Navigation Buttons */}
       <div className="flex justify-between">
-        {currentQuestionIndex > 0 ? (
+        {currentQuestionIndex > 0 && !oneWay ? (
           <button
             onClick={handlePrev}
             className={cx(
@@ -759,7 +765,11 @@ const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
                     : "bg-gray-300 text-gray-500 cursor-not-allowed",
               )}
             >
-              {isSubmitting ? "Submitting..." : "Submit Responses"}
+              {isSubmitting
+                ? "Submitting..."
+                : oneWay
+                  ? "Submit & continue to next section"
+                  : "Submit Responses"}
             </button>
           )
         )}

@@ -297,6 +297,11 @@ interface DecisionalConflictSurveyProps {
   }) => void;
   // Pattern A behavior tracking — fires whenever the visible question changes.
   onQuestionView?: (questionId: string, index: number) => void;
+  // One-way (forward-only) mode for the combined Total Survey. When true, the
+  // internal Previous button is hidden and the final Submit button is relabelled
+  // to make clear it also advances to the next survey section. Defaults to false
+  // so existing callers (e.g. V31Re) keep the current two-way behavior.
+  oneWay?: boolean;
 }
 
 export const DecisionalConflictSurvey: React.FC<
@@ -310,6 +315,7 @@ export const DecisionalConflictSurvey: React.FC<
   // physicianName removed — survey text now uses generic "your doctor" phrasing
   onTrackEvent,
   onQuestionView,
+  oneWay = false,
 }) => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = React.useState(0);
 
@@ -325,7 +331,10 @@ export const DecisionalConflictSurvey: React.FC<
   }, [currentQuestionIndex, currentQuestion.id]);
   const currentAnswer =
     answers[currentQuestion.id as keyof DecisionalConflictAnswers];
-  const isCurrentAnswered = currentAnswer !== null;
+  // Treat both null (initial) and undefined (missing/partial-restore) as
+  // unanswered, so the Next/Submit gate only opens once an answer is chosen.
+  const isCurrentAnswered =
+    currentAnswer !== null && currentAnswer !== undefined;
   const isLastQuestion = currentQuestionIndex === totalQuestions - 1;
 
   // Per-question Next/Submit gate — keep button clickable so handleNext
@@ -411,7 +420,7 @@ export const DecisionalConflictSurvey: React.FC<
 
       {/* Navigation Buttons */}
       <div className="flex justify-between">
-        {currentQuestionIndex > 0 ? (
+        {currentQuestionIndex > 0 && !oneWay ? (
           <button
             onClick={handlePrev}
             className={cx(
@@ -446,6 +455,7 @@ export const DecisionalConflictSurvey: React.FC<
           onSubmit && (
             <button
               onClick={handleSubmitClick}
+              disabled={!isCurrentAnswered}
               data-track-proximity="DCS_Submit_Button"
               className={cx(
                 "px-8 py-3 rounded-lg text-sm font-semibold transition-all shadow-lg",
@@ -454,11 +464,11 @@ export const DecisionalConflictSurvey: React.FC<
                     ? "bg-teal-700 text-teal-100 hover:bg-teal-600 hover:shadow-xl"
                     : "bg-teal-600 text-white hover:bg-teal-700 hover:shadow-xl"
                   : isDark
-                    ? "bg-slate-700 text-slate-500"
-                    : "bg-gray-300 text-gray-500",
+                    ? "bg-slate-700 text-slate-500 cursor-not-allowed"
+                    : "bg-gray-300 text-gray-500 cursor-not-allowed",
               )}
             >
-              Submit Responses
+              {oneWay ? "Submit & continue to next section" : "Submit Responses"}
             </button>
           )
         )}

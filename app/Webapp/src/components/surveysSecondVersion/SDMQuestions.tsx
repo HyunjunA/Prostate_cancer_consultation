@@ -603,6 +603,11 @@ interface SDMSurveyProps {
   // (initial mount + every Next/Prev navigation). The parent uses this to log
   // a survey_step_view event with survey_type="sdm".
   onQuestionView?: (questionId: string, index: number) => void;
+  // One-way (forward-only) mode for the combined Total Survey. When true, the
+  // internal Previous button is hidden and the final Submit button is relabelled
+  // to make clear it also advances to the next survey section. Defaults to false
+  // so existing callers (e.g. V31Re) keep the current two-way behavior.
+  oneWay?: boolean;
 }
 
 export const SDMSurvey: React.FC<SDMSurveyProps> = ({
@@ -614,6 +619,7 @@ export const SDMSurvey: React.FC<SDMSurveyProps> = ({
   interventionName = "[intervention]",
   onTrackEvent,
   onQuestionView,
+  oneWay = false,
 }) => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = React.useState(0);
 
@@ -629,7 +635,10 @@ export const SDMSurvey: React.FC<SDMSurveyProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentQuestionIndex, currentQuestion.id]);
   const currentAnswer = answers[currentQuestion.id as keyof SDMAnswers];
-  const isCurrentAnswered = currentAnswer !== null;
+  // Treat both null (initial) and undefined (missing/partial-restore) as
+  // unanswered, so the Next/Submit gate only opens once an answer is chosen.
+  const isCurrentAnswered =
+    currentAnswer !== null && currentAnswer !== undefined;
   const isLastQuestion = currentQuestionIndex === totalQuestions - 1;
 
   // Per-question Next/Submit gate: button stays clickable so handleNext
@@ -737,7 +746,7 @@ export const SDMSurvey: React.FC<SDMSurveyProps> = ({
 
       {/* Navigation Buttons */}
       <div className="flex justify-between">
-        {currentQuestionIndex > 0 ? (
+        {currentQuestionIndex > 0 && !oneWay ? (
           <button
             onClick={handlePrev}
             className={cx(
@@ -772,6 +781,7 @@ export const SDMSurvey: React.FC<SDMSurveyProps> = ({
           onSubmit && (
             <button
               onClick={handleSubmitClick}
+              disabled={!isCurrentAnswered}
               data-track-proximity="SDM_Submit_Button"
               className={cx(
                 "px-8 py-3 rounded-lg text-sm font-semibold transition-all shadow-lg",
@@ -780,11 +790,11 @@ export const SDMSurvey: React.FC<SDMSurveyProps> = ({
                     ? "bg-purple-700 text-purple-100 hover:bg-purple-600 hover:shadow-xl"
                     : "bg-purple-600 text-white hover:bg-purple-700 hover:shadow-xl"
                   : isDark
-                    ? "bg-slate-700 text-slate-500"
-                    : "bg-gray-300 text-gray-500",
+                    ? "bg-slate-700 text-slate-500 cursor-not-allowed"
+                    : "bg-gray-300 text-gray-500 cursor-not-allowed",
               )}
             >
-              Submit Responses
+              {oneWay ? "Submit & continue to next section" : "Submit Responses"}
             </button>
           )
         )}

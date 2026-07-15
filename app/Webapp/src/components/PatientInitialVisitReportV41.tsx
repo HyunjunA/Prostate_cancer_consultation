@@ -491,6 +491,11 @@ interface PatientReportProps {
   // behavior tracking to patient_followup_survey_page_behavior (survey_type='risk_perception')
   // so the admin follow-up dashboard shows it with the other surveys.
   trackToFollowup?: boolean;
+  // One-way (forward-only) mode for the combined Total Survey Risk step: hides the
+  // per-domain Back button and relabels the last-domain submit to "Submit & continue
+  // to next section", matching the other survey sections. Defaults to false so the
+  // standalone first-visit flow keeps Back + "Submit".
+  oneWay?: boolean;
 }
 
 interface ClassSummary {
@@ -3398,6 +3403,7 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
   onComplete,
   forceSurveyMode = false,
   trackToFollowup = false,
+  oneWay = false,
 }) => {
   const patientId = usePatientId((state) => state.patientId);
   const fileId = useFileId((state) => state.fileId);
@@ -4703,27 +4709,33 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
                   : "bg-white/80 border-gray-200/50 shadow-lg shadow-gray-500/5",
               )}
             >
-              <button
-                type="button"
-                disabled={currentScreen <= (surveyMode ? 1 : 0)}
-                onClick={() =>
-                  setCurrentScreen((s) => Math.max(surveyMode ? 1 : 0, s - 1))
-                }
-                data-track-proximity="WizardBack"
-                className={cx(
-                  "inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 border",
-                  currentScreen <= (surveyMode ? 1 : 0)
-                    ? isDarkMode
-                      ? "bg-slate-800/40 text-slate-600 border-slate-800 cursor-not-allowed"
-                      : "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                    : isDarkMode
-                      ? "bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700"
-                      : "bg-white text-gray-700 border-gray-200 shadow-sm hover:bg-gray-50",
-                )}
-              >
-                <ChevronLeft size={16} />
-                Back
-              </button>
+              {oneWay ? (
+                // One-way (Total Survey Risk step): no Back. Empty spacer keeps the
+                // status text centered and the Submit button right-aligned.
+                <div />
+              ) : (
+                <button
+                  type="button"
+                  disabled={currentScreen <= (surveyMode ? 1 : 0)}
+                  onClick={() =>
+                    setCurrentScreen((s) => Math.max(surveyMode ? 1 : 0, s - 1))
+                  }
+                  data-track-proximity="WizardBack"
+                  className={cx(
+                    "inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 border",
+                    currentScreen <= (surveyMode ? 1 : 0)
+                      ? isDarkMode
+                        ? "bg-slate-800/40 text-slate-600 border-slate-800 cursor-not-allowed"
+                        : "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                      : isDarkMode
+                        ? "bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700"
+                        : "bg-white text-gray-700 border-gray-200 shadow-sm hover:bg-gray-50",
+                  )}
+                >
+                  <ChevronLeft size={16} />
+                  Back
+                </button>
+              )}
 
               <span
                 className={cx(
@@ -4766,7 +4778,9 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
                 {isLastScreen
                   ? submitAllBusy
                     ? "Submitting…"
-                    : "Submit"
+                    : oneWay
+                      ? "Submit & continue to next section"
+                      : "Submit"
                   : "Next"}
                 {!isLastScreen && <ChevronRight size={16} />}
               </button>

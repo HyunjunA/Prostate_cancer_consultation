@@ -1,6 +1,7 @@
 import { useFileId } from "@/stores/useFileId";
 import { act } from "@testing-library/react";
 
+// The file id is session-scoped (URL-only) and must NOT touch localStorage.
 beforeEach(() => {
   act(() => {
     useFileId.setState({ fileId: null });
@@ -13,12 +14,12 @@ describe("useFileId", () => {
     expect(useFileId.getState().fileId).toBeNull();
   });
 
-  it("setFileId updates state and saves to localStorage", () => {
+  it("setFileId updates state without writing to localStorage", () => {
     act(() => {
       useFileId.getState().setFileId("F001");
     });
     expect(useFileId.getState().fileId).toBe("F001");
-    expect(localStorage.getItem("fileId")).toBe("F001");
+    expect(localStorage.getItem("fileId")).toBeNull();
   });
 
   it("setFileId overwrites previous value", () => {
@@ -29,7 +30,6 @@ describe("useFileId", () => {
       useFileId.getState().setFileId("F002");
     });
     expect(useFileId.getState().fileId).toBe("F002");
-    expect(localStorage.getItem("fileId")).toBe("F002");
   });
 
   it("setFileId handles empty string", () => {
@@ -37,10 +37,9 @@ describe("useFileId", () => {
       useFileId.getState().setFileId("");
     });
     expect(useFileId.getState().fileId).toBe("");
-    expect(localStorage.getItem("fileId")).toBe("");
   });
 
-  it("clearFileId resets state to null and removes from localStorage", () => {
+  it("clearFileId resets state to null", () => {
     act(() => {
       useFileId.getState().setFileId("F001");
     });
@@ -48,25 +47,17 @@ describe("useFileId", () => {
       useFileId.getState().clearFileId();
     });
     expect(useFileId.getState().fileId).toBeNull();
-    expect(localStorage.getItem("fileId")).toBeNull();
   });
 
-  it("initFromStorage loads fileId from localStorage", () => {
+  it("initFromStorage is a no-op — never loads a stale id from localStorage", () => {
     localStorage.setItem("fileId", "F-STORED");
-    act(() => {
-      useFileId.getState().initFromStorage();
-    });
-    expect(useFileId.getState().fileId).toBe("F-STORED");
-  });
-
-  it("initFromStorage does nothing when localStorage is empty", () => {
     act(() => {
       useFileId.getState().initFromStorage();
     });
     expect(useFileId.getState().fileId).toBeNull();
   });
 
-  it("initFromStorage preserves existing state when key missing from localStorage", () => {
+  it("initFromStorage leaves existing state untouched", () => {
     act(() => {
       useFileId.setState({ fileId: "EXISTING" });
     });

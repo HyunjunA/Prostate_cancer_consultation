@@ -1,7 +1,7 @@
 import { usePatientId } from "@/stores/usePatientId";
 import { act } from "@testing-library/react";
 
-// Reset store and localStorage between tests
+// The patient id is session-scoped (URL-only) and must NOT touch localStorage.
 beforeEach(() => {
   act(() => {
     usePatientId.setState({ patientId: null });
@@ -14,12 +14,12 @@ describe("usePatientId", () => {
     expect(usePatientId.getState().patientId).toBeNull();
   });
 
-  it("setPatientId updates state and saves to localStorage", () => {
+  it("setPatientId updates state without writing to localStorage", () => {
     act(() => {
       usePatientId.getState().setPatientId("P001");
     });
     expect(usePatientId.getState().patientId).toBe("P001");
-    expect(localStorage.getItem("patientId")).toBe("P001");
+    expect(localStorage.getItem("patientId")).toBeNull();
   });
 
   it("setPatientId overwrites previous value", () => {
@@ -30,7 +30,6 @@ describe("usePatientId", () => {
       usePatientId.getState().setPatientId("P002");
     });
     expect(usePatientId.getState().patientId).toBe("P002");
-    expect(localStorage.getItem("patientId")).toBe("P002");
   });
 
   it("setPatientId handles empty string", () => {
@@ -38,10 +37,9 @@ describe("usePatientId", () => {
       usePatientId.getState().setPatientId("");
     });
     expect(usePatientId.getState().patientId).toBe("");
-    expect(localStorage.getItem("patientId")).toBe("");
   });
 
-  it("clearPatientId resets state to null and removes from localStorage", () => {
+  it("clearPatientId resets state to null", () => {
     act(() => {
       usePatientId.getState().setPatientId("P001");
     });
@@ -49,33 +47,23 @@ describe("usePatientId", () => {
       usePatientId.getState().clearPatientId();
     });
     expect(usePatientId.getState().patientId).toBeNull();
-    expect(localStorage.getItem("patientId")).toBeNull();
   });
 
-  it("initFromStorage loads patientId from localStorage", () => {
+  it("initFromStorage is a no-op — never loads a stale id from localStorage", () => {
     localStorage.setItem("patientId", "P-STORED");
-    act(() => {
-      usePatientId.getState().initFromStorage();
-    });
-    expect(usePatientId.getState().patientId).toBe("P-STORED");
-  });
-
-  it("initFromStorage does nothing when localStorage is empty", () => {
     act(() => {
       usePatientId.getState().initFromStorage();
     });
     expect(usePatientId.getState().patientId).toBeNull();
   });
 
-  it("initFromStorage does not overwrite state when localStorage key missing", () => {
+  it("initFromStorage leaves existing state untouched", () => {
     act(() => {
       usePatientId.setState({ patientId: "EXISTING" });
     });
-    // localStorage has no patientId key
     act(() => {
       usePatientId.getState().initFromStorage();
     });
-    // State should remain unchanged since localStorage.getItem returns null (falsy)
     expect(usePatientId.getState().patientId).toBe("EXISTING");
   });
 });

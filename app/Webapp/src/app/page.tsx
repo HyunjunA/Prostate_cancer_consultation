@@ -35,7 +35,7 @@ import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV41";
 // Modified but not the version where one question appears per page.
 // import PatientFollowUpReport from "@/components/PatientFollowUpReportV31";
 
-import PatientFollowUpReport from "@/components/PatientFollowUpReportV31Re";
+// import PatientFollowUpReport from "@/components/PatientFollowUpReportV31Re";
 
 // second meeting patient report component
 // import PatientFollowUpReport from "@/components/PatientFollowUpReportV33";
@@ -45,6 +45,10 @@ import PatientFollowUpReport from "@/components/PatientFollowUpReportV31Re";
 // import PatientFollowUpReport from "@/components/PatientFollowUpReportV35";
 
 // import PatientFollowUpReport from "@/components/PatientFollowUpReportV37";
+
+// V38: one-way (forward-only) navigation for the Total Survey (elderly-friendly).
+// Copied from V31Re; V31Re preserved above, re-enable by swapping the imports.
+import PatientFollowUpReport from "@/components/PatientFollowUpReportV38";
 
 import FilterSidebar from "@/components/FilterSidebarV3";
 import Dashboard from "../components/Dashboard";
