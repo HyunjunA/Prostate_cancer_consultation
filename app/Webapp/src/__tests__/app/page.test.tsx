@@ -34,13 +34,16 @@ jest.mock("@/components/PhysicianReportsModifiedV41Timothy", () => {
   };
 });
 
-jest.mock("@/components/PatientInitialVisitReportV41", () => {
+// NOTE: these mock paths are coupled to the exact versioned component files that
+// app/page.tsx imports. When page.tsx is pointed at a new version (V42, V38, ...),
+// update the path here too or the real component renders and the routing tests fail.
+jest.mock("@/components/PatientInitialVisitReportV42", () => {
   return function MockPatientFirstVisit() {
     return <div data-testid="patient-report">Patient First Visit</div>;
   };
 });
 
-jest.mock("@/components/PatientFollowUpReportV31Re", () => {
+jest.mock("@/components/PatientFollowUpReportV38", () => {
   return function MockPatientFollowUp() {
     return <div data-testid="patient-followup">Patient Follow-up</div>;
   };
@@ -167,9 +170,7 @@ describe("Home page — URL-based routing", () => {
     render(<Home />);
 
     expect(screen.getByText("Patient Consultation System")).toBeInTheDocument();
-    expect(
-      screen.getByText(/Select a patient to view their consultation report/)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Pick a patient/)).toBeInTheDocument();
   });
 
   // ── 2. Patient first visit (new ?view=first-report) ────────────────────
