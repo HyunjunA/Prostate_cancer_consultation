@@ -928,7 +928,7 @@ const InstructionsBox: React.FC<InstructionsBoxProps> = ({
                     2
                   </span>
                   <span>
-                    Move between categories with <strong>Back / Next</strong>.
+                    Move between categories with <strong>Previous / Next</strong>.
                     Your progress is shown on the side.
                   </span>
                 </p>
@@ -4589,32 +4589,29 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
                   : "bg-white/80 border-gray-200/50 shadow-lg shadow-gray-500/5",
               )}
             >
-              {oneWay ? (
-                // One-way (Total Survey Risk step): no Back. Empty spacer keeps the
-                // status text centered and the Submit button right-aligned.
-                <div />
-              ) : (
+              {currentScreen > (surveyMode ? 1 : 0) ? (
+                // [V42] Within-survey Previous (also shown in one-way Total Survey).
+                // Hidden (spacer) on the first domain, keeping the status text
+                // centered and Next right-aligned. Moves to the previous domain;
+                // answers are untouched. Section-to-section back is via the sidebar.
                 <button
                   type="button"
-                  disabled={currentScreen <= (surveyMode ? 1 : 0)}
                   onClick={() =>
                     setCurrentScreen((s) => Math.max(surveyMode ? 1 : 0, s - 1))
                   }
                   data-track-proximity="WizardBack"
                   className={cx(
                     "inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 border",
-                    currentScreen <= (surveyMode ? 1 : 0)
-                      ? isDarkMode
-                        ? "bg-slate-800/40 text-slate-600 border-slate-800 cursor-not-allowed"
-                        : "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                      : isDarkMode
-                        ? "bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700"
-                        : "bg-white text-gray-700 border-gray-200 shadow-sm hover:bg-gray-50",
+                    isDarkMode
+                      ? "bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700"
+                      : "bg-white text-gray-700 border-gray-200 shadow-sm hover:bg-gray-50",
                   )}
                 >
                   <ChevronLeft size={16} />
-                  Back
+                  Previous
                 </button>
+              ) : (
+                <div />
               )}
 
               <span

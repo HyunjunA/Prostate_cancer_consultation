@@ -302,6 +302,7 @@
  */
 
 import React from "react";
+import { ChevronLeft } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -746,7 +747,7 @@ export const SDMSurvey: React.FC<SDMSurveyProps> = ({
 
       {/* Navigation Buttons */}
       <div className="flex justify-between">
-        {currentQuestionIndex > 0 && !oneWay ? (
+        {currentQuestionIndex > 0 ? (
           <button
             onClick={handlePrev}
             className={cx(
@@ -756,6 +757,7 @@ export const SDMSurvey: React.FC<SDMSurveyProps> = ({
                 : "border-purple-300 text-purple-600 hover:bg-purple-50",
             )}
           >
+            <ChevronLeft size={16} />
             Previous
           </button>
         ) : (

@@ -9,6 +9,7 @@
  */
 
 import React from "react";
+import { ChevronLeft } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -420,7 +421,7 @@ export const DecisionalConflictSurvey: React.FC<
 
       {/* Navigation Buttons */}
       <div className="flex justify-between">
-        {currentQuestionIndex > 0 && !oneWay ? (
+        {currentQuestionIndex > 0 ? (
           <button
             onClick={handlePrev}
             className={cx(
@@ -430,6 +431,7 @@ export const DecisionalConflictSurvey: React.FC<
                 : "border-teal-300 text-teal-600 hover:bg-teal-50",
             )}
           >
+            <ChevronLeft size={16} />
             Previous
           </button>
         ) : (
