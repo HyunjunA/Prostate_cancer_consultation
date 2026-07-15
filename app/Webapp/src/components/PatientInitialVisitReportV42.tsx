@@ -14,6 +14,11 @@
  * The per-treatment toggle props (isSubEvidenceShown / onToggleSubEvidence) are
  * left in place but unused.
  *
+ * [V42] Survey mode ("Risk Perception 2" in the Total Survey, forceSurveyMode)
+ * now builds the evidence grouping from EVERY treatment too, so it shows the same
+ * consolidated all-category dropdown as the report. The "one designated treatment"
+ * assumption is kept for SCORING only (the risk slider stays a single outcome).
+ *
  * First Visit Patient Dashboard.
  *
  * [V41] Side-effect domains (ED / Urinary Incontinence / Irritative Symptoms)
@@ -3636,13 +3641,23 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
       };
       for (const d of aiSummaryData.domains) {
         const topic = domainToTopic[d.domain_name] || d.domain_name;
-        if (surveyMode) {
-          const designated = DESIGNATED_TREATMENT[d.domain_name];
-          if (designated && (d.treatment ?? null) !== designated) continue;
-        }
+        // [V42] Survey mode ("Risk Perception 2" in the Total Survey) assumes ONE
+        // designated treatment so the risk slider stays a single scoreable outcome.
+        // That assumption applies to SCORING ONLY: the evidence display below now
+        // builds from EVERY treatment (like the report) so Risk Perception 2 shows
+        // all categories in the same consolidated dropdown. So we no longer `continue`
+        // past non-designated rows — we only skip them from the score aggregation.
+        const designated = surveyMode
+          ? DESIGNATED_TREATMENT[d.domain_name]
+          : undefined;
+        const isDesignatedForScore =
+          !designated || (d.treatment ?? null) === designated;
         // [DEBUG] collect this row's ai_score as-is (one entry per row/treatment).
-        if (!scoreListMap[topic]) scoreListMap[topic] = [];
-        scoreListMap[topic].push(d.ai_score ?? null);
+        // Score list keeps the survey-mode single-treatment assumption.
+        if (isDesignatedForScore) {
+          if (!scoreListMap[topic]) scoreListMap[topic] = [];
+          scoreListMap[topic].push(d.ai_score ?? null);
+        }
         // [V40] group this row under its treatment (sub-domain).
         {
           const treatment: string | null = d.treatment ?? null;
