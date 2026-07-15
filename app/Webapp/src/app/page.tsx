@@ -29,7 +29,8 @@ import PatientConsultationReports from "@/components/PatientConsultationReports"
 // import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV31";
 // import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV33";
 // import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV40";
-import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV41";
+// import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV41";
+import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV42";
 
 // // These below components are the one with feedback from Dr. Timothy
 // Modified but not the version where one question appears per page.

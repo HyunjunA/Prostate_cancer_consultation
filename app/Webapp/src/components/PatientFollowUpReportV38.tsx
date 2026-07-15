@@ -80,7 +80,8 @@ import RiskPerceptionWithSummary, {
 // Combined "Total Survey" Risk step renders the V41 first-visit component — this is
 // "Risk Perception 2" (survey_type=risk_perception_2, the 5-domain risk survey).
 // The non-combined follow-up flow uses the one-way RiskPerceptionWithSummary above.
-import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV41";
+// import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV41";
+import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV42";
 
 import { submitSurvey, fetchSurveySubmissions } from "@/api/surveyApi";
 import { useDebounce } from "@/hooks/useDebounce";
