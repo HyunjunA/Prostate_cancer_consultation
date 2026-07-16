@@ -11,13 +11,17 @@ only the outbound REDCap call via respx, asserting:
   - each domain is saved as its own row (own timestamp) and rows accumulate.
 """
 
+import base64
+import hashlib
 import json
+from types import SimpleNamespace
 from urllib.parse import parse_qs
 
 import httpx
 import pytest
 import pytest_asyncio
 import respx
+from cryptography.hazmat.primitives.ciphers.aead import AESSIV
 
 from models import PatientSummary
 
@@ -26,6 +30,17 @@ URL_GET = "/api/patient/first-visit-answers/{file}/{speaker}"
 
 FAKE_REDCAP_URL = "https://redcap.example.com/api/"
 FAKE_REDCAP_TOKEN = "FAKE_TOKEN_1234567890"
+
+# A de-identified speaker/file, built the way the upstream de-id builds it, so the
+# attribution test exercises the real cipher rather than a hand-written string.
+TEST_DEID_KEY = "unit-test-deid-passphrase-fixed"
+
+
+def _aes_hash(number: int, domain: bytes) -> str:
+    """Mirror ``deidentify_transcript.hash_id``: AES-SIV(number, domain) -> base32."""
+    derived = hashlib.sha512(TEST_DEID_KEY.encode("utf-8")).digest()
+    ciphertext = AESSIV(derived).encrypt(str(number).encode("utf-8"), [domain])
+    return base64.b32encode(ciphertext).decode("ascii").rstrip("=")
 
 
 def _body(domain, answers, *, file="f.xlsx", speaker="Patient", partial=False):
@@ -257,17 +272,25 @@ async def _fetch_risk2_row(db):
 @pytest.mark.integration
 @pytest.mark.asyncio
 @respx.mock
-async def test_redcap_record_id_is_mapped_auto_number(client, api_headers, enable_redcap, db):
+async def test_redcap_record_id_is_mapped_auto_number(client, api_headers, enable_redcap, db,
+                                                      monkeypatch):
     # The submission is posted under REDCap's resolved auto id ("3"), while the row
-    # keeps the study attribution (sid = SID_22, doctor = doc2).
+    # keeps the study attribution (sid = SID_22, doctor = doc2) recovered from the
+    # de-identified speaker. Needs a key: without one every id un-hashes to None.
+    import deid
+    monkeypatch.setattr(deid, "get_settings",
+                        lambda: SimpleNamespace(deid_key=TEST_DEID_KEY))
+    stem = f"{_aes_hash(22, deid.DOMAIN_PATIENT)}_{_aes_hash(2, deid.DOMAIN_DOCTOR)}_07022026"
+    file, speaker = f"{stem}.csv", f"Patient_{stem}"
+
     from models import PatientSummary
-    db.add(PatientSummary(file="13511_13571_07022026.csv", speaker="Patient_13511_13571_07022026"))
+    db.add(PatientSummary(file=file, speaker=speaker))
     await db.commit()
     route = respx.post(FAKE_REDCAP_URL).mock(return_value=httpx.Response(200, json={"count": 1}))
 
     resp = await client.put(URL_PUT, headers=api_headers, json=_body(
         "cp", [{"question_id": "cp_timeline", "field": "timeline", "value": "Over next 5 years"}],
-        file="13511_13571_07022026.csv", speaker="Patient_13511_13571_07022026",
+        file=file, speaker=speaker,
     ))
 
     assert resp.status_code == 200, resp.text
@@ -278,7 +301,7 @@ async def test_redcap_record_id_is_mapped_auto_number(client, api_headers, enabl
     from models import PatientSurveySubmissionLog
     db.expire_all()
     row = (await db.execute(select(PatientSurveySubmissionLog).where(
-        PatientSurveySubmissionLog.speaker == "Patient_13511_13571_07022026"))).scalars().first()
+        PatientSurveySubmissionLog.speaker == speaker))).scalars().first()
     assert row.sid == "SID_22"
     assert row.doctor == "doc2"
     assert row.redcap_record_id == "3"

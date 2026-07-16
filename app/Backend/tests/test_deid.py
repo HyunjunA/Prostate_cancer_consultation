@@ -17,11 +17,19 @@ import deid
 TEST_KEY = "unit-test-deid-passphrase-fixed"
 
 
-def _aes_hash(number: int, key: str = TEST_KEY) -> str:
-    """Mirror ``deidentify_transcript.hash_id``: AES-SIV(number) -> base32, unpadded."""
+def _aes_hash(number: int, domain: bytes = deid.DOMAIN_PATIENT, key: str = TEST_KEY) -> str:
+    """Mirror ``deidentify_transcript.hash_id``: AES-SIV(number, domain) -> base32.
+
+    ``domain`` is associated data, not encrypted: it is what keeps a patient and a
+    doctor sharing a number from producing the same token.
+    """
     derived = hashlib.sha512(key.encode("utf-8")).digest()
-    ciphertext = AESSIV(derived).encrypt(str(number).encode("utf-8"), None)
+    ciphertext = AESSIV(derived).encrypt(str(number).encode("utf-8"), [domain])
     return base64.b32encode(ciphertext).decode("ascii").rstrip("=")
+
+
+def _doctor_hash(number: int) -> str:
+    return _aes_hash(number, deid.DOMAIN_DOCTOR)
 
 
 @pytest.fixture(autouse=True)
@@ -33,11 +41,11 @@ def _use_test_key(monkeypatch):
 class TestUnhashPatientSid:
     @pytest.mark.parametrize("sid_n", [22, 34, 21, 29, 1, 999])
     def test_speaker_roundtrip(self, sid_n):
-        speaker = f"Patient_{_aes_hash(sid_n)}_{_aes_hash(2)}_07022026"
+        speaker = f"Patient_{_aes_hash(sid_n)}_{_doctor_hash(2)}_07022026"
         assert deid.unhash_patient_sid(speaker) == f"SID_{sid_n}"
 
     def test_file_form_with_extension(self):
-        name = f"{_aes_hash(22)}_{_aes_hash(2)}_07022026.csv"
+        name = f"{_aes_hash(22)}_{_doctor_hash(2)}_07022026.csv"
         assert deid.unhash_patient_sid(name) == "SID_22"
 
     def test_patient_only_two_part(self):
@@ -55,7 +63,7 @@ class TestUnhashPatientSid:
 
 class TestUnhashDoctorNum:
     def test_doctor_token(self):
-        speaker = f"Patient_{_aes_hash(22)}_{_aes_hash(2)}_07022026"
+        speaker = f"Patient_{_aes_hash(22)}_{_doctor_hash(2)}_07022026"
         assert deid.unhash_doctor_num(speaker) == "doc2"
 
     def test_needs_second_token(self):
@@ -65,9 +73,26 @@ class TestUnhashDoctorNum:
         assert deid.unhash_doctor_num("") is None
 
 
+class TestDomainSeparation:
+    """A token is bound to what its number refers to, so the two kinds cannot be
+    confused for each other — position picks a token, the domain verifies it."""
+
+    def test_patient_and_doctor_sharing_a_number_do_not_collide(self):
+        assert _aes_hash(2, deid.DOMAIN_PATIENT) != _aes_hash(2, deid.DOMAIN_DOCTOR)
+
+    def test_doctor_token_is_not_readable_as_a_subject(self):
+        """The regression: without a domain this returned "SID_3" for doctor 3,
+        which would attribute survey data to a subject that may not exist."""
+        assert deid.unhash_patient_sid(f"Patient_{_doctor_hash(3)}_07022026") is None
+
+    def test_patient_token_is_not_readable_as_a_doctor(self):
+        speaker = f"Patient_{_aes_hash(22)}_{_aes_hash(2)}_07022026"  # 2nd token is a PATIENT hash
+        assert deid.unhash_doctor_num(speaker) is None
+
+
 class TestNoKeyConfigured:
     def test_returns_none_without_key(self, monkeypatch):
         monkeypatch.setattr(deid, "get_settings", lambda: SimpleNamespace(deid_key=None))
-        speaker = f"Patient_{_aes_hash(22)}_{_aes_hash(2)}_07022026"
+        speaker = f"Patient_{_aes_hash(22)}_{_doctor_hash(2)}_07022026"
         assert deid.unhash_patient_sid(speaker) is None
         assert deid.unhash_doctor_num(speaker) is None

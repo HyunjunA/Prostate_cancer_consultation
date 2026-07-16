@@ -142,7 +142,7 @@ async def upload_transcript(file: UploadFile = File(...)) -> dict:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                             detail="Unsupported file type (use .xlsx / .xls / .csv).")
     try:
-        extract_study_id(name)  # validates a known SID/DLC study id is present
+        extract_study_id(name)  # validates a known study id (SID) is present
     except Exception:  # noqa: BLE001 - fail-closed on unrecognized names
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

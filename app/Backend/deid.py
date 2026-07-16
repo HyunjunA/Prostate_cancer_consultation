@@ -27,6 +27,12 @@ from cryptography.hazmat.primitives.ciphers.aead import AESSIV
 
 from core.settings import get_settings
 
+# What a hashed number refers to. Bound into each token as AES-SIV associated data
+# by the upstream de-id; these values must match ``deidentify_transcript``'s
+# DOMAIN_PATIENT / DOMAIN_DOCTOR byte-for-byte or nothing decrypts.
+DOMAIN_PATIENT = b"patient"
+DOMAIN_DOCTOR = b"doctor"
+
 
 @lru_cache(maxsize=4)
 def _derive_key(passphrase: str) -> bytes:
@@ -44,7 +50,9 @@ def _hash_tokens(speaker_or_file: str) -> list[str]:
     Drops a leading ``Patient`` label and the trailing 8-digit ``MMDDYYYY`` date,
     leaving ``[patientToken]`` or ``[patientToken, doctorToken]``. Base32 tokens
     contain letters, so (unlike the old affine ``.isdigit()`` split) they cannot be
-    told apart by digits — position is what identifies them.
+    told apart by digits — position is what picks which is which here. The cipher's
+    domain then verifies that choice: a token read from the wrong position fails to
+    decrypt rather than yielding the other kind's number.
 
         ``Patient_MFRGGZDF_NBSWY3DP_07022026`` -> ["MFRGGZDF", "NBSWY3DP"]
         ``MFRGGZDF_NBSWY3DP_07022026.csv``     -> ["MFRGGZDF", "NBSWY3DP"]
@@ -59,17 +67,22 @@ def _hash_tokens(speaker_or_file: str) -> list[str]:
     return parts
 
 
-def _unhash_number(token: str, key: str) -> Optional[str]:
+def _unhash_number(token: str, key: str, domain: bytes) -> Optional[str]:
     """Decrypt one Base32 token back to its number string, or None if it can't.
 
+    ``domain`` must match the one the upstream de-id created the token under
+    (mirrors ``deidentify_transcript.DOMAIN_PATIENT`` / ``DOMAIN_DOCTOR``), so a
+    doctor token asked for as a patient fails to authenticate instead of returning
+    the doctor's number as if it were a subject id.
+
     Fail-soft: a wrong key, a non-Base32 token (e.g. a legacy affine 5-digit code
-    contains ``0/1/8/9`` which are not in the Base32 alphabet), or a failed
-    authentication all yield None rather than raising.
+    contains ``0/1/8/9`` which are not in the Base32 alphabet), a wrong domain, or a
+    failed authentication all yield None rather than raising.
     """
     try:
         padding = "=" * (-len(token) % 8)
         ciphertext = base64.b32decode(token.upper() + padding)
-        return AESSIV(_derive_key(key)).decrypt(ciphertext, None).decode("utf-8")
+        return AESSIV(_derive_key(key)).decrypt(ciphertext, [domain]).decode("utf-8")
     except Exception:  # noqa: BLE001 - any decode/auth failure -> not re-identifiable
         return None
 
@@ -78,7 +91,8 @@ def unhash_patient_sid(speaker_or_file: str) -> Optional[str]:
     """Return ``"SID_<n>"`` for the patient hash in a speaker/file string, else None.
 
     The 1st hash token is the patient code. Returns None when there is no key, no
-    token, or the token does not decrypt (unparseable / legacy / tampered).
+    token, or the token does not decrypt (unparseable / legacy / tampered / a
+    doctor token, which is rejected by the domain rather than mis-read as a subject).
     """
     key = get_settings().deid_key
     if not speaker_or_file or not key:
@@ -86,7 +100,7 @@ def unhash_patient_sid(speaker_or_file: str) -> Optional[str]:
     tokens = _hash_tokens(speaker_or_file)
     if not tokens:
         return None
-    number = _unhash_number(tokens[0], key)
+    number = _unhash_number(tokens[0], key, DOMAIN_PATIENT)
     return f"SID_{number}" if number is not None else None
 
 
@@ -101,5 +115,5 @@ def unhash_doctor_num(speaker_or_file: str) -> Optional[str]:
     tokens = _hash_tokens(speaker_or_file)
     if len(tokens) < 2:
         return None
-    number = _unhash_number(tokens[1], key)
+    number = _unhash_number(tokens[1], key, DOMAIN_DOCTOR)
     return f"doc{number}" if number is not None else None
