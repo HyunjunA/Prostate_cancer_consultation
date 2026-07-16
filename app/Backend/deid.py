@@ -1,66 +1,105 @@
-"""Reverse the de-identification affine cipher, at the backend storage boundary.
+"""Reverse the de-identification cipher, at the backend storage boundary.
 
 Transcript files are de-identified upstream (AI repo
-``scripts/deidentify_transcript_simple.py``) with a deterministic, reversible
-affine cipher: ``code = (SID * MULT + ADD) mod MOD``. Patient/doctor numbers in a
-speaker/file string like ``Patient_13511_13571_07022026`` are those codes.
+``scripts/deidentify_transcript.py``) with AES-SIV (RFC 5297, deterministic
+authenticated encryption): only the sequential NUMBER of each id is encrypted
+under the shared ``DEID_KEY`` passphrase, then Base32-encoded. A speaker/file
+string like ``Patient_<hashedPatient>_<hashedDoctor>_<MMDDYYYY>`` carries those
+Base32 tokens.
 
-This module recovers the real subject id (``SID_<n>``) so survey data can be stored
-and pushed to REDCap attributed to the real subject instead of the opaque hash.
-
-The constants are the same public constants as the upstream script (its docstring
-notes this is light obfuscation, "not cryptographically secure" — no secret here).
-Only the affine (simple) method is reversed here; files de-identified with the AES
-method would need ``DEID_KEY`` and are not handled.
+This module recovers the real subject id (``SID_<n>``) so survey data can be
+stored and pushed to REDCap attributed to the real subject instead of the opaque
+hash. Re-identification requires the same ``DEID_KEY`` the upstream de-id used;
+it is read from settings (``app/Backend/.env``, gitignored). When the key is
+absent or a token does not decrypt (e.g. a legacy affine 5-digit code, or a
+tampered value), the un-hash functions return ``None`` and the caller records the
+submission as pending instead of attributing it.
 """
 from __future__ import annotations
 
+import base64
+import hashlib
 import re
+from functools import lru_cache
 from typing import Optional
 
-# Public affine-cipher constants — mirror deidentify_transcript_simple.py.
-MOD = 100000
-MULT = 49997
-ADD = 13577
-INV = pow(MULT, -1, MOD)  # multiplicative inverse of MULT mod MOD
+from cryptography.hazmat.primitives.ciphers.aead import AESSIV
+
+from core.settings import get_settings
 
 
-def _affine_unhash(code: int) -> int:
-    """Inverse of ``(sid * MULT + ADD) mod MOD`` — recover the original number."""
-    return ((code - ADD) % MOD) * INV % MOD
+@lru_cache(maxsize=4)
+def _derive_key(passphrase: str) -> bytes:
+    """Derive the 64-byte AES-256-SIV key from the shared passphrase (deterministic).
+
+    Mirrors ``deidentify_transcript._derive_key`` so the same passphrase reverses
+    what the upstream de-id produced. Cached: the passphrase is constant per process.
+    """
+    return hashlib.sha512(passphrase.encode("utf-8")).digest()
 
 
-def _numeric_tokens(speaker_or_file: str) -> list[int]:
-    """Numeric tokens of a speaker/file string, in order.
+def _hash_tokens(speaker_or_file: str) -> list[str]:
+    """The ordered Base32 hash tokens of a speaker/file string.
 
-    ``Patient_13511_13571_07022026`` / ``13511_13571_07022026.csv`` -> [13511, 13571, 7022026]
+    Drops a leading ``Patient`` label and the trailing 8-digit ``MMDDYYYY`` date,
+    leaving ``[patientToken]`` or ``[patientToken, doctorToken]``. Base32 tokens
+    contain letters, so (unlike the old affine ``.isdigit()`` split) they cannot be
+    told apart by digits — position is what identifies them.
+
+        ``Patient_MFRGGZDF_NBSWY3DP_07022026`` -> ["MFRGGZDF", "NBSWY3DP"]
+        ``MFRGGZDF_NBSWY3DP_07022026.csv``     -> ["MFRGGZDF", "NBSWY3DP"]
+        ``Patient_MFRGGZDF_07022026``          -> ["MFRGGZDF"]
     """
     stem = re.sub(r"\.(csv|xlsx|xls)$", "", speaker_or_file, flags=re.IGNORECASE)
-    return [int(t) for t in stem.split("_") if t.isdigit()]
+    parts = stem.split("_")
+    if parts and parts[0].lower() == "patient":
+        parts = parts[1:]
+    if parts and re.fullmatch(r"\d{8}", parts[-1]):
+        parts = parts[:-1]
+    return parts
+
+
+def _unhash_number(token: str, key: str) -> Optional[str]:
+    """Decrypt one Base32 token back to its number string, or None if it can't.
+
+    Fail-soft: a wrong key, a non-Base32 token (e.g. a legacy affine 5-digit code
+    contains ``0/1/8/9`` which are not in the Base32 alphabet), or a failed
+    authentication all yield None rather than raising.
+    """
+    try:
+        padding = "=" * (-len(token) % 8)
+        ciphertext = base64.b32decode(token.upper() + padding)
+        return AESSIV(_derive_key(key)).decrypt(ciphertext, None).decode("utf-8")
+    except Exception:  # noqa: BLE001 - any decode/auth failure -> not re-identifiable
+        return None
 
 
 def unhash_patient_sid(speaker_or_file: str) -> Optional[str]:
     """Return ``"SID_<n>"`` for the patient hash in a speaker/file string, else None.
 
-    The 1st numeric token is the hashed patient code. Returns None if the string has
-    no code-shaped token (e.g. unparseable, or a value outside the cipher range).
+    The 1st hash token is the patient code. Returns None when there is no key, no
+    token, or the token does not decrypt (unparseable / legacy / tampered).
     """
-    if not speaker_or_file:
+    key = get_settings().deid_key
+    if not speaker_or_file or not key:
         return None
-    tokens = _numeric_tokens(speaker_or_file)
-    if not tokens or tokens[0] >= MOD:
+    tokens = _hash_tokens(speaker_or_file)
+    if not tokens:
         return None
-    return f"SID_{_affine_unhash(tokens[0])}"
+    number = _unhash_number(tokens[0], key)
+    return f"SID_{number}" if number is not None else None
 
 
 def unhash_doctor_num(speaker_or_file: str) -> Optional[str]:
-    """Return ``"doc<n>"`` for the doctor hash (2nd numeric token), else None.
+    """Return ``"doc<n>"`` for the doctor hash (2nd hash token), else None.
 
     Carried alongside the SID as part of the stored state.
     """
-    if not speaker_or_file:
+    key = get_settings().deid_key
+    if not speaker_or_file or not key:
         return None
-    tokens = _numeric_tokens(speaker_or_file)
-    if len(tokens) < 2 or tokens[1] >= MOD:
+    tokens = _hash_tokens(speaker_or_file)
+    if len(tokens) < 2:
         return None
-    return f"doc{_affine_unhash(tokens[1])}"
+    number = _unhash_number(tokens[1], key)
+    return f"doc{number}" if number is not None else None

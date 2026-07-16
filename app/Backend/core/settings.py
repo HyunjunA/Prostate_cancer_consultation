@@ -155,6 +155,16 @@ class Settings(BaseSettings):
         """True only when BOTH the URL and the token are configured."""
         return bool(self.redcap_api_url and self.redcap_api_token)
 
+    # ── De-identification (AES-SIV) ──────────────────────────────────
+    # Shared passphrase used upstream by the AI repo's
+    # scripts/deidentify_transcript.py to hash the study/doctor numbers.
+    # The backend needs the SAME value to reverse a hashed speaker back to
+    # its SID for REDCap attribution (deid.unhash_patient_sid) and to
+    # de-identify raw admin uploads (routes_admin_upload). Optional: when
+    # absent, un-hash returns None and raw uploads are refused (503).
+    # Must match DEID_KEY in the AI repo .env. Never commit the value.
+    deid_key: Optional[str] = None
+
     # ── App / runtime ────────────────────────────────────────────────
     environment: str = Field("development")
     # Override with LOG_LEVEL=DEBUG / WARNING / ERROR. Default is None

@@ -9,12 +9,11 @@ Purpose
 
 Two accepted inputs
     1. A RAW study-id transcript (``SID 22_doc2.xlsx`` / ``DLC ...``): the server
-       de-identifies it on upload (reusing the AI repo's affine de-id), writes the
-       hashed ``<hp>_<hd>_<MMDDYYYY>.csv`` into the drop folder, and immediately
-       deletes the raw file so no PHI lingers. The real<->hash mapping is returned
-       in the response (never persisted server-side; the affine cipher is reversible
-       anyway).
-    2. An already de-identified file (``13511_13571_07142026.csv``): stored as-is.
+       de-identifies it on upload (reusing the AI repo's AES-SIV de-id, which needs
+       ``DEID_KEY``), writes the hashed ``<hp>_<hd>_<MMDDYYYY>.csv`` into the drop
+       folder, and immediately deletes the raw file so no PHI lingers. The
+       real<->hash mapping is returned in the response (never persisted server-side).
+    2. An already de-identified file (``<hp>_<hd>_07142026.csv``): stored as-is.
 
     Anything else is rejected. Auth is admin-only (``require_admin_user``).
 """
@@ -43,8 +42,10 @@ from core.settings import get_settings
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin", tags=["Admin Upload"])
 
-# Already-de-identified filename: <hashedPatient>_<hashedDoctor>_<MMDDYYYY>.<ext>.
-_DEID_NAME_RX = re.compile(r"^\d{1,6}_\d{1,6}_\d{8}\.(csv|xlsx)$", re.IGNORECASE)
+# Already-de-identified filename: <hashedPatient>[_<hashedDoctor>]_<MMDDYYYY>.<ext>.
+# Hash tokens are AES-SIV Base32 (letters + 2-7); legacy affine codes are digits —
+# accept either (alphanumeric) so both store-as-is. The doctor token is optional.
+_DEID_NAME_RX = re.compile(r"^[A-Z0-9]+(_[A-Z0-9]+)?_\d{8}\.(csv|xlsx)$", re.IGNORECASE)
 _RAW_EXTS = (".xlsx", ".xls", ".csv")
 _MAX_BYTES = 25 * 1024 * 1024  # 25 MB
 _CHUNK = 1024 * 1024
@@ -63,7 +64,7 @@ def _load_deid():
     if str(_AI_SCRIPTS) not in sys.path:
         sys.path.append(str(_AI_SCRIPTS))
     try:
-        from deidentify_transcript_simple import (  # noqa: E402
+        from deidentify_transcript import (  # noqa: E402
             deidentify_file,
             extract_study_id,
         )
@@ -131,6 +132,12 @@ async def upload_transcript(file: UploadFile = File(...)) -> dict:
 
     # ── Path 2: raw study-id transcript — de-identify on the server ──────────
     deidentify_file, extract_study_id = _load_deid()
+    key = settings.deid_key
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Server de-identification key (DEID_KEY) is not configured.",
+        )
     if Path(name).suffix.lower() not in _RAW_EXTS:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                             detail="Unsupported file type (use .xlsx / .xls / .csv).")
@@ -152,7 +159,7 @@ async def upload_transcript(file: UploadFile = File(...)) -> dict:
         tmp_raw = tmp_dir / name
         await _stream_to(file, tmp_raw)
         today = datetime.now().strftime("%m%d%Y")
-        mapping = deidentify_file(tmp_raw, out_dir=drop_dir, date_str=today)
+        mapping = deidentify_file(tmp_raw, out_dir=drop_dir, date_str=today, key=key)
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001
