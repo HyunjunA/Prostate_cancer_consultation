@@ -238,9 +238,10 @@
    # (filenames still real), data/redact_run_*.json (records the PHI spans).
    # DEID_KEY must match this server's, or re-identification fails SILENTLY.
    #
-   # DEPRECATED -- the old affine "simple" hash (public constants, trivially reversible,
-   # and no body-text removal at all):
-   #   scripts/deidentify_transcript_simple.py --dir data/input --out-dir data/input_deid
+   # There is no keyless "simple" alternative any more. The old affine hash was
+   # removed: the dashboard cannot read its codes at all, so files made with it
+   # uploaded and processed fine but never got a SID, and their surveys never
+   # reached REDCap -- with no error anywhere.
 
  -- 4b. Run the pipeline on the de-identified folder (writes to DB)
    On THIS server the de-identified files live in data/incoming — that is the drop
