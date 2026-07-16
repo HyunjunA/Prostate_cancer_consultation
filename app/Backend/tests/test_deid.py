@@ -1,9 +1,16 @@
 """Tests for deid.py — un-hashing AES-SIV speaker/file strings back to SIDs.
 
-Tokens are keyed, so instead of hard-coding them the tests generate tokens with a
-fixed test passphrase (mirroring the upstream ``deidentify_transcript.hash_id``)
-and monkeypatch ``deid.get_settings`` to that key — no dependence on the real
-``DEID_KEY`` in ``.env``.
+Tokens are keyed, so most tests generate them with a fixed test passphrase
+(mirroring the upstream ``deidentify_transcript.hash_id``) and monkeypatch
+``deid.get_settings`` to that key — no dependence on the real ``DEID_KEY`` in
+``.env``.
+
+``TestKnownAnswerVectors`` is the deliberate exception. Generated tokens only ever
+prove this file agrees with itself: this module duplicates the upstream key
+derivation, domains and encoding, and if the upstream changed any of them, every
+test here would still pass while production quietly re-identified nothing. The
+vectors are the contract between the two repos, so they are written out, and the
+AI repo asserts the same values from the encode side.
 """
 import base64
 import hashlib
@@ -15,6 +22,12 @@ from cryptography.hazmat.primitives.ciphers.aead import AESSIV
 import deid
 
 TEST_KEY = "unit-test-deid-passphrase-fixed"
+
+# Kept byte-identical with the AI repo's tests/test_deidentify_transcript.py.
+# These are what the upstream de-id actually emits for TEST_KEY; if this module
+# can no longer read them, it can no longer read production's tokens either.
+VECTOR_PATIENT_22 = "VM3OOSQYJLLLK24ZXBQJGXBXUW7D4"
+VECTOR_DOCTOR_2 = "7OOXN2SKFJ6TC3QR5WSSHKCCNJXA"
 
 
 def _aes_hash(number: int, domain: bytes = deid.DOMAIN_PATIENT, key: str = TEST_KEY) -> str:
@@ -88,6 +101,28 @@ class TestDomainSeparation:
     def test_patient_token_is_not_readable_as_a_doctor(self):
         speaker = f"Patient_{_aes_hash(22)}_{_aes_hash(2)}_07022026"  # 2nd token is a PATIENT hash
         assert deid.unhash_doctor_num(speaker) is None
+
+
+class TestKnownAnswerVectors:
+    """Read tokens this module did not generate — the cross-repo contract.
+
+    Everything else here round-trips against our own constants and would keep
+    passing if the upstream de-id changed its domains or key derivation, while
+    production silently un-hashed nothing. These fail instead.
+    """
+
+    def test_reads_an_upstream_patient_token(self):
+        speaker = f"Patient_{VECTOR_PATIENT_22}_{VECTOR_DOCTOR_2}_07162026"
+        assert deid.unhash_patient_sid(speaker) == "SID_22"
+
+    def test_reads_an_upstream_doctor_token(self):
+        speaker = f"Patient_{VECTOR_PATIENT_22}_{VECTOR_DOCTOR_2}_07162026"
+        assert deid.unhash_doctor_num(speaker) == "doc2"
+
+    def test_our_hash_matches_the_upstream_vector(self):
+        """The mirror in _aes_hash must reproduce upstream byte-for-byte."""
+        assert _aes_hash(22, deid.DOMAIN_PATIENT) == VECTOR_PATIENT_22
+        assert _doctor_hash(2) == VECTOR_DOCTOR_2
 
 
 class TestNoKeyConfigured:
