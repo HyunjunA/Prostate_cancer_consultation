@@ -37,9 +37,17 @@
                          locally in the default REMOTE mode (Phase 2 calls a
                          remote gateway over HTTP instead).
 
- Dependency order:  start Phase 1 first.  After that Phase 2 and Phase 3 are
- independent of each other (Phase 2 needs only the DB; Phase 3 needs only the
- backend).
+ Phase 0d (Upload preparation: PHI removal + ID hashing) is fully standalone -- it runs
+ on the CLINICAL machine and needs none of Phase 1/2/3, only the AI repo + PHI_Removal
+ + DEID_KEY. Do it whenever; its output is what Phase 2 consumes.
+
+ Dependency order for the server side:  start Phase 1 first (DB + backend).
+   Phase 2 (upload -> watch -> pipeline -> DB) goes through the webapp's admin page,
+   so PHASE 3 MUST BE RUNNING FIRST, and an admin account must exist (Phase 1).
+   Practical order for a fresh install:
+       PHASE 0  ->  PHASE 1  ->  PHASE 3  ->  PHASE 2
+   (Only the legacy CLI path -- run-pipeline-watch.sh --dir ... -- can run without
+   Phase 3, since it bypasses the upload page entirely.)
 
 
 ===============================================================================
@@ -220,11 +228,81 @@
     A freshly-provisioned machine has no DB yet, so SKIP this on a first
     install. To wipe, see DEPLOYMENT_3PHASE.md section 0b (DROP DATABASE).
 
- -- 0c. Stage transcripts for Phase 2
-    Phase 2 only processes files present in the AI repo's data/input/.
+ -- 0c. Stage transcripts
+    The originals go in the AI repo's data/input/. 0d reads that folder; it never
+    modifies the originals.
 
        $ cp <your-transcripts>/*.xlsx ../AI_physician_patient_communication/data/input/
        $ ls ../AI_physician_patient_communication/data/input/
+       # expected names: "SID 22_doc2.xlsx"  (study id + doctor id in the filename)
+
+ -- 0d. Upload preparation  (PHI removal + ID hashing)
+    Runs entirely on the CLINICAL machine and needs no server: not the DB, not the
+    backend, not the webapp. That is why it sits in Phase 0 -- it is independent of
+    Phase 1/2/3 and can be done at any time, on a machine that has none of them.
+
+    TWO SEPARATE LAYERS. Both are required; neither replaces the other:
+       1. body text -- names/dates/phones SPOKEN inside the transcript   (PHI_Removal)
+            "Dr. Smith, on the 25th"  ->  "Dr. [Name], [Date]"
+       2. filename  -- the study id                        (deidentify_transcript.py)
+            "SID 22_doc2.xlsx"        ->  "<hashP>_<hashD>_<MMDDYYYY>.csv"
+    Layer 2 alone is NOT enough: hashing the filename still ships every name spoken in
+    the conversation into sentence_text and the stored raw bytes. Layer 1 is the one
+    that is easy to forget.
+
+    ONE-TIME SETUP (the script cannot run without all of it):
+      1) AI repo venv:
+           $ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+      2) ML deps for layer 1 -- NOT in requirements.txt (~1-2 GB; CPU is fine):
+           $ .venv/bin/pip install torch transformers
+      3) The PHI_Removal package at <AI repo>/PHI_Removal/ :
+           run.py
+           PHI_transcript_screener/{encoder/,tokenizer/,token_head.pt,split_info.json}
+         !! NOT in git (gitignored: ~838 MB of model weights + real transcript text),
+         so `git clone` does NOT bring it -- it must be transferred out-of-band.
+         OPEN ISSUE: no delivery mechanism is defined yet for the coordinator's machine.
+      4) <AI repo>/.env :
+           DEID_KEY=<same secret the server has>     # openssl rand -hex 32; NEVER commit
+           AZURE_OPENAI_ENDPOINT=<PI's Azure resource>
+           AZURE_OPENAI_KEY=<key>
+         Layer 1 sends the lines its screener flags to Azure OpenAI, so these are required.
+      Smoke-test the package before trusting it:
+           $ .venv/bin/python scripts/check_phi_removal.py --file <transcript.csv> --rows 3
+
+    RUN:
+       $ cd ../AI_physician_patient_communication
+       $ bash scripts/run-deid-for-upload.sh
+       #   layer 1: scripts/redact_transcript.py       data/input -> data/input_phi_removal
+       #   layer 2: scripts/deidentify_transcript.py   data/input_phi_removal -> data/input_deid
+       #
+       # Preview without calling the LLM or writing anything:
+       # $ bash scripts/run-deid-for-upload.sh --dry-run
+
+    OUTPUT -- upload ONLY data/input_deid/*.csv  (that is what Phase 2 consumes).
+
+    NEVER upload -- keep these on the clinical machine:
+       data/deid_mapping.csv     real id <-> hash + patient/doctor links (the re-id key)
+       data/input_phi_removal/   filenames still carry the real study id
+       data/redact_run_*.json    records the PHI spans that were found
+
+    DEID_KEY must be the SAME value the server holds, or re-identification (and the
+    REDCap link) fails SILENTLY -- the backend just stores sid=NULL and skips the push.
+    run-deid-for-upload.sh prints a key fingerprint; compare it with the server's.
+
+    Review the layer-1 summary: a non-zero "unmatched" or "rows_masked" count means some
+    PHI could not be placed and whole rows were blanked. Check the log before uploading.
+
+    !! TEST BUILD -- NOT YET APPROVED FOR REAL DATA !!
+      PHI_Removal was validated against gpt-5.4, which is NOT deployed on our Azure
+      resource, so layer 1 falls back to gpt-4o. On 2026-07-16 that fallback was observed
+      to MISS PHI (left "Dr. XXXX" in one file while redacting it in another) and to
+      over-redact clinical text ("at 12 months" -> [Date]). Until gpt-5.4 is deployed,
+      treat this as a rehearsal and do not trust the output as de-identified.
+      See daily_control_logs/2026-07-16_*.
+
+    Safe to run on the same machine as the Phase 2 watch: 0d writes to data/input_deid,
+    while the watch polls data/incoming (the upload drop folder). Different folders, so
+    nothing is swallowed before you upload it.
 
 
 ===============================================================================
@@ -315,57 +393,74 @@
  HTTP at the gateway in config_remote.yaml (model_uri). No local NLP image
  needed. The AI scoring substep always calls Azure OpenAI.
 
- DE-IDENTIFICATION (recommended): run-pipeline-deid.sh first hashes the patient
- ID in each filename (data/input -> data/input_deid), then runs the pipeline on
- the hashed copies, so the DB stores HASHED patient IDs (e.g. 63514) instead of
- the original SID. Default hash is the SIMPLE one (no key). The originals in
- data/input are left untouched. See AI repo docs/DEIDENTIFICATION_EN.md.
+ INPUT: this phase consumes the already-de-identified files that Phase 0d produced
+ (in data/input_deid/ on the clinical machine). They arrive here by upload, landing in
+ data/incoming/ -- the drop folder the watch polls. Both de-identification layers
+ (body PHI + filename hashing) happen back in 0d -- see section 3 (PHASE 0). Nothing
+ here removes PHI; feeding it a raw transcript puts every spoken name into the DB.
 
- Prerequisites (REMOTE):
+   0d output      data/input_deid/   (clinical machine)   -- what you upload
+   upload lands   data/incoming/     (server)             -- what the watch polls
+ Two different folders on purpose: one machine can run both without the watch
+ swallowing files before they are uploaded.
+
+ Prerequisites (REMOTE mode):
    - NLP_GATEWAY_API_KEY set (auto-read from nlp_classifier_server/gateway/.env)
    - gateway host (model_uri) reachable (VPN / firewall)
    - ai_pipeline/.env has the Azure OpenAI credentials for the AI substep (see 2.5)
 
- Run (RECOMMENDED -- de-identify, then process):
-       $ cd ../AI_physician_patient_communication
-       $ bash scripts/run-pipeline-deid.sh    # de-id (simple hash) -> pipeline; DB gets hashed IDs
-       #
-       # AES-SIV (stronger) hash instead of the simple one (needs DEID_KEY in .env):
-       # $ DEID_METHOD=aes bash scripts/run-pipeline-deid.sh
+ !! ORDER: the upload below goes through the webapp, so START PHASE 3 BEFORE THIS.
+    Working order for a fresh install:
+        PHASE 0  ->  PHASE 1 (DB + backend)  ->  PHASE 3 (webapp :3001)  ->  PHASE 2
+    You also need an admin account to reach /admin/upload -- created in Phase 1
+    (`python scripts/create_admin.py --username admin`). A fresh/reset DB has NO admin
+    user, so redo that after any DB wipe or the upload page cannot be logged into.
+    (The legacy CLI path below bypasses the upload page and does not need Phase 3.)
 
- Run (WITHOUT de-identification -- original SIDs go into the DB):
-       $ bash scripts/run-pipeline-watch.sh --dir data/input    # process once, then exit
-       #
-       # WATCH mode (process input/, then keep watching for new drops; Ctrl-C to stop):
-       # $ bash scripts/run-pipeline-watch.sh
-       #
-       # LOCAL container instead of the gateway:
-       # $ PIPELINE_REMOTE=0 bash scripts/run-pipeline-watch.sh
+ Before starting, all of these must already be true:
+   - Phase 0d done: de-identified files exist and are ready to upload
+   - Phase 1 done: DB up, backend healthy (curl -s localhost:18000/health)
+   - Phase 3 done: webapp reachable at :3001   <- the upload page lives here
+   - An admin account exists (Phase 1: create_admin.py). A reset DB has none.
+   - data/incoming is EMPTY: whatever sits there is processed the moment the
+     watch starts, which silently pre-empts the upload you are about to test.
 
- Run (COORDINATOR UPLOAD -- admin page + auto-processing, RECOMMENDED for Ella):
-    Instead of SFTP + the CLI de-id above, the coordinator uploads through the
-    dashboard admin UI and a resident watch processes drops automatically.
-
-    1) Start a RESIDENT watch on the upload DROP FOLDER (data/input_deid). INPUT_DIR
+    1) Start a RESIDENT watch on the upload DROP FOLDER (data/incoming). INPUT_DIR
        points the watch at that folder (unset = default ./data/input). Needs the
        local NLP container (:8888).
        $ cd ../AI_physician_patient_communication
-       $ INPUT_DIR=data/input_deid PIPELINE_REMOTE=0 \
+       $ INPUT_DIR=data/incoming PIPELINE_REMOTE=0 \
              nohup bash scripts/run-pipeline-watch.sh > /tmp/watch.log 2>&1 & disown
-       # log shows: "Watching .../data/input_deid ... WAITING for new files"
+       # log shows: "Watching .../data/incoming ... WAITING for new files"
 
-    2) Coordinator uploads at  http://<host>:3001/admin/upload  (superuser login):
-       - drag a RAW file (SID 22_doc2.xlsx): the SERVER de-identifies it (raw deleted
-         immediately -> no PHI kept; real->hash mapping shown on screen, keep it
-         clinical-side), writing "<hash>_<hash>_<date>.csv" into the drop folder; or
-       - drag an already de-identified "<hash>_<hash>_<date>.csv": stored as-is.
+    2) Coordinator uploads at  http://<host>:3001/admin/upload  (log in as the admin
+       account from Phase 1):
+       - drag the "<hash>_<hash>_<date>.csv" files produced in Phase 0d; already
+         de-identified, so they are stored as-is ("queued", not "de-identified").
 
-    Full auto flow:  upload -> server de-id -> data/input_deid -> watch (5s poll)
-                     -> NLP+AI -> DB -> file moved to data/archive.
+    3) Confirm it worked (the watch picks the file up within ~5s):
+       $ tail -f /tmp/watch.log                    # processing log
+       $ ls data/archive/                          # processed files land here
+       $ ls data/incoming/                         # should drain back to empty
+       # DB check (from the dashboard repo):
+       $ .venv/bin/python app/Backend/scripts/verify_db.py
+       # A file that FAILED is moved to data/error/ with a .error.log next to it.
+
+    Full flow:  (0d, clinical) run-deid-for-upload.sh -> upload -> data/incoming
+                -> watch (5s poll) -> NLP+AI -> DB -> file moved to data/archive.
 
     The drop folder is the BACKEND setting PIPELINE_DROP_DIR (default: sibling AI repo
-    data/input_deid). On the server set an absolute PIPELINE_DROP_DIR that MATCHES the
+    data/incoming). On the server set an absolute PIPELINE_DROP_DIR that MATCHES the
     watch's INPUT_DIR so uploads land where the watch looks.
+
+ LEGACY / NOT FOR PHI (kept only for bulk local reruns of already-clean data):
+       $ bash scripts/run-pipeline-deid.sh        # hashes the FILENAME only
+       # Does NOT touch body PHI, and wipes data/input_deid (`rm -f *.csv`) before it
+       # runs -- never mix it with the Phase 0d output.
+       $ bash scripts/run-pipeline-watch.sh --dir data/input   # no de-id at all: real SIDs -> DB
+    The admin upload endpoint can also de-identify a RAW "SID ..." file server-side.
+    That path contradicts the policy above: PHI reaches the server, and body PHI is
+    not removed at all.
 
     Expected output (abridged) -- the wrapper prints its mode, then the pipeline runs:
        ▸ Starting drop-folder WATCH mode (Ctrl-C to stop).

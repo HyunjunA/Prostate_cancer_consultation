@@ -43,14 +43,16 @@ from typing import List, Optional
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Default pipeline drop folder: the sibling AI repo's de-identified input dir
-# that the pipeline watch mode monitors. core/settings.py sits at
-# app/Backend/core/, so parents[4] is the project root that holds both repos.
+# Default pipeline drop folder: where admin uploads land and the pipeline watch
+# picks them up. Deliberately NOT data/input_deid — that is where the clinical-side
+# preparation step writes its output, and reusing one folder for both roles means a
+# machine running both swallows files before they can be uploaded. core/settings.py
+# sits at app/Backend/core/, so parents[4] is the project root holding both repos.
 _DEFAULT_PIPELINE_DROP_DIR = str(
     Path(__file__).resolve().parents[4]
     / "AI_physician_patient_communication"
     / "data"
-    / "input_deid"
+    / "incoming"
 )
 
 

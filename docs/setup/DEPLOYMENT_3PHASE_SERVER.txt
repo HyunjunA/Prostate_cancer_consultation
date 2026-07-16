@@ -199,29 +199,69 @@
  4. PHASE 2 -- TRANSCRIPTS  (de-identify -> pipeline -> DB)
 ===============================================================================
 
- De-identification is a MANUAL pre-step (not part of the pipeline). Use the
- SIMPLE version (short 5-digit codes) per request.
+ De-identification is a MANUAL pre-step (not part of the pipeline) and has TWO
+ layers -- both must run BEFORE anything reaches this server:
+   1. body text -- names/dates/phones spoken inside the transcript  (PHI_Removal)
+   2. filename  -- the study id "SID 22" -> AES-SIV hash            (deidentify_transcript.py)
+ Hashing the filename alone still ships every name spoken in the conversation into
+ sentence_text and the stored raw bytes.
 
- -- 4a. De-identify the whole input folder
-   $ cd /home/choih2/test-prostate-cancer/AI_physician_patient_communication
-   $ rm -f data/input_deid/*.csv
-   $ ../Prostate_cancer_consultation_dashboard/.venv/bin/python \
-         scripts/deidentify_transcript_simple.py --dir data/input --out-dir data/input_deid
-   $ ls data/input_deid/                 # <code>_<MMDDYYYY>.csv  (e.g. 13547_06262026.csv)
-   # reverse a code:  ... scripts/deidentify_transcript_simple.py --decode 13547   # -> SID_10
+ POLICY: run 4a on the CLINICAL machine, not here. This server should only ever
+ receive files that are already de-identified.
+
+ !! TEST BUILD -- NOT YET APPROVED FOR REAL DATA !!
+   The body-text step falls back to gpt-4o because gpt-5.4 (what PHI_Removal was
+   validated on) is not deployed on our Azure resource. On 2026-07-16 that fallback
+   MISSED PHI. Treat this flow as a rehearsal until gpt-5.4 is available.
+
+ -- 4a. De-identify (CLINICAL machine, before upload) -- both layers, one command
+
+   ONE-TIME SETUP on that machine (the script cannot run without all of it):
+     1) $ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+     2) $ .venv/bin/pip install torch transformers    # NOT in requirements.txt; ~1-2 GB, CPU ok
+     3) PHI_Removal/ present:  run.py + PHI_transcript_screener/{encoder/,tokenizer/,
+        token_head.pt,split_info.json}.  NOT in git (~838 MB, gitignored) -> must be
+        transferred out-of-band.  OPEN ISSUE: delivery mechanism undefined.
+     4) <AI repo>/.env :  DEID_KEY (same as this server's), AZURE_OPENAI_ENDPOINT,
+        AZURE_OPENAI_KEY.  The body-text step calls Azure OpenAI.
+     Smoke-test first:  .venv/bin/python scripts/check_phi_removal.py --file <t.csv> --rows 3
+
+   EACH RUN -- originals go in data/input/ as "SID <n>_doc<n>.xlsx"; they are read only.
+
+   $ cd <AI repo>
+   $ bash scripts/run-deid-for-upload.sh
+   #   data/input -> data/input_phi_removal (body clean) -> data/input_deid (filename hashed)
+   $ ls data/input_deid/     # <hashP>_<hashD>_<MMDDYYYY>.csv  <- transfer ONLY these
+   # reverse a hash:  .venv/bin/python scripts/deidentify_transcript.py --decode <hash>  # -> SID_22
+   #
+   # NEVER transfer: data/deid_mapping.csv (the re-id key), data/input_phi_removal/
+   # (filenames still real), data/redact_run_*.json (records the PHI spans).
+   # DEID_KEY must match this server's, or re-identification fails SILENTLY.
+   #
+   # DEPRECATED -- the old affine "simple" hash (public constants, trivially reversible,
+   # and no body-text removal at all):
+   #   scripts/deidentify_transcript_simple.py --dir data/input --out-dir data/input_deid
 
  -- 4b. Run the pipeline on the de-identified folder (writes to DB)
+   On THIS server the de-identified files live in data/incoming — that is the drop
+   folder admin uploads land in (backend setting PIPELINE_DROP_DIR). If you transfer
+   files by hand instead of uploading, put them there too.
+   (data/input_deid is the 4a OUTPUT folder on the CLINICAL machine, not here.)
+
    $ cd /home/choih2/test-prostate-cancer/AI_physician_patient_communication
-   $ bash scripts/run-pipeline-watch.sh --dir data/input_deid
+   $ bash scripts/run-pipeline-watch.sh --dir data/incoming
    # REMOTE gateway is default; the wrapper handles the gateway key automatically.
    # (Gateway auth is currently DISABLED on this host, so a key is not required.)
+   #
+   # Resident WATCH instead of a one-shot batch (picks up each upload as it arrives):
+   # $ INPUT_DIR=data/incoming nohup bash scripts/run-pipeline-watch.sh > /tmp/watch.log 2>&1 & disown
 
    EQUIVALENT direct call (only if you skip the wrapper) — note you MUST load the
    key yourself when auth is enabled:
    $ cd /home/choih2/test-prostate-cancer/AI_physician_patient_communication
    $ set -a; source nlp_classifier_server/gateway/.env; set +a
    $ ../Prostate_cancer_consultation_dashboard/.venv/bin/python \
-         main_complete_pipeline_db_api.py --config config_remote.yaml --dir data/input_deid --skip-nlp-startup
+         main_complete_pipeline_db_api.py --config config_remote.yaml --dir data/incoming --skip-nlp-startup
 
  -- 4c. Verify rows landed (patient_id = the codes)
    $ PGPASSWORD=<POSTGRES_PASSWORD> psql "host=127.0.0.1 port=5439 user=prostatecancer_user dbname=prostatecancer_db_native" \
