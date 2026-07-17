@@ -611,7 +611,7 @@ const CompleteStep: React.FC<CompleteStepProps> = ({ isDark }) => {
           className={cx("text-sm", isDark ? "text-slate-400" : "text-gray-600")}
         >
           If you have any questions or concerns, please contact your healthcare
-          provider or our support team.
+          provider or our support team at ella.tetrault@cshs.org.
         </p>
       </div>
     </div>
