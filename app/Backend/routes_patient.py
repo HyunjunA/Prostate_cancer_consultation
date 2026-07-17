@@ -38,6 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth import get_current_user
 from auth.access_control import check_patient_access
 from auth.base import AuthUser
+from core.settings import get_settings
 from db import get_db
 from deid import unhash_patient_sid, unhash_doctor_num
 from redcap_mapping import resolve_record_id
@@ -111,6 +112,28 @@ async def get_patient_files(
     # break the dropdown rendering on the frontend.
     files = [f for f in files_raw if f is not None]
     return {"files": files}
+
+
+@router.get("/api/patient/processing-count")
+async def get_processing_count(user: AuthUser = Depends(get_current_user)):
+    """How many uploaded transcripts are still being processed.
+
+    A transcript only appears in the patient list once its pipeline run finishes and
+    writes to the DB; while it is being processed it sits in the pipeline drop folder
+    (the pipeline watch removes it when done). So the file count there is the
+    "still processing" count. Returns only a number — no filenames, no PHI — so the
+    UI can show "N transcripts processing" instead of an empty "no patients" state.
+    """
+    from pathlib import Path
+
+    drop = Path(get_settings().pipeline_drop_dir)
+    count = 0
+    if drop.is_dir():
+        count = sum(
+            1 for f in drop.iterdir()
+            if f.is_file() and f.suffix.lower() in (".csv", ".xlsx", ".xls")
+        )
+    return {"processing": count}
 
 
 @router.get("/api/patient/sentences/{file}")

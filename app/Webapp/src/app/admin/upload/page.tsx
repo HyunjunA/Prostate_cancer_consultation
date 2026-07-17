@@ -2,22 +2,31 @@
 
 /**
  * Admin transcript upload — drag & drop a transcript so the pipeline watch picks
- * it up, instead of SFTP-through-a-jump-server. A RAW study-id file (SID/DLC …) is
- * de-identified on the server; an already-hashed file is stored as-is. Access is
- * gated by src/middleware.ts (admin_session cookie); the backend re-checks admin
- * on POST /api/admin/upload-transcript.
+ * it up, instead of SFTP-through-a-jump-server. Only files already de-identified by
+ * the Secure Transcript Preparation app are accepted; a raw study-id file is rejected
+ * by the backend (de-id happens in the app, not on the server). Access is gated by
+ * src/middleware.ts (admin_session cookie); the backend re-checks admin on
+ * POST /api/admin/upload-transcript.
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-// Accept transcript files by type only. Raw study-id files (SID/DLC …) are
-// de-identified on the server; already-hashed files are stored as-is. The server
-// makes the final decision — this is just a fast client-side type check.
+// Fast client-side checks. Extension gate, plus a "does this look de-identified"
+// gate so a raw transcript is flagged with the reason up front instead of a neutral
+// "pending" that the backend would only reject on upload. Mirrors the backend's
+// _DEID_NAME_RX (routes_admin_upload.py): the app's output name is
+// <hashedPatient>[_<hashedDoctor>]_<MMDDYYYY>.csv.
 const ALLOWED_EXT = /\.(csv|xlsx|xls)$/i;
+const DEID_NAME_RX = /^[A-Z0-9]+(_[A-Z0-9]+)?_\d{8}\.(csv|xlsx)$/i;
 
-type Status = "pending" | "invalid" | "uploading" | "done" | "error";
+type Status = "pending" | "invalid" | "rejected" | "uploading" | "done" | "error";
 interface Item {
-  file: File;
+  // Always present. `file` is only set for a freshly-picked file this session; items
+  // rebuilt from the server's upload log on refresh have a name but no File object
+  // (the browser cannot restore a File), and are already "done"/"error" so they are
+  // never re-uploaded.
+  name: string;
+  file?: File;
   status: Status;
   message?: string;
 }
@@ -28,16 +37,50 @@ export default function AdminUploadPage() {
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // On load, rebuild the list from the server's upload history so a refresh does not
+  // wipe it. These carry only the de-identified queued name (no real study id).
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/admin/upload-log")
+      .then((r) => (r.ok ? r.json() : { uploads: [] }))
+      .then((data) => {
+        if (cancelled) return;
+        const history: Item[] = (data.uploads || []).map((u: any) => ({
+          name: u.queued || "(unknown)",
+          status: u.status === "error" ? "error" : "done",
+          message: u.message || (u.status === "error" ? "Upload failed." : "Queued for processing."),
+        }));
+        setItems((prev) => [...history, ...prev]);
+      })
+      .catch(() => { /* history is best-effort */ });
+    return () => { cancelled = true; };
+  }, []);
+
   const addFiles = useCallback((files: FileList | File[]) => {
-    const next: Item[] = Array.from(files).map((file) =>
-      ALLOWED_EXT.test(file.name)
-        ? { file, status: "pending" }
-        : {
-            file,
-            status: "invalid",
-            message: "Unsupported file type — use .csv, .xlsx, or .xls.",
-          },
-    );
+    const next: Item[] = Array.from(files).map((file) => {
+      if (!ALLOWED_EXT.test(file.name)) {
+        return {
+          name: file.name,
+          file,
+          status: "invalid" as Status,
+          message: "Unsupported file type — use .csv, .xlsx, or .xls.",
+        };
+      }
+      // A correct file has the app's de-identified name. Anything else is a raw
+      // transcript (or the mapping CSV) — flag it now with the reason instead of a
+      // neutral "pending" that only fails when the server rejects it on upload.
+      if (!DEID_NAME_RX.test(file.name)) {
+        return {
+          name: file.name,
+          file,
+          status: "rejected" as Status,
+          message:
+            "Not de-identified. Prepare it with the Secure Transcript Preparation " +
+            "app first, then upload the file from its ready_to_upload folder.",
+        };
+      }
+      return { name: file.name, file, status: "pending" as Status };
+    });
     setItems((prev) => [...prev, ...next]);
   }, []);
 
@@ -49,7 +92,9 @@ export default function AdminUploadPage() {
     const snapshot = items;
     for (let i = 0; i < snapshot.length; i++) {
       const it = snapshot[i];
-      if (it.status === "done" || it.status === "invalid") continue;
+      // Skip already-done, client-rejected (raw / wrong type), and any history item
+      // rebuilt without a File (browsers can't restore a File — not re-uploadable).
+      if (it.status === "done" || it.status === "invalid" || it.status === "rejected" || !it.file) continue;
       setAt(i, { status: "uploading", message: undefined });
       try {
         const fd = new FormData();
@@ -60,12 +105,7 @@ export default function AdminUploadPage() {
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
-          const message = data.deidentified
-            ? `De-identified & queued: ${data.queued}` +
-              (data.mapping?.real_sid
-                ? ` (${data.mapping.real_sid} → ${data.mapping.hashed_patient})`
-                : "")
-            : `Queued for processing: ${data.queued}${data.replaced ? " (replaced existing)" : ""}`;
+          const message = `Queued for processing: ${data.queued}${data.replaced ? " (replaced existing)" : ""}`;
           setAt(i, { status: "done", message });
         } else {
           setAt(i, { status: "error", message: data.detail || `Upload failed (${res.status}).` });
@@ -86,6 +126,7 @@ export default function AdminUploadPage() {
   const badge: Record<Status, string> = {
     pending: "bg-slate-100 text-slate-600",
     invalid: "bg-amber-100 text-amber-700",
+    rejected: "bg-rose-100 text-rose-700",
     uploading: "bg-blue-100 text-blue-700",
     done: "bg-emerald-100 text-emerald-700",
     error: "bg-rose-100 text-rose-700",
@@ -95,15 +136,13 @@ export default function AdminUploadPage() {
   return (
     <main className="max-w-3xl mx-auto px-6 py-10">
       <h1 className="text-2xl font-bold text-slate-900">Upload Transcript</h1>
-      <p className="mt-2 text-sm text-slate-500">
-        Drag &amp; drop a transcript. A raw file (e.g.{" "}
-        <code className="px-1 rounded bg-slate-100">SID 22_doc2.xlsx</code>) is
-        de-identified <strong>on the server</strong> and processed automatically — no SFTP
-        needed. An already de-identified file (e.g.{" "}
-        <code className="px-1 rounded bg-slate-100">13511_13571_07142026.csv</code>) is stored
-        as-is. Do not upload the mapping CSV. The real&rarr;hash mapping is shown below after a
-        raw upload — keep it on the clinical side.
-      </p>
+
+      <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
+        <p className="flex items-center gap-2 text-sm font-bold text-amber-900">
+          <span aria-hidden>⚠️</span>
+          Upload only files already de-identified by the Secure Transcript Preparation app.
+        </p>
+      </div>
 
       <div
         onDragOver={(e) => {
@@ -141,7 +180,7 @@ export default function AdminUploadPage() {
                 className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3"
               >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-slate-800">{it.file.name}</p>
+                  <p className="truncate text-sm font-medium text-slate-800">{it.name}</p>
                   {it.message && <p className="mt-0.5 text-xs text-slate-500">{it.message}</p>}
                 </div>
                 <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${badge[it.status]}`}>

@@ -481,3 +481,25 @@ class LLMPipelineIntermediate(Base):
     estimate = Column(Text)                                  # LLM extracted estimate — verbose responses possible
     treatment = Column(Text)                                 # LLM extracted treatment — verbose responses possible
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+
+class AdminUploadLog(Base):
+    """One row per admin upload attempt, so the /admin/upload page can show its
+    history after a refresh instead of losing it (the list was React-state only).
+
+    Stores only the DE-IDENTIFIED queued filename (the hashed name that lands in the
+    drop folder) — never the real study id or the real->hash mapping, matching the
+    rule that patient identifiers are not persisted client-side and keeping this table
+    as de-identified as transcript_analysis_log's source_filename.
+    """
+    __tablename__ = 'admin_upload_log'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    queued_filename = Column(String(500))                    # hashed name queued for processing
+    status = Column(String(20), nullable=False)              # 'queued' | 'error'
+    message = Column(Text)                                    # error detail or a short note
+    uploaded_by = Column(String(255))                        # admin username
+    uploaded_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f"<AdminUploadLog(id={self.id}, status={self.status}, file={self.queued_filename})>"

@@ -7,24 +7,19 @@ Purpose
     pipeline watch picks it up and processes it. Nothing about the pipeline itself
     changes — this is an additional transport path.
 
-Two accepted inputs
-    1. A RAW study-id transcript (``SID 22_doc2.xlsx`` / ``DLC ...``): the server
-       de-identifies it on upload (reusing the AI repo's AES-SIV de-id, which needs
-       ``DEID_KEY``), writes the hashed ``<hp>_<hd>_<MMDDYYYY>.csv`` into the drop
-       folder, and immediately deletes the raw file so no PHI lingers. The
-       real<->hash mapping is returned in the response (never persisted server-side).
-    2. An already de-identified file (``<hp>_<hd>_07142026.csv``): stored as-is.
-
-    Anything else is rejected. Auth is admin-only (``require_admin_user``).
+Only de-identified files are accepted
+    De-identification — removing PHI from the transcript text AND hashing the study
+    id in the filename — is done by the Secure Transcript Preparation app on the
+    clinical machine, BEFORE upload, so the server never receives PHI. This endpoint
+    therefore accepts only a file already prepared by the app (a hashed
+    ``<hp>_<hd>_<MMDDYYYY>.csv`` name) and stores it as-is. A raw transcript is
+    rejected — the server does NOT de-identify (it could only hash the filename, not
+    scrub the body, which would leak PHI while looking clean). Admin-only.
 """
 
 import logging
 import os
 import re
-import shutil
-import sys
-import tempfile
-from datetime import datetime
 from pathlib import Path
 
 from fastapi import (
@@ -36,45 +31,46 @@ from fastapi import (
     status,
 )
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from auth.admin_session import require_admin_user
+from auth.base import AuthUser
 from core.settings import get_settings
+from db import get_db
+from models import AdminUploadLog
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin", tags=["Admin Upload"])
+
+
+async def _record_upload(db: AsyncSession, queued_filename, status_str: str,
+                         message, uploaded_by) -> None:
+    """Log one upload attempt so /admin/upload can rebuild its list after a refresh.
+
+    Best-effort and non-blocking: a logging failure must never break the upload.
+    Stores only the de-identified queued name — callers pass None for the filename
+    on rejected raw uploads so the real study id is never persisted.
+    """
+    try:
+        db.add(AdminUploadLog(
+            queued_filename=queued_filename,
+            status=status_str,
+            message=message,
+            uploaded_by=uploaded_by,
+        ))
+        await db.commit()
+    except Exception:  # noqa: BLE001 - logging is best-effort
+        logger.exception("admin upload: failed to write upload log row")
+        await db.rollback()
+
 
 # Already-de-identified filename: <hashedPatient>[_<hashedDoctor>]_<MMDDYYYY>.<ext>.
 # Hash tokens are AES-SIV Base32 (letters + 2-7); legacy affine codes are digits —
 # accept either (alphanumeric) so both store-as-is. The doctor token is optional.
 _DEID_NAME_RX = re.compile(r"^[A-Z0-9]+(_[A-Z0-9]+)?_\d{8}\.(csv|xlsx)$", re.IGNORECASE)
-_RAW_EXTS = (".xlsx", ".xls", ".csv")
 _MAX_BYTES = 25 * 1024 * 1024  # 25 MB
 _CHUNK = 1024 * 1024
-
-# The sibling AI repo's de-id script (scripts/) is importable — the backend venv
-# has pandas/openpyxl and the script is pure functions behind an __main__ guard.
-_AI_SCRIPTS = (
-    Path(__file__).resolve().parents[3]
-    / "AI_physician_patient_communication"
-    / "scripts"
-)
-
-
-def _load_deid():
-    """Lazily import the AI repo's de-id helpers (reuse, don't reimplement)."""
-    if str(_AI_SCRIPTS) not in sys.path:
-        sys.path.append(str(_AI_SCRIPTS))
-    try:
-        from deidentify_transcript import (  # noqa: E402
-            deidentify_file,
-            extract_study_id,
-        )
-        return deidentify_file, extract_study_id
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("upload-transcript: de-id module unavailable")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="De-identification module is unavailable on the server.",
-        ) from exc
 
 
 async def _stream_to(file: UploadFile, dest: Path) -> int:
@@ -95,13 +91,29 @@ async def _stream_to(file: UploadFile, dest: Path) -> int:
     return total
 
 
-@router.post("/upload-transcript", dependencies=[Depends(require_admin_user)])
-async def upload_transcript(file: UploadFile = File(...)) -> dict:
+@router.post("/upload-transcript")
+async def upload_transcript(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    admin: AuthUser = Depends(require_admin_user),
+) -> dict:
     """Accept a raw or de-identified transcript into the pipeline drop folder.
 
     Raw files are de-identified server-side (raw deleted immediately after);
-    already-hashed files are stored as-is. Admin-only.
+    already-hashed files are stored as-is. Admin-only. Every attempt is logged to
+    admin_upload_log so the upload page can rebuild its list after a refresh — with
+    only the de-identified queued name, never the real study id.
     """
+    uploader = getattr(admin, "username", None)
+    try:
+        return await _do_upload(file, db, uploader)
+    except HTTPException as exc:
+        # Record the rejection WITHOUT the filename (a raw name is a real study id).
+        await _record_upload(db, None, "error", str(exc.detail), uploader)
+        raise
+
+
+async def _do_upload(file: UploadFile, db: AsyncSession, uploader) -> dict:
     name = Path(file.filename or "").name  # strip path components (traversal guard)
     settings = get_settings()
     drop_dir = Path(settings.pipeline_drop_dir).resolve()
@@ -127,57 +139,51 @@ async def upload_transcript(file: UploadFile = File(...)) -> dict:
             raise HTTPException(status_code=500, detail="Failed to store the file.") from exc
         logger.info("admin upload: %s %s (%d bytes)",
                     "replaced" if replaced else "queued", name, total)
+        # Path 1 name is already de-identified (hashed) — safe to record.
+        await _record_upload(db, name, "queued",
+                             "replaced existing" if replaced else None, uploader)
         return {"queued": name, "bytes": total, "replaced": replaced,
                 "deidentified": False}
 
-    # ── Path 2: raw study-id transcript — de-identify on the server ──────────
-    deidentify_file, extract_study_id = _load_deid()
-    key = settings.deid_key
-    if not key:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Server de-identification key (DEID_KEY) is not configured.",
-        )
-    if Path(name).suffix.lower() not in _RAW_EXTS:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="Unsupported file type (use .xlsx / .xls / .csv).")
-    try:
-        extract_study_id(name)  # validates a known study id (SID) is present
-    except Exception:  # noqa: BLE001 - fail-closed on unrecognized names
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=("Unrecognized filename. Upload a raw transcript named like "
-                    "'SID 22_doc2.xlsx', or an already de-identified "
-                    "'13511_13571_07142026.csv'."),
-        )
+    # ── Anything else: reject. ───────────────────────────────────────────────
+    # De-identification (both removing PHI from the text AND hashing the study id in
+    # the filename) is the Secure Transcript Preparation app's job, on the clinical
+    # machine, BEFORE upload — so the server never receives PHI. The server therefore
+    # accepts only files already prepared by the app (the hashed name above) and
+    # rejects a raw transcript. It deliberately does NOT de-identify here: it could
+    # only hash the filename, not remove PHI from the body (that needs the app's
+    # model), which would let PHI through while looking de-identified.
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=("This file has not been de-identified. Run it through the Secure "
+                "Transcript Preparation app first, then upload the file it creates "
+                "in the ready_to_upload folder."),
+    )
 
-    # Save the raw file to an isolated temp dir (NOT the drop folder, so the watch
-    # never sees the PHI original), de-identify into the drop folder, then delete
-    # the raw. The temp dir is always removed in `finally` — no PHI lingers.
-    tmp_dir = Path(tempfile.mkdtemp(prefix="deid_upload_"))
-    try:
-        tmp_raw = tmp_dir / name
-        await _stream_to(file, tmp_raw)
-        today = datetime.now().strftime("%m%d%Y")
-        mapping = deidentify_file(tmp_raw, out_dir=drop_dir, date_str=today, key=key)
-    except HTTPException:
-        raise
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("upload-transcript: server de-id failed for %s", name)
-        raise HTTPException(status_code=500,
-                            detail="Server-side de-identification failed.") from exc
-    finally:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
 
-    out_name = mapping.get("output_file", "")
-    logger.info("admin upload: de-identified %s -> %s", name, out_name)
+@router.get("/upload-log", dependencies=[Depends(require_admin_user)])
+async def get_upload_log(
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Recent admin uploads, newest first — lets /admin/upload rebuild its list after
+    a refresh. Contains only de-identified queued names, never the real study id."""
+    limit = max(1, min(limit, 500))
+    stmt = (
+        select(AdminUploadLog)
+        .order_by(AdminUploadLog.uploaded_at.desc(), AdminUploadLog.id.desc())
+        .limit(limit)
+    )
+    rows = (await db.execute(stmt)).scalars().all()
     return {
-        "queued": out_name,
-        "deidentified": True,
-        "mapping": {
-            "real_sid": mapping.get("real_sid"),
-            "hashed_patient": mapping.get("hashed_patient"),
-            "doctor": mapping.get("doctor"),
-            "hashed_doctor": mapping.get("hashed_doctor"),
-        },
+        "uploads": [
+            {
+                "queued": r.queued_filename,
+                "status": r.status,
+                "message": r.message,
+                "uploaded_by": r.uploaded_by,
+                "uploaded_at": r.uploaded_at.isoformat() if r.uploaded_at else None,
+            }
+            for r in rows
+        ]
     }

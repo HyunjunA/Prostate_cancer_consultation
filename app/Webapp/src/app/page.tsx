@@ -423,24 +423,68 @@ export default function Home() {
   // ═══════════════════════════════════════════════════════════
   const [patientList, setPatientList] = useState<any[]>([]);
   const [loadingPatients, setLoadingPatients] = useState(false);
+  // How many uploaded transcripts are still being processed (from the pipeline drop
+  // folder). Lets the empty list say "N processing" instead of "no patients".
+  const [processingCount, setProcessingCount] = useState(0);
 
   useEffect(() => {
-    if (currentView === "selection") {
-      setLoadingPatients(true);
-      // Scope the picker to a doctor when ?doctorid=<id> is present (not "auto").
-      const d = searchParams.get("doctorid");
-      const filesUrl = d
-        ? `/api/backend/patient/files?doctor_id=${encodeURIComponent(d)}`
-        : `/api/backend/patient/files`;
-      fetch(filesUrl)
-        .then((r) => r.json())
-        .then((data) => {
-          console.log("[SelectionScreen] Patient files loaded:", data);
-          setPatientList(data.files || data.patients || []);
-        })
-        .catch((err) => console.error("[SelectionScreen] Failed to load patients:", err))
-        .finally(() => setLoadingPatients(false));
-    }
+    if (currentView !== "selection") return;
+
+    // Scope the picker to a doctor when ?doctorid=<id> is present (not "auto").
+    const d = searchParams.get("doctorid");
+    const filesUrl = d
+      ? `/api/backend/patient/files?doctor_id=${encodeURIComponent(d)}`
+      : `/api/backend/patient/files`;
+
+    let interval: ReturnType<typeof setInterval> | null = null;
+    let cancelled = false;
+
+    const loadFiles = async (showSpinner: boolean): Promise<any[]> => {
+      if (showSpinner) setLoadingPatients(true);
+      try {
+        const data = await fetch(filesUrl).then((r) => r.json());
+        if (cancelled) return [];
+        const files = data.files || data.patients || [];
+        setPatientList(files);
+        return files;
+      } catch (err) {
+        console.error("[SelectionScreen] Failed to load patients:", err);
+        return [];
+      } finally {
+        if (showSpinner) setLoadingPatients(false);
+      }
+    };
+
+    const loadProcessing = async () => {
+      try {
+        const data = await fetch(`/api/backend/patient/processing-count`).then((r) => r.json());
+        if (!cancelled) setProcessingCount(data.processing || 0);
+      } catch {
+        /* non-fatal: just don't show the processing hint */
+      }
+    };
+
+    // Initial load. If the list is empty, poll every 5s: re-check the files (so a
+    // just-finished transcript appears on its own) and the processing count (so the
+    // user sees work is in flight). Stop polling once a patient shows up.
+    loadFiles(true).then((files) => {
+      if (cancelled || files.length > 0) return;
+      loadProcessing();
+      interval = setInterval(async () => {
+        const f = await loadFiles(false);
+        if (f.length > 0) {
+          if (interval) { clearInterval(interval); interval = null; }
+          setProcessingCount(0);
+        } else {
+          loadProcessing();
+        }
+      }, 5000);
+    });
+
+    return () => {
+      cancelled = true;
+      if (interval) clearInterval(interval);
+    };
   }, [currentView]);
 
   const handlePatientSelect = (
@@ -556,7 +600,21 @@ export default function Home() {
             <div className={`text-center py-20 rounded-xl border-2 border-dashed ${
               isDarkMode ? "border-slate-800 text-slate-500" : "border-slate-200 text-slate-400"
             }`}>
-              <p className="text-sm">No patients found.</p>
+              {processingCount > 0 ? (
+                <div className="flex flex-col items-center gap-3">
+                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  <p className="text-sm">
+                    {processingCount} transcript{processingCount !== 1 ? "s" : ""} processing…
+                    <br />
+                    <span className="opacity-70">They&rsquo;ll appear here automatically when done.</span>
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm">No patient records yet.</p>
+              )}
             </div>
           ) : (
             <div className={`rounded-xl overflow-hidden border ${
