@@ -13,7 +13,7 @@ CREATE TABLE doctor_rewrite_log (
     file VARCHAR(255) NOT NULL,
     i INT NOT NULL,
     i2 INT NOT NULL,
-    speaker VARCHAR(100),             -- DoctorID
+    speaker VARCHAR(255),             -- DoctorID
     time TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     original_sentence TEXT,
     revised_sentence TEXT,
@@ -29,7 +29,7 @@ CREATE TABLE doctor_rewrite_log (
 -- (A) Patient summary — one row per patient
 CREATE TABLE patient_summary (
     file VARCHAR(255) NOT NULL,
-    speaker VARCHAR(100) NOT NULL,
+    speaker VARCHAR(255) NOT NULL,
     entire_summary TEXT,
     PRIMARY KEY (file, speaker)
 );
@@ -38,7 +38,7 @@ CREATE TABLE patient_summary (
 --     the old patient_summary class_1~5 columns, patient_summary_scoring, and patient_responses)
 CREATE TABLE patient_summary_domain (
     file VARCHAR(255) NOT NULL,
-    speaker VARCHAR(100) NOT NULL,
+    speaker VARCHAR(255) NOT NULL,
     domain VARCHAR(100) NOT NULL,        -- e.g. 'cancer_prognosis', 'continence', ...
     display_order INT NOT NULL DEFAULT 0,-- display order in UI (1-based)
     summary_text TEXT,                   -- AI-generated summary for this domain
@@ -67,7 +67,7 @@ CREATE INDEX idx_patient_domain_order ON patient_summary_domain(file, speaker, d
 CREATE TABLE survey_submission_log (
     id SERIAL PRIMARY KEY,
     file VARCHAR(255) NOT NULL,
-    speaker VARCHAR(100) NOT NULL,
+    speaker VARCHAR(255) NOT NULL,
     survey_type VARCHAR(50) NOT NULL,
     answers JSONB NOT NULL,
     extra_data JSONB,
@@ -155,7 +155,7 @@ CREATE TABLE sentence_prediction (
     sentence_index INT NOT NULL,              -- xlsx 'index'   : global sentence number
     utterance_index INT NOT NULL,             -- xlsx 'i'       : utterance number
     sentence_in_utterance INT NOT NULL,       -- xlsx 'i2'      : sentence within utterance
-    speaker VARCHAR(100),                     -- xlsx 'speaker' : speaker label
+    speaker VARCHAR(255),                     -- xlsx 'speaker' : speaker label
     sentence_text TEXT,                       -- xlsx 'text'    : sentence text
     pred_score FLOAT NOT NULL,               -- xlsx '.pred_1' : prediction score (0.0–1.0)
     context TEXT                              -- xlsx 'context' : surrounding sentences
@@ -221,7 +221,7 @@ CREATE TABLE user_interaction_log (
     role VARCHAR(20) NOT NULL DEFAULT 'patient',
     visit_type VARCHAR(20),                        -- 'first' | 'followup' | NULL (physician/legacy)
     file VARCHAR(255) NOT NULL,
-    speaker VARCHAR(100) NOT NULL,
+    speaker VARCHAR(255) NOT NULL,
     event_type VARCHAR(50) NOT NULL,
     element_id VARCHAR(255),
     event_data JSONB,

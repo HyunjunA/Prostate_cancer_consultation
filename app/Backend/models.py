@@ -74,7 +74,7 @@ class DoctorRewriteLog(Base):
     i2 = Column(Integer, primary_key=True, nullable=False)
     # `time` in the PK makes every revision a distinct row.
     time = Column(TIMESTAMP(timezone=True), primary_key=True, default=func.now())
-    speaker = Column(String(100))
+    speaker = Column(String(255))
     original_sentence = Column(Text)
     revised_sentence = Column(Text)
     score = Column(Float)
@@ -101,7 +101,7 @@ class PatientSummary(Base):
     __tablename__ = 'patient_summary'
 
     file = Column(String(255), primary_key=True, nullable=False)
-    speaker = Column(String(100), primary_key=True, nullable=False)
+    speaker = Column(String(255), primary_key=True, nullable=False)
 
     def __repr__(self):
         return f"<PatientSummary(file={self.file}, speaker={self.speaker})>"
@@ -148,7 +148,7 @@ class PatientSurveySubmissionLog(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     file = Column(String(255), nullable=False, index=True)
-    speaker = Column(String(100), nullable=False, index=True)
+    speaker = Column(String(255), nullable=False, index=True)
     survey_type = Column(String(50), nullable=False, index=True)
     answers = Column(JSONB_COMPAT, nullable=False)
     # Submission status + any client metadata. Written uniformly as {"partial": bool}
@@ -239,7 +239,7 @@ class SentencePrediction(Base):
     sentence_index = Column(Integer, nullable=False)
     utterance_index = Column(Integer, nullable=False)
     sentence_in_utterance = Column(Integer, nullable=False)
-    speaker = Column(String(100))
+    speaker = Column(String(255))
     sentence_text = Column(Text)
     pred_score = Column(Float, nullable=False)
     context = Column(Text)
@@ -302,7 +302,7 @@ class PatientReportPageBehavior(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(String(100), nullable=False)
     file = Column(String(255), nullable=False)
-    speaker = Column(String(100), nullable=False)
+    speaker = Column(String(255), nullable=False)
     event_type = Column(String(30), nullable=False)
     domain = Column(String(50))
     rating = Column(Integer)  # SMALLINT in DB; SQLAlchemy Integer is fine for read/write
@@ -326,7 +326,7 @@ class PatientFollowupSurveyPageBehavior(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(String(100), nullable=False)
     file = Column(String(255), nullable=False)
-    speaker = Column(String(100), nullable=False)
+    speaker = Column(String(255), nullable=False)
     event_type = Column(String(30), nullable=False)
     survey_type = Column(String(30))
     question_id = Column(String(50))
@@ -346,7 +346,7 @@ class DoctorBehavior(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(String(100), nullable=False)
     file = Column(String(255))  # nullable: doctor dashboard not tied to a specific patient file
-    speaker = Column(String(100), nullable=False)
+    speaker = Column(String(255), nullable=False)
     event_type = Column(String(30), nullable=False)
     target_type = Column(String(20))  # patient | topic | sentence
     target_id = Column(String(255))
