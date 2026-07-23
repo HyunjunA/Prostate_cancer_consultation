@@ -15,9 +15,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // gate so a raw transcript is flagged with the reason up front instead of a neutral
 // "pending" that the backend would only reject on upload. Mirrors the backend's
 // _DEID_NAME_RX (routes_admin_upload.py): the app's output name is
-// <hashedPatient>[_<hashedDoctor>]_<MMDDYYYY>.csv.
+// <hashedPatient>[_<hashedDoctor>]_<hashedDate>.csv — every segment is a de-id
+// token now (the visit date is hashed too), so require 2-3 alphanumeric segments.
 const ALLOWED_EXT = /\.(csv|xlsx|xls)$/i;
-const DEID_NAME_RX = /^[A-Z0-9]+(_[A-Z0-9]+)?_\d{8}\.(csv|xlsx)$/i;
+const DEID_NAME_RX = /^[A-Z0-9]+_[A-Z0-9]+(_[A-Z0-9]+)?\.(csv|xlsx)$/i;
 
 type Status = "pending" | "invalid" | "rejected" | "uploading" | "done" | "error";
 interface Item {

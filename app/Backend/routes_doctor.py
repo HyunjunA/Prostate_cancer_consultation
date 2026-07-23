@@ -51,7 +51,25 @@ from auth import get_current_user
 from auth.access_control import check_patient_access
 from auth.base import AuthUser
 from db import get_db
+from deid import unhash_visit_date
 from models import DoctorRewriteLog, SentencePrediction, TranscriptAnalysisLog
+
+
+def _visit_order_key(source_filename: str, fallback: datetime) -> datetime:
+    """Sortable key that reconstructs the true visit order without exposing the date.
+
+    The de-id pipeline hashes the visit date into the filename; here we decrypt it
+    ONLY to order the timeline (the date is never returned to the client). Falls back
+    to ``fallback`` (the processing timestamp) for legacy names with no hashed date.
+    Both are returned tz-naive so mixed old/new files stay comparable.
+    """
+    raw = unhash_visit_date(source_filename)
+    if raw:
+        try:
+            return datetime.strptime(raw, "%m%d%Y")
+        except ValueError:
+            pass
+    return fallback.replace(tzinfo=None) if fallback.tzinfo else fallback
 
 logger = logging.getLogger(__name__)
 
@@ -516,6 +534,16 @@ async def get_doctor_files(
         if row.file not in file_map or row.sentence_count > file_map[row.file]["count"]:
             file_map[row.file] = {"speaker": row.speaker, "count": row.sentence_count}
 
+    # Chronological visit order from the real (decrypted) visit date hashed into the
+    # filename, falling back to the processing timestamp. The date itself is never
+    # returned — only its 1-based position, which the client shows as "Visit N".
+    def _order_key(f: str):
+        ca = date_map.get(f)
+        return _visit_order_key(f, ca) if ca is not None else datetime.max
+    visit_index = {
+        f: i for i, f in enumerate(sorted(file_map.keys(), key=_order_key), start=1)
+    }
+
     # Return both formats: "files" (legacy list) + "file_details" (with speaker)
     files = list(file_map.keys())
     file_details = [
@@ -523,6 +551,7 @@ async def get_doctor_files(
             "file": f,
             "speaker": info["speaker"],
             "sentence_count": info["count"],
+            "visit_index": visit_index[f],
             # Processing timestamp used as a stand-in visit date (see note above).
             "consult_date": (
                 date_map[f].isoformat() if date_map.get(f) else None
@@ -988,15 +1017,17 @@ async def get_doctor_score_trajectory(
         if r.source_filename not in file_dates or r.created_at < file_dates[r.source_filename]:
             file_dates[r.source_filename] = r.created_at
 
-    # ── Step 2: Build consultation timeline (sorted by date) ──
+    # ── Step 2: Build consultation timeline (sorted by real visit order) ──
+    # The visit date is hashed into the filename; _visit_order_key decrypts it only
+    # to order the timeline. The real date is never placed in an event or returned.
     events = [{"time": file_dates[f], "file": f} for f in file_scores]
-    events.sort(key=lambda x: x["time"])
+    events.sort(key=lambda x: _visit_order_key(x["file"], x["time"]))
 
     # ── Step 3: Process timeline → cumulative trajectory ──
     consulted_files: list = []
     trajectory = []
 
-    for event in events:
+    for visit_index, event in enumerate(events, start=1):
         file = event["file"]
         consulted_files.append(file)
 
@@ -1028,6 +1059,10 @@ async def get_doctor_score_trajectory(
         overall = sum(class_avgs.values()) / len(class_avgs) if class_avgs else None
 
         trajectory.append({
+            # visit_index is the real visit order (1-based) the client shows as
+            # "Visit N". timestamp remains the processing time (a stand-in, not the
+            # real visit date) for backward compat; the real date is never sent.
+            "visit_index": visit_index,
             "timestamp": event["time"].isoformat(),
             "event_type": "consultation",
             "file": event["file"],

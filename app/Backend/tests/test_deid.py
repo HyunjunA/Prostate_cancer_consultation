@@ -28,6 +28,7 @@ TEST_KEY = "unit-test-deid-passphrase-fixed"
 # can no longer read them, it can no longer read production's tokens either.
 VECTOR_PATIENT_22 = "VM3OOSQYJLLLK24ZXBQJGXBXUW7D4"
 VECTOR_DOCTOR_2 = "7OOXN2SKFJ6TC3QR5WSSHKCCNJXA"
+VECTOR_DATE_07162026 = "YPWF747CL7IHCWCX3UBQKSNWTD4ZQHWVHU5WMXQ"
 
 
 def _aes_hash(number: int, domain: bytes = deid.DOMAIN_PATIENT, key: str = TEST_KEY) -> str:
@@ -43,6 +44,16 @@ def _aes_hash(number: int, domain: bytes = deid.DOMAIN_PATIENT, key: str = TEST_
 
 def _doctor_hash(number: int) -> str:
     return _aes_hash(number, deid.DOMAIN_DOCTOR)
+
+
+def _date_hash(date_str: str, key: str = TEST_KEY) -> str:
+    """Mirror ``deidentify_transcript.hash_date``: AES-SIV(date STRING, DOMAIN_DATE).
+
+    The date is encrypted as its exact string so leading zeros survive.
+    """
+    derived = hashlib.sha512(key.encode("utf-8")).digest()
+    ciphertext = AESSIV(derived).encrypt(date_str.encode("utf-8"), [deid.DOMAIN_DATE])
+    return base64.b32encode(ciphertext).decode("ascii").rstrip("=")
 
 
 @pytest.fixture(autouse=True)
@@ -103,6 +114,38 @@ class TestDomainSeparation:
         assert deid.unhash_doctor_num(speaker) is None
 
 
+class TestUnhashVisitDate:
+    """The visit date is hashed into the filename; the server decrypts it (only to
+    order the timeline) and the real date is never returned to the client."""
+
+    def test_roundtrip_three_part(self):
+        name = f"{_aes_hash(22)}_{_doctor_hash(2)}_{_date_hash('07162026')}.csv"
+        assert deid.unhash_visit_date(name) == "07162026"
+
+    def test_roundtrip_two_part(self):
+        name = f"{_aes_hash(22)}_{_date_hash('07162026')}.csv"
+        assert deid.unhash_visit_date(name) == "07162026"
+
+    def test_leading_zero_preserved(self):
+        name = f"{_aes_hash(22)}_{_doctor_hash(2)}_{_date_hash('01022026')}.csv"
+        assert deid.unhash_visit_date(name) == "01022026"
+
+    def test_legacy_plaintext_date_returns_none(self):
+        # The trailing \d{8} is stripped, so the last token is the doctor, which does
+        # not authenticate under the date domain.
+        assert deid.unhash_visit_date(f"{_aes_hash(22)}_{_doctor_hash(2)}_07022026") is None
+
+    def test_patient_and_doctor_still_read_with_a_hashed_date(self):
+        name = f"Patient_{_aes_hash(22)}_{_doctor_hash(2)}_{_date_hash('07162026')}"
+        assert deid.unhash_patient_sid(name) == "SID_22"
+        assert deid.unhash_doctor_num(name) == "doc2"
+
+    def test_no_key_returns_none(self, monkeypatch):
+        monkeypatch.setattr(deid, "get_settings", lambda: SimpleNamespace(deid_key=None))
+        name = f"{_aes_hash(22)}_{_date_hash('07162026')}.csv"
+        assert deid.unhash_visit_date(name) is None
+
+
 class TestKnownAnswerVectors:
     """Read tokens this module did not generate — the cross-repo contract.
 
@@ -112,17 +155,22 @@ class TestKnownAnswerVectors:
     """
 
     def test_reads_an_upstream_patient_token(self):
-        speaker = f"Patient_{VECTOR_PATIENT_22}_{VECTOR_DOCTOR_2}_07162026"
+        speaker = f"Patient_{VECTOR_PATIENT_22}_{VECTOR_DOCTOR_2}_{VECTOR_DATE_07162026}"
         assert deid.unhash_patient_sid(speaker) == "SID_22"
 
     def test_reads_an_upstream_doctor_token(self):
-        speaker = f"Patient_{VECTOR_PATIENT_22}_{VECTOR_DOCTOR_2}_07162026"
+        speaker = f"Patient_{VECTOR_PATIENT_22}_{VECTOR_DOCTOR_2}_{VECTOR_DATE_07162026}"
         assert deid.unhash_doctor_num(speaker) == "doc2"
 
+    def test_reads_an_upstream_date_token(self):
+        name = f"{VECTOR_PATIENT_22}_{VECTOR_DOCTOR_2}_{VECTOR_DATE_07162026}.csv"
+        assert deid.unhash_visit_date(name) == "07162026"
+
     def test_our_hash_matches_the_upstream_vector(self):
-        """The mirror in _aes_hash must reproduce upstream byte-for-byte."""
+        """The mirror in _aes_hash / _date_hash must reproduce upstream byte-for-byte."""
         assert _aes_hash(22, deid.DOMAIN_PATIENT) == VECTOR_PATIENT_22
         assert _doctor_hash(2) == VECTOR_DOCTOR_2
+        assert _date_hash("07162026") == VECTOR_DATE_07162026
 
 
 class TestNoKeyConfigured:

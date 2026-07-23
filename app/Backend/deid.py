@@ -32,6 +32,11 @@ from core.settings import get_settings
 # DOMAIN_PATIENT / DOMAIN_DOCTOR byte-for-byte or nothing decrypts.
 DOMAIN_PATIENT = b"patient"
 DOMAIN_DOCTOR = b"doctor"
+# The visit date is hashed the same way (its own domain), so the real MMDDYYYY never
+# leaves the clinical machine. The server decrypts it only to reconstruct the visit
+# ORDER for the doctor timeline; the date itself is never stored or returned. Must
+# match ``deidentify_transcript.DOMAIN_DATE`` byte-for-byte.
+DOMAIN_DATE = b"date"
 
 
 @lru_cache(maxsize=4)
@@ -47,16 +52,19 @@ def _derive_key(passphrase: str) -> bytes:
 def _hash_tokens(speaker_or_file: str) -> list[str]:
     """The ordered Base32 hash tokens of a speaker/file string.
 
-    Drops a leading ``Patient`` label and the trailing 8-digit ``MMDDYYYY`` date,
-    leaving ``[patientToken]`` or ``[patientToken, doctorToken]``. Base32 tokens
-    contain letters, so (unlike the old affine ``.isdigit()`` split) they cannot be
-    told apart by digits — position is what picks which is which here. The cipher's
-    domain then verifies that choice: a token read from the wrong position fails to
-    decrypt rather than yielding the other kind's number.
+    Drops a leading ``Patient`` label and a LEGACY trailing 8-digit ``MMDDYYYY``
+    date. The de-id pipeline now hashes the date too, so on current files the date
+    is itself a Base32 token that stays in the list as the LAST element:
 
+        ``Patient_MFRGGZDF_NBSWY3DP_HZKV…`` -> ["MFRGGZDF", "NBSWY3DP", "HZKV…"]
+        ``MFRGGZDF_NBSWY3DP_HZKV….csv``     -> ["MFRGGZDF", "NBSWY3DP", "HZKV…"]
+        ``Patient_MFRGGZDF_HZKV…``          -> ["MFRGGZDF", "HZKV…"]
+        # legacy plaintext-date names still collapse to 1-2 tokens:
         ``Patient_MFRGGZDF_NBSWY3DP_07022026`` -> ["MFRGGZDF", "NBSWY3DP"]
-        ``MFRGGZDF_NBSWY3DP_07022026.csv``     -> ["MFRGGZDF", "NBSWY3DP"]
-        ``Patient_MFRGGZDF_07022026``          -> ["MFRGGZDF"]
+
+    Position picks patient (1st) vs doctor (2nd) vs date (last); the cipher's domain
+    then verifies that choice — a token read at the wrong position fails to decrypt
+    rather than yielding the wrong kind's value.
     """
     stem = re.sub(r"\.(csv|xlsx|xls)$", "", speaker_or_file, flags=re.IGNORECASE)
     parts = stem.split("_")
@@ -117,3 +125,23 @@ def unhash_doctor_num(speaker_or_file: str) -> Optional[str]:
         return None
     number = _unhash_number(tokens[1], key, DOMAIN_DOCTOR)
     return f"doc{number}" if number is not None else None
+
+
+def unhash_visit_date(speaker_or_file: str) -> Optional[str]:
+    """Return the real ``"MMDDYYYY"`` visit date hidden in a de-id name, else None.
+
+    The visit date is the LAST hash token (the de-id pipeline hashes it under
+    :data:`DOMAIN_DATE`). Used ONLY to reconstruct the visit order for the doctor
+    timeline — the returned date is never stored or sent to the client. Returns None
+    for legacy plaintext-date names, names with no hashed date, or a wrong key
+    (the token fails to authenticate under the date domain).
+    """
+    key = get_settings().deid_key
+    if not speaker_or_file or not key:
+        return None
+    tokens = _hash_tokens(speaker_or_file)
+    if not tokens:
+        return None
+    # _unhash_number returns the decrypted plaintext string; for a date that is the
+    # 8-char "MMDDYYYY" (leading zeros preserved), for an id it is the number.
+    return _unhash_number(tokens[-1], key, DOMAIN_DATE)

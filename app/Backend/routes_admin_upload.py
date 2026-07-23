@@ -65,10 +65,14 @@ async def _record_upload(db: AsyncSession, queued_filename, status_str: str,
         await db.rollback()
 
 
-# Already-de-identified filename: <hashedPatient>[_<hashedDoctor>]_<MMDDYYYY>.<ext>.
-# Hash tokens are AES-SIV Base32 (letters + 2-7); legacy affine codes are digits —
-# accept either (alphanumeric) so both store-as-is. The doctor token is optional.
-_DEID_NAME_RX = re.compile(r"^[A-Z0-9]+(_[A-Z0-9]+)?_\d{8}\.(csv|xlsx)$", re.IGNORECASE)
+# Already-de-identified filename: <hashedPatient>[_<hashedDoctor>]_<date>.<ext>.
+# Every segment is a de-id token — AES-SIV Base32 (letters + 2-7) or a legacy affine
+# digit code — and the trailing <date> is now hashed too (Base32), though legacy
+# plaintext MMDDYYYY (8 digits) is still accepted. All tokens therefore match
+# [A-Z0-9]+. Require at least two segments (patient + date); the doctor is optional.
+_DEID_NAME_RX = re.compile(
+    r"^[A-Z0-9]+_[A-Z0-9]+(_[A-Z0-9]+)?\.(csv|xlsx)$", re.IGNORECASE
+)
 _MAX_BYTES = 25 * 1024 * 1024  # 25 MB
 _CHUNK = 1024 * 1024
 

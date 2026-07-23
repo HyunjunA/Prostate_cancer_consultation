@@ -88,6 +88,9 @@ interface PatientRow {
   name: string;
   fileName: string;
   consultationDate: string;
+  // 1-based visit order the server reconstructs from the (hashed) visit date. The
+  // UI shows "Visit N" instead of a calendar date, which is never sent.
+  visitIndex?: number;
   status?: string;
   overallScore: number;
   topics: Record<TopicName, TopicData>;
@@ -2276,7 +2279,7 @@ const TrajectoryPointDetail: React.FC<{
   return (
     <>
       <div className="font-semibold mb-1">
-        {item.fullTimestamp?.substring(0, 19)} | {type}
+        {item.visitLabel ?? "Visit"} | {type}
       </div>
       {viewMode === "individual" ? (
         <>
@@ -2397,20 +2400,20 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
   // Transform trajectory API data → recharts format
   const chartData = useMemo(() => {
     if (!trajectoryData || trajectoryData.length === 0) return [];
-    return trajectoryData.map((item) => {
-      // Format timestamp as "MM/DD HH:mm"
-      const ts = item.timestamp ? new Date(item.timestamp) : null;
-      const label = ts
-        ? `${String(ts.getMonth() + 1).padStart(2, "0")}/${String(ts.getDate()).padStart(2, "0")} ${String(ts.getHours()).padStart(2, "0")}:${String(ts.getMinutes()).padStart(2, "0")}`
-        : "N/A";
+    return trajectoryData.map((item, idx) => {
+      // The X-axis is visit ORDER ("Visit N"), not a date. The real visit date is
+      // hashed upstream and never sent; visit_index is the server's reconstructed
+      // chronological order (falls back to array position).
+      const visitNo = (item as any).visit_index ?? idx + 1;
+      const visitLabel = `Visit ${visitNo}`;
       // Individual mode: this consultation's OWN overall score (its own row in
       // patients_detail), NOT the running cumulative average.
       const own = (item.patients_detail ?? []).find(
         (p: any) => p.file === item.file,
       )?.overall_score;
       return {
-        time: label,
-        fullTimestamp: item.timestamp,
+        time: visitLabel,
+        visitLabel,
         eventType: item.event_type,
         file: item.file,
         score: item.overall_score ?? 0,
@@ -2450,11 +2453,11 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
 
   // Patient table column sorting. Default: patient (SID) ascending, matching
   // the existing numeric SID order.
-  const [sortKey, setSortKey] = useState<"patient" | "date" | "score">(
+  const [sortKey, setSortKey] = useState<"patient" | "visit" | "score">(
     "patient",
   );
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const toggleSort = (key: "patient" | "date" | "score") => {
+  const toggleSort = (key: "patient" | "visit" | "score") => {
     if (sortKey === key) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     } else {
@@ -2472,8 +2475,8 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
       let cmp = 0;
       if (sortKey === "patient") {
         cmp = sidNum(a.id) - sidNum(b.id);
-      } else if (sortKey === "date") {
-        cmp = (a.consultationDate || "").localeCompare(b.consultationDate || "");
+      } else if (sortKey === "visit") {
+        cmp = (a.visitIndex ?? 0) - (b.visitIndex ?? 0);
       } else {
         cmp = (a.overallScore || 0) - (b.overallScore || 0);
       }
@@ -2482,7 +2485,7 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
     return arr;
   }, [filteredPatients, sortKey, sortDir]);
   // Caret shown in a column header: ▲/▼ when active, faint ↕ otherwise.
-  const sortCaret = (key: "patient" | "date" | "score") =>
+  const sortCaret = (key: "patient" | "visit" | "score") =>
     sortKey === key ? (sortDir === "asc" ? "▲" : "▼") : "↕";
 
   return (
@@ -2825,19 +2828,6 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
           />
         </div>
 
-        {/* D-10: dates are a processing-time stand-in, not the real visit date. */}
-        <div
-          className={cx(
-            "px-6 py-2 text-xs border-b",
-            isDarkMode
-              ? "bg-slate-800/40 border-slate-700 text-slate-400"
-              : "bg-amber-50/60 border-slate-200 text-slate-500",
-          )}
-        >
-          ⓘ Dates shown are processing timestamps and may not match the actual
-          consultation date.
-        </div>
-
         <div className="overflow-x-auto">
           <table className="w-full" style={{ tableLayout: "fixed" }}>
             <thead>
@@ -2862,12 +2852,12 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                 </th>
                 <th className="px-6 py-3 text-left font-semibold" style={{ width: "22%" }}>
                   <button
-                    onClick={() => toggleSort("date")}
+                    onClick={() => toggleSort("visit")}
                     className="inline-flex items-center gap-1 uppercase tracking-wider hover:opacity-80"
                   >
-                    Date
+                    Visit
                     <span className="text-[10px] opacity-70">
-                      {sortCaret("date")}
+                      {sortCaret("visit")}
                     </span>
                   </button>
                 </th>
@@ -2935,32 +2925,16 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                     </div>
                   </td>
                   <td className="px-6 py-3.5" style={{ width: "22%" }}>
+                    {/* Visit ORDER, not a date. The real visit date is hashed
+                        upstream and never sent; the server reconstructs the order. */}
                     <div
                       className={cx(
                         "text-sm",
                         isDarkMode ? "text-slate-300" : "text-slate-700",
                       )}
                     >
-                      {patient.consultationDate
-                        ? new Date(patient.consultationDate).toLocaleDateString(
-                            undefined,
-                            { year: "numeric", month: "short", day: "numeric" },
-                          )
-                        : "—"}
+                      {patient.visitIndex != null ? `Visit ${patient.visitIndex}` : "—"}
                     </div>
-                    {patient.consultationDate && (
-                      <div
-                        className={cx(
-                          "text-xs",
-                          isDarkMode ? "text-slate-500" : "text-slate-400",
-                        )}
-                      >
-                        {new Date(patient.consultationDate).toLocaleTimeString(
-                          undefined,
-                          { hour: "2-digit", minute: "2-digit" },
-                        )}
-                      </div>
-                    )}
                   </td>
                   <td className="px-6 py-3.5" style={{ width: "30%" }}>
                     <div className="flex items-center gap-2.5">
@@ -4388,6 +4362,9 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   // file -> consult date (ISO). Stand-in: the AI processing timestamp from the
   // backend until the de-id pipeline supplies the real (±7-day shifted) date.
   const [fileDateMap, setFileDateMap] = useState<Record<string, string>>({});
+  // file -> 1-based visit order (from the server, reconstructed from the hashed
+  // visit date). Shown as "Visit N"; the real date is never fetched.
+  const [fileVisitMap, setFileVisitMap] = useState<Record<string, number>>({});
   const [patients, setPatients] = useState<PatientRow[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<PatientRow | null>(
     null,
@@ -4660,18 +4637,22 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       if (result?.file_details?.length > 0) {
         const map: Record<string, string> = {};
         const dateMap: Record<string, string> = {};
+        const visitMap: Record<string, number> = {};
         result.file_details.forEach(
           (fd: {
             file: string;
             speaker: string;
             consult_date?: string | null;
+            visit_index?: number | null;
           }) => {
             map[fd.file] = fd.speaker;
             if (fd.consult_date) dateMap[fd.file] = fd.consult_date;
+            if (fd.visit_index != null) visitMap[fd.file] = fd.visit_index;
           },
         );
         setFileSpeakerMap(map);
         setFileDateMap(dateMap);
+        setFileVisitMap(visitMap);
 
         // Always auto-detect the transcript speaker from the first (scoped)
         // file — doctorId is a scoping key, not a speaker.
@@ -4724,6 +4705,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           name: `Patient ${id}`,
           fileName,
           consultationDate: fileDateMap[fileName] ?? "",
+          visitIndex: fileVisitMap[fileName],
           status: "completed",
           overallScore: 0,
           topics: {} as Record<TopicName, TopicData>,
@@ -4746,7 +4728,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       // Fetch scores for all patients (no speaker filter — speakers vary per file)
       fetchScoreAverage(undefined, undefined, undefined);
     }
-  }, [files, selectedSpeaker, fileDateMap]);
+  }, [files, selectedSpeaker, fileDateMap, fileVisitMap]);
 
   // ═══════════════════════════════════════════════════════════
   // Auto-select patient when fileId is provided via URL (once only)
