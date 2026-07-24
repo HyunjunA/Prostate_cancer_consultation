@@ -84,11 +84,6 @@ export default function AdminTrackingHubPage() {
       <div className="max-w-6xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-slate-900">Admin Tracking</h1>
-          <p className="mt-2 text-sm text-slate-600">
-            Per-area behavior dashboards. Each area is backed by its own table
-            with strict event vocabulary — no event-type free text, no OR-merge
-            across sessions.
-          </p>
         </div>
 
         {/* Primary action — bring transcript data into the pipeline. Uses the SAME
