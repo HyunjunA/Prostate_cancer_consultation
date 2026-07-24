@@ -1,11 +1,8 @@
 "use client";
 
 /**
- * Admin tracking nav hub — Pattern A.
- *
- * The legacy single-table dashboard (AdminTrackingDashboard.tsx) is kept
- * importable for now so we can compare side by side; it will be removed in
- * Phase 6 of the rebuild.
+ * Admin tracking nav hub. Each card links to a per-area behavior dashboard,
+ * plus a primary card to upload a transcript into the processing pipeline.
  */
 
 import Link from "next/link";
@@ -94,30 +91,25 @@ export default function AdminTrackingHubPage() {
           </p>
         </div>
 
-        {/* Primary action — bring transcript data INTO the system. Set apart from
-            the read-only tracking dashboards below with an accent treatment. */}
+        {/* Primary action — bring transcript data into the pipeline. Uses the SAME
+            card style as the tracking dashboards below (gradient bar + title +
+            description + CTA), with its own accent colour, so it fits the hub. */}
         <Link
           href="/admin/upload"
-          className="group mb-8 flex items-center gap-4 rounded-xl border-2 border-indigo-200 bg-gradient-to-r from-indigo-50 to-white p-5 shadow-sm transition-shadow hover:shadow-lg"
+          className="group mb-8 block bg-white rounded-xl shadow hover:shadow-lg transition-shadow overflow-hidden"
         >
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                 stroke="currentColor" strokeWidth={2} strokeLinecap="round"
-                 strokeLinejoin="round" className="h-6 w-6">
-              <path d="M12 19V6M5 13l7-7 7 7" />
-            </svg>
-          </span>
-          <div className="min-w-0">
+          <div className="h-2 bg-gradient-to-r from-indigo-500 to-blue-500" />
+          <div className="p-6">
             <h2 className="text-lg font-semibold text-slate-900 group-hover:text-indigo-600">
               Upload Transcript
             </h2>
-            <p className="mt-1 text-sm text-slate-600">
+            <p className="mt-2 text-sm text-slate-600">
               Add a de-identified transcript to the processing pipeline.
             </p>
+            <span className="mt-4 inline-block text-xs text-indigo-600 group-hover:underline">
+              Upload transcript →
+            </span>
           </div>
-          <span className="ml-auto shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors group-hover:bg-indigo-700">
-            Upload →
-          </span>
         </Link>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -139,11 +131,6 @@ export default function AdminTrackingHubPage() {
               </div>
             </Link>
           ))}
-        </div>
-
-        <div className="mt-10 text-xs text-slate-500">
-          Legacy single dashboard (AdminTrackingDashboard) is still importable
-          but will be removed in Phase 6 of the tracking rebuild.
         </div>
       </div>
     </div>
