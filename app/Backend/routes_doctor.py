@@ -521,10 +521,10 @@ async def get_doctor_files(
 
     date_stmt = select(
         LLMDomainScoringAndSummary.source_filename.label("file"),
-        func.min(LLMDomainScoringAndSummary.created_at).label("consult_date"),
+        func.min(LLMDomainScoringAndSummary.created_at).label("processing_date"),
     ).group_by(LLMDomainScoringAndSummary.source_filename)
     date_rows = (await db.execute(date_stmt)).all()
-    date_map = {r.file: r.consult_date for r in date_rows}
+    date_map = {r.file: r.processing_date for r in date_rows}
 
     # Build file list — pick the speaker with most sentences per file
     file_map: dict = {}
@@ -552,8 +552,9 @@ async def get_doctor_files(
             "speaker": info["speaker"],
             "sentence_count": info["count"],
             "visit_index": visit_index[f],
-            # Processing timestamp used as a stand-in visit date (see note above).
-            "consult_date": (
+            # Processing timestamp (generic name — not the clinical visit date, which
+            # is never returned; the client shows visit_index as "Visit N").
+            "processing_date": (
                 date_map[f].isoformat() if date_map.get(f) else None
             ),
         }

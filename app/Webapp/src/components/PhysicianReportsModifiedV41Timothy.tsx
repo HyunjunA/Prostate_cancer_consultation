@@ -87,7 +87,9 @@ interface PatientRow {
   id: string;
   name: string;
   fileName: string;
-  consultationDate: string;
+  // Processing timestamp (generic name — NOT the clinical visit date). Held for
+  // possible future use; the UI shows visitIndex ("Visit N"), never a date.
+  processingDate: string;
   // 1-based visit order the server reconstructs from the (hashed) visit date. The
   // UI shows "Visit N" instead of a calendar date, which is never sent.
   visitIndex?: number;
@@ -4642,11 +4644,11 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           (fd: {
             file: string;
             speaker: string;
-            consult_date?: string | null;
+            processing_date?: string | null;
             visit_index?: number | null;
           }) => {
             map[fd.file] = fd.speaker;
-            if (fd.consult_date) dateMap[fd.file] = fd.consult_date;
+            if (fd.processing_date) dateMap[fd.file] = fd.processing_date;
             if (fd.visit_index != null) visitMap[fd.file] = fd.visit_index;
           },
         );
@@ -4704,7 +4706,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           id,
           name: `Patient ${id}`,
           fileName,
-          consultationDate: fileDateMap[fileName] ?? "",
+          processingDate: fileDateMap[fileName] ?? "",
           visitIndex: fileVisitMap[fileName],
           status: "completed",
           overallScore: 0,
