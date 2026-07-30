@@ -112,7 +112,9 @@ class PatientFollowupBatch(BaseModel):
 
     session_id: str = Field(..., min_length=1, max_length=100)
     file: str = Field(..., min_length=1, max_length=255)
-    speaker: str = Field(..., min_length=1, max_length=100)
+    # 255 to match the widened DB column (migration 034) — a de-identified speaker
+    # runs to 105 chars, which the old 100 cap rejected with a 422.
+    speaker: str = Field(..., min_length=1, max_length=255)
     # 500-event cap so a single bad call cannot tie up the DB with a
     # 50000-row INSERT. The frontend flushes every few seconds, so 500
     # is more than enough headroom for normal pacing.

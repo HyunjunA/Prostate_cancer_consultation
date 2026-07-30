@@ -561,7 +561,9 @@ class FirstVisitAnswersUpsert(BaseModel):
     """Body for PUT /api/patient/first-visit-answers — one domain's answers."""
 
     file: str = Field(..., min_length=1, max_length=255)
-    speaker: str = Field(..., min_length=1, max_length=100)
+    # 255 to match patient_summary.speaker (migration 034) — a de-identified
+    # speaker is 105 chars, and the old 100 cap rejected the save with a 422.
+    speaker: str = Field(..., min_length=1, max_length=255)
     domain: DomainLiteral
     answers: List[AnswerItem] = Field(..., min_length=1, max_length=50)
     # true = an auto-save while the patient is still editing; false = the final Submit.

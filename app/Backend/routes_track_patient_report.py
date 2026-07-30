@@ -134,7 +134,10 @@ class PatientReportBatch(BaseModel):
 
     session_id: str = Field(..., min_length=1, max_length=100)
     file: str = Field(..., min_length=1, max_length=255)
-    speaker: str = Field(..., min_length=1, max_length=100)
+    # 255 to match the widened DB column (migration 034). A de-identified speaker
+    # is "Patient_<patient hash>_<doctor hash>_<date hash>" — 105 chars — so the
+    # old 100 cap rejected every event from a de-identified visit with a 422.
+    speaker: str = Field(..., min_length=1, max_length=255)
     # 500-event cap: the frontend flushes every few seconds, so 500 is
     # plenty of headroom; raising it any higher just lets one bad client
     # tie up DB writes.

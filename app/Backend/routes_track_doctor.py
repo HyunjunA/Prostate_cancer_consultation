@@ -91,7 +91,9 @@ class DoctorBatch(BaseModel):
     # patients overview). Patient-side tracking, by contrast, always
     # has a file because the patient UI always shows one patient.
     file: Optional[str] = Field(None, max_length=255)
-    speaker: str = Field(..., min_length=1, max_length=100)
+    # 255 to match the widened DB column (migration 034); a de-identified speaker
+    # runs past the old 100 cap.
+    speaker: str = Field(..., min_length=1, max_length=255)
     # 500-event cap per batch. The frontend flushes every few seconds
     # so this is plenty of headroom; raising it just lets one bad
     # client tie up DB writes.
