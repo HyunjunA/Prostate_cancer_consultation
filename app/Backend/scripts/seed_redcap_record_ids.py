@@ -1,13 +1,16 @@
 """Seed REDCap with record_id-only records extracted from data/input filenames.
 
-The dashboard attributes each survey to the REDCap record whose ``record_id`` IS the
-study SID (see redcap_mapping.resolve_record_id). This script pre-creates those empty
-SID-keyed records in bulk from the transcript filenames, so a submission for e.g.
-``SID_22`` lands on an existing record. For a one-off id, use ``create_redcap_records.py``.
+The dashboard attributes each survey to the REDCap record whose ``record_id`` is the
+NUMBER in the study SID — ``SID_22`` -> record ``22`` (see
+redcap_mapping.to_record_id). Records are normally created by hand in REDCap ("Add
+new record"); this script is the bulk convenience path for standing up the same
+empty shells from the transcript filenames. For a one-off id, use
+``create_redcap_records.py``.
 
 For each transcript file in the AI repo's ``data/input`` directory, derive the study
-SID (e.g. ``SID_21``) via the canonical ``extract_patient_id()`` and create a REDCap
-record that contains ONLY the ``record_id`` field — an empty shell keyed by SID.
+SID (e.g. ``SID_21``) via the canonical ``extract_patient_id()``, reduce it to its
+numeric record_id, and create a REDCap record that contains ONLY the ``record_id``
+field — an empty shell.
 
 Safety: defaults to a dry-run. It only writes to REDCap when ``--commit`` is passed.
 Existing records are untouched (a record_id-only import with overwriteBehavior=normal
@@ -35,6 +38,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from core.settings import get_settings  # noqa: E402
+from redcap_mapping import to_record_id  # noqa: E402
 
 # Default input dir = sibling AI repo's data/input.
 # app/Backend/scripts -> Backend -> dashboard -> prostate_cancer_project
@@ -62,10 +66,16 @@ def _extract_sid(filepath: Path) -> str:
 
 
 def derive_record_ids(input_dir: Path) -> List[str]:
-    """List input files and map each to its SID record_id (deduped, sorted)."""
+    """List input files and map each to its REDCap record_id (deduped, sorted).
+
+    The SID from the filename is normalised the same way the sync path does it
+    (``redcap_mapping.to_record_id``: ``SID_22`` -> ``22``), so seeded shells and
+    attributed submissions land on the same record. Files whose SID carries no
+    digits are skipped — there is nothing to key a record on.
+    """
     files = sorted(input_dir.glob("*.xlsx")) + sorted(input_dir.glob("*.csv"))
-    ids = {_extract_sid(f) for f in files}
-    return sorted(ids)
+    ids = {rid for rid in (to_record_id(_extract_sid(f)) for f in files) if rid}
+    return sorted(ids, key=int)
 
 
 def export_existing_record_ids(url: str, token: str) -> List[str]:

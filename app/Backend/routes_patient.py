@@ -41,7 +41,7 @@ from auth.base import AuthUser
 from core.settings import get_settings
 from db import get_db
 from deid import unhash_patient_sid, unhash_doctor_num
-from redcap_mapping import resolve_record_id
+from redcap_mapping import record_exists, resolve_record_id
 from patient_lookup import resolve_patient_summary_file
 from models import (
     DoctorRewriteLog,
@@ -915,15 +915,32 @@ async def upsert_first_visit_answers(
     await db.commit()
     await db.refresh(row)
 
-    # The REDCap record_id is the study SID (record_id == SID). If the speaker has
-    # no parseable SID, mark the row pending (no push) rather than inventing an id.
-    # Otherwise mirror to REDCap under that record_id. The sync outcome is recorded
-    # on the row just inserted for this domain.
+    # The REDCap record_id is the numeric part of the study SID (SID_22 -> "22").
+    # If the speaker has no parseable SID, mark the row pending (no push) rather
+    # than inventing an id. Records themselves are created by hand in REDCap, so a
+    # resolved id that REDCap does not hold is reported as unmatched instead of
+    # being imported (which would create a shadow record). The sync outcome is
+    # recorded on the row just inserted for this domain.
     redcap_record_id = await resolve_record_id(sid)
-    if redcap_record_id is None:
+    unmatched_error: Optional[str] = None
+    if redcap_record_id is not None:
+        try:
+            if not await record_exists(redcap_record_id):
+                unmatched_error = (
+                    f"No matching REDCap record_id {redcap_record_id!r} for study "
+                    f"{sid!r} — create the record in REDCap first."
+                )
+        except Exception as e:  # noqa: BLE001 - a failed check cannot prove existence
+            logger.error("REDCap record lookup failed (record_id=%s): %s",
+                         redcap_record_id, e, exc_info=True)
+            unmatched_error = (
+                f"Could not verify REDCap record_id {redcap_record_id!r}: {e}"
+            )
+
+    if redcap_record_id is None or unmatched_error is not None:
         row.redcap_synced = False
-        row.redcap_record_id = None
-        row.redcap_error = f"No study SID for speaker {body.speaker!r}"
+        row.redcap_record_id = redcap_record_id
+        row.redcap_error = unmatched_error or f"No study SID for speaker {body.speaker!r}"
         await db.commit()
     else:
         redcap_result = await _sync_first_visit_answers_to_redcap(redcap_record_id, body.answers)

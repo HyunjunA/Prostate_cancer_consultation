@@ -62,7 +62,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth import get_current_user
 from db import get_db
 from deid import unhash_patient_sid, unhash_doctor_num
-from redcap_mapping import resolve_record_id
+from redcap_mapping import record_exists, resolve_record_id
 from patient_lookup import resolve_patient_summary_file
 from models import PatientSurveySubmissionLog
 
@@ -389,15 +389,31 @@ async def import_to_redcap(submission: SurveySubmission, timestamp: str) -> dict
 
     print("[CONFIG] [OK] REDCap is enabled")
 
-    # Un-hash the composite speaker to its study SID and use it as the REDCap
-    # record_id (record_id == SID; the coordinator names each record after the SID).
-    # A missing record_id means the speaker had no parseable SID — do NOT push;
-    # the caller records it as pending.
+    # Un-hash the composite speaker to its study SID, then take the numeric part
+    # as the REDCap record_id (SID_22 -> "22"). A missing record_id means the
+    # speaker had no parseable SID — do NOT push; the caller records it as pending.
     sid = unhash_patient_sid(submission.speaker)
     record_id = await resolve_record_id(sid)
     if not record_id:
         return {"success": False, "record_id": None,
                 "error": f"No study SID for speaker {submission.speaker!r}"}
+
+    # Records are created by hand in REDCap ("Add new record"). Attribution may
+    # only land on one that already exists, so confirm the match before importing:
+    # with forceAutoNumber=false an import of an unknown id would CREATE a shadow
+    # record instead of failing, and the submission would look synced.
+    try:
+        exists = await record_exists(record_id)
+    except Exception as e:  # noqa: BLE001 - a failed check cannot prove existence
+        logger.error("REDCap record lookup failed (record_id=%s): %s",
+                     record_id, e, exc_info=True)
+        return {"success": False, "record_id": record_id,
+                "error": f"Could not verify REDCap record_id {record_id!r}: {e}"}
+    if not exists:
+        return {"success": False, "record_id": record_id,
+                "error": (f"No matching REDCap record_id {record_id!r} for study "
+                          f"{sid!r} — create the record in REDCap first.")}
+
     survey_type = submission.survey_type
 
     # Step 1: Get field mapping

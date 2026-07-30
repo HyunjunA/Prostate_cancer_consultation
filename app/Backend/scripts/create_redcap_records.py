@@ -23,6 +23,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import List
@@ -33,6 +34,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from core.settings import get_settings  # noqa: E402
+from redcap_mapping import to_record_id  # noqa: E402
 
 # Reuse the REDCap I/O helpers rather than reimplementing them. Both are pure
 # functions; importing the module only manipulates sys.path.
@@ -45,19 +47,23 @@ from seed_redcap_record_ids import (  # noqa: E402
 def parse_record_ids(raw: str) -> List[str]:
     """Split a comma-separated record_id argument into a clean, ordered list.
 
-    Whitespace around each id is stripped, empty entries are dropped, and duplicates
-    are removed while preserving the order the caller wrote them in.
+    Each entry is normalised to the REDCap record_id via
+    ``redcap_mapping.to_record_id`` (``"SID_22"`` -> ``"22"``), so the ids written
+    here match the ones the sync path attributes submissions to. Whitespace is
+    stripped, entries carrying no digits are dropped, and duplicates are removed
+    while preserving the order the caller wrote them in.
 
     Args:
         raw: The raw ``--record-ids`` value, e.g. ``"SID_22, SID_24"``.
 
     Returns:
-        The deduplicated record_ids, in input order. Empty if nothing usable was given.
+        The deduplicated numeric record_ids, in input order. Empty if nothing
+        usable was given.
     """
     seen: set[str] = set()
     record_ids: List[str] = []
     for token in raw.split(","):
-        rid = token.strip()
+        rid = to_record_id(token.strip())
         if rid and rid not in seen:
             seen.add(rid)
             record_ids.append(rid)
@@ -94,6 +100,9 @@ def main() -> int:
     already = [r for r in record_ids if r in existing]
     print(f"already in REDCap ({len(already)}): {', '.join(already) or '-'}")
     print(f"to create/new     ({len(new)}): {', '.join(new) or '-'}")
+    # Show the exact records that would be written, so a dry-run proves the ids
+    # were normalised (SID_22 -> "22") before anything reaches REDCap.
+    print("payload           :", json.dumps([{"record_id": r} for r in record_ids]))
 
     if not args.commit:
         print("\nDRY-RUN — no write made. Re-run with --commit to write to REDCap.")

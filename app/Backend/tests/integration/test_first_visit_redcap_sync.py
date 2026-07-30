@@ -73,11 +73,21 @@ def disable_redcap(monkeypatch):
 @pytest.fixture(autouse=True)
 def _default_mapping(monkeypatch):
     """Resolve every SID to REDCap record_id '3' by default — a fixed stub so the
-    tests assert against a known record_id without depending on the SID value."""
+    tests assert against a known record_id without depending on the SID value.
+
+    Also stubs the pre-flight existence check to True: records are created by hand
+    in REDCap, and these tests cover what gets posted for a subject that IS there.
+    """
     async def _resolve(_sid):
         return "3"
+
+    async def _exists(_record_id):
+        return True
+
     monkeypatch.setattr("routes_patient.resolve_record_id", _resolve)
     monkeypatch.setattr("routes_surveys.resolve_record_id", _resolve)
+    monkeypatch.setattr("routes_patient.record_exists", _exists)
+    monkeypatch.setattr("routes_surveys.record_exists", _exists)
 
 
 @pytest.fixture
@@ -86,6 +96,14 @@ def unmapped(monkeypatch):
     async def _resolve(_sid):
         return None
     monkeypatch.setattr("routes_patient.resolve_record_id", _resolve)
+
+
+@pytest.fixture
+def unmatched_record(monkeypatch):
+    """Force record_exists -> False (no such record_id in REDCap)."""
+    async def _exists(_record_id):
+        return False
+    monkeypatch.setattr("routes_patient.record_exists", _exists)
 
 
 @pytest_asyncio.fixture
@@ -373,6 +391,28 @@ async def test_unmapped_sid_is_pending(client, patient_row, api_headers, enable_
     assert row.redcap_synced is False
     assert row.redcap_record_id is None
     assert "No study SID" in (row.redcap_error or "")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@respx.mock(assert_all_called=False)
+async def test_unmatched_record_id_is_reported_not_created(
+    client, patient_row, api_headers, enable_redcap, unmatched_record, db
+):
+    # The coordinator creates records by hand in REDCap. When the resolved id is not
+    # there, the submission must NOT be imported (an import would create a shadow
+    # record) — it is reported as unmatched on the row instead.
+    route = respx.post(FAKE_REDCAP_URL).mock(return_value=httpx.Response(200, json={"count": 1}))
+
+    resp = await client.put(URL_PUT, headers=api_headers, json=_body(
+        "cp", [{"question_id": "cp_timeline", "field": "timeline", "value": "Over next 5 years"}]))
+
+    assert resp.status_code == 200, resp.text  # the DB write still succeeds
+    assert not route.called                    # nothing pushed to REDCap
+    row = await _fetch_risk2_row(db)
+    assert row.redcap_synced is False
+    assert row.redcap_record_id == "3"         # what we looked for, for the retry UI
+    assert "No matching REDCap record_id" in (row.redcap_error or "")
 
 
 @pytest.mark.integration
