@@ -39,12 +39,13 @@ services:
       dockerfile: Dockerfile
     container_name: prostatecancer-webapp-native
     env_file:
-      - app/Webapp/.env       # NEXT_PUBLIC_API_URL=http://host.docker.internal:18000
+      - app/Webapp/.env       # NEXT_PUBLIC_API_URL=http://host.docker.internal:18001
     environment:
       NODE_ENV: production
       # Server-only env vars (host.docker.internal lets the container reach
       # the native uvicorn backend on the Mac/Linux host).
-      BACKEND_URL: http://host.docker.internal:18000
+      # Host-specific (caire-server): backend is on 18001; 18000 would 502.
+      BACKEND_URL: http://host.docker.internal:18001
       # API_KEY comes from env_file (app/Webapp/.env) — NOT a ${API_KEY} shell
       # interpolation, which injected an EMPTY key whenever `docker compose up`
       # was run without first sourcing app/Backend/.env (blank dashboard).
@@ -52,9 +53,15 @@ services:
       # Linux: docker doesn't auto-resolve host.docker.internal — declare it.
       - "host.docker.internal:host-gateway"
     ports:
-      - "127.0.0.1:3001:3000"        # webapp directly on 3001 (no nginx in native mode)
+      # webapp directly on 3001 (no nginx in native mode).
+      # LAN-exposed on user request (2026-07-29): http://10.226.8.205:3001
+      # WARNING: this serves PHI over plain HTTP to the whole LAN. Revert to
+      # "127.0.0.1:3001:3000" (+ SSH tunnel) when the test window is over.
+      - "0.0.0.0:3001:3000"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
+      # 127.0.0.1, not localhost: in-container localhost resolves to ::1 but
+      # Next.js listens on IPv4 only -> false "unhealthy".
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 10
