@@ -455,29 +455,39 @@ export default function Home() {
       }
     };
 
-    const loadProcessing = async () => {
+    let prevProcessing = 0;
+
+    const loadProcessing = async (): Promise<number> => {
       try {
         const data = await fetch(`/api/backend/patient/processing-count`).then((r) => r.json());
-        if (!cancelled) setProcessingCount(data.processing || 0);
+        const count = data.processing || 0;
+        if (!cancelled) setProcessingCount(count);
+        return count;
       } catch {
         /* non-fatal: just don't show the processing hint */
+        return prevProcessing;
       }
     };
 
-    // Initial load. If the list is empty, poll every 5s: re-check the files (so a
-    // just-finished transcript appears on its own) and the processing count (so the
-    // user sees work is in flight). Stop polling once a patient shows up.
-    loadFiles(true).then((files) => {
-      if (cancelled || files.length > 0) return;
-      loadProcessing();
+    // Initial load, then poll every 5s for as long as this screen is open. The
+    // count must keep updating even once patients are listed — uploads happen far
+    // more often with records already on the screen than on an empty one, and the
+    // banner is the only signal that work is in flight. A transcript leaves the
+    // drop folder when it finishes, so a DROP in the count is the cue to reload
+    // the list (it now has one more patient); an empty list keeps reloading so the
+    // very first transcript still appears on its own.
+    loadFiles(true).then(async (files) => {
+      if (cancelled) return;
+      let listEmpty = files.length === 0;
+      prevProcessing = await loadProcessing();
       interval = setInterval(async () => {
-        const f = await loadFiles(false);
-        if (f.length > 0) {
-          if (interval) { clearInterval(interval); interval = null; }
-          setProcessingCount(0);
-        } else {
-          loadProcessing();
+        if (cancelled) return;
+        const count = await loadProcessing();
+        if (count < prevProcessing || listEmpty) {
+          const f = await loadFiles(false);
+          listEmpty = f.length === 0;
         }
+        prevProcessing = count;
       }, 5000);
     });
 
@@ -582,6 +592,27 @@ export default function Home() {
               summary) or Total Survey (the full questionnaire flow).
             </p>
           </div>
+
+          {/* Work in flight. Only shown alongside an existing list — the empty
+              state below says the same thing in place of "No patient records yet". */}
+          {processingCount > 0 && patientList.length > 0 && (
+            <div className={`flex items-center gap-3 mb-4 px-4 py-3 rounded-lg border text-sm ${
+              isDarkMode
+                ? "border-slate-800 bg-slate-900/50 text-slate-300"
+                : "border-slate-200 bg-slate-50 text-slate-600"
+            }`}>
+              <svg className="animate-spin h-4 w-4 shrink-0" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span>
+                {processingCount} transcript{processingCount !== 1 ? "s" : ""} processing…{" "}
+                <span className="opacity-70">
+                  They&rsquo;ll be added to the list automatically when done.
+                </span>
+              </span>
+            </div>
+          )}
 
           {/* Patient List */}
           {loadingPatients ? (
