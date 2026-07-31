@@ -271,10 +271,13 @@ async def get_dashboard_stats(
     # we need to compose the three columns into one identity per
     # sentence. concat() with ':' separator gives a unique tag.
     print("   Querying doctor interface stats...")
+    distinct_sentences = select(
+        SentencePrediction.patient_id,
+        SentencePrediction.utterance_index,
+        SentencePrediction.sentence_in_utterance,
+    ).distinct().subquery()
     doctor_sentences_count = (await db.execute(
-        select(func.count(func.distinct(
-            func.concat(SentencePrediction.patient_id, ':', SentencePrediction.utterance_index, ':', SentencePrediction.sentence_in_utterance)
-        )))
+        select(func.count()).select_from(distinct_sentences)
     )).scalar_one()
     print(f"   - doctor_sentences_count: {doctor_sentences_count}")
 

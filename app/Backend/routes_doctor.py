@@ -440,23 +440,26 @@ async def get_doctor_rewrite_stats(
         total_stmt = total_stmt.where(f)
     total_rewrites = (await db.execute(total_stmt)).scalar() or 0
 
-    # Unique sentences rewritten
-    unique_stmt = select(
-        func.count(func.distinct(
-            func.concat(DoctorRewriteLog.file, ':', DoctorRewriteLog.i, ':', DoctorRewriteLog.i2)
-        ))
-    ).select_from(DoctorRewriteLog)
+    # Unique sentences rewritten. The PK is (file, i, i2, time), so re-editing the
+    # same sentence adds a row — the distinct is what separates "rewrite attempts"
+    # from "sentences touched". Counting rows of a DISTINCT subquery keeps this
+    # standard SQL; COUNT(DISTINCT a, b, c) is not portable.
+    unique_sub = select(
+        DoctorRewriteLog.file, DoctorRewriteLog.i, DoctorRewriteLog.i2
+    ).distinct()
     for f in base_filter:
-        unique_stmt = unique_stmt.where(f)
-    unique_sentences = (await db.execute(unique_stmt)).scalar() or 0
+        unique_sub = unique_sub.where(f)
+    unique_sentences = (await db.execute(
+        select(func.count()).select_from(unique_sub.subquery())
+    )).scalar() or 0
 
-    # Per-file breakdown
+    # Per-file breakdown. Split in two: the plain aggregates cannot share a query
+    # with a multi-column distinct count (the DISTINCT subquery collapses exactly
+    # the rows min/max/count need), so per-file unique counts are gathered
+    # separately and merged below.
     file_stmt = select(
         DoctorRewriteLog.file,
         func.count().label('rewrite_count'),
-        func.count(func.distinct(
-            func.concat(DoctorRewriteLog.i, ':', DoctorRewriteLog.i2)
-        )).label('unique_sentences'),
         func.min(DoctorRewriteLog.time).label('first_rewrite'),
         func.max(DoctorRewriteLog.time).label('last_rewrite'),
     ).group_by(DoctorRewriteLog.file)
@@ -466,6 +469,16 @@ async def get_doctor_rewrite_stats(
 
     file_results = (await db.execute(file_stmt)).all()
 
+    per_file_sub = select(
+        DoctorRewriteLog.file, DoctorRewriteLog.i, DoctorRewriteLog.i2
+    ).distinct()
+    for f in base_filter:
+        per_file_sub = per_file_sub.where(f)
+    per_file_sub = per_file_sub.subquery()
+    unique_by_file = dict((await db.execute(
+        select(per_file_sub.c.file, func.count()).group_by(per_file_sub.c.file)
+    )).all())
+
     return {
         "total_rewrites": total_rewrites,
         "unique_sentences_rewritten": unique_sentences,
@@ -473,7 +486,7 @@ async def get_doctor_rewrite_stats(
             {
                 "file": r.file,
                 "rewrite_count": r.rewrite_count,
-                "unique_sentences": r.unique_sentences,
+                "unique_sentences": unique_by_file.get(r.file, 0),
                 "first_rewrite": r.first_rewrite.isoformat() if r.first_rewrite else None,
                 "last_rewrite": r.last_rewrite.isoformat() if r.last_rewrite else None,
             }
@@ -495,21 +508,36 @@ async def get_doctor_files(
     /scores/average, /scores/summary/{file}, /scores/trajectory, and the patient
     view convention (frontend ?fileid=... also uses source_filename).
     """
-    stmt = (
+    # sentence_prediction holds one row per (sentence x model), so the same sentence
+    # appears once per NLP model — count distinct sentences, not rows. Done as a
+    # DISTINCT subquery that is then grouped: COUNT(DISTINCT a, b) over several
+    # columns is not portable SQL, and building a text key instead would need casts
+    # and would change NULL handling.
+    distinct_sentences = (
         select(
             TranscriptAnalysisLog.source_filename.label("file"),
-            SentencePrediction.speaker,
-            func.count(func.distinct(
-                func.concat(SentencePrediction.utterance_index, ':', SentencePrediction.sentence_in_utterance)
-            )).label("sentence_count"),
+            SentencePrediction.speaker.label("speaker"),
+            SentencePrediction.utterance_index,
+            SentencePrediction.sentence_in_utterance,
         )
         .join(TranscriptAnalysisLog, SentencePrediction.analysis_id == TranscriptAnalysisLog.id)
-        .group_by(TranscriptAnalysisLog.source_filename, SentencePrediction.speaker)
-        .order_by(TranscriptAnalysisLog.source_filename)
-        .limit(limit)
+        .distinct()
     )
     if doctor_id:
-        stmt = stmt.where(TranscriptAnalysisLog.doctor_id == doctor_id)
+        distinct_sentences = distinct_sentences.where(
+            TranscriptAnalysisLog.doctor_id == doctor_id
+        )
+    sentences_sub = distinct_sentences.subquery()
+    stmt = (
+        select(
+            sentences_sub.c.file,
+            sentences_sub.c.speaker,
+            func.count().label("sentence_count"),
+        )
+        .group_by(sentences_sub.c.file, sentences_sub.c.speaker)
+        .order_by(sentences_sub.c.file)
+        .limit(limit)
+    )
     rows = (await db.execute(stmt)).all()
 
     # Per-file consult date. NOTE: there is no real visit date in the schema yet;

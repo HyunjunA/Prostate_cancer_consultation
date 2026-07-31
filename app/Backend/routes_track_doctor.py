@@ -39,6 +39,7 @@ from auth import get_current_user
 from auth.admin_session import require_admin_user
 from db import get_db
 from models import DoctorBehavior
+from sql_helpers import string_agg
 
 logger = logging.getLogger(__name__)
 
@@ -165,11 +166,11 @@ async def list_sessions(
     # for speaker; null → patient.fileName after patient_select for file).
     # If we grouped by (session_id, speaker, file) we would get multiple
     # rows for the same session, which the admin UI cannot render cleanly.
-    files_agg = func.string_agg(
-        func.distinct(func.coalesce(DoctorBehavior.file, "")), ","
+    files_agg = string_agg(
+        func.coalesce(DoctorBehavior.file, ""), ",", distinct=True
     ).label("files_csv")
-    speakers_agg = func.string_agg(
-        func.distinct(DoctorBehavior.speaker), ","
+    speakers_agg = string_agg(
+        DoctorBehavior.speaker, ",", distinct=True
     ).label("speakers_csv")
     stmt = select(
         DoctorBehavior.session_id,
