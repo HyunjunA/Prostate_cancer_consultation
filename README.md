@@ -8,6 +8,20 @@ Developed at Cedars-Sinai Medical Center as part of the R01 Prostate Cancer Comm
 
 ---
 
+## ⛔ NOT FOR PRODUCTION — RESEARCH & TESTING USE ONLY
+
+> **THIS IS A RESEARCH PROTOTYPE, NOT A PRODUCTION-GRADE APPLICATION.**
+>
+> This software is built and maintained **solely for internal testing and academic research** within the R01 Prostate Cancer Communication Study at Cedars-Sinai Medical Center. It is provided **as-is, for evaluation purposes only.**
+>
+> **⛔ DO NOT deploy or use this software in any production, clinical, diagnostic, or patient-facing care setting — under any circumstances.**
+>
+> It has **not** undergone the security hardening, data-privacy review, clinical validation, or regulatory clearance (e.g., HIPAA, FDA, IRB-approved clinical deployment) that production or clinical use would require. All outputs — NLP probabilities, AI-generated summaries, risk-communication text, and scores — are **experimental and unvalidated**, and **MUST NOT be used to inform, guide, or replace any real clinical decision, diagnosis, treatment, or patient care.**
+>
+> Use is restricted to **authorized research-team members operating in a controlled, non-clinical test environment.** Any other use is unauthorized and at the user's sole risk.
+
+---
+
 ## Native Deployment
 
 > ⚠️ **All deployment instructions live in [`docs/setup/DEPLOYMENT_NATIVE.md`](docs/setup/DEPLOYMENT_NATIVE.md).** That document is the canonical, step-by-step procedure: full prerequisites (Docker Desktop, Git LFS, NLP image archive, Azure OpenAI credentials), per-step env-file edits for both repos, Phase 1 startup, Phase 2 pipeline invocation, and a troubleshooting table. **Always defer to that document.** Inline command snippets in older copies of this README, in screenshots, or in chat transcripts drift from reality and have misled deployers in the past — they have been removed from this README on purpose.
