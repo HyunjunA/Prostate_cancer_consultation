@@ -7,9 +7,16 @@
  * by the backend (de-id happens in the app, not on the server). Access is gated by
  * src/middleware.ts (admin_session cookie); the backend re-checks admin on
  * POST /api/admin/upload-transcript.
+ *
+ * Duplicate warning: a name that was already processed into the DB is flagged up
+ * front via GET /api/admin/upload-precheck, and uploading it needs an explicit
+ * confirmation. Without that warning a duplicate is a silent no-op — the pipeline
+ * watcher dedupes drop-folder files by path in an in-memory set, so it skips the
+ * file with no log line and no error and the file just sits in the folder.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import DuplicateUploadDialog from "@/components/DuplicateUploadDialog";
 
 // Fast client-side checks. Extension gate, plus a "does this look de-identified"
 // gate so a raw transcript is flagged with the reason up front instead of a neutral
@@ -20,8 +27,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 const ALLOWED_EXT = /\.(csv|xlsx|xls)$/i;
 const DEID_NAME_RX = /^[A-Z0-9]+_[A-Z0-9]+(_[A-Z0-9]+)?\.(csv|xlsx)$/i;
 
-type Status = "pending" | "invalid" | "rejected" | "uploading" | "done" | "error";
+type Status =
+  | "pending"
+  | "invalid"
+  | "rejected"
+  | "duplicate"
+  | "uploading"
+  | "done"
+  | "error";
+
 interface Item {
+  // `uid` is a stable client-side key: the async precheck patches an item after the
+  // list may already have grown, so a list index would point at the wrong row.
+  uid: number;
   // Always present. `file` is only set for a freshly-picked file this session; items
   // rebuilt from the server's upload log on refresh have a name but no File object
   // (the browser cannot restore a File), and are already "done"/"error" so they are
@@ -32,11 +50,30 @@ interface Item {
   message?: string;
 }
 
+interface UploadLogRow {
+  queued?: string;
+  status?: string;
+  message?: string;
+}
+
+interface PrecheckResult {
+  duplicate: boolean;
+  analysis_id?: number;
+  analyzed_at?: string | null;
+}
+
+// Statuses the Upload button acts on. "duplicate" is included on purpose — it is a
+// warning, not a block, and re-processing is legitimate (e.g. after a DB reset).
+const UPLOADABLE: Status[] = ["pending", "error", "duplicate"];
+
 export default function AdminUploadPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const uidRef = useRef(0);
+  const nextUid = () => ++uidRef.current;
 
   // On load, rebuild the list from the server's upload history so a refresh does not
   // wipe it. These carry only the de-identified queued name (no real study id).
@@ -44,9 +81,10 @@ export default function AdminUploadPage() {
     let cancelled = false;
     fetch("/api/admin/upload-log")
       .then((r) => (r.ok ? r.json() : { uploads: [] }))
-      .then((data) => {
+      .then((data: { uploads?: UploadLogRow[] }) => {
         if (cancelled) return;
-        const history: Item[] = (data.uploads || []).map((u: any) => ({
+        const history: Item[] = (data.uploads || []).map((u) => ({
+          uid: nextUid(),
           name: u.queued || "(unknown)",
           status: u.status === "error" ? "error" : "done",
           message: u.message || (u.status === "error" ? "Upload failed." : "Queued for processing."),
@@ -57,10 +95,34 @@ export default function AdminUploadPage() {
     return () => { cancelled = true; };
   }, []);
 
+  const setByUid = (uid: number, patch: Partial<Item>) =>
+    setItems((prev) => prev.map((x) => (x.uid === uid ? { ...x, ...patch } : x)));
+
+  // Ask the backend whether this de-identified name already has results in the DB.
+  // Best-effort: a failed precheck leaves the item "pending" so the upload still
+  // works — the warning is a convenience, not a gate.
+  const precheck = useCallback((uid: number, name: string) => {
+    fetch(`/api/backend/admin/upload-precheck?name=${encodeURIComponent(name)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: PrecheckResult | null) => {
+        if (!d?.duplicate) return;
+        const when = d.analyzed_at ? new Date(d.analyzed_at).toLocaleString() : "earlier";
+        setByUid(uid, {
+          status: "duplicate",
+          message:
+            `Already processed ${when}` +
+            (d.analysis_id ? ` (analysis #${d.analysis_id})` : "") +
+            ". Uploading again re-runs the pipeline.",
+        });
+      })
+      .catch(() => { /* precheck is best-effort */ });
+  }, []);
+
   const addFiles = useCallback((files: FileList | File[]) => {
     const next: Item[] = Array.from(files).map((file) => {
       if (!ALLOWED_EXT.test(file.name)) {
         return {
+          uid: nextUid(),
           name: file.name,
           file,
           status: "invalid" as Status,
@@ -72,6 +134,7 @@ export default function AdminUploadPage() {
       // neutral "pending" that only fails when the server rejects it on upload.
       if (!DEID_NAME_RX.test(file.name)) {
         return {
+          uid: nextUid(),
           name: file.name,
           file,
           status: "rejected" as Status,
@@ -80,23 +143,23 @@ export default function AdminUploadPage() {
             "app first, then upload the file from its ready_to_upload folder.",
         };
       }
-      return { name: file.name, file, status: "pending" as Status };
+      return { uid: nextUid(), name: file.name, file, status: "pending" as Status };
     });
     setItems((prev) => [...prev, ...next]);
-  }, []);
+    next.forEach((it) => {
+      if (it.status === "pending") precheck(it.uid, it.name);
+    });
+  }, [precheck]);
 
-  const setAt = (i: number, patch: Partial<Item>) =>
-    setItems((prev) => prev.map((x, j) => (j === i ? { ...x, ...patch } : x)));
-
-  const uploadAll = async () => {
+  const uploadAll = async (includeDuplicates: boolean) => {
     setBusy(true);
     const snapshot = items;
-    for (let i = 0; i < snapshot.length; i++) {
-      const it = snapshot[i];
+    for (const it of snapshot) {
       // Skip already-done, client-rejected (raw / wrong type), and any history item
       // rebuilt without a File (browsers can't restore a File — not re-uploadable).
-      if (it.status === "done" || it.status === "invalid" || it.status === "rejected" || !it.file) continue;
-      setAt(i, { status: "uploading", message: undefined });
+      if (!UPLOADABLE.includes(it.status) || !it.file) continue;
+      if (it.status === "duplicate" && !includeDuplicates) continue;
+      setByUid(it.uid, { status: "uploading", message: undefined });
       try {
         const fd = new FormData();
         fd.append("file", it.file, it.file.name);
@@ -107,15 +170,27 @@ export default function AdminUploadPage() {
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
           const message = `Queued for processing: ${data.queued}${data.replaced ? " (replaced existing)" : ""}`;
-          setAt(i, { status: "done", message });
+          setByUid(it.uid, { status: "done", message });
         } else {
-          setAt(i, { status: "error", message: data.detail || `Upload failed (${res.status}).` });
+          setByUid(it.uid, { status: "error", message: data.detail || `Upload failed (${res.status}).` });
         }
       } catch {
-        setAt(i, { status: "error", message: "Network error — is the backend reachable?" });
+        setByUid(it.uid, { status: "error", message: "Network error — is the backend reachable?" });
       }
     }
     setBusy(false);
+  };
+
+  const duplicates = items.filter((it) => it.status === "duplicate" && it.file);
+
+  // Warn before sending a name the pipeline has already processed; otherwise upload
+  // straight away.
+  const onUploadClick = () => {
+    if (duplicates.length > 0) {
+      setConfirmOpen(true);
+      return;
+    }
+    void uploadAll(false);
   };
 
   const onDrop = (e: React.DragEvent) => {
@@ -128,11 +203,12 @@ export default function AdminUploadPage() {
     pending: "bg-slate-100 text-slate-600",
     invalid: "bg-amber-100 text-amber-700",
     rejected: "bg-rose-100 text-rose-700",
+    duplicate: "bg-amber-100 text-amber-800",
     uploading: "bg-blue-100 text-blue-700",
     done: "bg-emerald-100 text-emerald-700",
     error: "bg-rose-100 text-rose-700",
   };
-  const hasUploadable = items.some((it) => it.status === "pending" || it.status === "error");
+  const hasUploadable = items.some((it) => UPLOADABLE.includes(it.status) && it.file);
 
   return (
     <main className="max-w-3xl mx-auto px-6 py-10">
@@ -175,9 +251,9 @@ export default function AdminUploadPage() {
       {items.length > 0 && (
         <>
           <ul className="mt-6 space-y-2">
-            {items.map((it, i) => (
+            {items.map((it) => (
               <li
-                key={i}
+                key={it.uid}
                 className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3"
               >
                 <div className="min-w-0">
@@ -194,7 +270,7 @@ export default function AdminUploadPage() {
             <button
               type="button"
               disabled={busy || !hasUploadable}
-              onClick={uploadAll}
+              onClick={onUploadClick}
               className="rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               {busy ? "Uploading…" : "Upload"}
@@ -210,6 +286,20 @@ export default function AdminUploadPage() {
           </div>
         </>
       )}
+
+      <DuplicateUploadDialog
+        open={confirmOpen}
+        duplicates={duplicates.map((d) => ({ name: d.name, message: d.message }))}
+        onCancel={() => setConfirmOpen(false)}
+        onSkipDuplicates={() => {
+          setConfirmOpen(false);
+          void uploadAll(false);
+        }}
+        onReprocess={() => {
+          setConfirmOpen(false);
+          void uploadAll(true);
+        }}
+      />
     </main>
   );
 }

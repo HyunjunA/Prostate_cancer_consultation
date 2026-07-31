@@ -38,7 +38,7 @@ from auth.admin_session import require_admin_user
 from auth.base import AuthUser
 from core.settings import get_settings
 from db import get_db
-from models import AdminUploadLog
+from models import AdminUploadLog, TranscriptAnalysisLog
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin", tags=["Admin Upload"])
@@ -165,6 +165,47 @@ async def _do_upload(file: UploadFile, db: AsyncSession, uploader) -> dict:
                 "Transcript Preparation app first, then upload the file it creates "
                 "in the ready_to_upload folder."),
     )
+
+
+@router.get("/upload-precheck", dependencies=[Depends(require_admin_user)])
+async def upload_precheck(
+    name: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Report whether this de-identified filename has already been processed.
+
+    Lets /admin/upload warn the coordinator BEFORE any bytes are sent. Without it a
+    re-upload of an already-processed name looks like it worked — the file lands in
+    the drop folder, but the pipeline watcher dedupes by path in an in-memory set
+    (utils/file_manager.watch_input_folder) and skips it with no log line, no error,
+    and no move to the error folder, so the file just sits there.
+
+    Match key is transcript_analysis_log.source_filename — the same de-identified
+    name the drop folder receives — so "already processed" means "results are in the
+    DB", which is exactly what the dashboard shows. A duplicate is reported, never
+    blocked: re-running is legitimate (e.g. after the DB was cleared).
+    """
+    safe = Path(name or "").name  # strip path components
+    if not safe:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="name is required.")
+    stmt = (
+        select(TranscriptAnalysisLog)
+        .where(TranscriptAnalysisLog.source_filename == safe)
+        .order_by(TranscriptAnalysisLog.id.desc())
+        .limit(1)
+    )
+    row = (await db.execute(stmt)).scalars().first()
+    if row is None:
+        return {"name": safe, "duplicate": False}
+    return {
+        "name": safe,
+        "duplicate": True,
+        "analysis_id": row.id,
+        "patient_id": row.patient_id,
+        "processed": bool(row.processed),
+        "analyzed_at": row.analyzed_at.isoformat() if row.analyzed_at else None,
+    }
 
 
 @router.get("/upload-log", dependencies=[Depends(require_admin_user)])
