@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import httpx
 import pytest
 import respx
+from sqlalchemy.exc import IntegrityError
 
 import integrity_checks as ic
 from models import (
@@ -31,22 +32,38 @@ async def _add_summary(db, file, speaker):
 
 # ── C1 ──────────────────────────────────────────────────────────────────────
 class TestDbIntegrity:
-    async def test_orphan_and_empty_answers_flagged(self, db):
-        # good row (has parent + answers)
+    async def test_empty_answers_flagged(self, db):
         await _add_summary(db, "13511_13571_07022026.csv", "Patient_13511_13571_07022026")
+        # good row (has answers)
         db.add(PatientSurveySubmissionLog(
             file="13511_13571_07022026.csv", speaker="Patient_13511_13571_07022026",
             survey_type="sdm", answers={"q1": "yes"}))
-        # orphan row (no patient_summary) + empty answers
+        # broken row: submitted with nothing in it
         db.add(PatientSurveySubmissionLog(
-            file="orphan.csv", speaker="Patient_99999_88888_07022026",
+            file="13511_13571_07022026.csv", speaker="Patient_13511_13571_07022026",
             survey_type="sdm", answers={}))
         await db.commit()
 
         results = await ic.check_db_integrity(db)
-        assert _by_name(results, "survey_orphan_rows").count == 1
         assert _by_name(results, "survey_empty_answers").count == 1
+        assert _by_name(results, "survey_orphan_rows").count == 0
         assert _by_name(results, "survey_bad_type").status == "pass"
+
+    async def test_orphan_survey_row_is_rejected_by_the_database(self, db):
+        """The survey_orphan_rows check can only ever surface legacy rows.
+
+        patient_survey_submission_log carries a (file, speaker) foreign key into
+        patient_summary, so the database refuses to create a new orphan at all.
+        This used to be tested by inserting one and asserting the checker found
+        it — which only worked because the suite ran on SQLite, where foreign
+        keys are not enforced.
+        """
+        db.add(PatientSurveySubmissionLog(
+            file="orphan.csv", speaker="Patient_99999_88888_07022026",
+            survey_type="sdm", answers={}))
+        with pytest.raises(IntegrityError):
+            await db.commit()
+        await db.rollback()
 
     async def test_bad_survey_type_flagged(self, db):
         await _add_summary(db, "f.csv", "Patient_13511_13571_07022026")

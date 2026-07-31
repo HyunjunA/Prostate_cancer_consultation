@@ -164,6 +164,10 @@ The `auth/` module is wired in but the login feature was dropped on 2026-05-07; 
 
 `pytest --collect-only` reports **562 tests**. Default run for local dev: `pytest -m "not e2e"` (skips load + e2e specs).
 
+**The suite needs a PostgreSQL** — the same engine production runs on. Point it at one with `TEST_DATABASE_URL`; the default is a `prostatecancer_test` database beside the app's own, created on first run. The database name must end in `_test` or the suite refuses to start, so a stray run cannot write into live data. Each test runs in a transaction that is rolled back, so the schema is created once per session and every test still starts from an empty database.
+
+It used to run on in-memory SQLite, which needed no database but silently ignored foreign keys and column lengths — routes using PostgreSQL-only SQL could not be tested at all, and a green run did not prove production behaviour.
+
 ---
 
 ## Roadmap

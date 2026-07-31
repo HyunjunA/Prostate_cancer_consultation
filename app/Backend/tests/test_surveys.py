@@ -44,8 +44,15 @@ def _survey_payload(
 
 
 async def _seed_submissions(db, count: int = 1, **kwargs):
-    """Insert survey submissions into the DB and return the list of ORM objects."""
+    """Insert survey submissions into the DB and return the list of ORM objects.
+
+    Each submission needs its patient_summary parent: the table carries a
+    (file, speaker) foreign key into it, so a submission without one cannot
+    exist — the endpoint resolves that parent before attaching a survey. Seed it
+    here rather than in every caller.
+    """
     records = []
+    parents: set = set()
     for idx in range(count):
         defaults = {
             "file": kwargs.get("file", f"file-{idx}.xlsx"),
@@ -53,6 +60,15 @@ async def _seed_submissions(db, count: int = 1, **kwargs):
             "survey_type": kwargs.get("survey_type", "baseline"),
             "answers": kwargs.get("answers", '{"q1": "a"}'),
         }
+        parent_key = (defaults["file"], defaults["speaker"])
+        if parent_key not in parents:
+            parents.add(parent_key)
+            # merge, not add: some test classes seed the default (file, speaker)
+            # parent themselves via an autouse fixture, and a second add() of the
+            # same primary key would collide.
+            await db.merge(TestDataFactory.patient_summary(
+                file=defaults["file"], speaker=defaults["speaker"]
+            ))
         # Allow per-item overrides by making file unique when not explicitly set
         rec = TestDataFactory.survey_submission(**defaults)
         db.add(rec)

@@ -17,6 +17,8 @@ Strategy:
 """
 
 import json
+from datetime import datetime, timezone
+
 import pytest
 import pandas as pd
 from unittest.mock import AsyncMock, MagicMock
@@ -123,19 +125,19 @@ class TestTopByModelToJsonable:
 class TestFileAlreadyProcessed:
     """file_already_processed() returns True if sentence_prediction rows exist for a filename."""
 
-    async def test_returns_false_for_unknown_filename(self, engine):
+    async def test_returns_false_for_unknown_filename(self, session_factory):
         from persistence import file_already_processed
-        Session = async_sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
+        Session = session_factory
         result = await file_already_processed(Session, "nonexistent-file.xlsx")
         assert result is False
 
-    async def test_returns_false_for_empty_string_filename(self, engine):
+    async def test_returns_false_for_empty_string_filename(self, session_factory):
         from persistence import file_already_processed
-        Session = async_sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
+        Session = session_factory
         result = await file_already_processed(Session, "")
         assert result is False
 
-    async def test_returns_true_when_predictions_exist(self, engine, db):
+    async def test_returns_true_when_predictions_exist(self, session_factory, db):
         """If sentence_prediction rows exist for a patient_id, returns True."""
         from persistence import file_already_processed
 
@@ -151,11 +153,11 @@ class TestFileAlreadyProcessed:
         db.add(pred)
         await db.commit()
 
-        Session = async_sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
+        Session = session_factory
         result = await file_already_processed(Session, "file-check.xlsx")
         assert result is True
 
-    async def test_different_filenames_are_independent(self, engine, db):
+    async def test_different_filenames_are_independent(self, session_factory, db):
         """Processing file A must not affect the check for file B."""
         from persistence import file_already_processed
 
@@ -166,7 +168,7 @@ class TestFileAlreadyProcessed:
         db.add(pred)
         await db.commit()
 
-        Session = async_sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
+        Session = session_factory
         assert await file_already_processed(Session, "file-a.xlsx") is True
         assert await file_already_processed(Session, "file-b.xlsx") is False
 
@@ -177,42 +179,48 @@ class TestFileAlreadyProcessed:
 class TestGetLatestAnalysisId:
     """get_latest_analysis_id() returns the most recent id or None."""
 
-    async def test_returns_none_for_unknown_patient(self, engine):
+    async def test_returns_none_for_unknown_patient(self, session_factory):
         from persistence import get_latest_analysis_id
-        Session = async_sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
+        Session = session_factory
         result = await get_latest_analysis_id(Session, "no-such-patient")
         assert result is None
 
-    async def test_returns_id_for_known_patient(self, engine, db):
+    async def test_returns_id_for_known_patient(self, session_factory, db):
         from persistence import get_latest_analysis_id
 
         analysis = TestDataFactory.transcript_analysis(patient_id="sid-latest")
         db.add(analysis)
         await db.commit()
 
-        Session = async_sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
+        Session = session_factory
         result = await get_latest_analysis_id(Session, "sid-latest")
         assert result == analysis.id
 
-    async def test_returns_most_recent_id_when_multiple_exist(self, engine, db):
+    async def test_returns_most_recent_id_when_multiple_exist(self, session_factory, db):
         """With two runs for the same patient, the newest id is returned."""
         from persistence import get_latest_analysis_id
 
+        # analyzed_at defaults to now(), which PostgreSQL evaluates once per
+        # TRANSACTION — both rows would share a timestamp here and the ordering
+        # would be undefined. Real runs happen in separate transactions minutes
+        # apart, so set the times explicitly to model that.
         a1 = TestDataFactory.transcript_analysis(patient_id="sid-multi")
+        a1.analyzed_at = datetime(2026, 7, 31, 9, 0, tzinfo=timezone.utc)
         a2 = TestDataFactory.transcript_analysis(patient_id="sid-multi")
+        a2.analyzed_at = datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc)
         db.add(a1)
         await db.flush()
         db.add(a2)
         await db.commit()
 
-        Session = async_sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
+        Session = session_factory
         result = await get_latest_analysis_id(Session, "sid-multi")
         # The latest analyzed_at should belong to a2 (inserted second)
         assert result == a2.id
 
-    async def test_returns_none_for_empty_string_patient(self, engine):
+    async def test_returns_none_for_empty_string_patient(self, session_factory):
         from persistence import get_latest_analysis_id
-        Session = async_sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
+        Session = session_factory
         result = await get_latest_analysis_id(Session, "")
         assert result is None
 

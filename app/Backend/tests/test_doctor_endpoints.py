@@ -13,7 +13,46 @@ Endpoints tested:
 
 from datetime import datetime, timezone, timedelta
 
+from sqlalchemy import select
+
+from models import TranscriptAnalysisLog
 from tests.factories import TestDataFactory
+
+
+async def _analysis_for(db, file: str) -> int:
+    """Analysis id for `file`, creating the parent row only once.
+
+    sentence_prediction.analysis_id is a foreign key into transcript_analysis_log,
+    so a sentence cannot exist without its analysis. Creating one per call would
+    inflate the distinct-file counts several endpoints report, hence the lookup.
+    """
+    existing = (await db.execute(
+        select(TranscriptAnalysisLog.id)
+        .where(TranscriptAnalysisLog.source_filename == file)
+    )).scalars().first()
+    if existing is not None:
+        return existing
+    return await _seed_analysis(db, file)
+
+
+async def _seed_sentences(db, file: str, count: int = 1, **kwargs):
+    """Seed `count` sentences for `file`, with the analysis parent they require."""
+    aid = await _analysis_for(db, file)
+    rows = TestDataFactory.doctor_sentence_set(
+        analysis_id=aid, file=file, count=count, **kwargs
+    )
+    db.add_all(rows)
+    await db.commit()
+    return rows
+
+
+async def _seed_sentence(db, file: str, **kwargs):
+    """Seed a single sentence for `file`, with the analysis parent it requires."""
+    aid = await _analysis_for(db, file)
+    row = TestDataFactory.doctor_sentence(analysis_id=aid, file=file, **kwargs)
+    db.add(row)
+    await db.commit()
+    return row
 
 
 async def _seed_analysis(db, file: str) -> int:
@@ -47,7 +86,7 @@ class TestGetDoctorSentences:
         aid = await _seed_analysis(db, "alpha.xlsx")
         sentences = TestDataFactory.doctor_sentence_set(
             analysis_id=aid, file="alpha.xlsx", count=3,
-            speaker="Interviewer", class_="Cancer Prognosis",
+            speaker="Interviewer", class_="cp",
         )
         db.add_all(sentences)
         await db.commit()
@@ -142,8 +181,7 @@ class TestGetDoctorRewrites:
 
     async def test_returns_rewrites_with_data(self, client, db, api_headers):
         # FK requires the parent sentence to exist first
-        db.add(TestDataFactory.doctor_sentence(file="rw.xlsx", i=1, i2=1))
-        await db.commit()
+        await _seed_sentence(db, "rw.xlsx", i=1, i2=1)
         db.add(TestDataFactory.doctor_rewrite(file="rw.xlsx", i=1, i2=1))
         await db.commit()
 
@@ -154,8 +192,7 @@ class TestGetDoctorRewrites:
 
     async def test_pagination_skip_and_limit(self, client, db, api_headers):
         # Create parent sentence
-        db.add(TestDataFactory.doctor_sentence(file="pg.xlsx", i=1, i2=1))
-        await db.commit()
+        await _seed_sentence(db, "pg.xlsx", i=1, i2=1)
 
         # Create 5 rewrites with distinct times
         base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -173,10 +210,8 @@ class TestGetDoctorRewrites:
         assert len(body["data"]) == 2
 
     async def test_filter_by_file(self, client, db, api_headers):
-        s1 = TestDataFactory.doctor_sentence(file="a.xlsx", i=1, i2=1)
-        s2 = TestDataFactory.doctor_sentence(file="b.xlsx", i=1, i2=1)
-        db.add_all([s1, s2])
-        await db.commit()
+        await _seed_sentence(db, "a.xlsx", i=1, i2=1)
+        await _seed_sentence(db, "b.xlsx", i=1, i2=1)
 
         rw1 = TestDataFactory.doctor_rewrite(file="a.xlsx", i=1, i2=1)
         rw2 = TestDataFactory.doctor_rewrite(file="b.xlsx", i=1, i2=1)
@@ -189,8 +224,7 @@ class TestGetDoctorRewrites:
         assert body["data"][0]["file"] == "a.xlsx"
 
     async def test_response_shape(self, client, db, api_headers):
-        db.add(TestDataFactory.doctor_sentence(file="rs.xlsx", i=1, i2=1))
-        await db.commit()
+        await _seed_sentence(db, "rs.xlsx", i=1, i2=1)
         db.add(TestDataFactory.doctor_rewrite(file="rs.xlsx", i=1, i2=1))
         await db.commit()
 
@@ -364,8 +398,7 @@ class TestGetDoctorRewriteHistory:
         assert resp.status_code == 404
 
     async def test_returns_history_for_existing_rewrites(self, client, db, api_headers):
-        db.add(TestDataFactory.doctor_sentence(file="hist.xlsx", i=1, i2=1))
-        await db.commit()
+        await _seed_sentence(db, "hist.xlsx", i=1, i2=1)
 
         base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
         for idx in range(3):
@@ -387,8 +420,7 @@ class TestGetDoctorRewriteHistory:
         assert len(body["history"]) == 3
 
     async def test_history_ordered_oldest_to_newest(self, client, db, api_headers):
-        db.add(TestDataFactory.doctor_sentence(file="ord2.xlsx", i=1, i2=1))
-        await db.commit()
+        await _seed_sentence(db, "ord2.xlsx", i=1, i2=1)
 
         base_time = datetime(2026, 6, 1, tzinfo=timezone.utc)
         for idx in range(3):
@@ -406,8 +438,7 @@ class TestGetDoctorRewriteHistory:
         assert revision_numbers == [1, 2, 3]
 
     async def test_response_shape(self, client, db, api_headers):
-        db.add(TestDataFactory.doctor_sentence(file="hshape.xlsx", i=5, i2=2))
-        await db.commit()
+        await _seed_sentence(db, "hshape.xlsx", i=5, i2=2)
         rw = TestDataFactory.doctor_rewrite(file="hshape.xlsx", i=5, i2=2)
         db.add(rw)
         await db.commit()
@@ -487,8 +518,7 @@ class TestGetDoctorRewriteByKey:
         assert resp.status_code == 404
 
     async def test_returns_rewrite_by_composite_key(self, client, db, api_headers):
-        db.add(TestDataFactory.doctor_sentence(file="key.xlsx", i=3, i2=2))
-        await db.commit()
+        await _seed_sentence(db, "key.xlsx", i=3, i2=2)
         rw = TestDataFactory.doctor_rewrite(
             file="key.xlsx", i=3, i2=2, class_="Life Expectancy",
         )
@@ -507,8 +537,7 @@ class TestGetDoctorRewriteByKey:
         assert body["class"] == "Life Expectancy"
 
     async def test_wrong_class_returns_404(self, client, db, api_headers):
-        db.add(TestDataFactory.doctor_sentence(file="wc.xlsx", i=1, i2=1))
-        await db.commit()
+        await _seed_sentence(db, "wc.xlsx", i=1, i2=1)
         rw = TestDataFactory.doctor_rewrite(file="wc.xlsx", i=1, i2=1, class_="Cancer Prognosis")
         db.add(rw)
         await db.commit()
@@ -520,8 +549,7 @@ class TestGetDoctorRewriteByKey:
         assert resp.status_code == 404
 
     async def test_response_shape(self, client, db, api_headers):
-        db.add(TestDataFactory.doctor_sentence(file="kshape.xlsx", i=1, i2=1))
-        await db.commit()
+        await _seed_sentence(db, "kshape.xlsx", i=1, i2=1)
         db.add(TestDataFactory.doctor_rewrite(file="kshape.xlsx", i=1, i2=1))
         await db.commit()
 
@@ -647,8 +675,8 @@ class TestGetDoctorScoresAverage:
         assert group["count"] == 4
 
     async def test_filter_by_file(self, client, db, api_headers):
-        db.add_all(TestDataFactory.doctor_sentence_set(file="fa.xlsx", count=2))
-        db.add_all(TestDataFactory.doctor_sentence_set(file="fb.xlsx", count=2))
+        await _seed_sentences(db, "fa.xlsx", count=2)
+        await _seed_sentences(db, "fb.xlsx", count=2)
         await db.commit()
 
         resp = await client.get("/api/doctor/scores/average?file=fa.xlsx", headers=api_headers)
@@ -656,38 +684,34 @@ class TestGetDoctorScoresAverage:
         assert all(g["file"] == "fa.xlsx" for g in body["data"])
 
     async def test_filter_by_speaker(self, client, db, api_headers):
-        db.add_all(TestDataFactory.doctor_sentence_set(file="sp.xlsx", count=2, speaker="Dr_A"))
+        await _seed_sentences(db, "sp.xlsx", count=2, speaker="Dr_A")
         # Use different i values (starting at 100) to avoid PK collision
         for idx in range(2):
-            s = TestDataFactory.doctor_sentence(
-                file="sp.xlsx", i=100 + idx, i2=1, speaker="Dr_B",
-                score=0.7, class_="Cancer Prognosis",
+            await _seed_sentence(
+                db, "sp.xlsx", i=100 + idx, i2=1, speaker="Dr_B",
+                score=0.7, class_="cp",
             )
-            db.add(s)
-        await db.commit()
 
         resp = await client.get("/api/doctor/scores/average?speaker=Dr_A", headers=api_headers)
         body = resp.json()
         assert all(g["speaker"] == "Dr_A" for g in body["data"])
 
     async def test_filter_by_class(self, client, db, api_headers):
-        s1 = TestDataFactory.doctor_sentence(file="cl.xlsx", i=1, i2=1, class_="Cancer Prognosis")
-        s2 = TestDataFactory.doctor_sentence(file="cl.xlsx", i=2, i2=1, class_="Life Expectancy")
-        db.add_all([s1, s2])
-        await db.commit()
+        await _seed_sentence(db, "cl.xlsx", i=1, i2=1, class_="cp")
+        await _seed_sentence(db, "cl.xlsx", i=2, i2=1, class_="le")
 
+        # sentence_prediction.model stores the domain CODE (cp/le/ed/inc/ius),
+        # never the display label — the column is String(10).
         resp = await client.get(
-            "/api/doctor/scores/average?class=Cancer Prognosis",
+            "/api/doctor/scores/average?class=cp",
             headers=api_headers,
         )
         body = resp.json()
-        assert all(g["class"] == "Cancer Prognosis" for g in body["data"])
+        assert all(g["class"] == "cp" for g in body["data"])
 
     async def test_excludes_class_minus_one(self, client, db, api_headers):
-        valid = TestDataFactory.doctor_sentence(file="exc.xlsx", i=1, i2=1, class_="Cancer Prognosis")
-        invalid = TestDataFactory.doctor_sentence(file="exc.xlsx", i=2, i2=1, class_="-1")
-        db.add_all([valid, invalid])
-        await db.commit()
+        await _seed_sentence(db, "exc.xlsx", i=1, i2=1, class_="cp")
+        await _seed_sentence(db, "exc.xlsx", i=2, i2=1, class_="-1")
 
         resp = await client.get("/api/doctor/scores/average", headers=api_headers)
         body = resp.json()
@@ -695,8 +719,7 @@ class TestGetDoctorScoresAverage:
         assert "-1" not in classes_returned
 
     async def test_response_shape(self, client, db, api_headers):
-        db.add(TestDataFactory.doctor_sentence(file="rshape.xlsx", i=1, i2=1))
-        await db.commit()
+        await _seed_sentence(db, "rshape.xlsx", i=1, i2=1)
 
         resp = await client.get("/api/doctor/scores/average", headers=api_headers)
         body = resp.json()
@@ -730,7 +753,7 @@ class TestGetDashboardStats:
         assert body["patient_interface"]["unique_files"] == 0
 
     async def test_counts_doctor_sentences(self, client, db, api_headers):
-        db.add_all(TestDataFactory.doctor_sentence_set(file="ds.xlsx", count=5))
+        await _seed_sentences(db, "ds.xlsx", count=5)
         await db.commit()
 
         resp = await client.get("/api/stats/dashboard", headers=api_headers)
@@ -738,8 +761,7 @@ class TestGetDashboardStats:
         assert body["doctor_interface"]["total_sentences"] == 5
 
     async def test_counts_doctor_rewrites(self, client, db, api_headers):
-        db.add(TestDataFactory.doctor_sentence(file="drw.xlsx", i=1, i2=1))
-        await db.commit()
+        await _seed_sentence(db, "drw.xlsx", i=1, i2=1)
         db.add(TestDataFactory.doctor_rewrite(file="drw.xlsx", i=1, i2=1))
         await db.commit()
 
@@ -748,10 +770,9 @@ class TestGetDashboardStats:
         assert body["doctor_interface"]["total_rewrites"] == 1
 
     async def test_counts_unique_files(self, client, db, api_headers):
-        db.add(TestDataFactory.doctor_sentence(file="uf1.xlsx", i=1, i2=1))
-        db.add(TestDataFactory.doctor_sentence(file="uf1.xlsx", i=2, i2=1))
-        db.add(TestDataFactory.doctor_sentence(file="uf2.xlsx", i=1, i2=1))
-        await db.commit()
+        await _seed_sentence(db, "uf1.xlsx", i=1, i2=1)
+        await _seed_sentence(db, "uf1.xlsx", i=2, i2=1)
+        await _seed_sentence(db, "uf2.xlsx", i=1, i2=1)
 
         resp = await client.get("/api/stats/dashboard", headers=api_headers)
         body = resp.json()
