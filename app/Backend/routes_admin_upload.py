@@ -101,12 +101,15 @@ async def upload_transcript(
     db: AsyncSession = Depends(get_db),
     admin: AuthUser = Depends(require_admin_user),
 ) -> dict:
-    """Accept a raw or de-identified transcript into the pipeline drop folder.
+    """Accept an already de-identified transcript into the pipeline drop folder.
 
-    Raw files are de-identified server-side (raw deleted immediately after);
-    already-hashed files are stored as-is. Admin-only. Every attempt is logged to
-    admin_upload_log so the upload page can rebuild its list after a refresh — with
-    only the de-identified queued name, never the real study id.
+    Only a file prepared by the Secure Transcript Preparation app (a hashed
+    ``<hp>[_<hd>]_<date>.csv`` name) is accepted, and it is stored as-is. A raw
+    transcript is rejected with 400 — the server never de-identifies, because it
+    could only hash the filename, not scrub PHI from the body (see the module
+    docstring). Admin-only. Every attempt is logged to admin_upload_log so the
+    upload page can rebuild its list after a refresh — with only the de-identified
+    queued name, never the real study id.
     """
     uploader = getattr(admin, "username", None)
     try:
@@ -123,7 +126,7 @@ async def _do_upload(file: UploadFile, db: AsyncSession, uploader) -> dict:
     drop_dir = Path(settings.pipeline_drop_dir).resolve()
     drop_dir.mkdir(parents=True, exist_ok=True)
 
-    # ── Path 1: already de-identified — store as-is (overwrite) ──────────────
+    # ── Accepted: already de-identified — store as-is (overwrite) ────────────
     if _DEID_NAME_RX.match(name):
         dest = (drop_dir / name).resolve()
         if dest.parent != drop_dir:
@@ -143,11 +146,10 @@ async def _do_upload(file: UploadFile, db: AsyncSession, uploader) -> dict:
             raise HTTPException(status_code=500, detail="Failed to store the file.") from exc
         logger.info("admin upload: %s %s (%d bytes)",
                     "replaced" if replaced else "queued", name, total)
-        # Path 1 name is already de-identified (hashed) — safe to record.
+        # The name is already de-identified (hashed) — safe to record.
         await _record_upload(db, name, "queued",
                              "replaced existing" if replaced else None, uploader)
-        return {"queued": name, "bytes": total, "replaced": replaced,
-                "deidentified": False}
+        return {"queued": name, "bytes": total, "replaced": replaced}
 
     # ── Anything else: reject. ───────────────────────────────────────────────
     # De-identification (both removing PHI from the text AND hashing the study id in
