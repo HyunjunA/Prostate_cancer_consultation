@@ -17,6 +17,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import DuplicateUploadDialog from "@/components/DuplicateUploadDialog";
+import usePipelineGate from "@/hooks/usePipelineGate";
 
 // Fast client-side checks. Extension gate, plus a "does this look de-identified"
 // gate so a raw transcript is flagged with the reason up front instead of a neutral
@@ -66,11 +67,22 @@ interface PrecheckResult {
 // warning, not a block, and re-processing is legitimate (e.g. after a DB reset).
 const UPLOADABLE: Status[] = ["pending", "error", "duplicate"];
 
+/** "45s" / "3 min" — how long a transcript has been sitting in the drop folder. */
+function formatWait(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.round(seconds / 60)} min`;
+}
+
 export default function AdminUploadPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // The pipeline handles one transcript at a time; uploading mid-run would queue
+  // behind it invisibly. `stale` means the queue is stuck, not working — uploading
+  // is re-enabled then so a file the watcher cannot process never locks the page.
+  const gate = usePipelineGate();
+  const gateLocked = gate.busy && !gate.stale;
   const inputRef = useRef<HTMLInputElement>(null);
   const uidRef = useRef(0);
   const nextUid = () => ++uidRef.current;
@@ -186,6 +198,7 @@ export default function AdminUploadPage() {
   // Warn before sending a name the pipeline has already processed; otherwise upload
   // straight away.
   const onUploadClick = () => {
+    if (gateLocked) return;
     if (duplicates.length > 0) {
       setConfirmOpen(true);
       return;
@@ -220,6 +233,34 @@ export default function AdminUploadPage() {
           Upload only files already de-identified by the Secure Transcript Preparation app.
         </p>
       </div>
+
+      {gate.busy && (
+        <div
+          role="status"
+          className={`mt-3 rounded-xl border p-4 ${
+            gate.stale
+              ? "border-rose-300 bg-rose-50"
+              : "border-blue-300 bg-blue-50"
+          }`}
+        >
+          <p className={`text-sm font-semibold ${gate.stale ? "text-rose-900" : "text-blue-900"}`}>
+            <span aria-hidden>{gate.stale ? "⚠️" : "⏳"}</span>{" "}
+            {gate.stale ? (
+              <>
+                {gate.queued[0]} has been waiting {formatWait(gate.waitingSeconds)} — the
+                pipeline watch may be down. Upload is re-enabled, but check the watcher
+                before adding more.
+              </>
+            ) : (
+              <>
+                Pipeline is processing {gate.queued[0]}
+                {gate.queued.length > 1 && ` (+${gate.queued.length - 1} more queued)`} —
+                upload is disabled until it finishes.
+              </>
+            )}
+          </p>
+        </div>
+      )}
 
       <div
         onDragOver={(e) => {
@@ -269,11 +310,12 @@ export default function AdminUploadPage() {
           <div className="mt-4 flex gap-2">
             <button
               type="button"
-              disabled={busy || !hasUploadable}
+              disabled={busy || !hasUploadable || gateLocked}
               onClick={onUploadClick}
+              title={gateLocked ? "The pipeline is still processing a transcript." : undefined}
               className="rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
-              {busy ? "Uploading…" : "Upload"}
+              {busy ? "Uploading…" : gateLocked ? "Pipeline busy…" : "Upload"}
             </button>
             <button
               type="button"

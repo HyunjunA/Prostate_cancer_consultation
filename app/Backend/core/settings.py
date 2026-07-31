@@ -126,6 +126,14 @@ class Settings(BaseSettings):
     # PIPELINE_DROP_DIR (e.g. an absolute server path).
     pipeline_drop_dir: str = Field(_DEFAULT_PIPELINE_DROP_DIR)
 
+    # How long a file may sit in the drop folder before /admin/upload stops
+    # treating it as "the pipeline is working" and starts calling it stuck. The
+    # upload button is disabled while the folder is busy, so without this a file
+    # the watcher can never process would disable uploading forever. A normal run
+    # is 1-2 minutes; 15 minutes is well clear of that. Override with
+    # UPLOAD_GATE_STALE_SECONDS.
+    upload_gate_stale_seconds: int = Field(900, ge=60)
+
     # ── Background worker (CLI watch mode) ───────────────────────────
     # Legacy knobs kept for backwards compatibility with older config
     # snapshots. The AI repo's main_complete_pipeline_db.py has its own

@@ -20,6 +20,7 @@ Only de-identified files are accepted
 import logging
 import os
 import re
+import time
 from pathlib import Path
 
 from fastapi import (
@@ -76,6 +77,45 @@ _DEID_NAME_RX = re.compile(
 _MAX_BYTES = 25 * 1024 * 1024  # 25 MB
 _CHUNK = 1024 * 1024
 
+# Files the pipeline watch will pick up. An upload in flight is written as
+# "<name>.part" (see _stream_to) and matches neither glob, so a partially received
+# file never counts as queued work.
+_QUEUE_GLOBS = ("*.csv", "*.xlsx")
+
+# How recently a queued file may have arrived and still not block a new upload.
+# Without it the drop folder blocks the caller's own batch: /admin/upload posts one
+# file per request, so the first file of a 3-file batch would 409 the other two. A
+# real run is well past this by the time anyone could click again.
+_UPLOAD_GRACE_SECONDS = 30
+
+
+def _queue_state(drop_dir: Path) -> dict:
+    """Describe the drop folder: what is queued, and for how long.
+
+    The drop folder IS the queue — the upload endpoint writes into it and the
+    pipeline watch moves each file to archive/ or error/ when the run finishes — so
+    "a matching file is present" means "queued or being processed right now".
+    """
+    queued = sorted(
+        (p for pattern in _QUEUE_GLOBS for p in drop_dir.glob(pattern) if p.is_file()),
+        key=lambda p: p.name,
+    )
+    if not queued:
+        return {"busy": False, "queued": [], "waiting_seconds": 0}
+
+    now = time.time()
+    oldest = 0.0
+    for p in queued:
+        try:
+            oldest = max(oldest, now - p.stat().st_mtime)
+        except OSError:
+            continue  # vanished mid-scan (the watcher just archived it)
+    return {
+        "busy": True,
+        "queued": [p.name for p in queued],
+        "waiting_seconds": int(max(oldest, 0)),
+    }
+
 
 async def _stream_to(file: UploadFile, dest: Path) -> int:
     """Stream the upload to ``dest`` with a running size cap. Returns byte count."""
@@ -126,6 +166,23 @@ async def _do_upload(file: UploadFile, db: AsyncSession, uploader) -> dict:
     drop_dir = Path(settings.pipeline_drop_dir).resolve()
     drop_dir.mkdir(parents=True, exist_ok=True)
 
+    # ── Busy gate: one transcript through the pipeline at a time ─────────────
+    # The watch processes the drop folder serially, so uploading mid-run just piles
+    # work up invisibly. /admin/upload disables its button off the same signal; this
+    # is the backstop for a second tab or a direct POST. A stale queue is NOT
+    # blocked — a file the watcher can never process must not lock uploading
+    # forever (same escape hatch the UI uses).
+    state = _queue_state(drop_dir)
+    stale_after = get_settings().upload_gate_stale_seconds
+    if (state["busy"]
+            and state["waiting_seconds"] > _UPLOAD_GRACE_SECONDS
+            and state["waiting_seconds"] <= stale_after):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(f"The pipeline is still processing {state['queued'][0]}. "
+                    "Wait for it to finish, then upload again."),
+        )
+
     # ── Accepted: already de-identified — store as-is (overwrite) ────────────
     if _DEID_NAME_RX.match(name):
         dest = (drop_dir / name).resolve()
@@ -165,6 +222,34 @@ async def _do_upload(file: UploadFile, db: AsyncSession, uploader) -> dict:
                 "Transcript Preparation app first, then upload the file it creates "
                 "in the ready_to_upload folder."),
     )
+
+
+@router.get("/upload-gate", dependencies=[Depends(require_admin_user)])
+async def upload_gate() -> dict:
+    """Report whether the pipeline is busy, so /admin/upload can disable uploading.
+
+    The pipeline watch handles the drop folder one file at a time and a run takes
+    a couple of minutes, so a second upload mid-run silently queues behind the
+    first with nothing on screen to say so. This lets the page disable its Upload
+    button and name what is being processed.
+
+    ``stale`` means a queued file has been sitting far longer than a run takes —
+    most likely the watcher is down or the file cannot be processed. The page
+    re-enables uploading in that case rather than staying locked forever; the
+    stuck file still needs a human.
+    """
+    settings = get_settings()
+    drop_dir = Path(settings.pipeline_drop_dir).resolve()
+    if not drop_dir.is_dir():
+        # Not yet created (fresh host) — nothing can be queued.
+        return {"busy": False, "stale": False, "queued": [], "waiting_seconds": 0,
+                "stale_after_seconds": settings.upload_gate_stale_seconds}
+    state = _queue_state(drop_dir)
+    return {
+        **state,
+        "stale": state["waiting_seconds"] > settings.upload_gate_stale_seconds,
+        "stale_after_seconds": settings.upload_gate_stale_seconds,
+    }
 
 
 @router.get("/upload-precheck", dependencies=[Depends(require_admin_user)])
