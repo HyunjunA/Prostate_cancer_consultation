@@ -23,8 +23,6 @@ import pytest
 import pandas as pd
 from unittest.mock import AsyncMock, MagicMock
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
-
 from tests.factories import TestDataFactory
 
 

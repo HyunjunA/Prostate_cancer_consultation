@@ -10,7 +10,6 @@ multi-column distinct count — so the merge between them needs pinning down.
 
 from datetime import datetime, timedelta, timezone
 
-import pytest
 import pytest_asyncio
 
 from models import DoctorRewriteLog
