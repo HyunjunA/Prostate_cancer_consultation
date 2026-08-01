@@ -4706,19 +4706,25 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
       </div>
 
       {/* [V35] Scroll Indicator — "there's more below".
-          Purely visual: it floats over the page and, depending on scroll
-          position, lands on top of a topic header or a "View relevant
-          sentences" toggle. It used to be clickable (pointer-events-auto +
-          onClick scrollBy), which meant it swallowed the click meant for the
-          control underneath. Both layers are now pointer-events-none, so
-          clicks fall through to whatever the patient actually aimed at. */}
+          The full-width container stays pointer-events-none so it never
+          swallows a click meant for a control underneath. Only the small
+          centered pill is clickable (pointer-events-auto): tapping it scrolls
+          the page down to reveal more topics. */}
       {showScrollIndicator && (
         <div
           className="fixed bottom-20 left-0 right-0 flex justify-center z-30 pointer-events-none"
         >
-          <div
+          <button
+            type="button"
+            onClick={() =>
+              window.scrollBy({
+                top: window.innerHeight * 0.8,
+                behavior: "smooth",
+              })
+            }
+            aria-label="Scroll down to see more topics"
             className={cx(
-              "flex items-center gap-2 px-3 py-2 sm:px-5 sm:py-3 rounded-full shadow-lg border backdrop-blur-md pointer-events-none animate-bounce",
+              "flex items-center gap-2 px-3 py-2 sm:px-5 sm:py-3 rounded-full shadow-lg border backdrop-blur-md pointer-events-auto cursor-pointer animate-bounce",
               isDarkMode
                 ? "bg-slate-800/90 border-slate-700 text-slate-300"
                 : "bg-white/90 border-gray-200 text-gray-600 shadow-gray-300/50",
@@ -4727,7 +4733,7 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
             <ChevronDown size={18} className="opacity-70" />
             <span className="text-sm font-medium">More topics below</span>
             <ChevronDown size={18} className="opacity-70" />
-          </div>
+          </button>
         </div>
       )}
     </div>
