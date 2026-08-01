@@ -3455,6 +3455,14 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentScreen]);
 
+  // [V42] A1 (2026-07-30 meeting): on each Risk Perception 2 step change, scroll
+  // the viewport to the top so the patient starts every step at the top instead
+  // of mid-page (where the Next button sits). Fires on Next/Back and ?step= deep-links.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [currentScreen]);
+
   // [V38] On per-domain screens (1-5) auto-expand the active card so the
   // patient does not have to click into it. Overview (screen 0) keeps the
   // V37 default (first topic expanded, others collapsed) so the user can
