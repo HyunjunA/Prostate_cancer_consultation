@@ -371,6 +371,8 @@ interface RiskPerceptionWithSummaryProps {
   // to make clear it also advances to the next survey section. Defaults to false
   // so existing callers keep the current two-way behavior.
   oneWay?: boolean;
+  /** True once finally submitted; locks answers read-only. */
+  locked?: boolean;
 }
 
 const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
@@ -385,6 +387,7 @@ const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
   onTrackEvent,
   onQuestionView,
   oneWay = false,
+  locked = false,
 }) => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = React.useState(0);
 
@@ -453,6 +456,11 @@ const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
+      {locked && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          You have already submitted this survey — your answers are locked.
+        </div>
+      )}
       {/* Dev-only study-group toggle. Yellow = clearly a developer tool,
           not a patient-facing control. Click to flip between arms. */}
       <div className="flex justify-end">
@@ -549,6 +557,7 @@ const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
               min={currentQuestion.min}
               max={currentQuestion.max}
               step={currentQuestion.step}
+              disabled={locked}
               value={
                 typeof currentAnswer === "number"
                   ? currentAnswer
@@ -622,6 +631,7 @@ const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
                   name={currentQuestion.id}
                   value={option.value}
                   checked={currentAnswer === option.value}
+                  disabled={locked}
                   onChange={() => {
                     onChange(currentQuestion.id, option.value);
                     onTrackEvent?.({
@@ -751,8 +761,10 @@ const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
         ) : (
           onSubmit && (
             <button
-              onClick={onSubmit}
-              disabled={!isCurrentAnswered || isSubmitting}
+              onClick={() => {
+                if (!locked) onSubmit?.();
+              }}
+              disabled={!isCurrentAnswered || isSubmitting || locked}
               data-track-proximity="RiskPerception_Submit_Button"
               className={cx(
                 "px-8 py-3 rounded-lg text-sm font-semibold transition-all shadow-lg",
@@ -765,7 +777,9 @@ const RiskPerceptionWithSummary: React.FC<RiskPerceptionWithSummaryProps> = ({
                     : "bg-gray-300 text-gray-500 cursor-not-allowed",
               )}
             >
-              {isSubmitting
+              {locked
+                ? "Submitted"
+                : isSubmitting
                 ? "Submitting..."
                 : oneWay
                   ? "Submit & continue to next section"

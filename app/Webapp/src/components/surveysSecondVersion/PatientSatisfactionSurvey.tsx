@@ -697,11 +697,20 @@ interface PatientSatisfactionSurveyProps {
   // the flag currently makes no visual change; it is accepted for API parity with
   // the other one-way survey sections. Defaults to false.
   oneWay?: boolean;
+  /** True once finally submitted; locks answers read-only. */
+  locked?: boolean;
 }
 
 export const PatientSatisfactionSurvey: React.FC<
   PatientSatisfactionSurveyProps
-> = ({ answers, onChange, onSubmit, isDark = false, onTrackEvent }) => {
+> = ({
+  answers,
+  onChange,
+  onSubmit,
+  isDark = false,
+  onTrackEvent,
+  locked = false,
+}) => {
   // Survey is complete when feedback text has content. Guard against a missing
   // feedbackText (e.g. restored/legacy rows that never had the field) so the
   // component never crashes on `.trim()` of undefined.
@@ -712,6 +721,7 @@ export const PatientSatisfactionSurvey: React.FC<
   const [incompleteDialog, setIncompleteDialog] = React.useState(false);
 
   const handleSubmitClick = () => {
+    if (locked) return; // finalized: no re-submit
     if (!isComplete) {
       setIncompleteDialog(true);
       return;
@@ -721,8 +731,13 @@ export const PatientSatisfactionSurvey: React.FC<
 
   return (
     <div data-track-proximity="PatientSatisfaction_Survey">
+      {locked && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          You have already submitted this survey — your answers are locked.
+        </div>
+      )}
       {/* Free-form Feedback */}
-      <div className="space-y-6">
+      <div className={cx("space-y-6", locked && "pointer-events-none opacity-70")}>
         <FeedbackTextInput
           label="Please share your feedback"
           placeholder="Please share any feedback about your experience with the consultation report..."
@@ -739,6 +754,7 @@ export const PatientSatisfactionSurvey: React.FC<
         <div className="mt-10 flex justify-center">
           <button
             onClick={handleSubmitClick}
+            disabled={locked}
             data-track-proximity="Satisfaction_Submit_Button"
             className={cx(
               "px-8 py-4 rounded-lg text-lg font-semibold transition-all shadow-lg",
@@ -751,7 +767,11 @@ export const PatientSatisfactionSurvey: React.FC<
                   : "bg-gray-300 text-gray-500",
             )}
           >
-            {isComplete ? "Submit Feedback" : "Please enter feedback to submit"}
+            {locked
+              ? "Submitted"
+              : isComplete
+                ? "Submit Feedback"
+                : "Please enter feedback to submit"}
           </button>
         </div>
       )}

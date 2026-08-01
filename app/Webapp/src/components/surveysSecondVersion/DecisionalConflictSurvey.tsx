@@ -303,6 +303,8 @@ interface DecisionalConflictSurveyProps {
   // to make clear it also advances to the next survey section. Defaults to false
   // so existing callers (e.g. V31Re) keep the current two-way behavior.
   oneWay?: boolean;
+  /** True once finally submitted; locks answers read-only. */
+  locked?: boolean;
 }
 
 export const DecisionalConflictSurvey: React.FC<
@@ -317,6 +319,7 @@ export const DecisionalConflictSurvey: React.FC<
   onTrackEvent,
   onQuestionView,
   oneWay = false,
+  locked = false,
 }) => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = React.useState(0);
 
@@ -354,6 +357,7 @@ export const DecisionalConflictSurvey: React.FC<
   };
 
   const handleSubmitClick = () => {
+    if (locked) return; // finalized: no re-submit
     if (!isCurrentAnswered) {
       setIncompleteDialog(true);
       return;
@@ -369,8 +373,13 @@ export const DecisionalConflictSurvey: React.FC<
 
   return (
     <div data-track-proximity="DCS_Survey">
+      {locked && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          You have already submitted this survey — your answers are locked.
+        </div>
+      )}
       {/* Current Question */}
-      <div className="mb-6">
+      <div className={cx("mb-6", locked && "pointer-events-none opacity-70")}>
         <LikertQuestion
           questionNumber={currentQuestionIndex + 1}
           questionText={currentQuestion.text}
@@ -457,7 +466,7 @@ export const DecisionalConflictSurvey: React.FC<
           onSubmit && (
             <button
               onClick={handleSubmitClick}
-              disabled={!isCurrentAnswered}
+              disabled={!isCurrentAnswered || locked}
               data-track-proximity="DCS_Submit_Button"
               className={cx(
                 "px-8 py-3 rounded-lg text-sm font-semibold transition-all shadow-lg",
@@ -470,7 +479,11 @@ export const DecisionalConflictSurvey: React.FC<
                     : "bg-gray-300 text-gray-500 cursor-not-allowed",
               )}
             >
-              {oneWay ? "Submit & continue to next section" : "Submit Responses"}
+              {locked
+                ? "Submitted"
+                : oneWay
+                  ? "Submit & continue to next section"
+                  : "Submit Responses"}
             </button>
           )
         )}
