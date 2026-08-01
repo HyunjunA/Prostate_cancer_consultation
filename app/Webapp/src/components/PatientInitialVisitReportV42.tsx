@@ -983,6 +983,8 @@ interface TopicCardProps {
   isSubEvidenceShown?: (treatment: string | null) => boolean;
   onToggleSubEvidence?: (treatment: string | null) => void;
   isSubmitted: boolean;
+  /** True once the survey was finally submitted; locks answers read-only. */
+  locked?: boolean;
   onSubmit: () => void;
   /**
    * [V38] When false, the per-domain question UI (VAS sliders, radios,
@@ -1095,6 +1097,7 @@ const TopicCard = React.forwardRef<TopicCardHandle, TopicCardProps>(({
   isSubEvidenceShown,
   onToggleSubEvidence,
   isSubmitted,
+  locked = false,
   onSubmit,
   showQuestions = true,
   showAiSummary = true,
@@ -1413,7 +1416,7 @@ const TopicCard = React.forwardRef<TopicCardHandle, TopicCardProps>(({
     }
     if (debouncedSig === autosaveBaseline.current) return;
     autosaveBaseline.current = debouncedSig;
-    if (!onSave) return;
+    if (locked || !onSave) return; // finalized survey: no more auto-saves
     let answers: AnswerItem[];
     try {
       answers = JSON.parse(debouncedSig) as AnswerItem[];
@@ -1434,6 +1437,7 @@ const TopicCard = React.forwardRef<TopicCardHandle, TopicCardProps>(({
     status: "saved" | "empty" | "missing" | "error";
     missing?: string[];
   }> => {
+    if (locked) return { status: "saved" }; // finalized survey: no re-submit
     const missing = getMissingRequired();
     if (missing.length > 0) return { status: "missing", missing };
     if (!onSave) {
@@ -3796,7 +3800,7 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
   // missing a required answer, show one aggregated popup and do not report success;
   // otherwise show the success modal.
   const handleSubmitAll = async (): Promise<void> => {
-    if (submitAllBusy) return;
+    if (submitAllBusy || firstVisit.finalized) return; // finalized: no re-submit
     setSubmitAllBusy(true);
     try {
       const missing: string[] = [];
@@ -4543,6 +4547,7 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
                   showAiSummary={showAiSummaryStates[topic] ?? true}
                   onToggleAiSummary={() => handleToggleAiSummary(topic)}
                   isSubmitted={!!submittedDomains[topic]}
+                  locked={firstVisit.finalized}
                   onSubmit={() => handleSubmitDomain(topic)}
                   showQuestions={showQuestions}
                   prefill={firstVisit.responses[TOPIC_TO_DOMAIN[topic]] ?? null}
@@ -4634,14 +4639,16 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
                       : "text-gray-500",
                 )}
               >
-                {needsSubmit
-                  ? "Submit your answers, or click Next to skip"
-                  : SCREEN_LABELS[currentScreen]}
+                {firstVisit.finalized
+                  ? "This survey has already been submitted — your answers are locked."
+                  : needsSubmit
+                    ? "Submit your answers, or click Next to skip"
+                    : SCREEN_LABELS[currentScreen]}
               </span>
 
               <button
                 type="button"
-                disabled={isLastScreen && submitAllBusy}
+                disabled={isLastScreen && (submitAllBusy || firstVisit.finalized)}
                 onClick={() => {
                   if (isLastScreen) {
                     // Single Submit: persist every domain (one saveDomain row
@@ -4655,17 +4662,19 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
                 data-track-proximity={isLastScreen ? "WizardSubmit" : "WizardNext"}
                 className={cx(
                   "inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 border text-white",
-                  isLastScreen && submitAllBusy
+                  isLastScreen && (submitAllBusy || firstVisit.finalized)
                     ? "bg-gray-300 dark:bg-slate-700 border-transparent cursor-not-allowed"
                     : "bg-gradient-to-r from-indigo-500 to-violet-500 border-transparent shadow hover:from-indigo-600 hover:to-violet-600",
                 )}
               >
                 {isLastScreen
-                  ? submitAllBusy
-                    ? "Submitting…"
-                    : oneWay
-                      ? "Submit & continue to next section"
-                      : "Submit"
+                  ? firstVisit.finalized
+                    ? "Submitted"
+                    : submitAllBusy
+                      ? "Submitting…"
+                      : oneWay
+                        ? "Submit & continue to next section"
+                        : "Submit"
                   : "Next"}
                 {!isLastScreen && <ChevronRight size={16} />}
               </button>

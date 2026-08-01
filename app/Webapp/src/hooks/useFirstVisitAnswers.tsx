@@ -30,6 +30,8 @@ export interface UseFirstVisitAnswers {
   responses: Cache;
   /** True after the mount-time GET resolves (success or error). */
   isHydrated: boolean;
+  /** True once the patient did the final Submit-all; the survey locks read-only. */
+  finalized: boolean;
   /** Last error (network, server, validation). Cleared on next save. */
   error: Error | null;
   /** Upsert one domain's answers (its own row, own timestamp). Rejects on failure. */
@@ -46,6 +48,7 @@ export function useFirstVisitAnswers(
 ): UseFirstVisitAnswers {
   const [responses, setResponses] = useState<Cache>({});
   const [isHydrated, setIsHydrated] = useState<boolean>(false);
+  const [finalized, setFinalized] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
 
   const latestKey = useRef<string>("");
@@ -53,6 +56,7 @@ export function useFirstVisitAnswers(
   useEffect(() => {
     if (!file || !speaker) {
       setIsHydrated(false);
+      setFinalized(false);
       return;
     }
     const key = `${file}::${speaker}`;
@@ -65,6 +69,7 @@ export function useFirstVisitAnswers(
       .then((data) => {
         if (cancelled || latestKey.current !== key) return;
         setResponses(data.responses);
+        setFinalized(!!data.finalized);
         setError(null);
         setIsHydrated(true);
       })
@@ -98,6 +103,10 @@ export function useFirstVisitAnswers(
         });
         // Refresh the whole cache from the server's authoritative response.
         setResponses(data.responses);
+        // A final Submit (partial=false) locks the survey; also honor the
+        // server's finalized flag when present.
+        if (!partial) setFinalized(true);
+        else if (data.finalized) setFinalized(true);
         setError(null);
       } catch (e) {
         const err = e instanceof Error ? e : new Error(String(e));
@@ -108,5 +117,5 @@ export function useFirstVisitAnswers(
     [file, speaker],
   );
 
-  return { responses, isHydrated, error, saveDomain };
+  return { responses, isHydrated, finalized, error, saveDomain };
 }

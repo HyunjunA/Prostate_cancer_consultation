@@ -34,6 +34,8 @@ export type DomainAnswers = Record<string, AnswerRead>;
 
 export interface FirstVisitAnswersGet {
   responses: Record<Domain, DomainAnswers>;
+  /** True once a final Submit-all exists; frontend locks the survey read-only. */
+  finalized?: boolean;
 }
 
 const BASE = "/api/backend/patient/first-visit-answers";

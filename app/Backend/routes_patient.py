@@ -602,6 +602,10 @@ class FirstVisitAnswersGet(BaseModel):
     """
 
     responses: Dict[DomainLiteral, Dict[str, AnswerRead]]
+    # True once the patient has done the final Submit (a row with partial=False
+    # exists). The frontend uses this to lock the Risk Perception 2 survey
+    # read-only on revisit, while auto-save-only (partial) state stays editable.
+    finalized: bool = False
 
 
 @router.get(
@@ -635,7 +639,11 @@ async def get_first_visit_answers(
     records = (await db.execute(stmt)).scalars().all()
 
     by_domain: Dict[str, Dict[str, AnswerRead]] = {d: {} for d in _DOMAIN_ORDER}
+    finalized = False
     for record in records:  # oldest -> newest, so later rows overwrite earlier
+        # A final Submit-all writes rows with extra_data.partial == False.
+        if (record.extra_data or {}).get("partial") is False:
+            finalized = True
         for domain, qmap in (record.answers or {}).items():
             for qid, a in (qmap or {}).items():
                 by_domain.setdefault(domain, {})[qid] = AnswerRead(
@@ -644,7 +652,7 @@ async def get_first_visit_answers(
                     value=a.get("value"),
                     submitted_at=a.get("submitted_at", ""),
                 )
-    return FirstVisitAnswersGet(responses=by_domain)
+    return FirstVisitAnswersGet(responses=by_domain, finalized=finalized)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
