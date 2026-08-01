@@ -313,8 +313,12 @@ const ProgressSidebar: React.FC<ProgressSidebarProps> = ({
           const isCompleted = completedSteps.has(step);
           const isCurrent = step === currentStep;
           const isPast = index < currentIndex;
-          // Only completed, non-current sections can be revisited.
-          const isClickable = !!onStepClick && isCompleted && !isCurrent;
+          // Completed sections can be revisited; Welcome (the intro) is always
+          // reachable so the patient can return to it from any survey step.
+          const isClickable =
+            !!onStepClick &&
+            !isCurrent &&
+            (isCompleted || step === "welcome");
 
           return (
             <div
