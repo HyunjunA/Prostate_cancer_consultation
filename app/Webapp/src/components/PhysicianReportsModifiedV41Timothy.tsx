@@ -1195,7 +1195,7 @@ const PatientScoreBreakdownModal: React.FC<PatientScoreBreakdownModalProps> = ({
         >
           <div>
             <h2 className={cx("text-lg font-bold", isDarkMode ? "text-white" : "text-slate-900")}>
-              {patient.id} — Score Breakdown
+              {patient.name} — Score Breakdown
             </h2>
             <p className={cx("text-sm mt-0.5", isDarkMode ? "text-slate-400" : "text-slate-500")}>
               Per-category score and the matching rubric criterion. Click a row for the full rubric.
@@ -1358,7 +1358,7 @@ const PatientRubricReportModal: React.FC<PatientRubricReportModalProps> = ({
         >
           <div>
             <h2 className={cx("text-lg font-bold", isDarkMode ? "text-white" : "text-slate-900")}>
-              {patient.id} — Rubric Report
+              {patient.name} — Rubric Report
             </h2>
             <p className={cx("text-sm mt-0.5", isDarkMode ? "text-slate-400" : "text-slate-500")}>
               Each category shows the full 0–5 rubric with your score highlighted.
@@ -2165,15 +2165,6 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
                     >
                       {patient.name}
                     </div>
-                    <div
-                      title={patient.id}
-                      className={cx(
-                        "text-sm font-medium truncate max-w-[220px]",
-                        isDarkMode ? "text-cyan-400" : "text-cyan-600",
-                      )}
-                    >
-                      {patient.id}
-                    </div>
                   </div>
                 </td>
                 <td className="px-6 py-6 text-left" style={{ width: "40%" }}>
@@ -2271,13 +2262,12 @@ const TrajectoryPointDetail: React.FC<{
   item: any;
   isDarkMode: boolean;
   viewMode?: "average" | "individual";
-}> = ({ item, isDarkMode, viewMode = "average" }) => {
+  fileVisitMap?: Record<string, number>;
+}> = ({ item, isDarkMode, viewMode = "average", fileVisitMap = {} }) => {
   const type = item.eventType === "rewrite" ? "Rewrite" : "Consultation";
   const details = item.patientsDetail ?? [];
-  // Long patient ids truncate with an ellipsis; hovering one expands it in
-  // place (wraps to the full id) via CSS only. In-place expansion — instead of
-  // a positioned bubble — has no viewport-edge clipping and needs no JS; it
-  // stays inside the stable custom hover tooltip, which has its own max-width.
+  // Each consultation is labeled by its reconstructed visit order ("Visit N");
+  // the hashed filename is never shown.
   return (
     <>
       <div className="font-semibold mb-1">
@@ -2289,12 +2279,6 @@ const TrajectoryPointDetail: React.FC<{
             Consultation score:{" "}
             <span className="font-bold">
               {(item.individual ?? item.score).toFixed(2)}
-            </span>
-          </div>
-          <div className="flex text-xs mb-1">
-            <span className="opacity-70 mr-1 shrink-0">Patient:</span>
-            <span className="truncate max-w-[180px] hover:max-w-none hover:whitespace-normal hover:overflow-visible hover:break-words cursor-default">
-              {(item.file || "").replace(/\.xlsx$/i, "")}
             </span>
           </div>
         </>
@@ -2315,11 +2299,14 @@ const TrajectoryPointDetail: React.FC<{
           </div>
           <div className="space-y-0.5">
             {details.map((p: { file: string; overall_score: number }) => {
-              const shortId = p.file.replace(/\.xlsx$/i, "");
+              const label =
+                fileVisitMap[p.file] != null
+                  ? `Visit ${fileVisitMap[p.file]}`
+                  : "Visit";
               return (
                 <div key={p.file} className="flex justify-between text-xs">
-                  <span className="truncate mr-2 max-w-[160px] hover:max-w-none hover:whitespace-normal hover:overflow-visible hover:break-words cursor-default">
-                    {shortId}
+                  <span className="truncate mr-2 max-w-[160px]">
+                    {label}
                   </span>
                   <span className="font-mono font-semibold whitespace-nowrap">
                     {p.overall_score.toFixed(2)}
@@ -2350,6 +2337,16 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
   onOpenRubric,
   onTrackEvent,
 }) => {
+  // Map each file to its "Visit N" order so the trajectory tooltip can label
+  // patients by visit instead of the hashed filename.
+  const fileVisitMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const p of patients) {
+      if (p.visitIndex != null) map[p.fileName] = p.visitIndex;
+    }
+    return map;
+  }, [patients]);
+
   // Only count patients with AI scores (GPT-4o pipeline completed)
   const scoredPatients = patients.filter((p) => p.overallScore != null && p.overallScore > 0);
   const highCount = scoredPatients.filter((p) => p.overallScore >= 4).length;
@@ -2456,7 +2453,7 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
   // Patient table column sorting. Default: patient (SID) ascending, matching
   // the existing numeric SID order.
   const [sortKey, setSortKey] = useState<"patient" | "visit" | "score">(
-    "patient",
+    "visit",
   );
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const toggleSort = (key: "patient" | "visit" | "score") => {
@@ -2664,6 +2661,7 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                   item={hovered.item}
                   isDarkMode={isDarkMode}
                   viewMode={viewMode}
+                  fileVisitMap={fileVisitMap}
                 />
               </div>
             )}
@@ -2841,18 +2839,7 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                     : "bg-slate-50/50 border-slate-200 text-slate-500",
                 )}
               >
-                <th className="px-6 py-3 text-left font-semibold" style={{ width: "26%" }}>
-                  <button
-                    onClick={() => toggleSort("patient")}
-                    className="inline-flex items-center gap-1 uppercase tracking-wider hover:opacity-80"
-                  >
-                    Patient
-                    <span className="text-[10px] opacity-70">
-                      {sortCaret("patient")}
-                    </span>
-                  </button>
-                </th>
-                <th className="px-6 py-3 text-left font-semibold" style={{ width: "22%" }}>
+                <th className="px-6 py-3 text-left font-semibold" style={{ width: "48%" }}>
                   <button
                     onClick={() => toggleSort("visit")}
                     className="inline-flex items-center gap-1 uppercase tracking-wider hover:opacity-80"
@@ -2906,33 +2893,15 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                       : isDarkMode ? "opacity-50" : "opacity-40",
                   )}
                 >
-                  <td className="px-6 py-3.5" style={{ width: "35%" }}>
+                  <td className="px-6 py-3.5" style={{ width: "48%" }}>
+                    {/* Visit ORDER, not a date. The real visit date is hashed
+                        upstream and never sent; the server reconstructs the order.
+                        This is the row identifier — the hashed filename is never shown. */}
                     <div
                       title={patient.name}
                       className={cx(
-                        "text-sm font-semibold truncate max-w-[200px]",
+                        "text-sm font-semibold",
                         isDarkMode ? "text-slate-100" : "text-slate-900",
-                      )}
-                    >
-                      {patient.name}
-                    </div>
-                    <div
-                      title={patient.id}
-                      className={cx(
-                        "text-xs truncate max-w-[200px]",
-                        isDarkMode ? "text-slate-500" : "text-slate-400",
-                      )}
-                    >
-                      {patient.id}
-                    </div>
-                  </td>
-                  <td className="px-6 py-3.5" style={{ width: "22%" }}>
-                    {/* Visit ORDER, not a date. The real visit date is hashed
-                        upstream and never sent; the server reconstructs the order. */}
-                    <div
-                      className={cx(
-                        "text-sm",
-                        isDarkMode ? "text-slate-300" : "text-slate-700",
                       )}
                     >
                       {patient.visitIndex != null ? `Visit ${patient.visitIndex}` : "—"}
@@ -3157,8 +3126,6 @@ const GridView: React.FC<GridViewProps> = ({
             isDarkMode ? "text-slate-400" : "text-slate-600",
           )}
         >
-          <span>File: {selectedPatient.fileName}</span>
-          <span className="mx-1">•</span>
           <span className="inline-flex items-center gap-2">
             Overall Score:{" "}
             {scoreSummaryLoading ? (
@@ -3779,7 +3746,7 @@ const DetailView: React.FC<DetailViewProps> = ({
               isDarkMode ? "text-slate-400" : "text-slate-600",
             )}
           >
-            {patient.name} • File: {patient.fileName}
+            {patient.name}
           </p>
         </div>
 
@@ -4685,22 +4652,21 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
     if (files && files.length > 0) {
       const patientList: PatientRow[] = files.map((fileName, idx) => {
         const match = fileName.match(/sid[- ]?(\d+)/i);
-        // De-identified files are named "<hashed_token>_<MMDDYYYY>.csv" — show
-        // the hashed token (the de-id id) instead of a generic "P00n" so each
-        // patient is identifiable. Displayed truncated + full on hover below.
-        const id = match
-          ? `SID-${match[1]}`
-          : fileName
-              .replace(/\.[^.]+$/, "")
-              .replace(/_[^_]+_\d{8}$/, "") // strip 3-part "_<doctor>_<date>"
-              .replace(/_\d{8}$/, ""); // strip legacy 2-part "_<date>"
+        // `id` is an INTERNAL key only (React key, tracking id, sort tiebreak) — it
+        // must be unique per file, so keep the full de-id filename (extension
+        // stripped). It is never rendered: the UI shows "Visit N" everywhere so the
+        // doctor/date/patient hashes never surface.
+        const id = match ? `SID-${match[1]}` : fileName.replace(/\.[^.]+$/, "");
+        const visitIndex = fileVisitMap[fileName];
 
         return {
           id,
-          name: `Patient ${id}`,
+          // Server reconstructs the chronological visit order; the client shows it
+          // as "Visit N" and never the hashed filename.
+          name: visitIndex != null ? `Visit ${visitIndex}` : "Visit",
           fileName,
           processingDate: fileDateMap[fileName] ?? "",
-          visitIndex: fileVisitMap[fileName],
+          visitIndex,
           status: "completed",
           overallScore: 0,
           topics: {} as Record<TopicName, TopicData>,
