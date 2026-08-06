@@ -278,6 +278,11 @@ interface ProgressSidebarProps {
   // a patient can go back to review a finished section. Not-yet-reached steps stay
   // non-interactive (no forward skipping). Omit to keep every row display-only.
   onStepClick?: (step: SurveyStep) => void;
+  // Every survey has been submitted. Makes the terminal "complete" row clickable:
+  // goNext only ever marks the step it LEAVES as completed, and nothing follows
+  // "complete", so it never lands in completedSteps and its Thank-You screen was
+  // unreachable for the rest of the session once the patient clicked away.
+  surveyFinished?: boolean;
 }
 
 // V38 one-way flow: the forward control is each section's own submit button.
@@ -289,8 +294,24 @@ const ProgressSidebar: React.FC<ProgressSidebarProps> = ({
   isDark,
   steps,
   onStepClick,
+  surveyFinished = false,
 }) => {
   const currentIndex = steps.indexOf(currentStep);
+
+  // Progress = how much of the survey is finished, not which screen is open.
+  // Keyed off currentIndex it walked backwards when a finished patient clicked
+  // into a completed section to re-read it (100% -> 25%) with nothing actually
+  // undone. Counts exactly the steps the check marks above count, so the bar and
+  // the checks cannot disagree. Welcome is excluded because clicking past the
+  // intro marks it complete without anything being submitted; complete is the
+  // terminal screen, not work.
+  const requiredSteps = steps.filter((s) => s !== "welcome" && s !== "complete");
+  const finishedCount = requiredSteps.filter((s) =>
+    completedSteps.has(s),
+  ).length;
+  const progressPct = requiredSteps.length
+    ? Math.round((finishedCount / requiredSteps.length) * 100)
+    : 0;
 
   return (
     <div
@@ -310,15 +331,21 @@ const ProgressSidebar: React.FC<ProgressSidebarProps> = ({
 
       <div className="space-y-1">
         {steps.map((step, index) => {
-          const isCompleted = completedSteps.has(step);
+          // `complete` is terminal, so goNext — which only ever records the step
+          // it LEAVES — never puts it in completedSteps. Without this the row
+          // fell back to the grey "not reached yet" styling the moment the
+          // patient clicked away from the Thank-You screen, looking identical to
+          // a section they had never done. Everything submitted is the
+          // completion signal for that row.
+          const isCompleted =
+            completedSteps.has(step) ||
+            (step === "complete" && surveyFinished);
           const isCurrent = step === currentStep;
           const isPast = index < currentIndex;
           // Completed sections can be revisited; Welcome (the intro) is always
           // reachable so the patient can return to it from any survey step.
           const isClickable =
-            !!onStepClick &&
-            !isCurrent &&
-            (isCompleted || step === "welcome");
+            !!onStepClick && !isCurrent && (isCompleted || step === "welcome");
 
           return (
             <div
@@ -408,7 +435,7 @@ const ProgressSidebar: React.FC<ProgressSidebarProps> = ({
               isDark ? "text-slate-300" : "text-gray-600",
             )}
           >
-            {Math.round((currentIndex / (steps.length - 1)) * 100)}%
+            {progressPct}%
           </span>
         </div>
         <div
@@ -419,9 +446,7 @@ const ProgressSidebar: React.FC<ProgressSidebarProps> = ({
         >
           <div
             className="h-full bg-blue-500 rounded-full transition-all duration-300"
-            style={{
-              width: `${(currentIndex / (steps.length - 1)) * 100}%`,
-            }}
+            style={{ width: `${progressPct}%` }}
           />
         </div>
       </div>
@@ -699,6 +724,25 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
   // True once the mount-time restore fetch has resolved. Auto-save waits for this
   // so it never re-saves the just-restored values (and works for a fresh patient).
   const [surveyHydrated, setSurveyHydrated] = useState(false);
+
+  // Every survey in THIS flow has been submitted — the point at which answers
+  // become read-only. Locking each survey the moment it is submitted (what this
+  // replaced) stranded a patient who wanted to revise an earlier section while
+  // still working through the rest.
+  //
+  // Derived from `steps` rather than a hard-coded list so it follows the flow:
+  // the combined Total Survey requires risk, the plain follow-up hides that step
+  // and must not wait on it. Same test the mount-time restore uses to decide
+  // whether to land on the Thank-You page.
+  const submittedByStep: Partial<Record<SurveyStep, boolean>> = {
+    sdm: sdmSubmitted,
+    dcs: dcsSubmitted,
+    risk: riskSubmitted,
+    satisfaction: satisfactionSubmitted,
+  };
+  const requiredSteps = steps.filter((s) => s !== "welcome" && s !== "complete");
+  const allSurveysSubmitted =
+    requiredSteps.length > 0 && requiredSteps.every((s) => submittedByStep[s]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // 7.3 Load Summary Data
@@ -1430,6 +1474,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
         isDark={isDarkMode}
         steps={steps}
         onStepClick={goToStep}
+        surveyFinished={allSurveysSubmitted}
       />
 
       {/* Main Content */}
@@ -1476,7 +1521,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
                   answers={sdmAnswers}
                   onChange={handleSDMChange}
                   onSubmit={handleSubmitSDM}
-                  locked={sdmSubmitted}
+                  locked={allSurveysSubmitted}
                   onProgressSave={saveSDMProgress}
                   isDark={isDarkMode}
                   interventionName="treatment"
@@ -1501,7 +1546,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
                   answers={dcsAnswers}
                   onChange={handleDCSChange}
                   onSubmit={handleSubmitDCS}
-                  locked={dcsSubmitted}
+                  locked={allSurveysSubmitted}
                   onProgressSave={saveDCSProgress}
                   isDark={isDarkMode}
                   oneWay
@@ -1532,6 +1577,9 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
                   oneWay
                   isDarkMode={isDarkMode}
                   onComplete={goNext}
+                  // As a section of this flow it must not lock on its own submit;
+                  // completion is decided here, across every survey.
+                  locked={allSurveysSubmitted}
                 />
               ) : (
               <div>
@@ -1557,7 +1605,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
                   answers={riskAnswers}
                   onChange={handleRiskChange}
                   onSubmit={handleSubmitRisk}
-                  locked={riskSubmitted}
+                  locked={allSurveysSubmitted}
                   onProgressSave={saveRiskProgress}
                   isSubmitting={isSubmittingRisk}
                   summaries={topicSummaries}
@@ -1584,7 +1632,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
                   answers={satisfactionAnswers}
                   onChange={handleSatisfactionChange}
                   onSubmit={handleSubmitSatisfaction}
-                  locked={satisfactionSubmitted}
+                  locked={allSurveysSubmitted}
                   isDark={isDarkMode}
                   oneWay
                   onTrackEvent={handleTrackEvent}

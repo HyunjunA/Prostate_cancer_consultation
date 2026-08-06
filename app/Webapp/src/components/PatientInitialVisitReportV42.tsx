@@ -512,6 +512,13 @@ interface PatientReportProps {
   // to next section", matching the other survey sections. Defaults to false so the
   // standalone first-visit flow keeps Back + "Submit".
   oneWay?: boolean;
+  // Answers are read-only. Only the parent knows when to set this: as the combined
+  // Total Survey's Risk step, this survey is one section of a longer flow, and
+  // locking it as soon as it is submitted would strand a patient who wanted to
+  // revise it while finishing the rest. Left undefined by the standalone
+  // first-visit entry, where this survey IS the whole flow and its own final
+  // submit already means complete.
+  locked?: boolean;
 }
 
 interface ClassSummary {
@@ -3268,6 +3275,7 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
   forceSurveyMode = false,
   trackToFollowup = false,
   oneWay = false,
+  locked: lockedProp,
 }) => {
   const patientId = usePatientId((state) => state.patientId);
   const fileId = useFileId((state) => state.fileId);
@@ -3358,6 +3366,13 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
   // so the page restores after reload, and expose saveDomain() for the
   // per-domain Submit click in TopicCard.
   const firstVisit = useFirstVisitAnswers(currentFile, currentSpeaker);
+
+  // Read-only once the flow this survey belongs to is finished. Embedded as the
+  // combined Total Survey's Risk step the parent decides that, since completion
+  // spans the other surveys too; standalone, this survey is the whole flow, so
+  // its own final submit is the signal. Until then re-submitting is how a patient
+  // revises their answers, so it must stay open.
+  const locked = lockedProp ?? firstVisit.finalized;
 
   // First topic (Cancer Prognosis) expanded by default, rest collapsed
   const [expandedTopics, setExpandedTopics] = useState<Record<string, boolean>>(
@@ -3800,7 +3815,7 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
   // missing a required answer, show one aggregated popup and do not report success;
   // otherwise show the success modal.
   const handleSubmitAll = async (): Promise<void> => {
-    if (submitAllBusy || firstVisit.finalized) return; // finalized: no re-submit
+    if (submitAllBusy || locked) return; // finalized: no re-submit
     setSubmitAllBusy(true);
     try {
       const missing: string[] = [];
@@ -4547,7 +4562,7 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
                   showAiSummary={showAiSummaryStates[topic] ?? true}
                   onToggleAiSummary={() => handleToggleAiSummary(topic)}
                   isSubmitted={!!submittedDomains[topic]}
-                  locked={firstVisit.finalized}
+                  locked={locked}
                   onSubmit={() => handleSubmitDomain(topic)}
                   showQuestions={showQuestions}
                   prefill={firstVisit.responses[TOPIC_TO_DOMAIN[topic]] ?? null}
@@ -4639,7 +4654,7 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
                       : "text-gray-500",
                 )}
               >
-                {firstVisit.finalized
+                {locked
                   ? "This survey has already been submitted — your answers are locked."
                   : needsSubmit
                     ? "Submit your answers, or click Next to skip"
@@ -4648,7 +4663,7 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
 
               <button
                 type="button"
-                disabled={isLastScreen && (submitAllBusy || firstVisit.finalized)}
+                disabled={isLastScreen && (submitAllBusy || locked)}
                 onClick={() => {
                   if (isLastScreen) {
                     // Single Submit: persist every domain (one saveDomain row
@@ -4662,13 +4677,13 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
                 data-track-proximity={isLastScreen ? "WizardSubmit" : "WizardNext"}
                 className={cx(
                   "inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 border text-white",
-                  isLastScreen && (submitAllBusy || firstVisit.finalized)
+                  isLastScreen && (submitAllBusy || locked)
                     ? "bg-gray-300 dark:bg-slate-700 border-transparent cursor-not-allowed"
                     : "bg-gradient-to-r from-indigo-500 to-violet-500 border-transparent shadow hover:from-indigo-600 hover:to-violet-600",
                 )}
               >
                 {isLastScreen
-                  ? firstVisit.finalized
+                  ? locked
                     ? "Submitted"
                     : submitAllBusy
                       ? "Submitting…"
