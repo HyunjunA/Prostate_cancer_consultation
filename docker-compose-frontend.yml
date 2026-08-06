@@ -54,13 +54,13 @@ services:
       - "host.docker.internal:host-gateway"
     ports:
       # webapp directly on 3001 (no nginx in native mode).
-      # Loopback only. The 2026-07-29 test window bound this to 0.0.0.0 so the
-      # LAN could reach http://10.226.8.205:3001; that window is closed
-      # (2026-08-04). Reach it now through an SSH tunnel:
+      # LAN-exposed on user request (2026-08-04): http://10.226.8.205:3001
+      # WARNING: anyone on the LAN can read patient reports and survey answers —
+      # plain HTTP, no TLS, no network-level access control. This is the state
+      # this file now ships in, so a fresh checkout is exposed by default.
+      # Close it with "127.0.0.1:3001:3000" and reach it over a tunnel instead:
       #   ssh -L 3001:127.0.0.1:3001 <user>@<host>   ->   http://localhost:3001
-      # Re-exposing means serving PHI over plain HTTP to the whole LAN, so treat
-      # switching back to "0.0.0.0:3001:3000" as a deliberate decision each time.
-      - "127.0.0.1:3001:3000"
+      - "0.0.0.0:3001:3000"
     healthcheck:
       # 127.0.0.1, not localhost: in-container localhost resolves to ::1 but
       # Next.js listens on IPv4 only -> false "unhealthy".
