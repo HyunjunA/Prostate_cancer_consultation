@@ -2961,17 +2961,10 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                           "relative inline-flex items-center justify-center w-9 h-9 rounded-full text-sm font-bold transition-all",
                           getScoreColorForValue(patient.overallScore, isDarkMode),
                           hasScore
-                            ? "cursor-pointer ring-2 ring-cyan-400/50 hover:ring-4 hover:ring-cyan-400/70 hover:scale-105"
+                            ? "cursor-pointer ring-2 ring-cyan-400/50"
                             : "cursor-not-allowed",
                         )}
                       >
-                        {/* Pulsing ring radiates from the score circle to signal it's clickable */}
-                        {hasScore && (
-                          <span
-                            aria-hidden
-                            className="absolute inset-0 rounded-full ring-2 ring-cyan-400 animate-ping pointer-events-none"
-                          />
-                        )}
                         {patient.overallScore > 0
                           ? patient.overallScore.toFixed(1)
                           : "—"}
