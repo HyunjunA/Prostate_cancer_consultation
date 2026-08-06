@@ -3538,6 +3538,13 @@ const DetailView: React.FC<DetailViewProps> = ({
     return data.sentenceDetails.length > 0 ? data.sentenceDetails[0] : undefined;
   })();
 
+  // B2: current sentence score — seeds the scoring-rubric reference shown below
+  // the rewrite input (highlights "where you are" so the doctor sees how to reach
+  // the next level while rewriting).
+  const currentScore = currentSentence?.score ?? data.score ?? null;
+  // Toggle for the collapsible scoring rubric under the rewrite input.
+  const [showRewriteRubric, setShowRewriteRubric] = useState(false);
+
   // History modal state
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -4185,6 +4192,83 @@ const DetailView: React.FC<DetailViewProps> = ({
                     >
                       How would you say it better?
                     </span>
+                  </div>
+
+                  {/* B2: collapsible scoring rubric right under the prompt.
+                      Same shared RubricBody as the floating button / legend, but
+                      scoped to this domain and seeded at the sentence's current
+                      score, so the doctor can reference the criteria while writing. */}
+                  <div className="mb-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowRewriteRubric((v) => !v)}
+                      aria-expanded={showRewriteRubric}
+                      title="Scoring rubric for this domain"
+                      className={cx(
+                        "inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border text-sm font-semibold transition-all",
+                        showRewriteRubric
+                          ? isDarkMode
+                            ? "border-cyan-500 bg-cyan-500/15 text-cyan-300"
+                            : "border-cyan-500 bg-cyan-50 text-cyan-700"
+                          : isDarkMode
+                            ? "border-slate-600 text-cyan-400 hover:border-cyan-500 hover:bg-cyan-500/10"
+                            : "border-slate-300 text-cyan-600 hover:border-cyan-400 hover:bg-cyan-50",
+                      )}
+                    >
+                      {/* Rubric document icon — same as the floating rubric button */}
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="w-4 h-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                        />
+                      </svg>
+                      Scoring rubric
+                      {/* Chevron — rotates when expanded */}
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className={cx(
+                          "w-4 h-4 transition-transform",
+                          showRewriteRubric && "rotate-180",
+                        )}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M19 9l-7 7-7-7"
+                        />
+                      </svg>
+                    </button>
+                    {showRewriteRubric && (
+                      <div
+                        className={cx(
+                          "mt-3 rounded-xl border overflow-hidden",
+                          isDarkMode
+                            ? "border-slate-600 bg-slate-800/40"
+                            : "border-slate-200 bg-white",
+                        )}
+                      >
+                        <RubricBody
+                          key={`rewrite-rubric-${topicName}-${currentScore}`}
+                          isDarkMode={isDarkMode}
+                          initialTab={topicName}
+                          initialScore={
+                            currentScore != null ? Math.round(currentScore) : null
+                          }
+                        />
+                      </div>
+                    )}
                   </div>
                   <textarea
                     value={newSentence}
