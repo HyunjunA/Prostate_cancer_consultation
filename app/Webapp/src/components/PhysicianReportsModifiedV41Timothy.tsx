@@ -2321,6 +2321,40 @@ const TrajectoryPointDetail: React.FC<{
   );
 };
 
+// ═══════════════════════════════════════════════════════════
+// BackButton — shared ghost/outline back navigation button. Used at the top
+// AND bottom of each Physician Reports page so the doctor can return without
+// scrolling back up.
+// ═══════════════════════════════════════════════════════════
+const BackButton: React.FC<{
+  isDarkMode: boolean;
+  onClick: () => void;
+  label: string;
+}> = ({ isDarkMode, onClick, label }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={cx(
+      "group inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border text-sm font-medium transition-all",
+      isDarkMode
+        ? "border-slate-600 bg-slate-800/60 text-cyan-300 hover:bg-slate-700 hover:border-slate-500"
+        : "border-slate-300 bg-slate-50 text-cyan-700 hover:bg-slate-100 hover:border-slate-400",
+    )}
+  >
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className="w-4 h-4 transition-transform group-hover:-translate-x-0.5"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+    </svg>
+    {label}
+  </button>
+);
+
 const DashboardViewV2: React.FC<DashboardViewProps> = ({
   isDarkMode,
   patients,
@@ -3083,23 +3117,19 @@ const GridView: React.FC<GridViewProps> = ({
     return suggestions.length > 0 ? suggestions[0] : null;
   };
 
+  const handleReturnToDashboard = () => {
+    setCurrentView("dashboard");
+    setSelectedPatient(null);
+  };
+
   return (
     <div className="space-y-8">
       {/* Back Button */}
-      <button
-        onClick={() => {
-          setCurrentView("dashboard");
-          setSelectedPatient(null);
-        }}
-        className={cx(
-          "flex items-center gap-2 text-sm font-medium transition-colors",
-          isDarkMode
-            ? "text-cyan-400 hover:text-cyan-300"
-            : "text-cyan-600 hover:text-cyan-800",
-        )}
-      >
-        ← Return to Reports Dashboard
-      </button>
+      <BackButton
+        isDarkMode={isDarkMode}
+        onClick={handleReturnToDashboard}
+        label="Return to Reports Dashboard"
+      />
 
       {/* ── Overall Performance Card (visually separated from topic details) ── */}
       <div
@@ -3472,6 +3502,21 @@ const GridView: React.FC<GridViewProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Back Button (bottom) — same as top, so the doctor can return without
+          scrolling back up. */}
+      <div
+        className={cx(
+          "pt-6 border-t",
+          isDarkMode ? "border-slate-700" : "border-slate-200",
+        )}
+      >
+        <BackButton
+          isDarkMode={isDarkMode}
+          onClick={handleReturnToDashboard}
+          label="Return to Reports Dashboard"
+        />
+      </div>
     </div>
   );
 };
@@ -3690,6 +3735,17 @@ const DetailView: React.FC<DetailViewProps> = ({
     }
   };
 
+  const handleReturnToGrid = () => {
+    setCurrentView("grid");
+    setSelectedTopic(null);
+    setSelectedSuggestion(null);
+    setShowRewrite(false);
+    setNewSentence("");
+    setSaveStatus({ status: "idle", message: "" });
+    setSelectedSentenceIdx(0);
+    setAiRewriteText(null); // Clear AI rewrite on back
+  };
+
   return (
     <div className="space-y-8">
       {/* Commented out per Ivan's feedback: no rewrite history
@@ -3703,26 +3759,11 @@ const DetailView: React.FC<DetailViewProps> = ({
       */}
 
       {/* Back Button */}
-      <button
-        onClick={() => {
-          setCurrentView("grid");
-          setSelectedTopic(null);
-          setSelectedSuggestion(null);
-          setShowRewrite(false);
-          setNewSentence("");
-          setSaveStatus({ status: "idle", message: "" });
-          setSelectedSentenceIdx(0);
-          setAiRewriteText(null); // Clear AI rewrite on back
-        }}
-        className={cx(
-          "flex items-center gap-2 text-sm font-medium transition-colors",
-          isDarkMode
-            ? "text-cyan-400 hover:text-cyan-300"
-            : "text-cyan-600 hover:text-cyan-800",
-        )}
-      >
-        ← Return to Grid Summary
-      </button>
+      <BackButton
+        isDarkMode={isDarkMode}
+        onClick={handleReturnToGrid}
+        label="Return to Grid Summary"
+      />
 
       <div
         className={cx(
@@ -4348,6 +4389,21 @@ const DetailView: React.FC<DetailViewProps> = ({
             )}
           </div>
         </div>
+      </div>
+
+      {/* Back Button (bottom) — same as top, so the doctor can return without
+          scrolling back up. */}
+      <div
+        className={cx(
+          "pt-6 border-t",
+          isDarkMode ? "border-slate-700" : "border-slate-200",
+        )}
+      >
+        <BackButton
+          isDarkMode={isDarkMode}
+          onClick={handleReturnToGrid}
+          label="Return to Grid Summary"
+        />
       </div>
     </div>
   );
