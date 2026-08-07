@@ -139,6 +139,7 @@ interface DashboardViewProps {
     elementId: string,
     metadata?: Record<string, any>,
   ) => void;
+  showPatientId?: boolean;
 }
 
 interface GridViewProps {
@@ -2263,11 +2264,18 @@ const TrajectoryPointDetail: React.FC<{
   isDarkMode: boolean;
   viewMode?: "average" | "individual";
   fileVisitMap?: Record<string, number>;
-}> = ({ item, isDarkMode, viewMode = "average", fileVisitMap = {} }) => {
+  showPatientId?: boolean;
+}> = ({
+  item,
+  isDarkMode,
+  viewMode = "average",
+  fileVisitMap = {},
+  showPatientId = false,
+}) => {
   const type = item.eventType === "rewrite" ? "Rewrite" : "Consultation";
   const details = item.patientsDetail ?? [];
   // Each consultation is labeled by its reconstructed visit order ("Visit N");
-  // the hashed filename is never shown.
+  // the hashed filename is shown only when "?patientid=on" is set.
   return (
     <>
       <div className="font-semibold mb-1">
@@ -2281,6 +2289,14 @@ const TrajectoryPointDetail: React.FC<{
               {(item.individual ?? item.score).toFixed(2)}
             </span>
           </div>
+          {showPatientId && (
+            <div className="flex text-xs mb-1">
+              <span className="opacity-70 mr-1 shrink-0">Patient:</span>
+              <span className="truncate max-w-[180px]">
+                {(item.file || "").split("_")[0]}
+              </span>
+            </div>
+          )}
         </>
       ) : (
         <div className="mb-2" style={{ color: "#06b6d4" }}>
@@ -2299,10 +2315,13 @@ const TrajectoryPointDetail: React.FC<{
           </div>
           <div className="space-y-0.5">
             {details.map((p: { file: string; overall_score: number }) => {
-              const label =
+              const visitLabel =
                 fileVisitMap[p.file] != null
                   ? `Visit ${fileVisitMap[p.file]}`
                   : "Visit";
+              const label = showPatientId
+                ? `${visitLabel} · ${(p.file || "").split("_")[0]}`
+                : visitLabel;
               return (
                 <div key={p.file} className="flex justify-between text-xs">
                   <span className="truncate mr-2 max-w-[160px]">
@@ -2370,6 +2389,7 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
   scoreAverageData,
   onOpenRubric,
   onTrackEvent,
+  showPatientId = false,
 }) => {
   // Map each file to its "Visit N" order so the trajectory tooltip can label
   // patients by visit instead of the hashed filename.
@@ -2696,6 +2716,7 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                   isDarkMode={isDarkMode}
                   viewMode={viewMode}
                   fileVisitMap={fileVisitMap}
+                  showPatientId={showPatientId}
                 />
               </div>
             )}
@@ -2928,9 +2949,9 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                   )}
                 >
                   <td className="px-6 py-3.5" style={{ width: "48%" }}>
-                    {/* Visit ORDER, not a date. The real visit date is hashed
-                        upstream and never sent; the server reconstructs the order.
-                        This is the row identifier — the hashed filename is never shown. */}
+                    {/* Row identifier. Normally the reconstructed "Visit N"
+                        (patient.name), but the hashed patient id when
+                        "?patientid=on" is set — patient.name already encodes both. */}
                     <div
                       title={patient.name}
                       className={cx(
@@ -2938,7 +2959,7 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                         isDarkMode ? "text-slate-100" : "text-slate-900",
                       )}
                     >
-                      {patient.visitIndex != null ? `Visit ${patient.visitIndex}` : "—"}
+                      {patient.name}
                     </div>
                   </td>
                   <td className="px-6 py-3.5" style={{ width: "30%" }}>
@@ -4474,6 +4495,17 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   const [currentView, setCurrentView] = useState<
     "dashboard" | "grid" | "detail"
   >("dashboard");
+  // Debug/review URL trigger: "?patientid=on" reveals the hashed patient id
+  // again (pre-B5 behavior); absent or "off" keeps the "Visit N" labels. This
+  // is a client-side flag, not an access control. Read AFTER mount (not in a
+  // useState initializer) so the server render and client hydration agree
+  // (window is undefined during SSR) — otherwise the flag never takes effect.
+  const [showPatientId, setShowPatientId] = useState(false);
+  useEffect(() => {
+    setShowPatientId(
+      new URLSearchParams(window.location.search).get("patientid") === "on",
+    );
+  }, []);
   const [selectedTopic, setSelectedTopic] = useState<SelectedTopicState | null>(
     null,
   );
@@ -4806,12 +4838,18 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
         // doctor/date/patient hashes never surface.
         const id = match ? `SID-${match[1]}` : fileName.replace(/\.[^.]+$/, "");
         const visitIndex = fileVisitMap[fileName];
+        // Patient-id hash (first token of the de-id filename, or SID-N for legacy
+        // files) — shown only when the "?patientid=on" trigger is set.
+        const patientHash = match ? `SID-${match[1]}` : fileName.split("_")[0];
+
+        const visitLabel = visitIndex != null ? `Visit ${visitIndex}` : "Visit";
 
         return {
           id,
-          // Server reconstructs the chronological visit order; the client shows it
-          // as "Visit N" and never the hashed filename.
-          name: visitIndex != null ? `Visit ${visitIndex}` : "Visit",
+          // Server reconstructs the chronological visit order, shown as "Visit N".
+          // When "?patientid=on", append the hashed patient id alongside it
+          // (e.g. "Visit 2 · <hash>") instead of replacing it.
+          name: showPatientId ? `${visitLabel} · ${patientHash}` : visitLabel,
           fileName,
           processingDate: fileDateMap[fileName] ?? "",
           visitIndex,
@@ -4837,7 +4875,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       // Fetch scores for all patients (no speaker filter — speakers vary per file)
       fetchScoreAverage(undefined, undefined, undefined);
     }
-  }, [files, selectedSpeaker, fileDateMap, fileVisitMap]);
+  }, [files, selectedSpeaker, fileDateMap, fileVisitMap, showPatientId]);
 
   // ═══════════════════════════════════════════════════════════
   // Auto-select patient when fileId is provided via URL (once only)
@@ -5217,6 +5255,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           scoreAverageData={scoreAverage?.data}
           onOpenRubric={handleOpenRubric}
           onTrackEvent={trackEvent}
+          showPatientId={showPatientId}
         />
       )}
 
