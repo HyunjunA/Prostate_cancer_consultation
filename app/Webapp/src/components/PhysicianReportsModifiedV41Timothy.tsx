@@ -4677,6 +4677,14 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
     return () => endSession();
   }, []);
 
+  // B4 (2026-07-30 meeting): scroll to the top on each page transition
+  // (dashboard/grid/detail) so the next page starts at the top instead of the
+  // previous scroll position. behavior:"auto" = instant, matching the patient A1.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [currentView]);
+
   // Track view changes — only on actual transitions (skip the initial render,
   // which page_view already covers).
   useEffect(() => {
