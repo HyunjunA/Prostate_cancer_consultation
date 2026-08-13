@@ -60,6 +60,7 @@ from sqlalchemy import select, func, and_, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_user
+from auth.rate_limit import limit
 from db import get_db
 from deid import unhash_patient_sid, unhash_doctor_num
 from redcap_mapping import record_exists, resolve_record_id
@@ -517,7 +518,10 @@ async def import_to_redcap(submission: SurveySubmission, timestamp: str) -> dict
 # ══════════════════════════════════════════════════════════════════════════════
 # POST - Submit Survey
 # ══════════════════════════════════════════════════════════════════════════════
-@router.post("/submit")
+# 30/min: a patient completing the flow submits a handful of surveys over
+# several minutes. Generous enough that a double-click or a retry never trips
+# it, tight enough to stop a script filling the table.
+@router.post("/submit", dependencies=[limit(30, 60)])
 async def submit_survey(
     submission: SurveySubmission,
     db: AsyncSession = Depends(get_db)
