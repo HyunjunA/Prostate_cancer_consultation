@@ -45,12 +45,22 @@ Top-level catalog of all docs under `docs/`. Updated 2026-04-28.
 
 ---
 
+## Operations — [`operations/`](operations/)
+
+| Document | Use for |
+|---|---|
+| [`RUNBOOK.md`](operations/RUNBOOK.md) | **Something is broken — what do I do?** Triage, per-service diagnosis, restart, rebuild, rollback, database restore. |
+| [`INCIDENT_RESPONSE.md`](operations/INCIDENT_RESPONSE.md) | **Suspected patient-data exposure.** Contain, preserve evidence, report, scope, remediate. Read before touching anything. |
+
+---
+
 ## Security & Compliance — [`security/`](security/)
 
 | Document | Use for |
 |---|---|
-| [`SECURITY_AUDIT.md`](security/SECURITY_AUDIT.md) | OWASP vulnerability audit. |
+| [`PRODUCTION_READINESS.md`](security/PRODUCTION_READINESS.md) | What is missing before this can be called production — ten axes, measured. Supersedes `SECURITY_AUDIT.md`. |
 | [`PHI_COMPLIANCE.md`](security/PHI_COMPLIANCE.md) | Azure PHI handling requirements. |
+| [`SECURITY_AUDIT.md`](security/SECURITY_AUDIT.md) | OWASP audit from 2026-02-12. **Largely stale** — assumes nginx + a Dockerised backend, which is not the current deployment. |
 
 ---
 
