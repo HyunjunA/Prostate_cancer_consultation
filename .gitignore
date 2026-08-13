@@ -79,3 +79,12 @@ AI_physician_patient_communication/
 *_KR*.png
 *_KR*.pdf
 *_KR*.jpg
+
+# Database dumps. These are PHI in a single file — absolute rule 1 says PHI
+# never enters git, and a dump is the densest possible violation of it.
+# backup-db.sh writes outside the repo (~/compass-backups) precisely so this
+# cannot happen by accident; these patterns are the second line of defence
+# for dumps taken by hand.
+*.sql.gz
+*.sql.gz.gpg
+*.dump
