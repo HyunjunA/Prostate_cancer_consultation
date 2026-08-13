@@ -40,7 +40,7 @@ Verdicts below are the **assessed** state. Remediation has since begun; the
 | G | Testing | Gap | Blocked on B | Good unit coverage, but the E2E safety net is dead |
 | H | Docs & runbooks | Gap | **Resolved** | No runbook, incident, or rollback procedure existed |
 | I | Security | Blocker | **Mostly resolved** | 9 of 12 findings closed. TLS, per-user keys, and the admin password remain |
-| J | Access logging & retention | Blocker | **Mostly resolved** | The access log named the proxy for 93% of requests and lived in `/tmp`; both fixed. Log rotation is still absent |
+| J | Access logging & retention | Blocker | **Mostly resolved** | The access log named the proxy for 93% of requests and lived in `/tmp`; both fixed, audit noise removed, retention rules written. Log rotation is configured but not installed |
 
 **Blocker** = must be resolved before production. **Gap** = required for a system that stays healthy, but not a launch stopper. **OK** = adequate as-is.
 
@@ -605,12 +605,30 @@ This is the closest existing asset to "who did what". Three problems:
 
 HIPAA §164.312(b) requires a record of who accessed which patient record. None exists (axis I). The findings above make that worse than a simple omission: **the gap cannot be closed retroactively from logs**, because the logs never held the answer.
 
-### Recommended
+### Status as of 2026-08-13
 
-1. Pin the backend's log destination to the repository `logs/` directory — free if done alongside the systemd unit in axis A (`StandardOutput=append:`).
-2. Forward `X-Forwarded-For` from the proxy and run uvicorn with `--proxy-headers --forwarded-allow-ips=127.0.0.1`. **Everything else in this axis depends on this**; without it an audit log records the container address 12,000 times.
-3. `logrotate` with compression and a retention period matching the PHI policy.
-4. Define retention and expiry for `session_recording`, and classify it as PHI.
+| Item | State | Detail |
+|---|---|---|
+| Log destination in `/tmp` | **RESOLVED** | Pinned to the repository `logs/` directory by the axis A systemd units (`StandardOutput=append:`). The 12,381 access lines that were in `/tmp` were copied to `logs/access-preserved-20260813.log` before the cutover |
+| Client address discarded | **RESOLVED** | The proxy forwards `X-Forwarded-For`; uvicorn runs with `--proxy-headers` and a restricted `--forwarded-allow-ips`. Measured after rebuild: requests log the real caller, not `172.31.0.2` |
+| No PHI audit log | **RESOLVED** | `phi_access_log` written by middleware — see axis I |
+| Audit log flooded with noise | **RESOLVED** | 214 of the first 283 rows were a poll returning `{"processing": N}` with no patient in it, and only 4 rows carried a patient reference. Exact-match exemptions now keep it out; 21 requests afterwards produced 1 row |
+| No retention rule | **RESOLVED (unscheduled)** | `scripts/prune-retention.py` — `session_recording` 90 days, `phi_access_log` six years with a hard floor that refuses a shorter setting. Dry run by default. **Not scheduled**: adding a cron entry changes the server |
+| No log rotation | **REMAINING** | `deploy/logrotate/compass` is written and syntax-checked against all three logs, but **not installed**. Installing needs sudo on a host shared with other projects, so it belongs to whoever administers the machine |
+| `session_recording` not classified as PHI | **REMAINING** | It replays the patient's screen pixel for pixel. The 90-day expiry now bounds it, but it is still stored unencrypted in an ordinary column and is not covered by `PHI_COMPLIANCE.md` §3 handling. A classification decision is owed |
+
+### To install log rotation (requires sudo — run by hand)
+
+```bash
+sudo cp deploy/logrotate/compass /etc/logrotate.d/compass
+sudo logrotate --debug /etc/logrotate.d/compass    # dry run, changes nothing
+sudo logrotate --force /etc/logrotate.d/compass    # rotate once now
+```
+
+`copytruncate` is used deliberately: the three writers are systemd services
+with `StandardOutput=append:` that never reopen their descriptor, so a
+rename-and-create rotation would leave them writing into the rotated inode
+while the live file stayed empty.
 
 ---
 
