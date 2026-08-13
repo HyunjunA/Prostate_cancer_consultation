@@ -40,7 +40,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import List, Optional
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Default pipeline drop folder: where admin uploads land and the pipeline watch
@@ -182,6 +182,11 @@ class Settings(BaseSettings):
     # dev based on `environment` instead.
     log_level: Optional[str] = None
     api_key: Optional[str] = None  # Server-side check happens in auth/backends/
+    # Signing secret for admin session JWTs. Declared here so production can
+    # refuse to start without it; auth/backends/jwt_auth.py reads it from the
+    # environment directly and used to fall back to the literal "change-me",
+    # which would have let anyone mint a valid admin session.
+    jwt_secret: Optional[str] = None
     upload_dir: str = Field("/app/uploads")
     transcripts_dir: str = Field("data/transcripts")
     output_dir: str = Field("../AI_physician_patient_communication/data/output")
@@ -196,6 +201,53 @@ class Settings(BaseSettings):
             "http://localhost:8080",
         ]
     )
+
+    # ── Production guard rails ───────────────────────────────────────
+    @model_validator(mode="after")
+    def _production_requires_secrets(self) -> "Settings":
+        """Refuse to start a production process that is missing its secrets.
+
+        Every value below has a usable-looking default or a None fallback, so
+        a missing one does not crash — it silently degrades into something
+        insecure: an unsigned-in-practice JWT secret, an absent API key, a
+        wildcard CORS policy. Each of those failures is invisible from the
+        outside until it is exploited.
+
+        Failing at import time instead turns a silent security hole into a
+        loud startup error, which is the trade this project wants: the backend
+        is supervised and will report a failed start, whereas nothing at all
+        reports "the admin JWT secret is literally 'change-me'".
+
+        Development is left alone deliberately — a fresh clone must still run
+        without a populated .env.
+        """
+        if self.environment == "development":
+            return self
+
+        missing = [
+            name
+            for name, value in (
+                ("API_KEY", self.api_key),
+                ("JWT_SECRET", self.jwt_secret),
+            )
+            if not value
+        ]
+        if missing:
+            raise ValueError(
+                f"ENVIRONMENT={self.environment!r} but these are unset: "
+                f"{', '.join(missing)}. Set them in app/Backend/.env. "
+                "Refusing to start rather than run production without them."
+            )
+
+        # A wildcard origin combined with allow_credentials=True lets any site
+        # a user visits read this API as that user.
+        if "*" in self.cors_origins:
+            raise ValueError(
+                "CORS_ORIGINS contains '*', which is unsafe with credentialed "
+                "requests. List the exact origins instead."
+            )
+
+        return self
 
 
 @lru_cache(maxsize=1)
