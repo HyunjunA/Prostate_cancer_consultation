@@ -1,0 +1,54 @@
+# logrotate configuration for COMPASS application logs.
+#
+# NOT INSTALLED BY ANY SCRIPT IN THIS REPOSITORY. Installing it changes the
+# server, and this host is shared with other projects, so that decision belongs
+# to whoever administers the machine — not to an application change.
+#
+# WHY IT IS NEEDED
+#   Nothing has ever rotated these logs. app/Backend/logs/ holds 40 MB with
+#   files dating back to November 2025, and backend.log grows with every
+#   request now that access logging lands there. On a shared host a full disk
+#   is everyone's outage, not just this project's.
+#
+# TO INSTALL (requires sudo — run by hand, review first):
+#   sudo cp deploy/logrotate/compass /etc/logrotate.d/compass
+#   sudo logrotate --debug /etc/logrotate.d/compass   # dry run, changes nothing
+#   sudo logrotate --force /etc/logrotate.d/compass   # rotate once now
+#
+# TO RUN WITHOUT ROOT (user cron, no system change):
+#   logrotate --state ~/.logrotate.state deploy/logrotate/compass
+#
+# RETENTION
+#   30 daily files, compressed. These logs contain request paths, and a patient
+#   file token appears in the path of a report request — so a rotated log is
+#   PHI-adjacent and 0640 with a bounded lifetime is deliberate, not incidental.
+#   Keep this aligned with whatever retention policy the study settles on; the
+#   audit trail in phi_access_log is the record that must survive six years,
+#   not these.
+
+/home/choih2/test-prostate-cancer/Prostate_cancer_consultation_dashboard/app/Backend/logs/backend.log
+/home/choih2/test-prostate-cancer/AI_physician_patient_communication/logs/pipeline_watch.log
+/home/choih2/test-prostate-cancer/AI_physician_patient_communication/nlp_classifier_server/logs/gateway.log
+{
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 choih2 choih2
+
+    # copytruncate, NOT create-and-move.
+    #
+    # The three writers are uvicorn/python processes started by systemd with
+    # StandardOutput=append:. They hold an open file descriptor and never
+    # reopen it, so renaming the file would leave them writing into the
+    # rotated inode — logging would appear to stop while the "current" file
+    # stayed empty forever. copytruncate copies then truncates in place, which
+    # keeps the descriptor valid.
+    #
+    # The trade-off is a small window where lines written during the copy are
+    # lost. For request logs that is acceptable; for the audit trail it would
+    # not be, which is why that lives in PostgreSQL instead.
+    copytruncate
+}

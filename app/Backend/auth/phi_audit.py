@@ -50,6 +50,25 @@ EXEMPT_PREFIXES = (
     "/ready",
 )
 
+# Endpoints that sit under an audited prefix but disclose nothing about any
+# patient. Exact matches only — a prefix rule here would be too easy to widen
+# by accident.
+#
+# WHY THIS LIST EXISTS
+#     Measured over the first 15 minutes of auditing: 214 of 283 rows were
+#     /api/patient/processing-count, a poll that returns {"processing": N} and
+#     names no patient. Only 4 rows carried a patient reference at all. Left
+#     alone that is ~10 million rows and ~6 GB a year, of which three quarters
+#     say nothing — and an audit log nobody can read is not an audit log. The
+#     retention obligation (six years) makes the volume matter twice over.
+#
+# The bar for adding to this list: the response must be incapable of revealing
+# anything about an individual, whoever calls it. A global counter qualifies.
+# Anything keyed by a file token, speaker, or record id does not.
+EXEMPT_PATHS = frozenset({
+    "/api/patient/processing-count",   # returns {"processing": <int>} only
+})
+
 # File tokens are the AES-SIV base32 names the pipeline produces; speaker and
 # record ids appear as path segments. Pull whichever is present so a reviewer
 # can ask "who touched this patient?" without parsing paths by hand.
@@ -59,6 +78,8 @@ _LONG_HASH_RE = re.compile(r"\b([A-Z2-7]{26,})\b")
 
 def should_audit(path: str) -> bool:
     """True when this path can return patient data."""
+    if path in EXEMPT_PATHS:
+        return False
     if any(path.startswith(p) for p in EXEMPT_PREFIXES):
         return False
     return any(path.startswith(p) for p in AUDITED_PREFIXES)

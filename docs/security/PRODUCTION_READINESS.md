@@ -26,18 +26,21 @@ Every finding below was verified by direct observation on 2026-08-13. Where a nu
 
 ## Readiness scorecard
 
-| # | Axis | Verdict | The single worst item |
-|---|---|---|---|
-| A | Release & deployment | Blocker | No process supervision — a reboot stops everything, permanently |
-| B | CI & quality gates | Blocker | Nightly E2E has failed 60 of 60 runs since 2026-06-16 |
-| C | Observability | Blocker | No error tracking, no metrics, no alerting of any kind |
-| D | Reliability | Gap | Every component is a single point of failure with no restart |
-| E | Data & backup | Blocker | No database backup exists |
-| F | Frontend readiness | Gap | No error boundary — patients see the raw Next.js crash page |
-| G | Testing | Gap | Good unit coverage, but the E2E safety net is dead |
-| H | Docs & runbooks | Gap | No runbook, incident, or rollback procedure |
-| I | Security | Blocker | No TLS; `/docs` open on the LAN; no PHI audit log |
-| J | Access logging & retention | Blocker | The access log records the proxy's IP for 93% of requests, and lives in `/tmp` |
+Verdicts below are the **assessed** state. Remediation has since begun; the
+"Progress" column records where each axis stands as of 2026-08-13.
+
+| # | Axis | Verdict | Progress | The single worst item |
+|---|---|---|---|---|
+| A | Release & deployment | Blocker | **Largely resolved** | No process supervision — a reboot stopped everything, permanently. Now three systemd units with automatic restart; a real reboot has still not been tested |
+| B | CI & quality gates | Blocker | Not started | Nightly E2E has failed every run since 2026-05-28 — and the cause is a real REDCap defect, not a broken test |
+| C | Observability | Blocker | Not started | No error tracking, no metrics, no alerting of any kind |
+| D | Reliability | Gap | **Resolved via A** | Every component was a single point of failure with no restart |
+| E | Data & backup | Blocker | **Partly resolved** | No backup existed. Nightly encrypted dumps with a rehearsed restore now run; still same-disk, and three other E items are open |
+| F | Frontend readiness | Gap | Not started | No error boundary — patients see the raw Next.js crash page |
+| G | Testing | Gap | Blocked on B | Good unit coverage, but the E2E safety net is dead |
+| H | Docs & runbooks | Gap | **Resolved** | No runbook, incident, or rollback procedure existed |
+| I | Security | Blocker | **Mostly resolved** | 9 of 12 findings closed. TLS, per-user keys, and the admin password remain |
+| J | Access logging & retention | Blocker | **Mostly resolved** | The access log named the proxy for 93% of requests and lived in `/tmp`; both fixed. Log rotation is still absent |
 
 **Blocker** = must be resolved before production. **Gap** = required for a system that stays healthy, but not a launch stopper. **OK** = adequate as-is.
 
@@ -476,20 +479,34 @@ Searching `docs/` for runbook, incident, rollback, or monitoring material return
 >
 > The admin password (`admin1234567`) also needs replacing. It is stored using a method that is weak by current standards, so a database leak would reveal the original almost immediately.
 
-Full detail was assessed separately; the findings are summarised here and the remediation is folded into the phased plan below.
+### Status as of 2026-08-13
 
-| Finding | Detail |
-|---|---|
-| No TLS | Webapp `3001` and backend `18001` both plain HTTP |
-| `/docs` exposed | `.env` says `ENVIRONMENT=development`, so `/docs` and `/openapi.json` return **200 from the LAN** |
-| No PHI audit log | Nothing records who read which patient record — HIPAA §164.312(b) |
-| Shared API key = superuser | One key; any caller presenting it gets `is_superuser=True` (`auth/backends/api_key.py:33-38`) |
-| Weak admin credentials | `admin1234567`, hashed with single-round salted SHA-256 (`auth/admin_routes.py:48-64`) |
-| Backend on `0.0.0.0` | `scripts/run-backend.sh:60` — the webapp can be bypassed |
-| No login protection | No rate limit, lockout, or failure logging on `/api/admin-auth/login` |
-| No security headers | No HSTS, CSP, X-Frame-Options, or nosniff |
-| Rate limiter unused | Initialised in `app_lifespan.py`, applied to no route |
-| Re-identification key in plaintext | `deid_mapping.csv` mode `664`, on the same host as the data it re-identifies — see `PHI_COMPLIANCE.md` §3 |
+Work has started on this axis. **Nine findings are resolved and verified; three remain.** Everything achievable without a TLS certificate or a change to server configuration is done — what is left is blocked on institutional IT or on a decision about credential distribution.
+
+| Finding | State | Detail |
+|---|---|---|
+| `/docs` and `/openapi.json` exposed | **RESOLVED** | Were 200 from the LAN; now 404. `openapi_url` was left at its default, so hiding the docs UI hid nothing. Fail-closed on the environment check |
+| No security headers | **RESOLVED** | nosniff, X-Frame-Options DENY, Referrer-Policy, CSP. HSTS deliberately withheld until TLS exists |
+| Secrets degrade silently | **RESOLVED** | Production refuses to start without `API_KEY` / `JWT_SECRET`, and rejects a `*` CORS origin |
+| JWT secret default `"change-me"` | **RESOLVED** | Removed. Anyone reading the file could previously mint an admin session |
+| Weak password hashing | **RESOLVED** | Single-round SHA-256 → scrypt, migrated with no downtime and no password reset |
+| No login protection | **RESOLVED** | 8 failures per 15 min → 429, counted per username and per IP; failures now logged |
+| Rate limiter unused | **RESOLVED** | Applied to the AI, upload, and survey-submit routes; fails open if Redis is down |
+| Client address discarded | **RESOLVED** | Proxy now forwards `X-Forwarded-For`; access records name the caller, not the container |
+| No PHI audit log | **RESOLVED** | `phi_access_log` records actor, IP, path, patient reference, and status via middleware |
+| Re-identification key in plaintext | **PARTIAL** | Permissions tightened to `600`. Still plaintext, still on the same host as the data it re-identifies — see `PHI_COMPLIANCE.md` §3 and axis E |
+| **No TLS** | **REMAINING** | Webapp `3001` and backend `18001` are still plain HTTP. Blocked on an institutional CA certificate; the host is a private address so Let's Encrypt is not an option |
+| **Shared API key = superuser** | **REMAINING** | One key, and any caller presenting it gets `is_superuser=True` (`auth/backends/api_key.py:33-38`). This is why every audit row reads `actor=system` — per-user keys (`AUTH_MODE=multi_key`, already implemented) are needed before the audit trail can name a person |
+| **Weak admin password** | **REMAINING** | `admin1234567` is unchanged. scrypt makes a database leak far harder to exploit and the lockout blocks online guessing, but the string itself is still trivial to guess |
+| Backend on `0.0.0.0` | **REMAINING** | `scripts/run-backend.sh:60` — the webapp can still be bypassed. Moving to loopback must land with the nginx work or the webapp container loses its API |
+
+### What "remaining" depends on
+
+The three open items are not waiting on effort — each is blocked on something outside the codebase:
+
+- **TLS** waits on institutional IT issuing a certificate, and on server configuration (nginx, port 443) that is out of scope for application changes.
+- **Per-user API keys** need a decision about who gets a key and how keys are distributed and revoked, not just the code switch.
+- **The admin password** is a one-line change whenever the owner chooses a new one; it was left alone because rotating a shared credential without telling its users breaks their access.
 
 Adequate: PostgreSQL and Redis are loopback-only, uploads are capped at 25 MB, login messages do not enable account enumeration, and `NEXT_PUBLIC_API_KEY` has been removed.
 
