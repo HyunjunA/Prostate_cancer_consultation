@@ -42,6 +42,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # Lifespan = the async startup/shutdown context. Defined separately so
 # this file stays focused on routing.
 from app_lifespan import lifespan
+from auth import phi_audit
 from core.logging import configure_logging
 from core.settings import get_settings
 
@@ -197,6 +198,33 @@ def create_app() -> FastAPI:
             "Content-Security-Policy",
             "default-src 'none'; frame-ancestors 'none'",
         )
+        return response
+
+    # PHI access audit — HIPAA 164.312(b).
+    #
+    # A middleware rather than a hook inside check_patient_access(): that helper
+    # is called from 5 places across 28 patient- and doctor-facing routes, so
+    # hooking it would leave an audit trail with holes that reads as complete.
+    # Recording here means a route added later cannot forget to opt in.
+    #
+    # Registered AFTER the security-header middleware so it observes the final
+    # status code. Never raises — see auth/phi_audit.record_access.
+    @app.middleware("http")
+    async def _phi_audit(request, call_next):
+        response = await call_next(request)
+        path = request.url.path
+        if phi_audit.should_audit(path):
+            await phi_audit.record_access(
+                actor=phi_audit.resolve_actor(request),
+                source_ip=phi_audit.client_ip(request),
+                method=request.method,
+                path=path,
+                patient_ref=phi_audit.extract_patient_ref(
+                    path, request.url.query
+                ),
+                status_code=response.status_code,
+                user_agent=request.headers.get("user-agent"),
+            )
         return response
 
     # Register every router from the table of contents above. Single
