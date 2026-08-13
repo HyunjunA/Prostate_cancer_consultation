@@ -54,11 +54,15 @@ services:
       - "host.docker.internal:host-gateway"
     ports:
       # webapp directly on 3001 (no nginx in native mode).
-      # LAN-exposed on user request (2026-08-04): http://10.226.8.205:3001
-      # WARNING: anyone on the LAN can read patient reports and survey answers —
-      # plain HTTP, no TLS, no network-level access control. This is the state
-      # this file now ships in, so a fresh checkout is exposed by default.
-      # Close it with "127.0.0.1:3001:3000" and reach it over a tunnel instead:
+      # LAN-exposed on user request: http://10.226.8.205:3001
+      # WINDOW: 2026-08-07 .. 2026-08-14. scripts/close-lan-exposure.sh runs from
+      # cron every 15 min and flips this line back to 127.0.0.1 once that date
+      # passes, then removes its own cron entry. Re-opening later is therefore
+      # safe, but it is again open-ended unless a new window is set.
+      # WARNING: while open, anyone on the LAN can read patient reports and
+      # survey answers — plain HTTP, no TLS, no network-level access control.
+      # This is the state the file ships in, so a fresh checkout starts exposed.
+      # Close by hand with "127.0.0.1:3001:3000" and use a tunnel instead:
       #   ssh -L 3001:127.0.0.1:3001 <user>@<host>   ->   http://localhost:3001
       - "0.0.0.0:3001:3000"
     healthcheck:
