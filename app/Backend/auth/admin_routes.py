@@ -4,6 +4,7 @@ All endpoints require an authenticated admin user (``role == "admin"``).
 """
 
 import hashlib
+import hmac
 import logging
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -45,23 +46,80 @@ def _require_admin(user: AuthUserDTO) -> None:
         )
 
 
-def _hash_password(password: str) -> str:
-    """Hash a password with SHA-256 + salt.
+# Password hashing — scrypt (stdlib).
+#
+# The previous scheme was a single round of salted SHA-256. SHA-256 is built to
+# be fast, which is the opposite of what a password hash needs: commodity
+# hardware tries billions of candidates per second, so a leaked database gives
+# up a password like "admin1234567" essentially instantly.
+#
+# scrypt is deliberately slow AND memory-hard, so GPUs and ASICs lose most of
+# their advantage. It ships in hashlib, so this costs no new dependency — worth
+# noting on a project with no vulnerability scanning and a pinned lock file.
+#
+# Parameters: n=2**14, r=8, p=1 measures ~50 ms here. Slow enough that online
+# guessing is pointless and offline guessing is expensive; fast enough that a
+# human logging in does not notice.
+_SCRYPT_N = 2 ** 14
+_SCRYPT_R = 8
+_SCRYPT_P = 1
+_SCRYPT_DKLEN = 32
+_SCRYPT_PREFIX = "scrypt"
 
-    For production consider argon2/bcrypt via passlib; SHA-256 is used here
-    to avoid adding passlib to requirements until Phase 4 (JWT mode).
-    """
-    salt = secrets.token_hex(16)
-    hashed = hashlib.sha256(f"{salt}:{password}".encode()).hexdigest()
-    return f"{salt}${hashed}"
+
+def _hash_password(password: str) -> str:
+    """Hash a password with scrypt. Returns ``scrypt$n$r$p$salt$hash``."""
+    salt = secrets.token_bytes(16)
+    dk = hashlib.scrypt(
+        password.encode(), salt=salt,
+        n=_SCRYPT_N, r=_SCRYPT_R, p=_SCRYPT_P, dklen=_SCRYPT_DKLEN,
+    )
+    return (
+        f"{_SCRYPT_PREFIX}${_SCRYPT_N}${_SCRYPT_R}${_SCRYPT_P}"
+        f"${salt.hex()}${dk.hex()}"
+    )
 
 
 def _verify_password(password: str, stored: str) -> bool:
-    """Verify a password against the stored salt$hash."""
+    """Verify a password against either hash format.
+
+    Legacy ``salt$sha256hex`` rows are still accepted so existing accounts keep
+    working; ``_needs_rehash`` marks them for silent upgrade on next login.
+    Both comparisons use ``compare_digest`` — a plain ``==`` returns as soon as
+    two bytes differ, which leaks how much of a guess was correct.
+    """
+    if not stored:
+        return False
+
+    if stored.startswith(_SCRYPT_PREFIX + "$"):
+        try:
+            _, n, r, p, salt_hex, hash_hex = stored.split("$", 5)
+            dk = hashlib.scrypt(
+                password.encode(), salt=bytes.fromhex(salt_hex),
+                n=int(n), r=int(r), p=int(p), dklen=len(hash_hex) // 2,
+            )
+        except (ValueError, TypeError):
+            # Malformed stored hash: refuse rather than raise into a 500, which
+            # would tell an attacker the record exists.
+            return False
+        return hmac.compare_digest(dk.hex(), hash_hex)
+
+    # Legacy: salt$sha256hex
     if "$" not in stored:
         return False
     salt, hashed = stored.split("$", 1)
-    return hashlib.sha256(f"{salt}:{password}".encode()).hexdigest() == hashed
+    candidate = hashlib.sha256(f"{salt}:{password}".encode()).hexdigest()
+    return hmac.compare_digest(candidate, hashed)
+
+
+def _needs_rehash(stored: str) -> bool:
+    """True when a stored hash uses the superseded scheme.
+
+    Callers re-hash after a SUCCESSFUL verification, which is the only moment
+    the plaintext is available. That upgrades accounts as people log in,
+    without downtime and without asking anyone to reset a password.
+    """
+    return bool(stored) and not stored.startswith(_SCRYPT_PREFIX + "$")
 
 
 # ──────────────────────────────────────────────────────────────────────────────

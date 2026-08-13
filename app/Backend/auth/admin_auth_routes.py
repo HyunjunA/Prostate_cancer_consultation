@@ -13,11 +13,12 @@ which only functions under ``AUTH_MODE=jwt``.
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth.admin_routes import _verify_password
+from auth import login_guard
+from auth.admin_routes import _hash_password, _needs_rehash, _verify_password
 from auth.admin_session import require_admin_user
 from auth.backends.jwt_auth import _JWT_EXPIRE_MINUTES, create_access_token
 from auth.base import AuthUser as AuthUserDTO
@@ -32,6 +33,7 @@ router = APIRouter(prefix="/api/admin-auth", tags=["Admin Auth"])
 @router.post("/login", response_model=TokenResponse)
 async def admin_login(
     body: LoginRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     """Authenticate an admin (username + password) and return a JWT.
@@ -40,6 +42,17 @@ async def admin_login(
     role (or ``is_superuser``) may obtain a token here; everyone else gets 403
     so a non-admin account cannot mint an admin session.
     """
+    ip = login_guard.client_ip(request)
+
+    # Check the throttle BEFORE touching the database or hashing anything, so a
+    # locked-out attacker cannot keep spending server CPU on scrypt.
+    if await login_guard.is_locked(body.username, ip):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed attempts. Try again later.",
+            headers={"Retry-After": str(login_guard.WINDOW_SECONDS)},
+        )
+
     result = await db.execute(
         select(AuthUser).where(
             AuthUser.username == body.username,
@@ -53,6 +66,12 @@ async def admin_login(
         or not db_user.password_hash
         or not _verify_password(body.password, db_user.password_hash)
     ):
+        await login_guard.record_failure(body.username, ip)
+        # Failed logins were not recorded at all, so a sustained attack left no
+        # trace. Log the username and source, never the attempted password.
+        logger.warning(
+            "Admin login failed for user=%s from ip=%s", body.username, ip
+        )
         # Same message for unknown user and bad password — no account enumeration.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -60,10 +79,34 @@ async def admin_login(
         )
 
     if db_user.role != "admin" and not db_user.is_superuser:
+        # Credentials were correct, so this is not a guess — do not count it
+        # against the throttle, but do record it: a valid non-admin account
+        # probing the admin endpoint is worth seeing.
+        logger.warning(
+            "Non-admin user=%s attempted admin login from ip=%s", db_user.username, ip
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required",
         )
+
+    await login_guard.clear(body.username, ip)
+
+    # Upgrade a legacy hash now, while the plaintext is in hand — the only
+    # moment it can be done without asking the user to reset anything. Wrapped
+    # so a write failure cannot turn a valid login into an error: the upgrade
+    # is opportunistic and will simply be retried at the next login.
+    if _needs_rehash(db_user.password_hash):
+        try:
+            db_user.password_hash = _hash_password(body.password)
+            await db.commit()
+            logger.info("Upgraded password hash to scrypt for user=%s", db_user.username)
+        except Exception:
+            await db.rollback()
+            logger.warning(
+                "Password hash upgrade failed for user=%s; login still granted",
+                db_user.username, exc_info=True,
+            )
 
     token = create_access_token(
         user_id=db_user.id,

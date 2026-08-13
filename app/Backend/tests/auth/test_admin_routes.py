@@ -36,14 +36,58 @@ class TestPasswordHelpers:
     """Tests for _hash_password and _verify_password."""
 
     def test_hash_password_format(self):
-        """Hashed password should have salt$hash format."""
+        """New hashes are scrypt, and carry their own cost parameters.
+
+        Storing n/r/p alongside the hash is what lets the cost be raised later
+        without invalidating every existing password.
+        """
         from auth.admin_routes import _hash_password
         result = _hash_password("mypassword")
-        assert "$" in result
-        parts = result.split("$")
-        assert len(parts) == 2
-        assert len(parts[0]) == 32  # 16 bytes hex = 32 chars
-        assert len(parts[1]) == 64  # SHA-256 hex = 64 chars
+        scheme, n, r, p, salt_hex, hash_hex = result.split("$", 5)
+        assert scheme == "scrypt"
+        assert int(n) >= 2 ** 14      # cost must not silently regress
+        assert int(r) >= 8 and int(p) >= 1
+        assert len(salt_hex) == 32    # 16 random bytes
+        assert len(hash_hex) == 64    # 32-byte derived key
+
+    def test_legacy_sha256_hashes_still_verify(self):
+        """Accounts created before the scrypt switch must keep working.
+
+        Rejecting them would lock every existing admin out at deploy time.
+        """
+        import hashlib
+        import secrets
+        from auth.admin_routes import _verify_password
+
+        salt = secrets.token_hex(16)
+        legacy = f"{salt}${hashlib.sha256(f'{salt}:hunter2'.encode()).hexdigest()}"
+        assert _verify_password("hunter2", legacy) is True
+        assert _verify_password("wrong", legacy) is False
+
+    def test_needs_rehash_flags_only_legacy(self):
+        """Legacy hashes are marked for upgrade; scrypt hashes are left alone.
+
+        Getting this backwards would either re-hash on every single login or
+        never migrate anyone.
+        """
+        import hashlib
+        import secrets
+        from auth.admin_routes import _hash_password, _needs_rehash
+
+        salt = secrets.token_hex(16)
+        legacy = f"{salt}${hashlib.sha256(f'{salt}:pw'.encode()).hexdigest()}"
+        assert _needs_rehash(legacy) is True
+        assert _needs_rehash(_hash_password("pw")) is False
+
+    def test_malformed_hash_is_refused_not_raised(self):
+        """A corrupt stored hash denies access instead of raising a 500.
+
+        A 500 here distinguishes "this account exists but its row is broken"
+        from "no such account", which is exactly what login must not reveal.
+        """
+        from auth.admin_routes import _verify_password
+        for broken in ("", "scrypt$", "scrypt$notanint$8$1$aa$bb", "nodollarsign"):
+            assert _verify_password("pw", broken) is False
 
     def test_hash_password_different_salts(self):
         """Same password should produce different hashes (different salts)."""
