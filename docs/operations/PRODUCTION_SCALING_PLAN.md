@@ -75,7 +75,7 @@ The three user personas do not load the system equally, and conflating them lead
 
 | Persona | What they do | Cost per action | Concurrency risk |
 |---|---|---|---|
-| **Patient (survey)** | Submits DCS / SDM / Risk / Satisfaction forms, optional REDCap sync | One or a few DB writes; REDCap call up to 60 s timeout | **This is the real ~100-concurrent path** |
+| **Patient (survey)** | Submits DCS / SDM / Risk / Satisfaction forms, optional REDCap sync | One or a few DB writes; synchronous REDCap calls (30 s lookup + 5 s each for project/event/import) | **This is the real ~100-concurrent path** |
 | **Patient (report)** | Reads AI-generated summaries | DB reads, page render | Moderate; grows with table size |
 | **Doctor** | Reviews rewrites and score trajectories | DB reads + behavior-tracking writes | Low count, heavier pages |
 | **Admin** | Uploads transcripts | Triggers a 2–3 min pipeline run | **Never concurrent — one person, one file at a time** |
@@ -190,7 +190,9 @@ The readiness assessment's own verdict on load testing is *"1 file · Never run 
 - `app/Backend/load_tests/test_100_doctors.py` — 100 simulated doctors, `CONCURRENCY = 100`, burst mode. But it hits only `/api/track/doctor` — behavior tracking, the cheapest endpoint in the system.
 - `scripts/load_test.py` — concurrent-session latency percentiles.
 
-Neither covers **survey submission**, which is the actual 100-concurrent path. Write that scenario, run it, and let the numbers set the worker/pool values. Guessing here produces a configuration nobody can defend.
+Neither covers **survey submission**, which is the actual 100-concurrent path. Worse, **neither one runs**: `test_100_doctors.py` imports `aiohttp`, which is in no requirements file and is not installed, and half of `scripts/load_test.py`'s endpoints were deleted in migrations 008/020 and now return 404. The working count is zero.
+
+The replacement is specified in [`LOAD_TEST_PLAN.md`](LOAD_TEST_PLAN.md) — isolated test stack, realistic journeys, ramp to find the ceiling, and correctness checks under load. Run it, and let the numbers set the worker/pool values. Guessing here produces a configuration nobody can defend.
 
 ### Data growth
 
