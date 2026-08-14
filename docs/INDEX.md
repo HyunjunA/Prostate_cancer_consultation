@@ -51,6 +51,7 @@ Top-level catalog of all docs under `docs/`. Updated 2026-04-28.
 |---|---|
 | [`RUNBOOK.md`](operations/RUNBOOK.md) | **Something is broken — what do I do?** Triage, per-service diagnosis, restart, rebuild, rollback, database restore. |
 | [`INCIDENT_RESPONSE.md`](operations/INCIDENT_RESPONSE.md) | **Suspected patient-data exposure.** Contain, preserve evidence, report, scope, remediate. Read before touching anything. |
+| [`PRODUCTION_SCALING_PLAN.md`](operations/PRODUCTION_SCALING_PLAN.md) | **What is needed to serve ~100 concurrent users**, in the order to do it. Seven phases mapped onto the readiness axes. Plan only — nothing executed. (KR: [`PRODUCTION_SCALING_PLAN_KR.md`](operations/PRODUCTION_SCALING_PLAN_KR.md)) |
 
 ---
 
