@@ -12,17 +12,41 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException, Request, status
 
 from auth.base import AuthBackend, AuthUser as AuthUserDTO
+from core.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
-# No "change-me" fallback. This secret signs admin session JWTs, so a default
-# value means anyone who reads this file can mint a valid admin session — and
-# because everything keeps working, nothing ever surfaces that it happened.
-# Production is blocked earlier by the Settings validator; the dev-only default
-# below is obviously non-secret and cannot be mistaken for a configured value.
-_JWT_SECRET = os.getenv("JWT_SECRET") or os.getenv("SECRET_KEY") or (
-    "insecure-development-only-secret-do-not-use-in-production"
-)
+# Read through Settings, NOT os.getenv. pydantic-settings loads .env as a FILE;
+# those values never enter the process environment, so os.getenv("JWT_SECRET")
+# returned None under systemd (the unit sets no EnvironmentFile) and this
+# silently fell through to the development literal below. The backend then
+# signed admin JWTs with a constant published in this repo while the webapp
+# middleware verified them against the real .env secret: every admin login
+# succeeded at the API and was then bounced straight back to the login page.
+#
+# The Settings validator did not catch it because it checks `settings.jwt_secret`
+# — the value this module was not using. Reading the same source it validates is
+# what makes that check mean something.
+_settings = get_settings()
+
+_JWT_SECRET = _settings.jwt_secret or os.getenv("SECRET_KEY") or ""
+
+if not _JWT_SECRET:
+    # No "change-me" fallback outside development. A default value means anyone
+    # who reads this file can mint a valid admin session — and because
+    # everything keeps working, nothing ever surfaces that it happened.
+    if _settings.environment == "development":
+        _JWT_SECRET = "insecure-development-only-secret-do-not-use-in-production"
+        logger.warning(
+            "JWT_SECRET is unset; using the development-only signing secret. "
+            "Admin sessions are forgeable — never run this outside development."
+        )
+    else:
+        raise RuntimeError(
+            f"ENVIRONMENT={_settings.environment!r} but JWT_SECRET is unset. "
+            "Set it in app/Backend/.env. Refusing to sign admin sessions with a "
+            "publicly known secret."
+        )
 _JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", os.getenv("ALGORITHM", "HS256"))
 _JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
 

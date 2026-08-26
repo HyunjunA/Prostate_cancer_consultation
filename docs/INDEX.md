@@ -61,6 +61,7 @@ Top-level catalog of all docs under `docs/`. Updated 2026-04-28.
 | [`PRODUCTION_READINESS.md`](security/PRODUCTION_READINESS.md) | What is missing before this can be called production — ten axes, measured. Supersedes `SECURITY_AUDIT.md`. |
 | [`PHI_COMPLIANCE.md`](security/PHI_COMPLIANCE.md) | Azure PHI handling requirements. |
 | [`SECURITY_AUDIT.md`](security/SECURITY_AUDIT.md) | OWASP audit from 2026-02-12. **Largely stale** — assumes nginx + a Dockerised backend, which is not the current deployment. |
+| [`INCIDENT_2026-08-25_ADMIN_LOGIN.md`](security/INCIDENT_2026-08-25_ADMIN_LOGIN.md) | Why admin login bounced back to the login page for 12 days: the systemd migration emptied the process environment, so `jwt_auth.py`'s `os.getenv` signed with the development fallback. Read before adding config that `os.getenv` reads. |
 
 ---
 
