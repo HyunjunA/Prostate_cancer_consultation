@@ -18,7 +18,7 @@ harder to do safely. Evidence (measured 2026-06-06):
 | Signal | Measurement | Problem |
 |---|---|---|
 | Oversized route files | `routes_surveys.py` **1851**, `routes_doctor.py` **1561**, `routes_patient.py` **1358** lines | one file mixes 14–18 endpoints + helpers + constants; hard to read/review/test |
-| `print()` in request paths | `routes_surveys.py` **251**, `routes_patient.py` **40**, `routes_doctor.py` **35** | violates `app/Backend/CLAUDE.md` rule #1 ("No raw print() in request paths — use logging"); noisy, unstructured |
+| `print()` in request paths | `routes_surveys.py` **251**, `routes_patient.py` **40**, `routes_doctor.py` **35** | violates backend rule #1 ("No raw print() in request paths — use logging"); noisy, unstructured |
 | Mixed concerns | mapping tables, transforms, Pydantic models, routes all inline in one file | no `services/` / `utils/` separation (repo standard) |
 
 **Subtasks (incremental, one file at a time — keep behavior identical):**
@@ -31,7 +31,7 @@ harder to do safely. Evidence (measured 2026-06-06):
      (:255), `REDCapImportData` (:1420), the `import_to_redcap*` helpers.
    - `routes_patient.py` → `_FV_QUESTION_TO_REDCAP_FIELD` / `_FV_*_CODES` /
      `_fv_answer_to_redcap` (:1135–1244).
-3. **Docstrings + type hints** on public functions (Google-style, per repo CLAUDE.md).
+3. **Docstrings + type hints** on public functions (Google-style, per repository convention).
 4. **Consistent error handling** — specific exceptions + structured logging, no bare `except`.
 5. After each step: `pytest -m "not e2e"` + `ruff check .` + native boot must stay green.
 

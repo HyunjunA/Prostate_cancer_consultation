@@ -135,7 +135,7 @@ CREATE INDEX idx_pfvr_file_speaker
 
 | Column | Why not |
 |---|---|
-| `visit_version` | All rows would currently carry the same constant `'v37'`, so the column would be informationless at write time. A future V39 will likely change more than just a label (different question set, different validation rules, possibly new columns), so a single string column would not actually save us future migration work. The repo-wide CLAUDE.md guidance is explicit: *"Don't design for hypothetical future requirements."* If a V39 ever ships, an Alembic migration at that point can add `visit_version` along with whatever other columns the new design actually needs. |
+| `visit_version` | All rows would currently carry the same constant `'v37'`, so the column would be informationless at write time. A future V39 will likely change more than just a label (different question set, different validation rules, possibly new columns), so a single string column would not actually save us future migration work. The repo-wide design guidance is explicit: *"Don't design for hypothetical future requirements."* If a V39 ever ships, an Alembic migration at that point can add `visit_version` along with whatever other columns the new design actually needs. |
 | `updated_at` | The system has no other "did this row get edited later" tracking — `patient_summary_domain.patient_scoring` overwrites silently, with no audit trail. Adding `updated_at` only here would create an inconsistent special case. The research team has not flagged "did the patient revise their answer?" as a V37 question. If it ever becomes one, a follow-up migration can add the column with `server_default=submitted_at` to backfill cleanly. |
 
 ### 3.4 Constraint rationale

@@ -2,7 +2,7 @@
 //
 // The active doctor id is SESSION-SCOPED and derived from the URL (?doctorid).
 // It is deliberately NOT persisted to localStorage — identifiers must not leak
-// across sessions and must not live in localStorage (webapp CLAUDE.md rule).
+// across sessions and must not live in localStorage (webapp convention).
 import { create } from "zustand";
 
 interface DoctorIdState {

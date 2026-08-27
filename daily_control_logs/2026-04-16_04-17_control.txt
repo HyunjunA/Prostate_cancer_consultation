@@ -99,10 +99,10 @@ bad82f3  fix: align /api/doctor/files with source_filename + harden
 ### G. Gitignore housekeeping (2 commits)
 5596fbf  chore: gitignore *_KR.pdf and untrack the previously committed
                 KR PDF
-6d49e7a  chore: gitignore .harness/ Claude Code evaluation tooling
+6d49e7a  chore: gitignore .harness/ local evaluation tooling
 
   *_KR.pdf rule added to mirror existing *_KR.md.
-  .harness/ (Claude Code evaluation tooling) added to .gitignore.
+  .harness/ (local evaluation tooling) added to .gitignore.
 
 ### H. doctor_sentence_view removal (1 commit, the big refactor)
 ed467fb  refactor: remove doctor_sentence_view across schema, code,

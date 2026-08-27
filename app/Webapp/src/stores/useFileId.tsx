@@ -3,7 +3,7 @@
 // The active file id is SESSION-SCOPED and derived from the URL (?fileid / ?f).
 // It is deliberately NOT persisted to localStorage: a stale id from a previous
 // session must never leak into a new one (a non-existent patient there makes
-// survey submits 404 → "Failed to submit"), and per the webapp CLAUDE.md rule
+// survey submits 404 → "Failed to submit"), and per the webapp convention
 // patient/file identifiers must not live in localStorage.
 import { create } from "zustand";
 
