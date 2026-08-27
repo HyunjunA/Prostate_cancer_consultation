@@ -32,6 +32,33 @@ async function proxyRequest(
     headers["Content-Type"] = contentType;
   }
 
+  // Forward who the caller actually is.
+  //
+  // Every browser request reaches the backend through this proxy, so without
+  // these headers the backend sees one address — this container — for every
+  // user. 93% of access-log entries read 172.31.0.2, which makes the log
+  // useless for answering "who did this?" and would make a PHI audit trail
+  // record the same container on every row.
+  //
+  // X-Forwarded-For is append-only by convention: keep any upstream chain and
+  // add the address we observed, so a future nginx in front still works.
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  const observedIp = request.headers.get("x-real-ip") || request.ip || "";
+  const chain = [forwardedFor, observedIp].filter(Boolean).join(", ");
+  if (chain) {
+    headers["X-Forwarded-For"] = chain;
+  }
+  const forwardedProto = request.headers.get("x-forwarded-proto");
+  if (forwardedProto) {
+    headers["X-Forwarded-Proto"] = forwardedProto;
+  }
+  // The user agent distinguishes a real browser from a script when reviewing
+  // access after the fact.
+  const userAgent = request.headers.get("user-agent");
+  if (userAgent) {
+    headers["User-Agent"] = userAgent;
+  }
+
   const fetchOptions: RequestInit = {
     method: request.method,
     headers,

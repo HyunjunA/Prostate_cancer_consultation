@@ -42,6 +42,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # Lifespan = the async startup/shutdown context. Defined separately so
 # this file stays focused on routing.
 from app_lifespan import lifespan
+from auth import phi_audit
 from core.logging import configure_logging
 from core.settings import get_settings
 
@@ -129,6 +130,11 @@ def create_app() -> FastAPI:
     # Pulling once here keeps create_app() pure-ish — easier to test.
     settings = get_settings()
 
+    # Anything that is not explicitly "development" is treated as production.
+    # Fail-closed: a typo in ENVIRONMENT hides the schema rather than exposing
+    # it, which is the safer direction to be wrong in.
+    _dev = settings.environment == "development"
+
     app = FastAPI(
         title="COMPASS API",
         description=(
@@ -138,10 +144,16 @@ def create_app() -> FastAPI:
         ),
         version="1.0.0",
         # docs_url=None disables /docs entirely (returns 404). Same for
-        # redoc_url. We hide both in non-dev environments to avoid
+        # redoc_url. We hide all three in non-dev environments to avoid
         # surfacing the API schema to anonymous traffic in prod.
-        docs_url="/docs" if settings.environment == "development" else None,
-        redoc_url="/redoc" if settings.environment == "development" else None,
+        #
+        # openapi_url matters as much as the other two and used to be left at
+        # its default: /docs was a 404 while /openapi.json still served the
+        # full schema, so hiding the UI hid nothing. Every endpoint, parameter,
+        # and response model stayed one request away.
+        docs_url="/docs" if _dev else None,
+        redoc_url="/redoc" if _dev else None,
+        openapi_url="/openapi.json" if _dev else None,
         # lifespan replaces the deprecated @app.on_event hooks. See
         # app_lifespan.py for what runs at startup vs shutdown.
         lifespan=lifespan,
@@ -158,6 +170,62 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Security response headers.
+    #
+    # A reverse proxy would normally set these, but there is no proxy in front
+    # of this backend yet, and the API is reachable directly. Setting them here
+    # also means they survive a future proxy being misconfigured — defence in
+    # depth rather than a single place to get wrong.
+    #
+    # HSTS is deliberately NOT sent: the deployment is plain HTTP today, and
+    # sending Strict-Transport-Security over HTTP would pin browsers to an
+    # https:// origin that does not answer, locking users out of a working
+    # site. It belongs with the TLS work, not before it.
+    @app.middleware("http")
+    async def _security_headers(request, call_next):
+        response = await call_next(request)
+        # Stop the browser second-guessing declared content types, which is
+        # how a JSON response gets executed as script.
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        # This API is never legitimately framed; denying it removes clickjacking.
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        # Patient links carry the file token in the URL. Without this the token
+        # leaks to any third-party host in a Referer header.
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        # API responses are data, never a document; forbid every subresource.
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'none'; frame-ancestors 'none'",
+        )
+        return response
+
+    # PHI access audit — HIPAA 164.312(b).
+    #
+    # A middleware rather than a hook inside check_patient_access(): that helper
+    # is called from 5 places across 28 patient- and doctor-facing routes, so
+    # hooking it would leave an audit trail with holes that reads as complete.
+    # Recording here means a route added later cannot forget to opt in.
+    #
+    # Registered AFTER the security-header middleware so it observes the final
+    # status code. Never raises — see auth/phi_audit.record_access.
+    @app.middleware("http")
+    async def _phi_audit(request, call_next):
+        response = await call_next(request)
+        path = request.url.path
+        if phi_audit.should_audit(path):
+            await phi_audit.record_access(
+                actor=phi_audit.resolve_actor(request),
+                source_ip=phi_audit.client_ip(request),
+                method=request.method,
+                path=path,
+                patient_ref=phi_audit.extract_patient_ref(
+                    path, request.url.query
+                ),
+                status_code=response.status_code,
+                user_agent=request.headers.get("user-agent"),
+            )
+        return response
 
     # Register every router from the table of contents above. Single
     # loop instead of 12 explicit `app.include_router(...)` calls —

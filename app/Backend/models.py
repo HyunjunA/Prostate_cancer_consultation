@@ -503,3 +503,42 @@ class AdminUploadLog(Base):
 
     def __repr__(self):
         return f"<AdminUploadLog(id={self.id}, status={self.status}, file={self.queued_filename})>"
+
+
+class PhiAccessLog(Base):
+    """One row per request that could return patient data.
+
+    WHY THIS EXISTS
+        HIPAA 164.312(b) requires a record of who accessed which patient
+        record and when. Nothing recorded that before this table, and the gap
+        could not be closed after the fact — the access log kept only the
+        webapp container's address for browser traffic, so even reconstructing
+        it from logs was impossible.
+
+    WHY A MIDDLEWARE WRITES IT, NOT check_patient_access()
+        That helper looked like the single gateway but is called from only 5
+        places across 28 patient- and doctor-facing routes. A hook there would
+        have produced an audit trail with holes — worse than none, because it
+        looks complete. A middleware records by construction: a new route
+        cannot forget to opt in.
+
+    NOTE ON `actor`
+        Under AUTH_MODE=api_key every caller authenticates with one shared key
+        and is recorded as "system". Per-user keys (AUTH_MODE=multi_key) are
+        what make this column meaningful; until then `source_ip` carries most
+        of the identifying weight.
+    """
+    __tablename__ = 'phi_access_log'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    occurred_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), index=True)
+    actor = Column(String(255))                              # username, or 'system' for the shared API key
+    source_ip = Column(String(64))                           # real client IP once the proxy forwards it
+    method = Column(String(10), nullable=False)              # GET / POST / ...
+    path = Column(String(500), nullable=False)               # request path, no query string
+    patient_ref = Column(String(500), index=True)            # hashed file/speaker token when present
+    status_code = Column(Integer)                            # response status, so denials are recorded too
+    user_agent = Column(String(500))                         # distinguishes a browser from a script
+
+    def __repr__(self):
+        return f"<PhiAccessLog(id={self.id}, actor={self.actor}, path={self.path})>"

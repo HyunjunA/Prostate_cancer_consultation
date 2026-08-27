@@ -54,7 +54,7 @@ April 17, 2026 — Documentation push + operational fixes (28 commits):
 
 7. Gitignore housekeeping (2 commits)
    - *_KR.pdf added (mirrors *_KR.md rule)
-   - .harness/ added (Claude Code evaluation tooling, local only)
+   - .harness/ added (local evaluation tooling, local only)
    - Previously committed KR PDF removed from index (local file kept)
 
 8. doctor_sentence_view removal refactor (1 commit, ed467fb — the big one)

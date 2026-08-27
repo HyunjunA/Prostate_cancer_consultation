@@ -37,6 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.admin_session import require_admin_user
 from auth.base import AuthUser
+from auth.rate_limit import limit
 from core.settings import get_settings
 from db import get_db
 from models import AdminUploadLog, TranscriptAnalysisLog
@@ -135,7 +136,9 @@ async def _stream_to(file: UploadFile, dest: Path) -> int:
     return total
 
 
-@router.post("/upload-transcript")
+# 10/min: an admin uploading a batch by hand sends far fewer, and every
+# accepted file is 25 MB and starts a pipeline run.
+@router.post("/upload-transcript", dependencies=[limit(10, 60)])
 async def upload_transcript(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),

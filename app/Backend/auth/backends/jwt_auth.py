@@ -15,7 +15,14 @@ from auth.base import AuthBackend, AuthUser as AuthUserDTO
 
 logger = logging.getLogger(__name__)
 
-_JWT_SECRET = os.getenv("JWT_SECRET", os.getenv("SECRET_KEY", "change-me"))
+# No "change-me" fallback. This secret signs admin session JWTs, so a default
+# value means anyone who reads this file can mint a valid admin session — and
+# because everything keeps working, nothing ever surfaces that it happened.
+# Production is blocked earlier by the Settings validator; the dev-only default
+# below is obviously non-secret and cannot be mistaken for a configured value.
+_JWT_SECRET = os.getenv("JWT_SECRET") or os.getenv("SECRET_KEY") or (
+    "insecure-development-only-secret-do-not-use-in-production"
+)
 _JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", os.getenv("ALGORITHM", "HS256"))
 _JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))
 

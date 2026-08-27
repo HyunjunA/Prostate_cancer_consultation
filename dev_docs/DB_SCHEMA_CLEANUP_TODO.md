@@ -27,7 +27,7 @@ picked up. **Do NOT bundle items with different risk tags into the same PR.**
 - For HIGH-risk items (G/H/I): take a `pg_dump` of the native postgres
   database before applying the migration. Document the exact rollback
   commands in the PR description.
-- Confirm no real-collaborator names (per repo CLAUDE.md) leak into new
+- Confirm no real-collaborator names (per repository convention) leak into new
   files.
 
 ---

@@ -50,6 +50,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth import get_current_user
 from auth.access_control import check_patient_access
 from auth.base import AuthUser
+from auth.rate_limit import limit
 from db import get_db
 from deid import unhash_visit_date
 from models import DoctorRewriteLog, SentencePrediction, TranscriptAnalysisLog
@@ -1095,7 +1096,10 @@ class SentenceScoringResponse(BaseModel):
     sentence: str
     explanation: Optional[str] = None
 
-@router.post("/score-sentence")
+# 20/min: a doctor scoring sentences interactively sends a handful at a time,
+# so this is well clear of real use while stopping a loop from running up an
+# Azure bill.
+@router.post("/score-sentence", dependencies=[limit(20, 60)])
 async def score_sentence(
     request_data: SentenceScoringRequest,
     user: AuthUser = Depends(get_current_user)
@@ -1393,7 +1397,9 @@ class AIRewriteResponse(BaseModel):
 # ═══════════════════════════════════════════════════════════
 # AI Rewrite Endpoint
 # ═══════════════════════════════════════════════════════════
-@router.post("/ai-rewrite", response_model=AIRewriteResponse)
+# Same reasoning as /score-sentence, and a rewrite is the more expensive call
+# of the two.
+@router.post("/ai-rewrite", response_model=AIRewriteResponse, dependencies=[limit(20, 60)])
 async def generate_ai_rewrite(
     request_data: AIRewriteRequest,
     user: AuthUser = Depends(get_current_user)
