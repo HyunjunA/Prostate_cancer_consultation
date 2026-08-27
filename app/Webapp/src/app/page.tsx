@@ -72,77 +72,11 @@ import APITestDashboard from "@/components/ApiTestDashboard";
 // Patient: ?fileid=xxx&patid=yyy&visit=first|followup
 // Doctor:  ?fileid=xxx&doctorid=zzz
 // ═══════════════════════════════════════════════════════════
-type ViewType = "patient" | "doctor" | "doctorSelect" | "selection";
-
-// Doctor-selection screen: lists doctors (from /api/doctor/list) and links each
-// to ?doctorid=<hashed>. Replaces the removed "?doctorid=auto" (= all patients)
-// entry so the physician view is always scoped to one doctor.
-function DoctorSelectionScreen({ isDarkMode }: { isDarkMode: boolean }) {
-  const [doctors, setDoctors] = useState<
-    { doctor_id: string; patient_count: number }[]
-  >([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch(`/api/backend/doctor/list`)
-      .then((r) => r.json())
-      .then((d) => setDoctors(d.doctors || []))
-      .catch((e) => console.error("[DoctorSelect] load failed:", e))
-      .finally(() => setLoading(false));
-  }, []);
-
-  return (
-    <div
-      className={`min-h-screen p-8 ${
-        isDarkMode ? "bg-slate-950 text-slate-100" : "bg-slate-50 text-slate-900"
-      }`}
-    >
-      <div className="max-w-2xl mx-auto">
-        <a
-          href="/"
-          className={`text-sm hover:underline ${
-            isDarkMode ? "text-slate-400" : "text-slate-500"
-          }`}
-        >
-          ← Back
-        </a>
-        <h1 className="text-2xl font-bold mt-4 mb-1">Select a physician</h1>
-        <p
-          className={`text-sm mb-6 ${
-            isDarkMode ? "text-slate-400" : "text-slate-500"
-          }`}
-        >
-          Choose a doctor to view only their patients.
-        </p>
-        {loading ? (
-          <p className="text-sm opacity-70">Loading doctors…</p>
-        ) : doctors.length === 0 ? (
-          <p className="text-sm opacity-70">No doctors found.</p>
-        ) : (
-          <ul className="space-y-2">
-            {doctors.map((d) => (
-              <li key={d.doctor_id}>
-                <a
-                  href={`/?doctorid=${encodeURIComponent(d.doctor_id)}`}
-                  className={`flex items-center justify-between rounded-lg border px-4 py-3 transition-all ${
-                    isDarkMode
-                      ? "border-slate-800 bg-slate-900 hover:bg-slate-800"
-                      : "border-slate-200 bg-white hover:bg-slate-50 shadow-sm"
-                  }`}
-                >
-                  <span className="font-medium">Doctor {d.doctor_id}</span>
-                  <span className="text-xs opacity-70">
-                    {d.patient_count} patient{d.patient_count !== 1 ? "s" : ""}
-                  </span>
-                </a>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
-}
+// "selection" is the public landing screen shown when no patient/doctor
+// parameter is present. It carries no index of patients or doctors — those
+// moved behind the admin login on 2026-08-27 (/admin/patients,
+// /admin/physicians). See src/middleware.ts for the gate.
+type ViewType = "patient" | "doctor" | "selection";
 
 // ═══════════════════════════════════════════════════════════
 // Visit Type: first visit or follow-up visit
@@ -339,12 +273,9 @@ export default function Home() {
         console.log("📋 Visit Type: Follow-up Survey (default)");
       }
     }
-    // ═══ Doctor-selection screen (?select=physician) — pick a doctor, no "auto" ═══
-    else if (searchParams.get("select") === "physician") {
-      clearDoctorId();
-      clearPatientId();
-      setCurrentView("doctorSelect");
-    }
+    // Anything else (including a bare "/") stays on the public landing screen.
+    // The physician roster used to live here behind ?select=physician; it is now
+    // at /admin/physicians, behind the admin login.
   }, [
     searchParams,
     setFileId,
@@ -419,119 +350,13 @@ export default function Home() {
   }, [currentView, fileId, visitType, searchParams, doctorId]);
 
   // ═══════════════════════════════════════════════════════════
-  // Selection Screen — Patient list + visit type buttons
+  // Public landing screen — rendered when the URL carries no patient or
+  // doctor parameter. It deliberately lists nothing: the browsable patient
+  // and physician indexes moved behind the admin login on 2026-08-27
+  // (/admin/patients, /admin/physicians). Patients and physicians still
+  // reach their own pages through the personal link they were given, which
+  // is a public "/?f=..." / "/?doctorid=..." URL handled above.
   // ═══════════════════════════════════════════════════════════
-  const [patientList, setPatientList] = useState<any[]>([]);
-  const [loadingPatients, setLoadingPatients] = useState(false);
-  // How many uploaded transcripts are still being processed (from the pipeline drop
-  // folder). Lets the empty list say "N processing" instead of "no patients".
-  const [processingCount, setProcessingCount] = useState(0);
-
-  useEffect(() => {
-    if (currentView !== "selection") return;
-
-    // Scope the picker to a doctor when ?doctorid=<id> is present (not "auto").
-    const d = searchParams.get("doctorid");
-    const filesUrl = d
-      ? `/api/backend/patient/files?doctor_id=${encodeURIComponent(d)}`
-      : `/api/backend/patient/files`;
-
-    let interval: ReturnType<typeof setInterval> | null = null;
-    let cancelled = false;
-
-    const loadFiles = async (showSpinner: boolean): Promise<any[]> => {
-      if (showSpinner) setLoadingPatients(true);
-      try {
-        const data = await fetch(filesUrl).then((r) => r.json());
-        if (cancelled) return [];
-        const files = data.files || data.patients || [];
-        setPatientList(files);
-        return files;
-      } catch (err) {
-        console.error("[SelectionScreen] Failed to load patients:", err);
-        return [];
-      } finally {
-        if (showSpinner) setLoadingPatients(false);
-      }
-    };
-
-    let prevProcessing = 0;
-
-    const loadProcessing = async (): Promise<number> => {
-      try {
-        const data = await fetch(`/api/backend/patient/processing-count`).then((r) => r.json());
-        const count = data.processing || 0;
-        if (!cancelled) setProcessingCount(count);
-        return count;
-      } catch {
-        /* non-fatal: just don't show the processing hint */
-        return prevProcessing;
-      }
-    };
-
-    // Initial load, then poll every 5s for as long as this screen is open. The
-    // count must keep updating even once patients are listed — uploads happen far
-    // more often with records already on the screen than on an empty one, and the
-    // banner is the only signal that work is in flight. A transcript leaves the
-    // drop folder when it finishes, so a DROP in the count is the cue to reload
-    // the list (it now has one more patient); an empty list keeps reloading so the
-    // very first transcript still appears on its own.
-    loadFiles(true).then(async (files) => {
-      if (cancelled) return;
-      let listEmpty = files.length === 0;
-      prevProcessing = await loadProcessing();
-      interval = setInterval(async () => {
-        if (cancelled) return;
-        const count = await loadProcessing();
-        if (count < prevProcessing || listEmpty) {
-          const f = await loadFiles(false);
-          listEmpty = f.length === 0;
-        }
-        prevProcessing = count;
-      }, 5000);
-    });
-
-    return () => {
-      cancelled = true;
-      if (interval) clearInterval(interval);
-    };
-  }, [currentView]);
-
-  const handlePatientSelect = (
-    file: string,
-    visit: "first" | "followup" | "combined" | "sequential",
-    survey = false,
-  ) => {
-    const stem = file.replace(/\.(xlsx|csv)$/i, "");
-    // Self-descriptive URL: the survey type is stated directly.
-    //   report        → ?f=<stem>&view=first-report
-    //   1st survey     → ?f=<stem>&survey=first-visit
-    //   follow-up      → ?f=<stem>&survey=follow-up
-    //   combined       → ?f=<stem>&survey=first-visit&combined=1  (chains to
-    //                    ?f=<stem>&survey=follow-up&combined=1 when the survey ends)
-    const params = new URLSearchParams({ f: stem });
-    if (visit === "combined") {
-      // Total Survey = one unified follow-up flow (?combined=1). The follow-up
-      // re-enables its Risk step and renders the 1st survey (V41) there, so
-      // there is no separate first-visit phase.
-      params.set("survey", "follow-up");
-      params.set("combined", "1");
-    } else if (visit === "sequential") {
-      // Combined (2-step) = the previous form: the 1st survey runs first as its
-      // own screen (?seq=1), then chains to a normal follow-up (?survey=follow-up
-      // &seq=1) with the Risk step NOT embedded.
-      params.set("survey", "first-visit");
-      params.set("seq", "1");
-    } else if (visit === "followup") {
-      params.set("survey", "follow-up");
-    } else if (survey) {
-      params.set("survey", "first-visit");
-    } else {
-      params.set("view", "first-report");
-    }
-    window.location.href = `/?${params.toString()}`;
-  };
-
   const SelectionScreen = () => (
     <div
       className={`min-h-screen flex flex-col ${
@@ -541,292 +366,52 @@ export default function Home() {
       }`}
     >
       {/* Header */}
-      <header className={`border-b backdrop-blur-sm ${
-        isDarkMode ? "border-slate-800/60 bg-slate-900/70" : "border-slate-200/60 bg-white/70"
-      }`}>
-        <div className="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">
-          <h1 className={`text-lg font-semibold tracking-tight ${
-            isDarkMode ? "text-slate-100" : "text-slate-900"
-          }`}>
+      <header
+        className={`border-b backdrop-blur-sm ${
+          isDarkMode
+            ? "border-slate-800/60 bg-slate-900/70"
+            : "border-slate-200/60 bg-white/70"
+        }`}
+      >
+        <div className="max-w-6xl mx-auto px-6 py-5">
+          <h1
+            className={`text-lg font-semibold tracking-tight ${
+              isDarkMode ? "text-slate-100" : "text-slate-900"
+            }`}
+          >
             Patient Consultation System
           </h1>
-          <div className="flex items-center gap-2">
-            <a
-              href="/?select=physician"
-              className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition-all ${
-                isDarkMode
-                  ? "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700"
-                  : "bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-slate-200 shadow-sm"
-              }`}
-            >
-              Physician View
-            </a>
-            <a
-              href="/admin/tracking"
-              className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition-all ${
-                isDarkMode
-                  ? "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700"
-                  : "bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-slate-200 shadow-sm"
-              }`}
-            >
-              Admin
-            </a>
-          </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex items-start justify-center py-12 px-6">
-        <div className="w-full max-w-3xl">
-          {/* Section Header */}
-          <div className="mb-6">
-            <h2 className={`text-sm font-semibold uppercase tracking-wider ${
-              isDarkMode ? "text-slate-500" : "text-slate-400"
-            }`}>
-              Patient Records
-            </h2>
-            <p className={`mt-1 text-sm ${
+      <main className="flex-1 flex items-start justify-center py-16 px-6">
+        <div className="w-full max-w-xl text-center">
+          <p
+            className={`text-base ${
+              isDarkMode ? "text-slate-300" : "text-slate-700"
+            }`}
+          >
+            This page is accessed through the personal link you were given.
+          </p>
+          <p
+            className={`mt-3 text-sm ${
               isDarkMode ? "text-slate-400" : "text-slate-500"
-            }`}>
-              Pick a patient, then an entry point: 1st · Report (read-only AI
-              summary) or Total Survey (the full questionnaire flow).
-            </p>
-          </div>
-
-          {/* Work in flight. Only shown alongside an existing list — the empty
-              state below says the same thing in place of "No patient records yet". */}
-          {processingCount > 0 && patientList.length > 0 && (
-            <div className={`flex items-center gap-3 mb-4 px-4 py-3 rounded-lg border text-sm ${
+            }`}
+          >
+            If you have a link, please open it directly. If you reached this page
+            by mistake, you can close this window.
+          </p>
+          <a
+            href="/admin/login"
+            className={`mt-10 inline-block text-xs transition-colors ${
               isDarkMode
-                ? "border-slate-800 bg-slate-900/50 text-slate-300"
-                : "border-slate-200 bg-slate-50 text-slate-600"
-            }`}>
-              <svg className="animate-spin h-4 w-4 shrink-0" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              <span>
-                {processingCount} transcript{processingCount !== 1 ? "s" : ""} processing…{" "}
-                <span className="opacity-70">
-                  They&rsquo;ll be added to the list automatically when done.
-                </span>
-              </span>
-            </div>
-          )}
-
-          {/* Patient List */}
-          {loadingPatients ? (
-            <div className="flex items-center justify-center py-20">
-              <div className={`flex items-center gap-3 ${
-                isDarkMode ? "text-slate-400" : "text-slate-500"
-              }`}>
-                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                <span className="text-sm">Loading patients...</span>
-              </div>
-            </div>
-          ) : patientList.length === 0 ? (
-            <div className={`text-center py-20 rounded-xl border-2 border-dashed ${
-              isDarkMode ? "border-slate-800 text-slate-500" : "border-slate-200 text-slate-400"
-            }`}>
-              {processingCount > 0 ? (
-                <div className="flex flex-col items-center gap-3">
-                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  <p className="text-sm">
-                    {processingCount} transcript{processingCount !== 1 ? "s" : ""} processing…
-                    <br />
-                    <span className="opacity-70">They&rsquo;ll appear here automatically when done.</span>
-                  </p>
-                </div>
-              ) : (
-                <p className="text-sm">No patient records yet.</p>
-              )}
-            </div>
-          ) : (
-            <div className={`rounded-xl overflow-hidden border ${
-              isDarkMode ? "border-slate-800 bg-slate-900/50" : "border-slate-200 bg-white shadow-sm"
-            }`}>
-              <table className="w-full table-fixed">
-                <thead>
-                  <tr className={isDarkMode ? "bg-slate-800/50" : "bg-slate-50"}>
-                    <th className={`w-[34%] px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider ${
-                      isDarkMode ? "text-slate-400" : "text-slate-500"
-                    }`}>
-                      Patient ID
-                    </th>
-                    <th className={`w-[28%] px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider hidden sm:table-cell ${
-                      isDarkMode ? "text-slate-400" : "text-slate-500"
-                    }`}>
-                      Source File
-                    </th>
-                    <th className={`w-[38%] px-5 py-3 text-right text-xs font-semibold uppercase tracking-wider ${
-                      isDarkMode ? "text-slate-400" : "text-slate-500"
-                    }`}>
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className={`divide-y ${
-                  isDarkMode ? "divide-slate-800" : "divide-slate-100"
-                }`}>
-                  {patientList.map((file, idx) => {
-                    const match = file.match(/sid[\s_-]*(\d+)/i);
-                    const label = match
-                      ? `SID-${match[1]}`
-                      : file
-                          .replace(/\.[^.]+$/, "")
-                          .replace(/_[^_]+_\d{8}$/, "") // strip 3-part "_<doctor>_<date>"
-                          .replace(/_\d{8}$/, ""); // strip legacy 2-part "_<date>"
-                    // Hard-truncate the displayed text (auto-layout tables ignore
-                    // a child's max-width for long unbreakable hashed names, which
-                    // then overflow the overflow-hidden container). Full value on
-                    // hover via title.
-                    const shorten = (s: string, n = 22) =>
-                      s.length > n ? `${s.slice(0, n)}…` : s;
-                    const labelShort = shorten(label, 16);
-                    const fileShort = shorten(file, 18);
-                    return (
-                      <tr
-                        key={file}
-                        className={`group transition-colors ${
-                          isDarkMode
-                            ? "hover:bg-slate-800/50"
-                            : "hover:bg-slate-50/80"
-                        }`}
-                      >
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
-                              isDarkMode
-                                ? "bg-blue-500/10 text-blue-400"
-                                : "bg-blue-50 text-blue-600"
-                            }`}>
-                              {match ? match[1] : (idx + 1)}
-                            </div>
-                            <span
-                              title={label}
-                              className={`block truncate max-w-[200px] font-medium text-sm ${
-                                isDarkMode ? "text-slate-200" : "text-slate-800"
-                              }`}
-                            >
-                              {labelShort}
-                            </span>
-                          </div>
-                        </td>
-                        <td className={`px-5 py-4 hidden sm:table-cell`}>
-                          <span
-                            title={file}
-                            className={`block truncate max-w-[240px] text-xs font-mono ${
-                              isDarkMode ? "text-slate-500" : "text-slate-400"
-                            }`}
-                          >
-                            {fileShort}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-2 shrink-0">
-                            <button
-                              onClick={() => handlePatientSelect(file, "first")}
-                              title="First visit — AI summary report (read-only)"
-                              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                                isDarkMode
-                                  ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 hover:text-blue-300 border border-blue-500/20"
-                                  : "bg-blue-50 text-blue-700 hover:bg-blue-100 hover:text-blue-800 border border-blue-100"
-                              }`}
-                            >
-                              1st · Report
-                            </button>
-                            {/* Hidden (2026-07-09): standalone 1st·Survey
-                                (?survey=first-visit). The Total Survey already
-                                runs these Risk questions as its first step. The
-                                URL still works; un-comment to show the button.
-                            <button
-                              onClick={() => handlePatientSelect(file, "first", true)}
-                              title="First visit — survey questionnaire"
-                              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                                isDarkMode
-                                  ? "bg-violet-500/10 text-violet-400 hover:bg-violet-500/20 hover:text-violet-300 border border-violet-500/20"
-                                  : "bg-violet-50 text-violet-700 hover:bg-violet-100 hover:text-violet-800 border border-violet-100"
-                              }`}
-                            >
-                              1st · Survey
-                            </button>
-                            */}
-                            {/* Hidden (2026-07-09): standalone follow-up surveys
-                                (?survey=follow-up). The Total Survey already runs
-                                sdm/dcs/satisfaction after the Risk step. The URL
-                                still works; un-comment to show the button.
-                            <button
-                              onClick={() => handlePatientSelect(file, "followup")}
-                              title="Follow-up surveys (SDM, DCS, Satisfaction)"
-                              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                                isDarkMode
-                                  ? "bg-teal-500/10 text-teal-400 hover:bg-teal-500/20 hover:text-teal-300 border border-teal-500/20"
-                                  : "bg-teal-50 text-teal-700 hover:bg-teal-100 hover:text-teal-800 border border-teal-100"
-                              }`}
-                            >
-                              Follow-up
-                            </button>
-                            */}
-                            {/* Total Survey entry — 1st survey then follow-up. */}
-                            <button
-                              onClick={() => handlePatientSelect(file, "combined")}
-                              title="Total Survey — 1st·Survey questions, then the Follow-up surveys"
-                              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                                isDarkMode
-                                  ? "bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 border border-amber-500/20"
-                                  : "bg-amber-50 text-amber-700 hover:bg-amber-100 hover:text-amber-800 border border-amber-100"
-                              }`}
-                            >
-                              Total Survey
-                            </button>
-                            {/* Hidden (2026-07-09): Combined (2-step) — the 1st
-                                survey as its own screen, then a normal follow-up
-                                with the Risk step not embedded (?seq=1). Superseded
-                                by the single-flow Total Survey. The URL still works;
-                                un-comment to show the button.
-                            <button
-                              onClick={() => handlePatientSelect(file, "sequential")}
-                              title="Combined — 1st·Survey screen first, then the Follow-up surveys (2-step)"
-                              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                                isDarkMode
-                                  ? "bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 hover:text-orange-300 border border-orange-500/20"
-                                  : "bg-orange-50 text-orange-700 hover:bg-orange-100 hover:text-orange-800 border border-orange-100"
-                              }`}
-                            >
-                              Combined
-                            </button>
-                            */}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-
-              {/* Table Footer */}
-              <div className={`px-5 py-3 flex items-center justify-between border-t ${
-                isDarkMode ? "border-slate-800 bg-slate-800/30" : "border-slate-100 bg-slate-50/50"
-              }`}>
-                <span className={`text-xs ${
-                  isDarkMode ? "text-slate-500" : "text-slate-400"
-                }`}>
-                  {patientList.length} patient{patientList.length !== 1 ? "s" : ""}
-                </span>
-                <span className={`text-xs ${
-                  isDarkMode ? "text-slate-600" : "text-slate-300"
-                }`}>
-                  &nbsp;
-                </span>
-              </div>
-            </div>
-          )}
+                ? "text-slate-500 hover:text-slate-300"
+                : "text-slate-400 hover:text-slate-600"
+            }`}
+          >
+            Staff sign-in →
+          </a>
         </div>
       </main>
     </div>
@@ -917,11 +502,6 @@ export default function Home() {
         {/* Physician report - Doctor View */}
         {currentView === "doctor" && (
           <PhysicianReports isDarkMode={isDarkMode} />
-        )}
-
-        {/* Doctor-selection screen (?select=physician) */}
-        {currentView === "doctorSelect" && (
-          <DoctorSelectionScreen isDarkMode={isDarkMode} />
         )}
 
         {/* Patient Report - First Visit (report or survey). The survey's

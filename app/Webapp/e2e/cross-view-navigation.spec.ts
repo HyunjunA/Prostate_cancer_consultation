@@ -1,12 +1,18 @@
 import { test, expect } from "@playwright/test";
 import { requireFirstFixture, type DemoFixture } from "./_fixtures";
+import { loginAsAdmin } from "./_admin_auth";
 
 /**
  * Cross-View Navigation E2E Tests
  *
- * Tests navigation between different views (selection, patient,
+ * Tests navigation between different views (admin pickers, patient,
  * doctor) and verifies URL parameter handling, browser history, and
  * resilience to invalid params.
+ *
+ * The list screens these flows start from moved from "/" to /admin/patients
+ * and /admin/physicians on 2026-08-27, so the picker-driven tests sign in
+ * first (they skip without E2E_ADMIN_USER / E2E_ADMIN_PASSWORD). The
+ * destination URLs are unchanged and still public.
  *
  * Patient / file / doctor identifiers are discovered from the
  * backend at run time (`requireFirstFixture`) so the spec is
@@ -32,58 +38,49 @@ test.describe("Cross-View Navigation", () => {
     DOCTOR_VIEW_URL = `/?fileid=${file}&doctorid=${doctor}`;
   });
 
-  test("navigate from selection to patient first visit and back", async ({ page }) => {
-    // Start at selection screen
-    await page.goto("/");
-    await expect(
-      page.getByText("Patient Consultation System")
-    ).toBeVisible({ timeout: 10_000 });
+  test("navigate from the admin patient list to patient first visit and back", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    await page.goto("/admin/patients");
 
-    // Click the per-row "First Visit" button. Selection screen at
-    // page.tsx:458-467 renders one such button per patient — `.first()`
-    // picks the row corresponding to the discovered fixture (which is
-    // the first/only row because we discovered it from the same list).
-    const firstVisitBtn = page
-      .getByRole("button", { name: /^\s*First Visit\s*$/i })
-      .first();
-    await firstVisitBtn.click();
+    // Click the per-row "1st · Report" button. `.first()` picks the row
+    // corresponding to the discovered fixture (which is the first/only row
+    // because we discovered it from the same list).
+    const reportBtn = page.getByRole("button", { name: /1st · Report/i }).first();
+    await expect(reportBtn).toBeVisible({ timeout: 10_000 });
+    await reportBtn.click();
 
-    // Should now be on patient view (new self-descriptive URL).
+    // Should now be on the public patient view (self-descriptive URL).
     await expect(page).toHaveURL(/[?&]f=.*(view=first-report|survey=first-visit)/);
-    await expect(
-      page.getByText("Patient Consultation System")
-    ).not.toBeVisible({ timeout: 10_000 });
 
-    // Navigate back to selection
-    await page.goto("/");
+    // Back to the picker
+    await page.goto("/admin/patients");
     await expect(
-      page.getByText("Patient Consultation System")
+      page.getByRole("heading", { name: "Patient Records" }),
     ).toBeVisible({ timeout: 10_000 });
   });
 
-  test("navigate from selection to doctor view and back", async ({ page }) => {
-    // Start at selection screen
-    await page.goto("/");
-    await expect(
-      page.getByText("Patient Consultation System")
-    ).toBeVisible({ timeout: 10_000 });
+  test("navigate from the admin physician list to doctor view and back", async ({
+    page,
+  }) => {
+    await loginAsAdmin(page);
+    await page.goto("/admin/physicians");
 
-    // Click the "Physician View" link in the selection-screen header
-    // (page.tsx:334 — <a href="/?doctorid=auto">). The legacy spec
-    // looked for "Doctor Demo" which no longer exists in the UI.
-    const physicianLink = page.getByRole("link", { name: /Physician View/i });
-    await physicianLink.click();
+    const doctorLink = page.getByRole("link", { name: /^Doctor / }).first();
+    await expect(doctorLink).toBeVisible({ timeout: 10_000 });
+    await doctorLink.click();
 
-    // Should now be on doctor view
+    // Should now be on the public doctor view
     await expect(page).toHaveURL(/doctorid=/);
     await expect(
       page.getByText("Patient Consultation System")
     ).not.toBeVisible({ timeout: 10_000 });
 
-    // Navigate back to selection
-    await page.goto("/");
+    // Back to the picker
+    await page.goto("/admin/physicians");
     await expect(
-      page.getByText("Patient Consultation System")
+      page.getByRole("heading", { name: /Physician View/i }),
     ).toBeVisible({ timeout: 10_000 });
   });
 
@@ -111,36 +108,25 @@ test.describe("Cross-View Navigation", () => {
   });
 
   test("browser back and forward navigation works", async ({ page }) => {
-    // Start at selection
-    await page.goto("/");
-    await expect(
-      page.getByText("Patient Consultation System")
-    ).toBeVisible({ timeout: 10_000 });
+    await loginAsAdmin(page);
+    await page.goto("/admin/patients");
 
-    // Navigate to follow-up via the per-row "Follow-up" button
-    // (page.tsx:468-477). The legacy spec used a "Patient Follow-up"
-    // quick link that no longer exists.
-    const followUpBtn = page
-      .getByRole("button", { name: /^\s*Follow-up\s*$/i })
-      .first();
-    await followUpBtn.click();
-    await expect(page).toHaveURL(/visit=followup/);
+    // Navigate to the survey flow via the per-row "Total Survey" button.
+    const surveyBtn = page.getByRole("button", { name: /Total Survey/i }).first();
+    await expect(surveyBtn).toBeVisible({ timeout: 10_000 });
+    await surveyBtn.click();
+    await expect(page).toHaveURL(/survey=follow-up/);
 
-    // Go back. URL should be the bare baseURL — match any localhost
-    // port (CI uses :3000, native deploy uses :3001) and tolerate a
-    // trailing slash either way. The previous version pinned :3000.
+    // Go back to the picker.
     await page.goBack();
-    await expect(page).toHaveURL(/^http:\/\/localhost(:\d+)?\/?$/);
+    await expect(page).toHaveURL(/\/admin\/patients\/?$/);
     await expect(
-      page.getByText("Patient Consultation System")
+      page.getByRole("heading", { name: "Patient Records" }),
     ).toBeVisible({ timeout: 10_000 });
 
     // Go forward
     await page.goForward();
-    await expect(page).toHaveURL(/visit=followup/);
-    await expect(
-      page.getByText("Patient Consultation System")
-    ).not.toBeVisible({ timeout: 10_000 });
+    await expect(page).toHaveURL(/survey=follow-up/);
   });
 
   test("page does not crash on invalid or missing params", async ({ page }) => {

@@ -5,6 +5,10 @@ node_modules/
 
 # Testing
 /coverage
+# Playwright run artifacts. error-context.md holds a snapshot of whatever page
+# the failing test was on, so these must never reach git.
+/test-results/
+/playwright-report/
 
 # Next.js
 /.next/

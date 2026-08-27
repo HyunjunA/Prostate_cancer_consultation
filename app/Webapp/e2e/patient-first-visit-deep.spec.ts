@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Locator } from "@playwright/test";
+import { loginAsAdmin } from "./_admin_auth";
 
 /**
  * Patient First Visit — deep flow (single integrated test)
@@ -33,9 +34,11 @@ import { test, expect, type Page, type Locator } from "@playwright/test";
  *   /api/patient/scoring and would gain a third round-trip block here.
  *
  * Flow:
- *   1. Selection screen (`/`) → randomly pick one of the listed
- *      "First Visit" buttons. Different demo data per run prevents
- *      ossification around a single fixture.
+ *   1. Admin patient picker (`/admin/patients`) → randomly pick one
+ *      of the listed "1st · Report" buttons. Different demo data per
+ *      run prevents ossification around a single fixture. The picker
+ *      needs an admin session, so the test skips without
+ *      E2E_ADMIN_USER / E2E_ADMIN_PASSWORD.
  *   2. Confirm V37 mounted via the "Your Consultation Summary"
  *      header.
  *   3. For each of the 5 domain cards (CP / LE / ED / INC / IUS):
@@ -344,27 +347,28 @@ test.describe("Patient First Visit — deep flow", () => {
       }
     });
 
-    // ── 1. Selection screen → random first-visit button ─────────────
-    // page.tsx:458-467 renders each row's "First Visit" affordance
-    // as a <button> (no href) with an onClick that rewrites the
-    // query string. Match the exact button name to avoid heading
-    // text overlap.
-    await page.goto("/");
+    // ── 1. Admin patient list → random first-visit button ───────────
+    // AdminPatientTable renders each row's "1st · Report" affordance as a
+    // <button> (no href) with an onClick that navigates to the public
+    // ?f=…&view=first-report URL. The list moved from "/" to /admin/patients
+    // on 2026-08-27, so sign in first (skips without E2E_ADMIN_* creds).
+    await loginAsAdmin(page);
+    await page.goto("/admin/patients");
     await page.waitForLoadState("networkidle");
 
     const firstVisitButtons = page.getByRole("button", {
-      name: /^\s*First Visit\s*$/i,
+      name: /1st · Report/i,
     });
     const buttonCount = await firstVisitButtons.count();
     // CI starts against a freshly-bootstrapped Postgres with no
-    // pipeline rows yet, so the selection screen renders zero
-    // first-visit buttons. Skipping (rather than failing) keeps
-    // nightly green; the moment a fixture-seed step starts
-    // populating patient data, the test starts exercising the
-    // full deep flow without any further changes here.
+    // pipeline rows yet, so the picker renders zero first-visit
+    // buttons. Skipping (rather than failing) keeps nightly green;
+    // the moment a fixture-seed step starts populating patient data,
+    // the test starts exercising the full deep flow without any
+    // further changes here.
     test.skip(
       buttonCount === 0,
-      "no first-visit patients on selection screen — likely an unseeded DB",
+      "no first-visit patients in the admin picker — likely an unseeded DB",
     );
 
     const idx = randIdx(buttonCount);

@@ -164,13 +164,30 @@ afterEach(() => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("Home page — URL-based routing", () => {
-  // ── 1. Selection screen (no params) ─────────────────────────────────────
-  test("shows selection screen when no URL params are provided", () => {
+  // ── 1. Public landing screen (no params) ────────────────────────────────
+  // Since 2026-08-27 the landing screen lists nothing: the patient and
+  // physician indexes moved to /admin/patients and /admin/physicians, behind
+  // the admin cookie gate. All it offers is the staff sign-in link.
+  test("shows the public landing screen when no URL params are provided", () => {
     mockSearchParams({});
     render(<Home />);
 
     expect(screen.getByText("Patient Consultation System")).toBeInTheDocument();
-    expect(screen.getByText(/Pick a patient/)).toBeInTheDocument();
+    expect(screen.getByText(/personal link you were given/)).toBeInTheDocument();
+    expect(screen.getByText(/Staff sign-in/)).toHaveAttribute(
+      "href",
+      "/admin/login",
+    );
+  });
+
+  // ── 1b. The landing screen must not expose any patient index ────────────
+  test("landing screen shows no patient list and no physician link", () => {
+    mockSearchParams({});
+    render(<Home />);
+
+    expect(screen.queryByText(/Pick a patient/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Physician View")).not.toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 
   // ── 2. Patient first visit (new ?view=first-report) ────────────────────

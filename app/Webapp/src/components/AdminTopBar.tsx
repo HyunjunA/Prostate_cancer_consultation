@@ -49,9 +49,9 @@ export default function AdminTopBar() {
           <span className="text-xs font-medium uppercase tracking-wider text-gray-400">
             Admin
           </span>
-          {/* Home = the admin tracking hub. Shown on every admin page. */}
+          {/* Home = the admin landing page. Shown on every admin page. */}
           <Link
-            href="/admin/tracking"
+            href="/admin"
             className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
           >
             ← Home

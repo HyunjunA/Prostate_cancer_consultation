@@ -2,13 +2,13 @@
 
 // Admin login page. Posts credentials to the server-side login route handler,
 // which sets the httpOnly admin_session cookie. On success we navigate to the
-// originally-requested page (?next=) or the tracking dashboard.
+// originally-requested page (?next=) or the admin landing page.
 import { Suspense, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 
 function AdminLoginForm() {
   const searchParams = useSearchParams();
-  const nextPath = searchParams.get("next") || "/admin/tracking";
+  const nextPath = searchParams.get("next") || "/admin";
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");

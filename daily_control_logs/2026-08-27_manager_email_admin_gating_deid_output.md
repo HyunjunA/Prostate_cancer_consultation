@@ -49,7 +49,7 @@ sibling AI repository (`secure_transcript_prep/`, the desktop de-identifier).
 
 | # | Requirement | Repo | Effort | Status |
 |---|---|---|---|---|
-| R1 | Put the patient and doctor entry points behind admin; make the admin page the landing page, with a tracking link on it | dashboard (`app/Webapp`) | small–medium | ⬜ not started |
+| R1 | Put the patient and doctor entry points behind admin; make the admin page the landing page, with a tracking link on it | dashboard (`app/Webapp`) | small–medium | ✅ done 2026-08-27 |
 | R2 | Let the user choose the de-identifier tool's output directory (so it can point at a shared OneDrive folder) | AI repo (`secure_transcript_prep`) | small | ⬜ not started |
 | R3 | Add a page to the de-identifier interface that shows the mapping and the links, so the mapping CSV is never opened by hand | AI repo (`secure_transcript_prep`) | medium | ⬜ not started |
 
@@ -71,15 +71,65 @@ sibling AI repository (`secure_transcript_prep/`, the desktop de-identifier).
 
 **Work items:**
 
-- ⬜ R1-a Remove the browsable patient list and the Physician View link from the
-  public home page (or gate them behind the same admin cookie).
-- ⬜ R1-b Add "Patient view" and "Doctor view" entry points to the admin landing
-  page, alongside the existing tracking cards.
-- ⬜ R1-c Decide what the public `/` should show once the list is gone — a plain
-  landing/welcome screen, or a redirect to `/admin/login`.
-- ⬜ R1-d Extend `middleware.ts` matcher if the gate must cover more than `/admin/*`.
+- ✅ R1-a Removed the browsable patient list and the Physician View link from the
+  public home page. Both list screens moved under `/admin`, so the existing
+  cookie gate covers them.
+- ✅ R1-b Added a new `/admin` landing page (`src/app/admin/page.tsx`) with four
+  entry points: Patient Records, Physician View, Tracking, Upload Transcript.
+  It did not exist before — `/admin` returned 404.
+- ✅ R1-c The public `/` renders a minimal landing screen (heading + "this page is
+  accessed through the personal link you were given" + a Staff sign-in link).
+  **Not** a redirect to `/admin/login` — see the design tension below.
+- ✅ R1-d `middleware.ts` was left untouched. `matcher: ["/admin/:path*"]` already
+  covers `/admin`, `/admin/patients` and `/admin/physicians` (verified: all three
+  return 307 → `/admin/login?next=…` when signed out).
 
-**⚠️ Design tension that must be settled before implementing.**
+**Files changed:**
+
+| File | Change |
+|---|---|
+| `src/app/admin/page.tsx` | new — admin landing page |
+| `src/app/admin/patients/page.tsx` | new — gated patient index |
+| `src/app/admin/physicians/page.tsx` | new — gated physician roster |
+| `src/components/AdminPatientPicker.tsx` | new — renders the list; polling lives in the hook below |
+| `src/hooks/usePatientFileList.tsx` | new — list fetch + 5 s processing poll, extracted to keep the picker under the 150-line limit |
+| `src/components/AdminPatientTable.tsx` | new — table markup moved from `page.tsx` |
+| `src/components/AdminPhysicianPicker.tsx` | new — roster moved from `page.tsx` |
+| `src/components/AdminHubCard.tsx` | new — nav card shared by both admin hubs |
+| `src/app/admin/tracking/page.tsx` | Upload Transcript card removed (it only lived here while `/admin` did not exist); cards now use `AdminHubCard` |
+| `src/app/page.tsx` | −414 lines: list, `?select=physician`, `doctorSelect` view all removed; landing screen added. Deep-link handling untouched |
+| `src/app/admin/login/page.tsx` | default landing after sign-in `/admin/tracking` → `/admin` |
+| `src/components/AdminTopBar.tsx` | "← Home" `/admin/tracking` → `/admin` |
+| `.gitignore` (webapp) | ignore `test-results/` and `playwright-report/` — Playwright's `error-context.md` snapshots the failing page |
+| `e2e/_admin_auth.ts` | new — `loginAsAdmin()`, skips without `E2E_ADMIN_USER`/`E2E_ADMIN_PASSWORD` |
+| `e2e/public-landing.spec.ts` | new — replaces `selection-screen.spec.ts`; asserts the index is *gone* |
+| `e2e/admin-pickers.spec.ts` | new — the moved list behaviour, authenticated |
+| `e2e/cross-view-navigation.spec.ts`, `e2e/patient-first-visit-deep.spec.ts`, `e2e/doctor-view-deep.spec.ts` | start from the admin pickers; destination-URL assertions unchanged |
+| `src/__tests__/app/page.test.tsx` | landing-screen test rewritten + a "no index leaked back" test |
+
+**Verified after rebuild + `up -d webapp`** (image-baked frontend, so a rebuild was
+required; only the `webapp` service was recreated):
+
+- signed out: `/admin`, `/admin/patients`, `/admin/physicians`, `/admin/tracking`
+  → 307 to `/admin/login`; `/` and `/admin/login` → 200
+- `/` renders no `<table>`, no Physician View link, no row buttons; the retired
+  `?select=physician` falls back to the landing screen
+- all three distributed deep links still render: `?f=…&view=first-report`,
+  `?f=…&survey=follow-up&combined=1`, `?doctorid=…`
+- signed in: `/admin/patients` row → `/?f=…&view=first-report`;
+  `/admin/physicians` row → `/?doctorid=…` (unchanged destinations)
+- signed in: Upload Transcript appears once on `/admin` and no longer on
+  `/admin/tracking`, which now shows only its three behavior dashboards
+- 262/262 Jest tests pass; production build clean; `JWT_SECRET` still present in
+  the container; port binding still `0.0.0.0:3001`
+- `public-landing.spec.ts` passes 6/6 against the running container. The
+  admin-gated specs still skip: they need `E2E_ADMIN_USER` / `E2E_ADMIN_PASSWORD`.
+  Unrelated pre-existing failures remain in `survey-submit-flow.spec.ts` and
+  `patient-followup-complete-flow.spec.ts`, whose helper waits for a
+  "Submit Responses" button that the `surveysSecondVersion` components render as
+  "Submit & continue to next section".
+
+**⚠️ Design tension, settled as follows.**
 The de-identifier writes three **direct** dashboard links per transcript into
 `deid_mapping.csv` (`scripts/deidentify_transcript.py`):
 
@@ -91,9 +141,10 @@ The de-identifier writes three **direct** dashboard links per transcript into
 
 These all live under `/`, not `/admin/`. **Patients and physicians must be able to
 open their own link without an admin login**, so the gate cannot simply cover all
-of `/`. The workable reading of the request is: gate the **browsable index** (the
-patient list and the physician roster on the home page) while leaving the
-**per-person deep links** publicly resolvable. → confirm this reading on Thursday.
+of `/`. The implemented reading: gate the **browsable index** (the patient list and
+the physician roster) while leaving the **per-person deep links** publicly
+resolvable. → still worth confirming with the manager, but the alternative
+(gating `/` outright) would kill every link already handed out.
 
 ---
 
@@ -173,11 +224,11 @@ prepend the host itself.
 
 ## 4. Open questions for Thursday's discussion
 
-- [ ] **R1 scope** — does "behind admin" mean only the browsable patient/physician
-      index, with the per-person deep links staying public? (See the R1 design
-      tension: patients cannot log in as admin.)
-- [ ] **R1 public page** — what should `http://10.226.8.205:3001/` show once the
-      list is removed? Landing screen, or redirect to `/admin/login`?
+- [x] **R1 scope** — implemented as "only the browsable index is gated; the
+      per-person deep links stay public". Confirm with the manager; the
+      alternative breaks every link already distributed.
+- [x] **R1 public page** — `http://10.226.8.205:3001/` now shows a minimal landing
+      screen (heading + "use your personal link" + Staff sign-in), not a redirect.
 - [ ] **R2 conflict policy** — how should two machines share one
       `deid_mapping.csv` on OneDrive without losing rows?
 - [ ] **R2 compliance** — is syncing the re-identification mapping to OneDrive
@@ -189,14 +240,15 @@ prepend the host itself.
 
 ## 5. Next actions
 
-1. Raise the four ⚠️ items in section 3 at Thursday's discussion **before** writing
-   any code — R1's scope and R2's OneDrive conflict policy both change the design.
-2. R2 first once scope is confirmed: it is the smallest change and unblocks nothing
+1. ✅ **R1 shipped 2026-08-27** — implemented and redeployed ahead of the other two
+   at the developer's request (the plan below had it last). The one open point is
+   confirming the scope reading with the manager: only the index is gated.
+2. Raise R2's ⚠️ items (OneDrive conflict policy, compliance) at Thursday's
+   discussion **before** writing any code — they change the design.
+3. R2 next once scope is confirmed: it is the smallest change and unblocks nothing
    else (`STP_OUTPUT_DIR` already exists; the work is GUI + persistence).
-3. R3 next, in the same GUI change set, so the coordinator gets one rebuild rather
+4. R3 in the same GUI change set, so the coordinator gets one rebuild rather
    than two.
-4. R1 last — it touches the public entry point and needs to be verified against the
-   test session before it ships.
 
 ## 6. Not affected
 

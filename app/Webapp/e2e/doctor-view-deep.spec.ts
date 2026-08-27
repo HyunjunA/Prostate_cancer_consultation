@@ -1,13 +1,15 @@
 import { test, expect, type Page } from "@playwright/test";
 import { requireFirstFixture, type DemoFixture } from "./_fixtures";
+import { loginAsAdmin } from "./_admin_auth";
 
 /**
  * Doctor View — full clinical walkthrough
  *
  * Drives V41Timothy through the actual physician journey:
  *
- *   1. Selection screen → click the "Physician View" header link
- *      (page.tsx:334) to enter the doctor surface.
+ *   1. Admin physician picker (/admin/physicians) → click a doctor
+ *      to enter the doctor surface. Requires an admin session, so the
+ *      test skips without E2E_ADMIN_USER / E2E_ADMIN_PASSWORD.
  *   2. Dashboard tour (react-joyride) — click "Next" until the tour
  *      ends with "Got it!". Tours might be absent if a previous
  *      session already completed them; the helper handles that
@@ -264,16 +266,18 @@ test.describe("Doctor View — full clinical walkthrough", () => {
       if (!/Hydration|hydrat/i.test(e.message)) pageErrors.push(e.message);
     });
 
-    // ── Step 1 — Selection screen → Physician View ──────────────────
-    // Start at the bare root URL and click the "Physician View"
-    // link in the header (page.tsx:334 — <a href="/?doctorid=auto">).
-    // This drops the user onto the doctor dashboard.
-    await page.goto("/");
+    // ── Step 1 — Admin physician picker → doctor dashboard ──────────
+    // The physician roster moved from the public header link
+    // ("/?select=physician") to /admin/physicians on 2026-08-27, so sign in
+    // first (skips without E2E_ADMIN_* creds) and click a doctor there. The
+    // destination is still the public ?doctorid= dashboard URL.
+    await loginAsAdmin(page);
+    await page.goto("/admin/physicians");
     await page.waitForLoadState("networkidle");
 
-    const physicianLink = page.getByRole("link", { name: /Physician View/i });
-    await expect(physicianLink).toBeVisible({ timeout: 10_000 });
-    await physicianLink.click();
+    const doctorLink = page.getByRole("link", { name: /^Doctor / }).first();
+    await expect(doctorLink).toBeVisible({ timeout: 10_000 });
+    await doctorLink.click();
     await expect(page).toHaveURL(/doctorid=/, { timeout: 10_000 });
 
     // ── Step 2 — Dashboard tour ─────────────────────────────────────

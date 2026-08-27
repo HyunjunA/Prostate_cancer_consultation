@@ -1,11 +1,14 @@
 "use client";
 
 /**
- * Admin tracking nav hub. Each card links to a per-area behavior dashboard,
- * plus a primary card to upload a transcript into the processing pipeline.
+ * Admin tracking nav hub. Each card links to a per-area behavior dashboard.
+ *
+ * The Upload Transcript card lived here until 2026-08-27 only because /admin
+ * did not exist yet and this was where sign-in landed. Uploading is a pipeline
+ * action, not a behavior dashboard, so it now sits on /admin alone.
  */
 
-import Link from "next/link";
+import AdminHubCard from "@/components/AdminHubCard";
 
 const AREAS = [
   {
@@ -86,45 +89,9 @@ export default function AdminTrackingHubPage() {
           <h1 className="text-3xl font-bold text-slate-900">Admin Tracking</h1>
         </div>
 
-        {/* Primary action — bring transcript data into the pipeline. Uses the SAME
-            card style as the tracking dashboards below (gradient bar + title +
-            description + CTA), with its own accent colour, so it fits the hub. */}
-        <Link
-          href="/admin/upload"
-          className="group mb-8 block bg-white rounded-xl shadow hover:shadow-lg transition-shadow overflow-hidden"
-        >
-          <div className="h-2 bg-gradient-to-r from-indigo-500 to-blue-500" />
-          <div className="p-6">
-            <h2 className="text-lg font-semibold text-slate-900 group-hover:text-indigo-600">
-              Upload Transcript
-            </h2>
-            <p className="mt-2 text-sm text-slate-600">
-              Add a de-identified transcript to the processing pipeline.
-            </p>
-            <span className="mt-4 inline-block text-xs text-indigo-600 group-hover:underline">
-              Upload transcript →
-            </span>
-          </div>
-        </Link>
-
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {AREAS.map((a) => (
-            <Link
-              key={a.href}
-              href={a.href}
-              className="group block bg-white rounded-xl shadow hover:shadow-lg transition-shadow overflow-hidden"
-            >
-              <div className={`h-2 bg-gradient-to-r ${a.color}`} />
-              <div className="p-6">
-                <h2 className="text-lg font-semibold text-slate-900 group-hover:text-indigo-600">
-                  {a.title}
-                </h2>
-                <p className="mt-2 text-sm text-slate-600">{a.description}</p>
-                <span className="mt-4 inline-block text-xs text-indigo-600 group-hover:underline">
-                  Open dashboard →
-                </span>
-              </div>
-            </Link>
+            <AdminHubCard key={a.href} {...a} cta="Open dashboard →" />
           ))}
         </div>
       </div>
