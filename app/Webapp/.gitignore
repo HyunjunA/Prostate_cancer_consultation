@@ -129,8 +129,16 @@ temp/
 *.webp
 *.ico
 
-# Data files (선택사항 - 필요에 따라 주석 해제)
+# Data files (optional — comment out as needed)
 *.json
+# …but the toolchain config files are not data. Without this negation a fresh
+# clone has no ESLint config, `next lint` drops into its interactive setup
+# prompt, and the build's lint gate silently disappears.
+!.eslintrc.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!components.json
 *.csv
 *.xml
 *.yaml

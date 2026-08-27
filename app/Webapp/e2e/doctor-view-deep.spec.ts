@@ -47,7 +47,9 @@ test.setTimeout(240_000);
 
 const API_BASE = "http://localhost:8000";
 const API_KEY = process.env.E2E_API_KEY || process.env.API_KEY || "";
-const AUTH_HEADERS = API_KEY ? { "X-API-Key": API_KEY } : {};
+const AUTH_HEADERS: Record<string, string> = API_KEY
+  ? { "X-API-Key": API_KEY }
+  : {};
 
 let FIXTURE: DemoFixture;
 

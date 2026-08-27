@@ -2,12 +2,13 @@
 "use client";
 
 import { useState } from "react";
-import {
-  usePatientData,
-  PatientScoringUpdate,
-  PatientResponsesUpdate,
-} from "@/hooks/usePatientData";
+import { usePatientData } from "@/hooks/usePatientData";
 import { useDoctorData, DoctorRewriteData } from "@/hooks/useDoctorData";
+
+// The patient scoring/answer tables are keyed by clinical domain, not by a
+// class number (migration 020 normalised the old class_1..class_5 columns).
+const DOMAINS = ["cp", "le", "ed", "inc", "ius"] as const;
+type Domain = (typeof DOMAINS)[number];
 
 export default function APITestDashboard() {
   // Patient Data Hook
@@ -24,8 +25,6 @@ export default function APITestDashboard() {
     fetchResponsesAll,
     fetchResponsesFiltered,
     // PUT APIs
-    updateScoring,
-    updateResponses,
     updateSingleClassScore,
     updateAllClassScores,
     updateSingleAnswer,
@@ -59,29 +58,29 @@ export default function APITestDashboard() {
   const [results, setResults] = useState<{ [key: string]: any }>({});
 
   // State for PUT API inputs
-  const [scoringInputs, setScoringInputs] = useState({
-    class_1: "",
-    class_2: "",
-    class_3: "",
-    class_4: "",
-    class_5: "",
+  const [scoringInputs, setScoringInputs] = useState<Record<Domain, string>>({
+    cp: "",
+    le: "",
+    ed: "",
+    inc: "",
+    ius: "",
   });
 
-  const [responseInputs, setResponseInputs] = useState({
-    answer_1: "",
-    answer_2: "",
-    answer_3: "",
-    answer_4: "",
-    answer_5: "",
+  const [responseInputs, setResponseInputs] = useState<Record<Domain, string>>({
+    cp: "",
+    le: "",
+    ed: "",
+    inc: "",
+    ius: "",
   });
 
   const [singleScoreInput, setSingleScoreInput] = useState({
-    classNumber: "1" as string,
+    domain: "cp" as Domain,
     score: "",
   });
 
   const [singleAnswerInput, setSingleAnswerInput] = useState({
-    answerNumber: "1" as string,
+    domain: "cp" as Domain,
     answer: "",
   });
 
@@ -217,33 +216,22 @@ export default function APITestDashboard() {
   // PUT Test functions
   // ============================================================================
 
-  // Test: Update All Scores
+  // Test: Update All Scores (one PUT per domain that has a value)
   const testUpdateAllScores = async () => {
-    const data: PatientScoringUpdate = {
-      file: selectedFile,
-      speaker: selectedSpeaker,
-      class_1_patient_scoring: scoringInputs.class_1
-        ? parseInt(scoringInputs.class_1)
-        : undefined,
-      class_2_patient_scoring: scoringInputs.class_2
-        ? parseInt(scoringInputs.class_2)
-        : undefined,
-      class_3_patient_scoring: scoringInputs.class_3
-        ? parseInt(scoringInputs.class_3)
-        : undefined,
-      class_4_patient_scoring: scoringInputs.class_4
-        ? parseInt(scoringInputs.class_4)
-        : undefined,
-      class_5_patient_scoring: scoringInputs.class_5
-        ? parseInt(scoringInputs.class_5)
-        : undefined,
-    };
+    const scores: { [domain: string]: number } = {};
+    for (const domain of DOMAINS) {
+      if (scoringInputs[domain]) scores[domain] = parseInt(scoringInputs[domain]);
+    }
 
-    const result = await updateScoring(data);
+    const result = await updateAllClassScores(
+      selectedFile,
+      selectedSpeaker,
+      scores
+    );
     logResult(
-      "PUT Scoring (All Classes)",
+      "PUT Scoring (All Domains)",
       {
-        request: data,
+        request: { file: selectedFile, speaker: selectedSpeaker, scores },
         response: result,
       },
       result ? null : patientError
@@ -252,12 +240,7 @@ export default function APITestDashboard() {
 
   // Test: Update Single Score
   const testUpdateSingleScore = async () => {
-    const classNum = parseInt(singleScoreInput.classNumber) as
-      | 1
-      | 2
-      | 3
-      | 4
-      | 5;
+    const domain = singleScoreInput.domain;
     const score = parseInt(singleScoreInput.score);
 
     if (isNaN(score)) {
@@ -268,16 +251,16 @@ export default function APITestDashboard() {
     const result = await updateSingleClassScore(
       selectedFile,
       selectedSpeaker,
-      classNum,
+      domain,
       score
     );
     logResult(
-      "PUT Scoring (Single Class)",
+      "PUT Scoring (Single Domain)",
       {
         request: {
           file: selectedFile,
           speaker: selectedSpeaker,
-          class: classNum,
+          domain,
           score,
         },
         response: result,
@@ -286,23 +269,27 @@ export default function APITestDashboard() {
     );
   };
 
-  // Test: Update All Responses
+  // Test: Update All Responses (one PUT per domain that has an answer)
   const testUpdateAllResponses = async () => {
-    const data: PatientResponsesUpdate = {
-      file: selectedFile,
-      speaker: selectedSpeaker,
-      answer_1: responseInputs.answer_1 || undefined,
-      answer_2: responseInputs.answer_2 || undefined,
-      answer_3: responseInputs.answer_3 || undefined,
-      answer_4: responseInputs.answer_4 || undefined,
-      answer_5: responseInputs.answer_5 || undefined,
-    };
+    const answers: { [domain: string]: string } = {};
+    for (const domain of DOMAINS) {
+      if (responseInputs[domain]) answers[domain] = responseInputs[domain];
+    }
 
-    const result = await updateResponses(data);
+    let result = null;
+    for (const [domain, answer] of Object.entries(answers)) {
+      result = await updateSingleAnswer(
+        selectedFile,
+        selectedSpeaker,
+        domain,
+        answer
+      );
+      if (!result) break;
+    }
     logResult(
-      "PUT Responses (All)",
+      "PUT Responses (All Domains)",
       {
-        request: data,
+        request: { file: selectedFile, speaker: selectedSpeaker, answers },
         response: result,
       },
       result ? null : patientError
@@ -311,12 +298,7 @@ export default function APITestDashboard() {
 
   // Test: Update Single Answer
   const testUpdateSingleAnswer = async () => {
-    const answerNum = parseInt(singleAnswerInput.answerNumber) as
-      | 1
-      | 2
-      | 3
-      | 4
-      | 5;
+    const domain = singleAnswerInput.domain;
     const answer = singleAnswerInput.answer;
 
     if (!answer) {
@@ -327,16 +309,16 @@ export default function APITestDashboard() {
     const result = await updateSingleAnswer(
       selectedFile,
       selectedSpeaker,
-      answerNum,
+      domain,
       answer
     );
     logResult(
-      "PUT Response (Single Answer)",
+      "PUT Response (Single Domain)",
       {
         request: {
           file: selectedFile,
           speaker: selectedSpeaker,
-          answerNumber: answerNum,
+          domain,
           answer,
         },
         response: result,
@@ -1221,21 +1203,19 @@ export default function APITestDashboard() {
               marginBottom: "10px",
             }}
           >
-            {[1, 2, 3, 4, 5].map((num) => (
-              <div key={num}>
-                <label style={{ fontSize: "12px" }}>Class {num}:</label>
+            {DOMAINS.map((domain) => (
+              <div key={domain}>
+                <label style={{ fontSize: "12px" }}>{domain}:</label>
                 <input
                   type="number"
                   min="0"
                   max="10"
                   placeholder="0-10"
-                  value={
-                    scoringInputs[`class_${num}` as keyof typeof scoringInputs]
-                  }
+                  value={scoringInputs[domain]}
                   onChange={(e) =>
                     setScoringInputs((prev) => ({
                       ...prev,
-                      [`class_${num}`]: e.target.value,
+                      [domain]: e.target.value,
                     }))
                   }
                   style={{ width: "100%", padding: "5px", marginTop: "5px" }}
@@ -1262,7 +1242,7 @@ export default function APITestDashboard() {
         {/* Update Single Score */}
         <div style={{ borderTop: "1px solid #c8e6c9", paddingTop: "20px" }}>
           <h3 style={{ fontSize: "16px", marginBottom: "10px" }}>
-            Update Single Class Score
+            Update Single Domain Score
           </h3>
           <div
             style={{
@@ -1273,20 +1253,20 @@ export default function APITestDashboard() {
             }}
           >
             <div>
-              <label style={{ fontSize: "12px" }}>Class:</label>
+              <label style={{ fontSize: "12px" }}>Domain:</label>
               <select
-                value={singleScoreInput.classNumber}
+                value={singleScoreInput.domain}
                 onChange={(e) =>
                   setSingleScoreInput((prev) => ({
                     ...prev,
-                    classNumber: e.target.value,
+                    domain: e.target.value as Domain,
                   }))
                 }
                 style={{ display: "block", padding: "5px", marginTop: "5px" }}
               >
-                {[1, 2, 3, 4, 5].map((num) => (
-                  <option key={num} value={num}>
-                    Class {num}
+                {DOMAINS.map((domain) => (
+                  <option key={domain} value={domain}>
+                    {domain}
                   </option>
                 ))}
               </select>
@@ -1355,21 +1335,17 @@ export default function APITestDashboard() {
               marginBottom: "10px",
             }}
           >
-            {[1, 2, 3, 4, 5].map((num) => (
-              <div key={num}>
-                <label style={{ fontSize: "12px" }}>Answer {num}:</label>
+            {DOMAINS.map((domain) => (
+              <div key={domain}>
+                <label style={{ fontSize: "12px" }}>{domain}:</label>
                 <input
                   type="text"
-                  placeholder={`Enter answer ${num}...`}
-                  value={
-                    responseInputs[
-                      `answer_${num}` as keyof typeof responseInputs
-                    ]
-                  }
+                  placeholder={`Enter ${domain} answer...`}
+                  value={responseInputs[domain]}
                   onChange={(e) =>
                     setResponseInputs((prev) => ({
                       ...prev,
-                      [`answer_${num}`]: e.target.value,
+                      [domain]: e.target.value,
                     }))
                   }
                   style={{ width: "100%", padding: "8px", marginTop: "5px" }}
@@ -1408,20 +1384,20 @@ export default function APITestDashboard() {
             }}
           >
             <div>
-              <label style={{ fontSize: "12px" }}>Answer #:</label>
+              <label style={{ fontSize: "12px" }}>Domain:</label>
               <select
-                value={singleAnswerInput.answerNumber}
+                value={singleAnswerInput.domain}
                 onChange={(e) =>
                   setSingleAnswerInput((prev) => ({
                     ...prev,
-                    answerNumber: e.target.value,
+                    domain: e.target.value as Domain,
                   }))
                 }
                 style={{ display: "block", padding: "5px", marginTop: "5px" }}
               >
-                {[1, 2, 3, 4, 5].map((num) => (
-                  <option key={num} value={num}>
-                    Answer {num}
+                {DOMAINS.map((domain) => (
+                  <option key={domain} value={domain}>
+                    {domain}
                   </option>
                 ))}
               </select>

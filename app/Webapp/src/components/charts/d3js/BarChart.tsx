@@ -131,10 +131,10 @@
 //   useEffect(() => {
 //     if (!chartRef.current) return;
 
-//     // 최대 레이블 길이 계산
+//     // compute the longest label length
 //     const maxLabelChars = Math.max(...data.map((d) => d.category.length));
 
-//     // 동적으로 bottom margin 계산
+//     // compute the bottom margin dynamically
 //     const dynamicBottomMargin = Math.max(70, maxLabelChars * 6 + 20);
 
 //     const margin = {
@@ -175,28 +175,28 @@
 //       .domain([0, axisRange.max])
 //       .interpolator(d3.interpolateBlues);
 
-//     // x축 설정
+//     // x-axis setup
 //     const xAxisGroup = g
 //       .append("g")
 //       .attr("transform", `translate(0,${innerHeight})`)
 //       .call(d3.axisBottom(x));
 
-//     // 동적 폰트 크기 계산
+//     // compute the font size dynamically
 //     const barWidth = x.bandwidth();
-//     const avgLabelWidth = maxLabelChars * 10; // 예상 평균 픽셀 너비
+//     const avgLabelWidth = maxLabelChars * 10; // estimated average width in pixels
 //     const needsRotation = avgLabelWidth > barWidth * 0.9;
 
-//     // 동적 폰트 크기 설정
+//     // apply the dynamic font size
 //     const fontSize = Math.min(
 //       parseInt(chartStyles.axisText.fontSize),
 //       Math.max(10, (barWidth / maxLabelChars) * 2)
 //     );
 
-//     // x축 레이블 스타일링
+//     // x-axis label styling
 //     const xAxisLabels = xAxisGroup.selectAll("text");
 
 //     if (needsRotation) {
-//       // 레이블이 길면 회전
+//       // rotate when the label is long
 //       xAxisLabels
 //         .attr("transform", "rotate(-45)")
 //         .style("text-anchor", "end")
@@ -204,13 +204,13 @@
 //         .attr("dx", "-0.8em")
 //         .attr("dy", "0.15em");
 //     } else {
-//       // 레이블이 짧으면 수평
+//       // keep it horizontal when the label is short
 //       xAxisLabels
 //         .style("text-anchor", "middle")
 //         .style("font-size", `${fontSize}px`);
 //     }
 
-//     // 레이블이 너무 길면 줄바꿈 적용
+//     // wrap the label when it is too long
 //     if (maxLabelChars > 15 && !needsRotation) {
 //       xAxisLabels.each(function (d: any) {
 //         const text = d3.select(this);
@@ -249,7 +249,7 @@
 //       });
 //     }
 
-//     // 툴팁 추가 (전체 텍스트 표시)
+//     // add a tooltip (shows the full text)
 //     xAxisLabels.append("title").text((d: any) => d);
 
 //     const yAxis = g
@@ -270,7 +270,7 @@
 
 //     const labelContainer = g.append("g").attr("class", "label-container");
 
-//     // 세로 방향 legend 설정
+//     // vertical legend setup
 //     const legendWidth = 20;
 //     const legendHeight = 200;
 //     const legendX = width - margin.right + 40;
@@ -404,7 +404,7 @@
 //           .style("font-weight", "bold")
 //           .text(d.count.toLocaleString());
 
-//         // 화살표 마커 추가
+//         // add the arrow marker
 //         const markerY = legendScale(d.count);
 //         const arrowSize = 6;
 
@@ -583,10 +583,10 @@ export const BarChart = ({
     const axisColor = isDarkMode ? "#4B5563" : "#D1D5DB";
     const backgroundColor = isDarkMode ? "#111827" : "#FFFFFF";
 
-    // 최대 레이블 길이 계산
+    // compute the longest label length
     const maxLabelChars = Math.max(...data.map((d) => d.category.length));
 
-    // 동적으로 bottom margin 계산
+    // compute the bottom margin dynamically
     const dynamicBottomMargin = Math.max(70, maxLabelChars * 6 + 20);
 
     const margin = {
@@ -649,7 +649,7 @@ export const BarChart = ({
     // Modern color scale - single gradient for all bars
     const colorScale = () => `url(#bar-gradient-${id})`;
 
-    // x축 설정
+    // x-axis setup
     const xAxisGroup = g
       .append("g")
       .attr("transform", `translate(0,${innerHeight})`)
@@ -659,22 +659,22 @@ export const BarChart = ({
     xAxisGroup.select(".domain").attr("stroke", axisColor);
     xAxisGroup.selectAll(".tick line").attr("stroke", axisColor);
 
-    // 동적 폰트 크기 계산
+    // compute the font size dynamically
     const barWidth = x.bandwidth();
-    const avgLabelWidth = maxLabelChars * 10; // 예상 평균 픽셀 너비
+    const avgLabelWidth = maxLabelChars * 10; // estimated average width in pixels
     const needsRotation = avgLabelWidth > barWidth * 0.9;
 
-    // 동적 폰트 크기 설정
+    // apply the dynamic font size
     const fontSize = Math.min(
       parseInt(chartStyles.axisText.fontSize),
       Math.max(10, (barWidth / maxLabelChars) * 2)
     );
 
-    // x축 레이블 스타일링
+    // x-axis label styling
     const xAxisLabels = xAxisGroup.selectAll("text");
 
     if (needsRotation) {
-      // 레이블이 길면 회전
+      // rotate when the label is long
       xAxisLabels
         .attr("transform", "rotate(-45)")
         .style("text-anchor", "end")
@@ -683,14 +683,14 @@ export const BarChart = ({
         .attr("dx", "-0.8em")
         .attr("dy", "0.15em");
     } else {
-      // 레이블이 짧으면 수평
+      // keep it horizontal when the label is short
       xAxisLabels
         .style("text-anchor", "middle")
         .style("font-size", `${fontSize}px`)
         .style("fill", textColor);
     }
 
-    // 레이블이 너무 길면 줄바꿈 적용
+    // wrap the label when it is too long
     if (maxLabelChars > 15 && !needsRotation) {
       xAxisLabels.each(function (d: any) {
         const text = d3.select(this);
@@ -729,28 +729,28 @@ export const BarChart = ({
       });
     }
 
-    // 툴팁 추가 (전체 텍스트 표시)
+    // add a tooltip (shows the full text)
     xAxisLabels.append("title").text((d: any) => d);
 
     // const yAxisGroup = g.append("g").call(d3.axisLeft(y).tickSizeOuter(0));
 
-    // Y축에 표시할 tick 값들을 스마트하게 계산
+    // pick sensible tick values for the y-axis
     const yAxisTickValues = (() => {
       const max = Math.ceil(axisRange.max);
       if (max <= 10) {
-        // 10 이하: 모든 정수
+        // <= 10: every integer
         return d3.range(0, max + 1);
       } else if (max <= 20) {
-        // 20 이하: 2의 배수
+        // <= 20: multiples of 2
         return d3.range(0, max + 1, 2);
       } else if (max <= 50) {
-        // 50 이하: 5의 배수
+        // <= 50: multiples of 5
         return d3.range(0, max + 1, 5);
       } else if (max <= 100) {
-        // 100 이하: 10의 배수
+        // <= 100: multiples of 10
         return d3.range(0, max + 1, 10);
       } else {
-        // 100 초과: 자동으로 적절한 간격 계산
+        // > 100: let d3 choose the interval
         const step = Math.ceil(max / 10);
         const roundedStep = Math.ceil(step / 10) * 10;
         return d3.range(0, max + 1, roundedStep);
@@ -762,7 +762,7 @@ export const BarChart = ({
         .axisLeft(y)
         .tickSizeOuter(0)
         .tickValues(yAxisTickValues)
-        .tickFormat(d3.format("d")) // 정수로만 표시
+        .tickFormat(d3.format("d")) // integers only
     );
 
     // Style y-axis
@@ -921,7 +921,7 @@ export const BarChart = ({
           .style("font-weight", "600")
           .text(d.count.toLocaleString());
 
-        // 화살표 마커 추가
+        // add the arrow marker
         const markerY = legendScale(d.count);
         const arrowSize = 6;
 

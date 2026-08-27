@@ -6,23 +6,23 @@ import { getTrackingConfig, sanitizeEventData } from '../config/tracking.config'
 
 interface UseViewportTrackingOptions {
   componentName: string;
-  threshold?: number; // 0-1, 얼마나 보여야 추적할지
-  triggerOnce?: boolean; // 한 번만 추적할지 여부
-  minViewDuration?: number; // 최소 노출 시간 (밀리초)
+  threshold?: number; // 0-1, how much must be visible before we track
+  triggerOnce?: boolean; // whether to track only once
+  minViewDuration?: number; // minimum exposure time (milliseconds)
 }
 
 /**
- * 컴포넌트 화면 노출 추적 훅
- * 사용자가 특정 컴포넌트를 실제로 봤는지 추적
+ * Component viewport-exposure tracking hook
+ * Records whether the user actually saw a given component
  */
 export const useViewportTracking = <T extends HTMLElement>(
   options: UseViewportTrackingOptions
 ): RefObject<T> => {
   const {
     componentName,
-    threshold = 0.5, // 기본 50%
+    threshold = 0.5, // 50% by default
     triggerOnce = false,
-    minViewDuration = 1000, // 기본 1초
+    minViewDuration = 1000, // 1 second by default
   } = options;
 
   const elementRef = useRef<T>(null);
@@ -44,22 +44,22 @@ export const useViewportTracking = <T extends HTMLElement>(
             entry.intersectionRatio * 100
           );
 
-          // 최대 가시성 업데이트
+          // update the highest visibility seen
           if (visibilityPercentage > maxVisibilityRef.current) {
             maxVisibilityRef.current = visibilityPercentage;
           }
 
           if (entry.isIntersecting && entry.intersectionRatio >= thresholdValue) {
-            // 화면에 들어옴
+            // entered the viewport
             if (!viewStartTimeRef.current) {
               viewStartTimeRef.current = Date.now();
             }
           } else {
-            // 화면에서 나감
+            // left the viewport
             if (viewStartTimeRef.current) {
               const viewDuration = Date.now() - viewStartTimeRef.current;
 
-              // 최소 노출 시간 체크
+              // minimum exposure time check
               if (viewDuration >= minViewDuration) {
                 if (!triggerOnce || !hasTriggeredRef.current) {
                   const session = getOrCreateSession();
@@ -79,7 +79,7 @@ export const useViewportTracking = <T extends HTMLElement>(
                 }
               }
 
-              // 리셋
+              // reset
               viewStartTimeRef.current = null;
               maxVisibilityRef.current = 0;
             }
@@ -97,7 +97,7 @@ export const useViewportTracking = <T extends HTMLElement>(
     return () => {
       observer.disconnect();
 
-      // 언마운트 시 아직 보고 있던 경우 처리
+      // handle the still-visible case on unmount
       if (viewStartTimeRef.current) {
         const viewDuration = Date.now() - viewStartTimeRef.current;
         if (viewDuration >= minViewDuration) {

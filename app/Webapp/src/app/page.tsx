@@ -8,7 +8,7 @@ import { useShallow } from "zustand/react/shallow";
 
 // import PhysicianReports from "@/components/PhysicianReportsModifiedV35";
 
-// PhysicianReportsModifiedV37 is based on the plan from dr timothy.
+// PhysicianReportsModifiedV37 is based on the plan from the clinical collaborator.
 // import PhysicianReports from "@/components/PhysicianReportsModifiedV37";
 
 // import PhysicianReports from "@/components/PhysicianReportsModifiedV37Timothy";
@@ -32,7 +32,7 @@ import PatientConsultationReports from "@/components/PatientConsultationReports"
 // import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV41";
 import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV42";
 
-// // These below components are the one with feedback from Dr. Timothy
+// // These below components are the one with feedback from the clinical collaborator
 // Modified but not the version where one question appears per page.
 // import PatientFollowUpReport from "@/components/PatientFollowUpReportV31";
 

@@ -2,32 +2,32 @@ import { useEffect } from "react";
 import { useClickPath } from "./useClickPath";
 import { useScrollDepth } from "./useScrollDepth";
 import { useNavigationTracking } from "./useNavigationTracking";
-import { useGlobalCursorProximity } from "./useGlobalCursorProximity"; // 🆕 추가
+import { useGlobalCursorProximity } from "./useGlobalCursorProximity"; // added
 import { initializePostHog, captureEvent, setTrackingContext } from "../lib/posthog";
 import { getOrCreateSession, endSession } from "../utils/session.utils";
 import { getTrackingConfig } from "../config/tracking.config";
 
 /**
- * 통합 추적 훅
- * 앱 전체에서 사용자 행동 추적을 활성화
+ * Unified tracking hook
+ * Enables user behavior tracking across the whole app
  *
- * ⭐ localhost에서는 환경변수 설정 없이 자동으로 활성화됨
- * 🆕 커서 근접도 추적 자동 활성화!
+ * On localhost it turns on automatically, with no env var needed
+ * Cursor proximity tracking is enabled automatically
  *
  * @example
- * // App.tsx 최상위에서 사용
+ * // use at the top level of App.tsx
  * function App() {
  *   useTracking();
  *   return <YourApp />;
  * }
  *
  * @example
- * // 커스텀 설정으로 사용
+ * // use with custom options
  * function App() {
  *   useTracking({
  *     cursorProximity: {
  *       enabled: true,
- *       autoTrackInteractive: true  // 모든 버튼/링크 자동 추적
+ *       autoTrackInteractive: true  // auto-track every button/link
  *     }
  *   });
  *   return <YourApp />;
@@ -43,7 +43,7 @@ interface UseTrackingOptions {
   speaker?: string;
   /** Visit type: "first" | "followup" */
   visitType?: string;
-  /** 커서 근접도 추적 설정 */
+  /** Cursor proximity tracking options */
   cursorProximity?: {
     enabled?: boolean;
     autoTrackInteractive?: boolean;
@@ -69,9 +69,9 @@ export const useTracking = (options?: UseTrackingOptions) => {
     });
   }, [options?.role, options?.file, options?.speaker, options?.visitType]);
 
-  // 전역 커서 근접도 추적
+  // Global cursor proximity tracking
   const cursorProximityConfig = {
-    enabled: options?.cursorProximity?.enabled !== false, // 기본값: true
+    enabled: options?.cursorProximity?.enabled !== false, // default: true
     autoTrackInteractive:
       options?.cursorProximity?.autoTrackInteractive || false,
     selector:
@@ -81,7 +81,7 @@ export const useTracking = (options?: UseTrackingOptions) => {
     maxTrackingDistance: options?.cursorProximity?.maxTrackingDistance || 400,
   };
 
-  // 🎯 전역 커서 근접도 추적 활성화
+  // Enable global cursor proximity tracking
   const globalCursorProximity = useGlobalCursorProximity(
     cursorProximityConfig.enabled
       ? {
@@ -93,14 +93,14 @@ export const useTracking = (options?: UseTrackingOptions) => {
       : undefined
   );
 
-  // PostHog 초기화 (최초 1회)
+  // PostHog initialisation (once)
   useEffect(() => {
     if (!config.enabled) {
       console.log("[Tracking] Disabled via environment variable");
       return;
     }
 
-    // 🏠 localhost 정보 표시
+    // Show localhost info
     console.log(
       "%c🏠 LOCALHOST TRACKING ENABLED",
       "background: #10b981; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;"
@@ -112,7 +112,7 @@ export const useTracking = (options?: UseTrackingOptions) => {
     if (initialized) {
       const session = getOrCreateSession();
 
-      // 세션 시작 이벤트
+      // Session start event
       captureEvent("session_start", {
         timestamp: new Date().toISOString(),
         sessionId: session.sessionId,
@@ -122,7 +122,7 @@ export const useTracking = (options?: UseTrackingOptions) => {
 
       console.log("[Tracking] Initialized successfully");
 
-      // 🆕 커서 근접도 추적 정보
+      // Cursor proximity tracking info
       if (cursorProximityConfig.enabled) {
         console.log(
           "%c🎯 CURSOR PROXIMITY TRACKING ENABLED",
@@ -135,7 +135,7 @@ export const useTracking = (options?: UseTrackingOptions) => {
       }
     }
 
-    // 앱 종료 시 세션 종료
+    // End the session when the app unmounts
     const handleBeforeUnload = () => {
       const session = getOrCreateSession();
       captureEvent("session_end", {
@@ -153,7 +153,7 @@ export const useTracking = (options?: UseTrackingOptions) => {
     };
   }, [config.enabled, cursorProximityConfig.enabled]);
 
-  // 🎯 전역 클릭 이벤트 리스너 (자동 추적)
+  // Global click listener (automatic tracking)
   useEffect(() => {
     if (!config.enabled) return;
 
@@ -161,7 +161,7 @@ export const useTracking = (options?: UseTrackingOptions) => {
       const target = event.target;
 
       if (target instanceof HTMLElement) {
-        // 클릭 가능한 요소들만 추적
+        // only track clickable elements
         const isClickable =
           target.tagName === "BUTTON" ||
           target.tagName === "A" ||
@@ -175,7 +175,7 @@ export const useTracking = (options?: UseTrackingOptions) => {
             (target.closest('button, a, [role="button"]') as HTMLElement) ||
             target;
 
-          // 🖱️ 클릭 로그
+          // click log
           console.log(
             `%c🖱️ CLICK%c <${elementToTrack.tagName.toLowerCase()}${
               elementToTrack.id ? "#" + elementToTrack.id : ""
@@ -209,11 +209,11 @@ export const useTracking = (options?: UseTrackingOptions) => {
   };
 };
 
-// 모든 훅을 export
+// Re-export every hook
 export { useClickPath } from "./useClickPath";
 export { useTimeOnComponent } from "./useTimeOnComponent";
 export { useScrollDepth } from "./useScrollDepth";
 export { useViewportTracking } from "./useViewportTracking";
 export { useNavigationTracking } from "./useNavigationTracking";
-// export { useCursorProximity } from "./useGlobalCursorProximity"; // 개별 사용을 원할 때
-export { useGlobalCursorProximity } from "./useGlobalCursorProximity"; // 🆕 전역 추적
+// export { useCursorProximity } from "./useGlobalCursorProximity"; // when you want it individually
+export { useGlobalCursorProximity } from "./useGlobalCursorProximity"; // global tracking

@@ -22,7 +22,7 @@ export const ReportDownload = () => {
 
     for (const container of chartContainers) {
       try {
-        // zoom-instructions 요소 숨기기
+        // hide the zoom-instructions element
         const zoomElements = container.querySelectorAll(
           '[id*="zoom-instructions"]'
         );
@@ -33,7 +33,7 @@ export const ReportDownload = () => {
           el.style.display = "none";
         });
 
-        // 원본 이미지 캡처
+        // capture the original image
         const originalCanvas = await html2canvas(container, {
           scale: 2,
           useCORS: true,
@@ -41,21 +41,21 @@ export const ReportDownload = () => {
           backgroundColor: isDarkMode ? "#1e1e1e" : "#ffffff",
         });
 
-        // 원래 상태로 복원
+        // restore the original state
         zoomElements.forEach((el, index) => {
           el.style.display = originalDisplayStyles[index];
         });
 
-        // 둥근 모서리 적용
-        const cornerRadius = 12; // 모서리 반경 크기 (원하는 값으로 조정)
+        // apply rounded corners
+        const cornerRadius = 12; // corner radius (tune as desired)
 
-        // 새 캔버스 생성
+        // create a new canvas
         const roundedCanvas = document.createElement("canvas");
         roundedCanvas.width = originalCanvas.width;
         roundedCanvas.height = originalCanvas.height;
         const ctx = roundedCanvas.getContext("2d");
 
-        // 둥근 사각형 경로 생성
+        // build the rounded-rectangle path
         ctx.beginPath();
         ctx.moveTo(cornerRadius, 0);
         ctx.lineTo(roundedCanvas.width - cornerRadius, 0);
@@ -83,13 +83,13 @@ export const ReportDownload = () => {
         ctx.quadraticCurveTo(0, 0, cornerRadius, 0);
         ctx.closePath();
 
-        // 경로를 클리핑 마스크로 설정
+        // use the path as a clipping mask
         ctx.clip();
 
-        // 원본 이미지 그리기
+        // draw the original image
         ctx.drawImage(originalCanvas, 0, 0);
 
-        // 최종 이미지 데이터 변환
+        // convert to the final image data
         const imageData = roundedCanvas.toDataURL("image/png");
 
         chartImages.push({
@@ -977,62 +977,62 @@ These observations should be considered with caution, and additional data may be
         return [r, g, b];
       }
 
-      // / FIRST PAGE - 첫 페이지 최적화
+      // / FIRST PAGE - first-page layout tuning
       await addLogo(pdf);
 
-      // 제목 추가 - 세로 공간 최적화
+      // add the title — tuned for vertical space
       pdf.setFontSize(18);
       pdf.setTextColor(...hexToRgb(primaryColor));
       pdf.setFont(headingFont, "bold");
       pdf.text("Influenza Analysis Report", margin, 38);
 
-      // 부제목 추가 - 간격 최적화
+      // add the subtitle — tuned spacing
       pdf.setFontSize(11);
       pdf.setTextColor(...hexToRgb(textColor));
       pdf.setFont(headingFont, "normal");
       const today = formatDate(new Date());
       pdf.text(`Report Date: ${today}`, margin, 45);
 
-      // 푸터 추가
+      // add the footer
       addFooter(pdf);
 
-      // 요약 파싱
+      // parse the summary
       console.log("Summary before parsing:", summary);
       const parsedSummary = parseSummary(summary);
       console.log("Parsed summary:", parsedSummary);
 
-      // 다운로드 버튼 숨기기
+      // hide the download button
       const downloadButtons = document.querySelectorAll("#downloadchart");
       downloadButtons.forEach((btn) => {
         btn.style.display = "none";
       });
 
-      // 차트 이미지 캡처
+      // capture the chart image
       const chartImages = await captureChartsAsImages();
 
-      // 다운로드 버튼 다시 표시
+      // show the download button again
       downloadButtons.forEach((btn) => {
         btn.style.display = "block";
       });
 
-      // 차트 섹션 초기화 - 모든 섹션을 첫 번째 차트에 연결
+      // initialise chart sections — every section is attached to the first chart
       const chartSections = {
-        0: [], // 모든 섹션은 첫 번째 차트에 연결
+        0: [], // every section attaches to the first chart
       };
-      // 섹션 존재 확인 및 처리
+      // check for sections and process them
       if (parsedSummary.sections && parsedSummary.sections.length > 0) {
         console.log("Total sections found:", parsedSummary.sections.length);
 
-        // 섹션 순서 최적화 - 짧은 섹션을 앞으로 배치하여 첫 페이지 공간 활용 최대화
-        // (선택 사항 - 원래 순서를 유지하려면 이 단계를 건너뛸 수 있음)
+        // order sections shortest-first so the first page is used as fully as possible
+        // (optional — skip this step to keep the original order)
         const sortedSections = [...parsedSummary.sections].sort((a, b) => {
           const aLength = a.bullets ? a.bullets.length : 0;
           const bLength = b.bullets ? b.bullets.length : 0;
-          return aLength - bLength; // 글머리 기호가 적은 순서대로 정렬
+          return aLength - bLength; // sort by ascending bullet count
         });
 
-        // 모든 섹션을 첫 번째 차트에 추가 (정렬된 순서 또는 원래 순서로)
-        // 원래 순서를 유지하려면 sortedSections 대신 parsedSummary.sections 사용
+        // add every section to the first chart (sorted or original order)
+        // use parsedSummary.sections instead of sortedSections to keep the original order
         parsedSummary.sections.forEach((section, index) => {
           console.log(`Processing section ${index}:`, section);
 
@@ -1045,50 +1045,50 @@ These observations should be considered with caution, and additional data may be
 
       console.log("Final chart sections assignment:", chartSections);
 
-      // 첫 페이지 콘텐츠 시작 위치 설정 - 로고와 제목 아래
+      // set where the first page's content starts — below the logo and title
       let currentPosition = 50;
 
-      // 첫 번째 차트 추가 전 페이지 높이 예측
-      // 최대한 첫 페이지 공간을 활용하기 위한 사전 조치
+      // estimate the page height before adding the first chart
+      // done up front so the first page is used as fully as possible
       let estimatedTotalHeight = 0;
       if (chartImages.length > 0) {
-        // 차트 이미지 높이 예측
+        // estimate the chart image height
         const imgWidth = contentWidth;
         const originalHeight =
           (chartImages[0].height / chartImages[0].width) * imgWidth;
-        const imgHeight = Math.min(originalHeight * 1.3, 100); // 높이 제한
+        const imgHeight = Math.min(originalHeight * 1.3, 100); // height cap
 
-        // 차트 제목 + 이미지 + 분석 섹션 제목 + 간격
-        estimatedTotalHeight = 5 + imgHeight + 6 + 7; // 차트 제목, 이미지, 섹션 제목 간격
+        // chart title + image + analysis section title + spacing
+        estimatedTotalHeight = 5 + imgHeight + 6 + 7; // chart title, image, section title spacing
 
-        // 섹션 높이 예측 (간략하게)
+        // rough estimate of the section height
         if (chartSections[0] && chartSections[0].length > 0) {
           for (const section of chartSections[0]) {
-            // 섹션 제목 + 기본 간격
+            // section title + base spacing
             estimatedTotalHeight += 15;
 
-            // 글머리 기호 예측
+            // estimate the bullets
             if (section.bullets && section.bullets.length > 0) {
-              // 글머리 기호당 평균 10픽셀로 대략 예측
+              // rough estimate of 10 pixels per bullet
               estimatedTotalHeight += section.bullets.length * 10;
             }
           }
         }
       }
 
-      // 차트와 섹션 추가
+      // add the charts and sections
       if (chartImages.length > 0) {
         if (chartSections[0] && chartSections[0].length > 0) {
-          // 첫 번째 차트와 모든 섹션 추가 (최적화된 함수 사용)
+          // add the first chart and every section (uses the tuned helper)
           currentPosition = addChartWithDescription(
             pdf,
             chartImages[0],
             chartSections[0],
             currentPosition,
-            true // 첫 페이지임을 표시
+            true // flag that this is the first page
           );
         } else {
-          // 섹션 없이 차트만 추가
+          // add the chart only, with no sections
           const imgWidth = contentWidth;
           const originalHeight =
             (chartImages[0].height / chartImages[0].width) * imgWidth;
@@ -1112,18 +1112,18 @@ These observations should be considered with caution, and additional data may be
         }
       }
 
-      // 추가 차트 처리
+      // handle the remaining charts
       for (let i = 1; i < chartImages.length; i++) {
-        // 현재 페이지에 충분한 공간이 없는 경우에만 새 페이지 시작
+        // only start a new page when the current one lacks room
         if (currentPosition > pdfHeight - 100) {
-          // 최소 100픽셀 필요
+          // needs at least 100 pixels
           pdf.addPage();
           addHeader(pdf);
           addFooter(pdf);
           currentPosition = 30;
         }
 
-        // 추가 차트 추가
+        // add the remaining chart
         const imgWidth = contentWidth;
         const originalHeight =
           (chartImages[i].height / chartImages[i].width) * imgWidth;
@@ -1146,7 +1146,7 @@ These observations should be considered with caution, and additional data may be
         currentPosition += imgHeight + 10;
       }
 
-      // PDF 저장
+      // save the PDF
       pdf.save("influenza-analysis-report.pdf");
 
       return true;

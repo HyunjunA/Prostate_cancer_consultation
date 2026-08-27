@@ -364,7 +364,7 @@ class LLMDomainScoringAndSummary(Base):
     """GPT-4o AI pipeline results per domain per analysis run.
 
     Each row = one domain's final result from the AI pipeline
-    (Guillermo's ai_pipeline module: scoring → extraction → filtering → selection → reformat).
+    (the AI pipeline author's ai_pipeline module: scoring → extraction → filtering → selection → reformat).
 
     Frontend usage:
       - ai_score (0-5)        → DOCTOR page: displayed as consultation quality score
@@ -449,7 +449,7 @@ class NLPPipelineIntermediate(Base):
 
 
 # =====================================================
-# 10. AI Pipeline Intermediates (Guillermo's sub-steps)
+# 10. AI Pipeline Intermediates (AI pipeline author's sub-steps)
 # =====================================================
 
 class LLMPipelineIntermediate(Base):

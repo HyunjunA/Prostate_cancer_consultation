@@ -1,9 +1,9 @@
 /**
- * 사용자 행동 추적을 위한 타입 정의
- * PHI (Protected Health Information)는 절대 포함하지 않음
+ * Type definitions for user behavior tracking
+ * PHI (Protected Health Information) is never included
  */
 
-// 추적 이벤트 타입
+// Tracking event types
 export type TrackingEventType =
   | "page_view"
   | "component_view"
@@ -13,10 +13,10 @@ export type TrackingEventType =
   | "time_on_component"
   | "session_start"
   | "session_end"
-  | "cursor_proximity" // NEW: 커서 근접도 추적
-  | "cursor_proximity_leave"; // NEW: 커서 떠남 추적
+  | "cursor_proximity" // NEW: cursor proximity tracking
+  | "cursor_proximity_leave"; // NEW: cursor-left tracking
 
-// 기본 이벤트 속성 (PHI 제외)
+// Base event properties (PHI excluded)
 export interface BaseEventProperties {
   timestamp: string;
   sessionId: string;
@@ -25,7 +25,7 @@ export interface BaseEventProperties {
   action?: string;
 }
 
-// 클릭 이벤트 속성
+// Click event properties
 export interface ClickEventProperties extends BaseEventProperties {
   elementType: string;
   elementId?: string;
@@ -33,47 +33,47 @@ export interface ClickEventProperties extends BaseEventProperties {
   clickSequence: number;
 }
 
-// 스크롤 깊이 이벤트
+// Scroll depth event
 export interface ScrollDepthEventProperties extends BaseEventProperties {
   scrollDepth: number; // 0-100%
   maxScrollDepth: number;
   scrollDirection: "down" | "up";
 }
 
-// 체류시간 이벤트
+// Dwell time event
 export interface TimeOnComponentEventProperties extends BaseEventProperties {
-  duration: number; // 밀리초
+  duration: number; // milliseconds
   componentName: string;
-  engaged: boolean; // 실제 인터랙션이 있었는지
+  engaged: boolean; // whether the user actually interacted
 }
 
-// 화면 노출 이벤트
+// Viewport exposure event
 export interface ViewportEventProperties extends BaseEventProperties {
   componentName: string;
   visibilityPercentage: number;
-  viewDuration: number; // 밀리초
+  viewDuration: number; // milliseconds
   wasFullyVisible: boolean;
 }
 
-// 탐색 경로 이벤트
+// Navigation path event
 export interface NavigationEventProperties extends BaseEventProperties {
   from: string;
   to: string;
   navigationStep: number;
 }
 
-// 커서 근접도 이벤트 (NEW)
+// Cursor proximity event (NEW)
 export interface CursorProximityEventProperties extends BaseEventProperties {
   componentName: string;
-  distance: number; // 픽셀 단위 거리
+  distance: number; // distance in pixels
   proximityLevel: "near" | "medium" | "far" | "very-close";
   cursorX: number;
   cursorY: number;
   componentCenter: { x: number; y: number };
-  hoverDuration?: number; // 근처에 머문 시간 (밀리초)
+  hoverDuration?: number; // time spent nearby (milliseconds)
 }
 
-// 세션 정보
+// Session info
 export interface SessionInfo {
   sessionId: string;
   startTime: string;
@@ -81,18 +81,18 @@ export interface SessionInfo {
   userAgent: string;
 }
 
-// 추적 설정
+// Tracking configuration
 export interface TrackingConfig {
   enabled: boolean;
   debug: boolean;
   apiKey?: string;
   apiHost?: string;
-  sessionDuration: number; // 세션 만료 시간 (밀리초)
-  scrollThreshold: number; // 스크롤 추적 임계값 (%)
-  visibilityThreshold: number; // 노출 추적 임계값 (%)
+  sessionDuration: number; // session expiry (milliseconds)
+  scrollThreshold: number; // scroll tracking threshold (%)
+  visibilityThreshold: number; // visibility tracking threshold (%)
 }
 
-// 추적 컨텍스트
+// Tracking context
 export interface TrackingContext {
   isEnabled: boolean;
   config: TrackingConfig;

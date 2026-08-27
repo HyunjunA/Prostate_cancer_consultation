@@ -91,7 +91,6 @@ describe("Doctor Data Flow Integration", () => {
         method: "GET",
         headers: expect.objectContaining({
           "Content-Type": "application/json",
-          "Content-Type": "application/json",
         }),
       })
     );

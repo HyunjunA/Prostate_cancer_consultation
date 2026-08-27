@@ -90,7 +90,6 @@ describe("Patient Data Flow Integration", () => {
         method: "GET",
         headers: expect.objectContaining({
           "Content-Type": "application/json",
-          "Content-Type": "application/json",
         }),
       })
     );
@@ -172,7 +171,8 @@ describe("Patient Data Flow Integration", () => {
     const updateData = {
       file: "session1.xlsx",
       speaker: "Patient_sid-1",
-      class_1_patient_scoring: 4,
+      domain: "cp",
+      patient_scoring: 4,
     };
 
     let returnValue: unknown;

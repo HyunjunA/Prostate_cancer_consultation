@@ -30,18 +30,25 @@ export interface DoctorRewriteData {
 // ═══════════════════════════════════════════════════════════
 // Sentence Data Type Definition (API Response)
 // ═══════════════════════════════════════════════════════════
+// Mirrors the per-item dict built in Backend routes_doctor.py
+// `get_doctor_sentences` (GET /doctor/sentences/{file}/{speaker}). `file` and
+// `speaker` live on the response envelope, not on each item, so they are not
+// declared here. `time` is emitted as a literal null by that endpoint, and
+// `score` is a lookup miss away from null, so both are nullable.
 export interface DoctorSentenceItem {
-  file: string;
   i: number;
   i2: number;
-  speaker: string;
-  time: string;
+  time: string | null;
   sentence: string;
+  // Surrounding utterance with the sentence wrapped in <main> tags.
+  context?: string | null;
   class: string;
-  score?: number;
+  score?: number | null;
 }
 
 export interface DoctorSentencesResponse {
+  file: string;
+  speaker: string;
   total: number;
   data: DoctorSentenceItem[];
 }
@@ -119,26 +126,37 @@ export interface ScoreAverageResponse {
 // ═══════════════════════════════════════════════════════════
 // NEW: Score Summary Data Type Definition
 // ═══════════════════════════════════════════════════════════
+// Mirrors the payload built in Backend routes_doctor.py
+// `get_doctor_score_summary_by_file_speaker`
+// (GET /doctor/scores/summary/{file}[/{speaker}]). This endpoint reads
+// llm_domain_scoring_and_summary and returns ONE row per domain, so it shares
+// no shape with /scores/average — do not reuse ScoreAverageItem here.
 export interface ScoreSummaryClassItem {
+  // Domain code: cp | le | ed | inc | ius.
   class: string;
-  avg_score: number | null;
-  count: number;
-  rewritten_count: number;
-  original_count: number;
-  min_score: number | null;
-  max_score: number | null;
+  // Designated-treatment ai_score (0-5); forced to 0 when the domain was
+  // mentioned but not tied to the designated treatment.
+  score: number | null;
+  // Always null on this endpoint; kept because the payload carries the key.
+  pred_score: number | null;
+  sentence: string | null;
+  // (utterance_index, sentence_in_utterance) of `sentence`, when it could be
+  // matched back to sentence_prediction.
+  i: number | null;
+  i2: number | null;
+  explanation: string | null;
+  extracted_estimate: string | null;
+  treatment: string | null;
 }
 
 export interface ScoreSummaryResponse {
   file: string;
   speaker: string;
   overall: {
-    avg_score: number | null;
+    // Canonical per-patient overall: designated-treatment domain scores
+    // averaged over 5. Null when the file has no AI rows yet.
+    score: number | null;
     count: number;
-    rewritten_count: number;
-    original_count: number;
-    min_score: number | null;
-    max_score: number | null;
   };
   by_class: ScoreSummaryClassItem[];
 }

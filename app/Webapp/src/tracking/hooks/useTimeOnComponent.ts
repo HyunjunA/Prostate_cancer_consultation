@@ -6,13 +6,13 @@ import { sanitizeEventData } from '../config/tracking.config';
 
 interface UseTimeOnComponentOptions {
   componentName: string;
-  minDuration?: number; // 최소 추적 시간 (밀리초)
-  trackEngagement?: boolean; // 실제 인터랙션 추적 여부
+  minDuration?: number; // minimum tracked duration (milliseconds)
+  trackEngagement?: boolean; // whether to track real interactions
 }
 
 /**
- * 컴포넌트 체류시간 추적 훅
- * 사용자가 특정 컴포넌트/페이지에 얼마나 머물렀는지 추적
+ * Component dwell-time tracking hook
+ * Records how long the user stayed on a component/page
  */
 export const useTimeOnComponent = (options: UseTimeOnComponentOptions) => {
   const { componentName, minDuration = 1000, trackEngagement = true } = options;
@@ -21,7 +21,7 @@ export const useTimeOnComponent = (options: UseTimeOnComponentOptions) => {
   const engagementRef = useRef<boolean>(false);
   const [isActive, setIsActive] = useState(true);
 
-  // 인터랙션 감지
+  // interaction detection
   useEffect(() => {
     if (!trackEngagement) return;
 
@@ -29,7 +29,7 @@ export const useTimeOnComponent = (options: UseTimeOnComponentOptions) => {
       engagementRef.current = true;
     };
 
-    // 마우스 움직임, 클릭, 스크롤, 키보드 입력 감지
+    // detect mouse move, click, scroll and key input
     const events = ['mousemove', 'click', 'scroll', 'keydown'];
     
     events.forEach((event) => {
@@ -43,12 +43,12 @@ export const useTimeOnComponent = (options: UseTimeOnComponentOptions) => {
     };
   }, [trackEngagement]);
 
-  // 컴포넌트 언마운트 시 체류시간 전송
+  // send the dwell time on unmount
   useEffect(() => {
     return () => {
       const duration = Date.now() - startTimeRef.current;
 
-      // 최소 시간 미만이면 전송하지 않음
+      // skip if below the minimum duration
       if (duration < minDuration) return;
 
       const session = getOrCreateSession();
@@ -67,12 +67,12 @@ export const useTimeOnComponent = (options: UseTimeOnComponentOptions) => {
     };
   }, [componentName, minDuration]);
 
-  // 페이지 가시성 추적 (탭 전환 감지)
+  // page visibility tracking (tab switches)
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
         setIsActive(false);
-        // 탭이 숨겨질 때 현재까지의 시간 기록
+        // record elapsed time when the tab is hidden
         const duration = Date.now() - startTimeRef.current;
         if (duration >= minDuration) {
           const session = getOrCreateSession();
@@ -88,7 +88,7 @@ export const useTimeOnComponent = (options: UseTimeOnComponentOptions) => {
         }
       } else {
         setIsActive(true);
-        // 다시 돌아왔을 때 시작 시간 리셋
+        // reset the start time when the user comes back
         startTimeRef.current = Date.now();
         engagementRef.current = false;
       }

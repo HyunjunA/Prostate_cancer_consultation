@@ -1,7 +1,8 @@
 """
 Transcript Analysis Pipeline Service.
 
-Python implementation of Guillermo's R script (``process-data-guille.R``).
+Python implementation of the AI pipeline author's reference R script
+(sibling repo, ``sentence_classification``).
 This module reproduces the full transcript-processing pipeline that converts
 a raw consultation transcript (xlsx with *speaker* and *text* columns) into
 per-topic scored sentence sheets suitable for the Doctor Interface.
@@ -19,7 +20,7 @@ Step 3 — **Split into sentences**
     splitting (mirrors R ``tidytext::unnest_tokens('sentences')``).
 Step 4 — **NLP prediction** *(delegated to nlp_classifier_client.py)*
     Send every sentence to the five NLP classification models hosted in
-    Michael's ``r01-nlp-classifiers`` Docker container. Each model returns
+    the NLP team's ``r01-nlp-classifiers`` Docker container. Each model returns
     a probability score (``.pred_1``) indicating how relevant the sentence
     is to its clinical topic.
 Step 5 — **Select top-N sentences**
@@ -63,7 +64,7 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────────────
 
 # R script outcome names → sheet abbreviations
-# (matches process-data-guille.R lines 151-169)
+# (matches the reference R script, lines 151-169)
 OUTCOME_TO_SHEET = {
     "cancer_prognosis": "cp",
     "continence": "inc",
@@ -154,7 +155,7 @@ def read_transcript(file_bytes: bytes, filename: str) -> Tuple[pd.DataFrame, str
 def identify_doctor_speaker(df: pd.DataFrame) -> str:
     """Identify the doctor by total text length — the speaker who talks the most.
 
-    Ivan's rule: "group by speaker, sum the text length, the bigger is the doctor."
+    The manager's rule: "group by speaker, sum the text length, the bigger is the doctor."
     No hardcoded speaker IDs. Reuses logic from AI_physician_patient_communication
     Pipeline's preprocessing.identify_doctor_speaker().
     """
@@ -192,7 +193,7 @@ def identify_doctor_speaker(df: pd.DataFrame) -> str:
 def filter_interviewer(df: pd.DataFrame) -> pd.DataFrame:
     """Keep only doctor rows (identified by longest total text) and re-index.
 
-    Uses Ivan's dynamic identification: speaker with most text = doctor.
+    Uses the manager's dynamic identification: speaker with most text = doctor.
     """
     doctor_speaker = identify_doctor_speaker(df)
     if not doctor_speaker:
@@ -225,7 +226,7 @@ def _sent_tokenize(text: str) -> List[str]:
 def split_sentences(df: pd.DataFrame) -> pd.DataFrame:
     """Split each utterance into individual sentences.
 
-    Matches process-data-guille.R lines 49-66:
+    Matches the reference R script, lines 49-66:
     - unnest_tokens('text', text, 'sentences')
     - i = original utterance number
     - i2 = sentence number within utterance
@@ -351,7 +352,7 @@ def generate_context(
 ) -> List[str]:
     """Generate context strings for each top sentence.
 
-    Matches process-data-guille.R lines 119-136:
+    Matches the reference R script, lines 119-136:
     - For each top sentence at index x, take sentences from (x-window) to (x+window)
     - Wrap the target sentence in <main>...</main> tags
     - Join with "."
@@ -410,7 +411,7 @@ def export_to_xlsx(
 ) -> bytes:
     """Export results to xlsx with 5 sheets (cp, inc, ed, ius, le).
 
-    Matches process-data-guille.R lines 151-175.
+    Matches the reference R script, lines 151-175.
     Returns xlsx file as bytes.
     """
     output = BytesIO()

@@ -13,7 +13,7 @@ candidate sentence in one domain at a specific step:
                         that pass filtering)
 
 We collapse scoring + extraction into one snapshot (`step='extraction'`)
-because Guillermo's `pipeline.py` adds those columns to the same DataFrame
+because the AI pipeline author's `pipeline.py` adds those columns to the same DataFrame
 and only snapshots once via `df_extraction = df.copy()` after extraction.
 The `survived_filter` boolean derives from `df_filtering` which is the
 filtered subset.

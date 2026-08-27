@@ -831,8 +831,6 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   const GridView = () => {
     const [showContext, setShowContext] = useState(false);
 
-    if (!selectedPatient) return null;
-
     // 모든 문장을 시간순으로 정렬
     const allSentences = useMemo(() => {
       const all: Array<SentenceDetail & { topic: TopicName }> = [];
@@ -843,6 +841,10 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       });
       return all.sort((a, b) => a.time.localeCompare(b.time));
     }, [topicsData]);
+
+    // Bail out AFTER the useMemo above: an early return placed before it
+    // makes the hook conditional, which breaks React's hook ordering.
+    if (!selectedPatient) return null;
 
     // ✅ 수정: setSelectedTopic에서 data 제거
     const handleSuggestionClick = (

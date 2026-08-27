@@ -1,6 +1,25 @@
 import { create } from "zustand";
 
-const useFilterStore = create((set) => ({
+export interface FilterItem {
+  id: string;
+  label: string;
+  checked: boolean;
+}
+
+/** The filter groups the sidebar renders; each maps to `<section>State`. */
+export type FilterSection = "region" | "age" | "gender" | "displayBy";
+type FilterSectionKey = `${FilterSection}State`;
+
+interface FilterStore extends Record<FilterSectionKey, FilterItem[]> {
+  updateFilter: (
+    section: FilterSection,
+    id: string,
+    checked: boolean
+  ) => void;
+  clearSection: (section: FilterSection) => void;
+}
+
+const useFilterStore = create<FilterStore>((set) => ({
   regionState: [
     { id: "all", label: "All States", checked: false },
     { id: "AL", label: "Alabama", checked: false },
@@ -97,7 +116,7 @@ const useFilterStore = create((set) => ({
 
   updateFilter: (section, id, checked) =>
     set((state) => {
-      const sectionKey = `${section}State`;
+      const sectionKey: FilterSectionKey = `${section}State`;
 
       // Special handling for displayByState
       if (section === "displayBy") {
@@ -128,12 +147,15 @@ const useFilterStore = create((set) => ({
       return { [sectionKey]: newState };
     }),
   clearSection: (section) =>
-    set((state) => ({
-      [`${section}State`]: state[`${section}State`].map((item) => ({
-        ...item,
-        checked: false,
-      })),
-    })),
+    set((state) => {
+      const sectionKey: FilterSectionKey = `${section}State`;
+      return {
+        [sectionKey]: state[sectionKey].map((item) => ({
+          ...item,
+          checked: false,
+        })),
+      };
+    }),
 }));
 
 export default useFilterStore;

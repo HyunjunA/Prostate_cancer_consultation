@@ -768,7 +768,7 @@ async def get_doctor_score_summary_by_file_speaker(
     """
     Get score summary for specific patient (all classes).
 
-    Uses Guille's GPT-4o ai_score (0-5) from llm_domain_scoring_and_summary.
+    Uses the AI pipeline's GPT-4o ai_score (0-5) from llm_domain_scoring_and_summary.
     Uses AI pipeline ai_score only.
     """
     if not speaker:
@@ -1104,7 +1104,7 @@ async def score_sentence(
     request_data: SentenceScoringRequest,
     user: AuthUser = Depends(get_current_user)
 ):
-    """Score a sentence using Guille's AI pipeline (GPT-4o).
+    """Score a sentence using the AI pipeline (GPT-4o).
 
     Uses Azure OpenAI GPT-4o to evaluate how specifically the doctor
     communicated clinical risk in this sentence. Returns 0-5 score

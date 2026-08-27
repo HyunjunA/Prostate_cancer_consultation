@@ -6,8 +6,8 @@ import { getOrCreateSession } from "../utils/session.utils";
 import { sanitizeEventData } from "../config/tracking.config";
 
 /**
- * 페이지 네비게이션 추적 훅 (Next.js App Router용)
- * Next.js의 usePathname을 사용하여 페이지 이동 경로 추적
+ * Page navigation tracking hook (for the Next.js App Router)
+ * Uses Next.js usePathname to record the navigation path
  */
 export const useNavigationTracking = () => {
   const pathname = usePathname();
@@ -16,12 +16,12 @@ export const useNavigationTracking = () => {
   const navigationStepRef = useRef(0);
 
   useEffect(() => {
-    // URL 전체 경로 생성
+    // build the full URL path
     const search = searchParams?.toString();
     const currentPath = search ? `${pathname}?${search}` : pathname;
     const previousPath = previousLocationRef.current;
 
-    // 첫 페이지 방문
+    // first page visit
     if (!previousPath) {
       navigationStepRef.current = 1;
       previousLocationRef.current = currentPath;
@@ -36,7 +36,7 @@ export const useNavigationTracking = () => {
       return;
     }
 
-    // 페이지 이동
+    // navigation
     if (currentPath !== previousPath) {
       navigationStepRef.current += 1;
 
@@ -51,7 +51,7 @@ export const useNavigationTracking = () => {
 
       captureEvent("navigation", sanitizeEventData(properties));
 
-      // 새 페이지 뷰도 기록
+      // also record the new page view
       captureEvent("page_view", {
         timestamp: new Date().toISOString(),
         sessionId: session.sessionId,

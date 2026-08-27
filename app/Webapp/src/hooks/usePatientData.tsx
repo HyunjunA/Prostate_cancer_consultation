@@ -13,7 +13,7 @@ export interface DistributionData {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// PUT API용 Interface 정의
+// Request bodies for the PUT APIs
 // ──────────────────────────────────────────────────────────────────────────────
 export interface PatientScoringUpdate {
   file: string;
@@ -66,7 +66,7 @@ export const usePatientData = () => {
   const [error, setError] = useState<string | null>(null);
 
   // ============================================================================
-  // GET APIs (모든 함수에 return 추가)
+  // GET APIs (every function returns its payload)
   // ============================================================================
 
   // 1) Get Files
@@ -81,11 +81,11 @@ export const usePatientData = () => {
       if (!response.ok) throw new Error("Failed to fetch files");
       const data = await response.json();
       setFiles(data.files);
-      return data; // ← 추가
+      return data;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
       console.error("Error loading files:", err);
-      return null; // ← 추가
+      return null;
     } finally {
       setLoading(false);
     }
@@ -103,11 +103,11 @@ export const usePatientData = () => {
       if (!response.ok) throw new Error("Failed to fetch summaries");
       const data = await response.json();
       setSummariesAll(data);
-      return data; // ← 추가
+      return data;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
       console.error("Error loading summaries:", err);
-      return null; // ← 추가
+      return null;
     } finally {
       setLoading(false);
     }
@@ -132,11 +132,11 @@ export const usePatientData = () => {
       if (!response.ok) throw new Error("Failed to fetch filtered summaries");
       const data = await response.json();
       setSummariesFiltered(data);
-      return data; // ← 추가
+      return data;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
       console.error("Error loading filtered summaries:", err);
-      return null; // ← 추가
+      return null;
     } finally {
       setLoading(false);
     }
@@ -160,11 +160,11 @@ export const usePatientData = () => {
       if (!response.ok) throw new Error("Failed to fetch summary detail");
       const data = await response.json();
       setSummaryDetail(data);
-      return data; // ← 추가
+      return data;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
       console.error("Error loading summary detail:", err);
-      return null; // ← 추가
+      return null;
     } finally {
       setLoading(false);
     }
@@ -199,11 +199,11 @@ export const usePatientData = () => {
       if (!response.ok) throw new Error("Failed to fetch scoring");
       const data = await response.json();
       setScoringAll(data);
-      return data; // ← 추가
+      return data;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
       console.error("Error loading scoring:", err);
-      return null; // ← 추가
+      return null;
     } finally {
       setLoading(false);
     }
@@ -228,11 +228,11 @@ export const usePatientData = () => {
       if (!response.ok) throw new Error("Failed to fetch filtered scoring");
       const data = await response.json();
       setScoringFiltered(data);
-      return data; // ← 추가
+      return data;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
       console.error("Error loading filtered scoring:", err);
-      return null; // ← 추가
+      return null;
     } finally {
       setLoading(false);
     }
@@ -250,11 +250,11 @@ export const usePatientData = () => {
       if (!response.ok) throw new Error("Failed to fetch responses");
       const data = await response.json();
       setResponsesAll(data);
-      return data; // ← 추가
+      return data;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
       console.error("Error loading responses:", err);
-      return null; // ← 추가
+      return null;
     } finally {
       setLoading(false);
     }
@@ -279,11 +279,11 @@ export const usePatientData = () => {
       if (!response.ok) throw new Error("Failed to fetch filtered responses");
       const data = await response.json();
       setResponsesFiltered(data);
-      return data; // ← 추가
+      return data;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
       console.error("Error loading filtered responses:", err);
-      return null; // ← 추가
+      return null;
     } finally {
       setLoading(false);
     }
@@ -395,7 +395,7 @@ export const usePatientData = () => {
   };
 
   // 11) Update Single Class Score (Convenience function)
-  // 개별 domain score만 업데이트하는 편의 함수
+  // Convenience wrapper: update a single domain's score
   const updateSingleClassScore = async (
     file: string,
     speaker: string,
@@ -412,7 +412,7 @@ export const usePatientData = () => {
   };
 
   // 12) Update All Class Scores at Once (Convenience function)
-  // 모든 domain scores를 한번에 업데이트하는 편의 함수
+  // Convenience wrapper: update every domain score in one call
   const updateAllClassScores = async (
     file: string,
     speaker: string,
@@ -429,7 +429,7 @@ export const usePatientData = () => {
   };
 
   // 13) Update Single Answer (Convenience function)
-  // 개별 domain answer만 업데이트하는 편의 함수
+  // Convenience wrapper: update a single domain's answer
   const updateSingleAnswer = async (
     file: string,
     speaker: string,

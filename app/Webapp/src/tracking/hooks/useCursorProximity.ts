@@ -6,18 +6,18 @@ import { BaseEventProperties } from "../types/tracking.types";
 
 interface CursorProximityEventProperties extends BaseEventProperties {
   componentName: string;
-  distance: number; // 픽셀 단위 거리
+  distance: number; // distance in pixels
   proximityLevel: "near" | "medium" | "far" | "very-close";
   cursorX: number;
   cursorY: number;
   componentCenter: { x: number; y: number };
-  hoverDuration?: number; // 근처에 머문 시간 (밀리초)
+  hoverDuration?: number; // time spent nearby (milliseconds)
 }
 
 interface UseCursorProximityOptions {
   componentName: string;
   /**
-   * 거리 임계값 설정 (픽셀)
+   * Distance thresholds (pixels)
    * very-close: 0-50px
    * near: 50-150px
    * medium: 150-300px
@@ -29,29 +29,29 @@ interface UseCursorProximityOptions {
     medium?: number;
   };
   /**
-   * 이벤트 전송 빈도 조절 (밀리초)
-   * 기본값: 500ms (너무 자주 전송하지 않도록)
+   * Throttle interval for outgoing events (milliseconds)
+   * Default: 500ms, so events are not sent too often
    */
   throttleMs?: number;
   /**
-   * 특정 거리 이내일 때만 추적
-   * 기본값: 300px
+   * Only track while within this distance
+   * Default: 300px
    */
   maxTrackingDistance?: number;
   /**
-   * hover 시간 추적 여부
-   * 기본값: true
+   * Whether to track hover duration
+   * Default: true
    */
   trackHoverDuration?: boolean;
   /**
-   * 디버그 모드 - 시각적 표시
-   * 기본값: false
+   * Debug mode — draw a visual overlay
+   * Default: false
    */
   debug?: boolean;
 }
 
 /**
- * 커서가 컴포넌트에 얼마나 가까운지 추적하는 Hook
+ * Hook that tracks how close the cursor is to a component
  *
  * @example
  * function ImportantButton() {
@@ -89,11 +89,11 @@ export const useCursorProximity = <T extends HTMLElement>(
   const hoverStartTimeRef = useRef<number | null>(null);
   const debugOverlayRef = useRef<HTMLDivElement | null>(null);
 
-  // 현재 거리 상태 (디버깅용)
+  // current distance (for debugging)
   const [currentDistance, setCurrentDistance] = useState<number | null>(null);
 
   /**
-   * 두 점 사이의 거리 계산 (Euclidean distance)
+   * Distance between two points (Euclidean distance)
    */
   const calculateDistance = useCallback(
     (x1: number, y1: number, x2: number, y2: number): number => {
@@ -103,7 +103,7 @@ export const useCursorProximity = <T extends HTMLElement>(
   );
 
   /**
-   * 거리에 따른 근접도 레벨 결정
+   * Map a distance to a proximity level
    */
   const getProximityLevel = useCallback(
     (distance: number): "very-close" | "near" | "medium" | "far" => {
@@ -116,7 +116,7 @@ export const useCursorProximity = <T extends HTMLElement>(
   );
 
   /**
-   * 컴포넌트의 중심점 계산
+   * Centre point of the component
    */
   const getElementCenter = useCallback(
     (element: HTMLElement): { x: number; y: number } => {
@@ -130,7 +130,7 @@ export const useCursorProximity = <T extends HTMLElement>(
   );
 
   /**
-   * 디버그 오버레이 업데이트
+   * Update the debug overlay
    */
   const updateDebugOverlay = useCallback(
     (distance: number, level: string) => {
@@ -175,7 +175,7 @@ export const useCursorProximity = <T extends HTMLElement>(
   );
 
   /**
-   * 근접도 이벤트 전송
+   * Send a proximity event
    */
   const trackProximity = useCallback(
     (
@@ -187,27 +187,27 @@ export const useCursorProximity = <T extends HTMLElement>(
       const now = Date.now();
       const proximityLevel = getProximityLevel(distance);
 
-      // 디버그 오버레이 업데이트
+      // update the debug overlay
       if (debug) {
         updateDebugOverlay(distance, proximityLevel);
       }
 
-      // Throttling: 너무 자주 전송하지 않기
+      // Throttling: do not send too often
       if (now - lastEventTimeRef.current < throttleMs) {
         return;
       }
 
-      // 같은 레벨이면 전송하지 않기 (레벨 변경 시에만 전송)
+      // skip if the level is unchanged (only send on level transitions)
       if (proximityLevel === lastProximityLevelRef.current) {
         return;
       }
 
-      // hover 시작 시간 기록
+      // record when hovering started
       if (proximityLevel !== "far" && !hoverStartTimeRef.current) {
         hoverStartTimeRef.current = now;
       }
 
-      // hover 종료 시간 계산
+      // compute the hover duration
       let hoverDuration: number | undefined;
       if (
         proximityLevel === "far" &&
@@ -260,7 +260,7 @@ export const useCursorProximity = <T extends HTMLElement>(
   );
 
   /**
-   * 마우스 무브 핸들러
+   * Mouse-move handler
    */
   const handleMouseMove = useCallback(
     (event: MouseEvent) => {
@@ -278,12 +278,12 @@ export const useCursorProximity = <T extends HTMLElement>(
         componentCenter.y
       );
 
-      // 상태 업데이트 (디버깅용)
+      // update state (for debugging)
       setCurrentDistance(distance);
 
-      // 최대 추적 거리를 벗어나면 무시
+      // ignore anything beyond the maximum tracking distance
       if (distance > maxTrackingDistance) {
-        // far 상태로 전환 (hover 종료 처리)
+        // fall back to the "far" state (ends the hover)
         if (lastProximityLevelRef.current !== "far") {
           trackProximity(distance, cursorX, cursorY, componentCenter);
         }
@@ -296,7 +296,7 @@ export const useCursorProximity = <T extends HTMLElement>(
   );
 
   /**
-   * 마우스 리브 핸들러 (컴포넌트에서 완전히 벗어남)
+   * Mouse-leave handler (cursor left the component entirely)
    */
   const handleMouseLeave = useCallback(() => {
     if (hoverStartTimeRef.current && trackHoverDuration) {
@@ -333,14 +333,14 @@ export const useCursorProximity = <T extends HTMLElement>(
     lastProximityLevelRef.current = "";
     setCurrentDistance(null);
 
-    // 디버그 오버레이 제거
+    // remove the debug overlay
     if (debugOverlayRef.current) {
       debugOverlayRef.current.remove();
       debugOverlayRef.current = null;
     }
   }, [componentName, getElementCenter, trackHoverDuration]);
 
-  // 이벤트 리스너 등록
+  // register the event listeners
   useEffect(() => {
     document.addEventListener("mousemove", handleMouseMove);
 
@@ -355,7 +355,7 @@ export const useCursorProximity = <T extends HTMLElement>(
         element.removeEventListener("mouseleave", handleMouseLeave);
       }
 
-      // 디버그 오버레이 정리
+      // clean up the debug overlay
       if (debugOverlayRef.current) {
         debugOverlayRef.current.remove();
       }

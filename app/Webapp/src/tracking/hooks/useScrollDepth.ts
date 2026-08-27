@@ -5,8 +5,8 @@ import { getOrCreateSession } from '../utils/session.utils';
 import { getTrackingConfig, sanitizeEventData } from '../config/tracking.config';
 
 /**
- * 스크롤 깊이 추적 훅
- * 사용자가 페이지를 얼마나 스크롤했는지 추적
+ * Scroll depth tracking hook
+ * Records how far down the page the user scrolled
  */
 export const useScrollDepth = () => {
   const maxScrollDepthRef = useRef(0);
@@ -28,14 +28,14 @@ export const useScrollDepth = () => {
   const trackScrollDepth = useCallback(() => {
     const currentDepth = calculateScrollDepth();
     const config = getTrackingConfig();
-    const threshold = config.scrollThreshold; // 기본 25%
+    const threshold = config.scrollThreshold; // 25% by default
 
-    // 최대 스크롤 깊이 업데이트
+    // update the deepest scroll seen so far
     if (currentDepth > maxScrollDepthRef.current) {
       maxScrollDepthRef.current = currentDepth;
     }
 
-    // 임계값 도달 체크 (25%, 50%, 75%, 100%)
+    // threshold checks (25%, 50%, 75%, 100%)
     const thresholds = [25, 50, 75, 100];
     thresholds.forEach((t) => {
       if (
@@ -78,16 +78,16 @@ export const useScrollDepth = () => {
       }
     };
 
-    // 스크롤 이벤트 리스너 (디바운싱 적용)
+    // scroll listener (debounced)
     window.addEventListener('scroll', handleScroll, { passive: true });
 
-    // 초기 스크롤 위치 기록
+    // record the initial scroll position
     trackScrollDepth();
 
     return () => {
       window.removeEventListener('scroll', handleScroll);
 
-      // 컴포넌트 언마운트 시 최종 스크롤 깊이 전송
+      // send the final scroll depth on unmount
       if (maxScrollDepthRef.current > 0) {
         const session = getOrCreateSession();
         const properties: ScrollDepthEventProperties = {

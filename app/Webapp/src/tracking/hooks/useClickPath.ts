@@ -5,8 +5,8 @@ import { getOrCreateSession } from "../utils/session.utils";
 import { sanitizeEventData } from "../config/tracking.config";
 
 /**
- * 클릭 이벤트 추적 훅
- * 사용자가 어떤 순서로 무엇을 클릭했는지 추적
+ * Click event tracking hook
+ * Records what the user clicked, and in what order
  */
 export const useClickPath = () => {
   const clickSequenceRef = useRef(0);
@@ -33,7 +33,7 @@ export const useClickPath = () => {
         ...customProperties,
       };
 
-      // 🎯 명확한 클릭 로그 출력
+      // explicit click log
       console.log(
         `🖱️ CLICK #${clickSequenceRef.current}:`,
         `<${properties.elementType}${
@@ -43,7 +43,7 @@ export const useClickPath = () => {
         `at ${properties.pageUrl}`
       );
 
-      // PHI 필터링
+      // PHI filtering
       const sanitized = sanitizeEventData(properties);
 
       captureEvent("button_click", sanitized);

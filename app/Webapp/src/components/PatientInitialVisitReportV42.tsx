@@ -3313,7 +3313,7 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
     trackingManager.recordEvent({
       eventType: "page_enter",
       elementId: "patient_report_page",
-      metadata: { timestamp: new Date().toISOString() },
+      timestamp: new Date().toISOString(),
     });
 
     trackReport(currentFile, currentSpeaker, {
@@ -3326,10 +3326,10 @@ const PatientReportFirstVisitV41: React.FC<PatientReportProps> = ({
       trackingManager.recordEvent({
         eventType: "page_exit",
         elementId: "patient_report_page",
+        timestamp: new Date().toISOString(),
         metadata: {
           timeSpentMs,
           timeSpentSeconds: Math.round(timeSpentMs / 1000),
-          timestamp: new Date().toISOString(),
         },
       });
 

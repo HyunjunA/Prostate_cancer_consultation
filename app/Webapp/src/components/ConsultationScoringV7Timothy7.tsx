@@ -417,7 +417,7 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
           <div className="relative mt-4" style={{ height: "80px" }}>
             {scaleItems.map((item, index) => {
               const isCurrentScore =
-                highlightPosition !== undefined &&
+                highlightPosition != null &&
                 Math.round(highlightPosition) === item.value;
               // Collect all rubric entries from score 1 (or 0) up to this score
               const cumulativeEntries = allRubricLevels

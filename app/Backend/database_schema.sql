@@ -259,9 +259,9 @@ CREATE INDEX idx_sr_session_id ON session_recording(session_id);
 
 
 -- =====================================================
--- 8. LLM Domain Scoring & Summary (Guille's AI Pipeline)
+-- 8. LLM Domain Scoring & Summary (AI Pipeline)
 -- =====================================================
--- Stores the output of Guille's AI pipeline (Step 11):
+-- Stores the output of the AI pipeline (Step 11):
 --   - GPT-4o scores each sentence's clinical specificity (0-5)
 --   - Extracts actual risk numbers ("24-25%", "13 years")
 --   - Reformats into patient-facing plain language

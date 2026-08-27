@@ -4,14 +4,14 @@ import { getTrackingConfig } from '../config/tracking.config';
 const SESSION_KEY = 'patient_dashboard_session';
 
 /**
- * 세션 ID 생성
+ * Generate a session id
  */
 export const generateSessionId = (): string => {
   return `session_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
 };
 
 /**
- * 디바이스 타입 감지
+ * Detect the device type
  */
 export const getDeviceType = (): 'desktop' | 'tablet' | 'mobile' => {
   const width = window.innerWidth;
@@ -21,7 +21,7 @@ export const getDeviceType = (): 'desktop' | 'tablet' | 'mobile' => {
 };
 
 /**
- * 세션 정보 가져오기 또는 생성
+ * Get the current session, creating one if needed
  */
 export const getOrCreateSession = (): SessionInfo => {
   const config = getTrackingConfig();
@@ -32,7 +32,7 @@ export const getOrCreateSession = (): SessionInfo => {
       const session: SessionInfo = JSON.parse(stored);
       const sessionAge = Date.now() - new Date(session.startTime).getTime();
 
-      // 세션이 아직 유효한 경우
+      // the session is still valid
       if (sessionAge < config.sessionDuration) {
         return session;
       }
@@ -41,7 +41,7 @@ export const getOrCreateSession = (): SessionInfo => {
     }
   }
 
-  // 새 세션 생성
+  // create a new session
   const newSession: SessionInfo = {
     sessionId: generateSessionId(),
     startTime: new Date().toISOString(),
@@ -54,7 +54,7 @@ export const getOrCreateSession = (): SessionInfo => {
 };
 
 /**
- * 세션 정보 업데이트
+ * Update the session record
  */
 export const updateSession = (updates: Partial<SessionInfo>): void => {
   const session = getOrCreateSession();
@@ -63,7 +63,7 @@ export const updateSession = (updates: Partial<SessionInfo>): void => {
 };
 
 /**
- * 세션 종료
+ * End the session
  */
 export const endSession = (): void => {
   localStorage.removeItem(SESSION_KEY);

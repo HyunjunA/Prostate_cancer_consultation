@@ -1,7 +1,7 @@
 import { TrackingConfig } from "../types/tracking.types";
 
 /**
- * localhost 환경인지 확인
+ * Check whether we are running on localhost
  */
 const isLocalhost = (): boolean => {
   if (typeof window === "undefined") return false;
@@ -18,17 +18,17 @@ const isLocalhost = (): boolean => {
 };
 
 /**
- * 환경변수에서 추적 설정을 가져옴
- * CRITICAL: PHI 데이터는 절대 추적하지 않음
+ * Read the tracking configuration from environment variables
+ * CRITICAL: PHI is never tracked
  *
- * ⭐ localhost에서는 항상 enabled=true
+ * On localhost, enabled is always true
  */
 export const getTrackingConfig = (): TrackingConfig => {
   const envEnabled = process.env.REACT_APP_ENABLE_POSTHOG === "true";
   const isDebug = process.env.REACT_APP_TRACKING_DEBUG === "true";
   const isLocal = isLocalhost();
 
-  // 🎯 localhost에서는 환경변수 관계없이 항상 활성화
+  // On localhost, always enabled regardless of the env var
   const enabled = isLocal ? true : envEnabled;
 
   if (isLocal && !envEnabled) {
@@ -39,23 +39,23 @@ export const getTrackingConfig = (): TrackingConfig => {
 
   return {
     enabled,
-    debug: isDebug || isLocal, // localhost면 디버그도 자동 활성화
+    debug: isDebug || isLocal, // debug turns on automatically on localhost
     apiKey: process.env.REACT_APP_POSTHOG_API_KEY,
     apiHost: process.env.REACT_APP_POSTHOG_HOST || "https://app.posthog.com",
-    sessionDuration: 30 * 60 * 1000, // 30분
-    scrollThreshold: 25, // 25% 단위로 추적
-    visibilityThreshold: 50, // 50% 이상 보일 때 추적
+    sessionDuration: 30 * 60 * 1000, // 30 minutes
+    scrollThreshold: 25, // track in 25% steps
+    visibilityThreshold: 50, // track once at least 50% is visible
   };
 };
 
 /**
- * 디버그 로그 출력 - localhost에서는 항상 활성화
+ * Debug logging — always on for localhost
  */
 export const debugLog = (message: string, data?: any) => {
   const config = getTrackingConfig();
   const isLocal = isLocalhost();
 
-  // localhost이거나 debug 모드면 항상 로그 출력
+  // always log on localhost or in debug mode
   if (isLocal || config.debug) {
     const timestamp = new Date().toLocaleTimeString();
     console.log(
@@ -68,8 +68,8 @@ export const debugLog = (message: string, data?: any) => {
 };
 
 /**
- * PHI 필터링 - 민감한 정보 제거
- * CRITICAL: 프로덕션에서 PHI가 절대 추적되지 않도록 보장
+ * PHI filtering — strip sensitive fields
+ * CRITICAL: guarantees PHI is never tracked in production
  */
 export const sanitizeEventData = (
   data: Record<string, any>
@@ -109,6 +109,6 @@ export const sanitizeEventData = (
 };
 
 /**
- * localhost 환경인지 확인하는 헬퍼 함수 (export)
+ * Exported helper: are we running on localhost?
  */
 export { isLocalhost };

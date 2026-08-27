@@ -243,7 +243,8 @@ describe("usePatientData", () => {
     const updateData = {
       file: "test.xlsx",
       speaker: "Doctor",
-      class_1_patient_scoring: 3,
+      domain: "cp",
+      patient_scoring: 3,
     };
 
     await act(async () => {
@@ -279,7 +280,8 @@ describe("usePatientData", () => {
       await result.current.updateScoring({
         file: "test.xlsx",
         speaker: "Doctor",
-        class_1_patient_scoring: 3,
+        domain: "cp",
+        patient_scoring: 3,
       });
     });
 
@@ -309,7 +311,8 @@ describe("usePatientData", () => {
     const updateData = {
       file: "test.xlsx",
       speaker: "Patient",
-      answer_1: "Yes",
+      domain: "cp",
+      patient_response: "Yes",
     };
 
     await act(async () => {

@@ -10,13 +10,13 @@ load_dotenv()
 api_url = os.getenv('api_url', 'https://iredcap.csmc.edu/api/')
 api_key = os.getenv('test_project_api_key', '')
 
-# ============ 입력할 데이터 정의 ============
-# 각 필드에 맞는 값을 채워넣으세요
+# ============ Define the data to submit ============
+# Fill in a value for each field
 
 records_to_import = [
     {
         # Patient Info
-        'record_id': '3',  # 필수: 고유 ID
+        'record_id': '3',  # required: unique id
         'name': 'test_John Doe',
         'mrn': '12345678',
         
@@ -42,21 +42,21 @@ records_to_import = [
         'proc_1': '100',
         'proc_2': '200',
         'proc_3': '150',
-        # total_proc는 calc 타입이므로 자동 계산됨
-        'proc_1_rb': '1829',  # 선택지 중 하나
+        # total_proc is a calc field, so REDCap computes it
+        'proc_1_rb': '1829',  # one of the choices
         'proc_2_rb': '2883',
         'proc_3_rb': '4933',
         'exercise': '7',   # 7=Every other day
         'sleep': '8',      # 8=8 hours
-        # health_score는 calc 타입이므로 자동 계산됨
+        # health_score is a calc field, so REDCap computes it
         'appt_date': '2024-02-01',
         'dob': '1985-05-15',
-        # age_calc는 calc 타입이므로 자동 계산됨
+        # age_calc is a calc field, so REDCap computes it
         'admission_date': '2024-01-08',
         'discharge_date': '2024-01-12',
-        # los는 calc 타입이므로 자동 계산됨
+        # los is a calc field, so REDCap computes it
     },
-    # 추가 레코드가 있으면 여기에 더 넣으세요
+    # add further records here if you have any
     # {
     #     'record_id': '2',
     #     'name': 'Jane Smith',
@@ -64,16 +64,16 @@ records_to_import = [
     # }
 ]
 
-# ============ REDCap에 Import ============
+# ============ Import into REDCap ============
 def import_records(api_url, api_key, records):
-    """REDCap에 레코드 import"""
+    """Import records into REDCap"""
     
     data = {
         'token': api_key,
         'content': 'record',
         'format': 'json',
         'type': 'flat',
-        'overwriteBehavior': 'normal',  # 'overwrite'로 바꾸면 기존 데이터 덮어씀
+        'overwriteBehavior': 'normal',  # switch to 'overwrite' to replace existing data
         'forceAutoNumber': 'false',
         'data': json.dumps(records),
         'returnContent': 'ids',
@@ -84,34 +84,34 @@ def import_records(api_url, api_key, records):
     
     return response
 
-# Import 실행
+# Run the import
 print("=" * 60)
-print("📤 REDCap으로 데이터 Import 중...")
+print("📤 Importing data into REDCap...")
 print("=" * 60)
 
 response = import_records(api_url, api_key, records_to_import)
 
 if response.status_code == 200:
     result = response.json()
-    print(f"✅ Import 성공!")
-    print(f"   Import된 레코드 ID: {result}")
+    print(f"✅ Import succeeded!")
+    print(f"   Imported record ids: {result}")
 else:
-    print(f"❌ Import 실패!")
+    print(f"❌ Import failed!")
     print(f"   Status Code: {response.status_code}")
     print(f"   Error: {response.text}")
 
-# ============ Import 확인 ============
+# ============ Verify the import ============
 print("\n" + "=" * 60)
-print("🔍 Import된 데이터 확인:")
+print("🔍 Checking the imported data:")
 print("=" * 60)
 
-# 방금 import한 레코드 다시 가져오기
+# fetch the record we just imported
 response = requests.post(api_url, data={
     'token': api_key,
     'content': 'record',
     'format': 'json',
     'type': 'flat',
-    'records[0]': '1',  # 확인할 record_id
+    'records[0]': '1',  # record_id to check
     'returnFormat': 'json'
 })
 
@@ -120,5 +120,5 @@ if response.status_code == 200:
     for record in imported_data:
         print(f"\nRecord ID: {record.get('record_id')}")
         for key, value in record.items():
-            if value:  # 값이 있는 필드만 출력
+            if value:  # only print fields that have a value
                 print(f"   {key}: {value}")

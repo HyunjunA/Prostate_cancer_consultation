@@ -316,7 +316,7 @@ async def get_dashboard_stats(
 
 # ──────────────────────────────────────────────────────────────────────────────
 # AI Summary — GPT-4o generated patient-facing risk summaries
-# (from Guille's ai_pipeline: LLM scoring + rewriting system)
+# (from the AI pipeline author's ai_pipeline: LLM scoring + rewriting system)
 # ──────────────────────────────────────────────────────────────────────────────
 
 @router.get("/api/patient/ai-summary/{file}")

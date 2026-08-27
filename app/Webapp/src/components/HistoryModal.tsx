@@ -112,8 +112,6 @@ const HistoryModal: React.FC<HistoryModalProps> = ({
   historyData,
   loading,
 }) => {
-  if (!isOpen) return null;
-
   // Calculate statistics (including original score)
   const stats = useMemo(() => {
     if (!historyData || historyData.history.length === 0) return null;
@@ -207,6 +205,12 @@ const HistoryModal: React.FC<HistoryModalProps> = ({
 
     return data;
   }, [historyData]);
+
+  // Bail out AFTER the hooks above: an early return placed before them makes
+  // the useMemo calls conditional, so React would see a different hook count
+  // between the closed and open renders and throw "Rendered more hooks than
+  // during the previous render".
+  if (!isOpen) return null;
 
   // Custom tooltip for chart
   const CustomTooltip = ({ active, payload }: any) => {

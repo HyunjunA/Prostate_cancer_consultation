@@ -1,7 +1,7 @@
 // src/hooks/useDemographicData.ts
 import { useState, useEffect } from "react";
 
-// 필요한 타입 정의들을 훅 파일 내부로 이동
+// The types this hook needs were moved into the hook file itself.
 export interface ChartData {
   category: string;
   count: number;

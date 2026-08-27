@@ -10,14 +10,14 @@ export const useInstituteSelection = () => {
   >(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(true);
 
-  // ⬇️ 이 부분만 수정됨
+  // ⬇️ only this block was changed
   const toggleInstitute = (instituteId: string) => {
-    // Radio 버튼 방식: 항상 하나만 선택되도록 수정
+    // Radio-button behaviour: exactly one option stays selected
     const newSelected = new Set<string>([instituteId]);
     setSelectedInstitutes(newSelected);
     setLastSelectedInstitute(instituteId);
   };
-  // ⬆️ 여기까지만 수정
+  // ⬆️ end of the changed block
 
   return {
     selectedInstitutes,

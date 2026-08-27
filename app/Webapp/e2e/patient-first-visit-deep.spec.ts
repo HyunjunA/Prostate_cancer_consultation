@@ -69,7 +69,9 @@ test.setTimeout(300_000);
 // the survey-submit-flow spec uses so behavior is consistent.
 const API_BASE = "http://localhost:8000";
 const API_KEY = process.env.E2E_API_KEY || process.env.API_KEY || "";
-const AUTH_HEADERS = API_KEY ? { "X-API-Key": API_KEY } : {};
+const AUTH_HEADERS: Record<string, string> = API_KEY
+  ? { "X-API-Key": API_KEY }
+  : {};
 
 const TOPICS = [
   { display: "Cancer Prognosis", domain: "cp" },
@@ -382,6 +384,12 @@ test.describe("Patient First Visit — deep flow", () => {
     const f = liveUrl.searchParams.get("f");
     expect(f, "f (stem) in URL after click").toBeTruthy();
 
+    // Mirror the reconstruction in src/app/page.tsx: the stem in ?f= maps to
+    // file "<stem>.csv" and speaker "Patient_<stem>". The URL no longer carries
+    // fileid/patid, so the API round-trip below has to derive them the same way.
+    const fileId = `${f!}.csv`;
+    const patId = `Patient_${f!}`;
+
     console.log(
       `[deep] picked first-visit ${idx + 1}/${buttonCount}  stem=${f}`,
     );
@@ -589,7 +597,7 @@ test.describe("Patient First Visit — deep flow", () => {
     console.log(
       `[deep] session=${sessionId} persisted ${sessionBody.count} events ` +
         `covering domains [${[...topicDomains].join(", ")}] ` +
-        `for file=${fileid} speaker=${patid}`,
+        `for file=${fileId} speaker=${patId}`,
     );
 
     // ── 6. V37 first-visit-responses round-trip ─────────────────────
@@ -600,7 +608,7 @@ test.describe("Patient First Visit — deep flow", () => {
     // endpoint directly: the response is keyed by domain so the
     // five expected keys are guaranteed by the schema.
     const fvResp = await page.request.get(
-      `${API_BASE}/api/patient/first-visit-responses/${encodeURIComponent(fileid!)}/${encodeURIComponent(patid!)}`,
+      `${API_BASE}/api/patient/first-visit-responses/${encodeURIComponent(fileId)}/${encodeURIComponent(patId)}`,
       { headers: AUTH_HEADERS },
     );
     expect(
@@ -645,7 +653,7 @@ test.describe("Patient First Visit — deep flow", () => {
     console.log(
       `[deep] first-visit-responses persisted for all ${TOPICS.length} domains ` +
         `(${TOPICS.map((t) => t.domain).join(", ")}) ` +
-        `for file=${fileid} speaker=${patid}`,
+        `for file=${fileId} speaker=${patId}`,
     );
   });
 });

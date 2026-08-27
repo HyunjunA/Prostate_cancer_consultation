@@ -8,7 +8,7 @@
 #  R is intentionally NOT installed here. The pipeline's only R use is
 #  sentence segmentation via stringi, which the segmentation.py library
 #  routes through ``docker exec`` against the NLP-classifiers container
-#  (R 4.5.1 + stringi 1.8.7 + ICU 74.2 — Michael's reference environment).
+#  (R 4.5.1 + stringi 1.8.7 + ICU 74.2 — the NLP team's reference environment).
 #
 #  Usage:
 #    chmod +x app/Backend/scripts/setup-native-linux.sh
@@ -156,7 +156,7 @@ cat <<EOF
 
   R is NOT installed on the host. Sentence segmentation calls stringi
   inside the NLP-classifiers Docker container via 'docker exec' —
-  100% identical to Michael's reference (R 4.5.1 + stringi 1.8.7 + ICU 74.2).
+  100% identical to the NLP team's reference (R 4.5.1 + stringi 1.8.7 + ICU 74.2).
 
   Next steps:
     1. cp app/Backend/.env.example app/Backend/.env

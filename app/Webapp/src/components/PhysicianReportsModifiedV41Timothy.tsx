@@ -41,6 +41,7 @@ import {
   AIRewriteResponse,
   TrajectoryItem,
   ScoreAverageItem,
+  ScoreSummaryClassItem,
   RewriteStatsResponse,
 } from "@/hooks/useDoctorData";
 
@@ -64,9 +65,9 @@ interface SentenceDetail {
   i: number;
   i2: number;
   sentence: string;
-  context?: string;
-  time: string;
-  score?: number;
+  context?: string | null;
+  time: string | null;
+  score?: number | null;
   hasRewrite?: boolean;
   revisedSentence?: string;
   revisedScore?: number;
@@ -77,6 +78,11 @@ interface TopicData {
   score: number | null;
   sentences: string[];
   sentenceDetails: SentenceDetail[];
+  // (utterance_index, sentence_in_utterance) of the by_class row this domain's
+  // score/sentence came from, so the detail view can highlight that exact
+  // sentence instead of guessing from the text.
+  representativeI?: number | null;
+  representativeI2?: number | null;
   // Treatment of the by_class row this domain's score/sentence came from.
   // "<missing>" means the domain was mentioned but not tied to the designated
   // treatment (score forced to 0) — used to show a "not tied to surgery" badge.
@@ -3113,8 +3119,8 @@ const GridView: React.FC<GridViewProps> = ({
 
   // Representative sentence: from sentences API, matched by AI-selected (i, i2)
   const getRepresentativeSentence = (data: TopicData): string => {
-    const repI = (data as any).representativeI;
-    const repI2 = (data as any).representativeI2;
+    const repI = data.representativeI;
+    const repI2 = data.representativeI2;
     if (repI != null && repI2 != null) {
       const match = data.sentenceDetails.find((d) => d.i === repI && d.i2 === repI2);
       if (match) return match.context || match.sentence;
@@ -3590,10 +3596,10 @@ const DetailView: React.FC<DetailViewProps> = ({
   const { name: topicName, patient } = selectedTopic;
   const data = topicsData[topicName];
   // Use the representative sentence from scores/summary API (pred_score highest)
-  const repI = (data as any).representativeI;
-  const repI2 = (data as any).representativeI2;
+  const repI = data.representativeI;
+  const repI2 = data.representativeI2;
   const currentSentence = (() => {
-    if (repI !== null && repI2 !== null) {
+    if (repI != null && repI2 != null) {
       const match = data.sentenceDetails.find((d) => d.i === repI && d.i2 === repI2);
       if (match) {
         console.log(`[currentSentence] Using API representative: i=${repI}, i2=${repI2}, score=${match.score}`);
@@ -3769,7 +3775,7 @@ const DetailView: React.FC<DetailViewProps> = ({
 
   return (
     <div className="space-y-8">
-      {/* Commented out per Ivan's feedback: no rewrite history
+      {/* Commented out per the manager's feedback: no rewrite history
       <HistoryModal
         isDarkMode={isDarkMode}
         isOpen={showHistoryModal}
@@ -3997,7 +4003,7 @@ const DetailView: React.FC<DetailViewProps> = ({
         })()}
 
         {/* Consultation Scoring — TEMPORARY: uses placeholder random scores (1-5)
-            Will be replaced by Guillermo's AI scoring sub-pipeline (Step 8) */}
+            Will be replaced by the AI scoring sub-pipeline (Step 8) */}
         <div data-tour="detail-consultation-scoring" className="mb-6">
           <ConsultationScoring
             isDarkMode={isDarkMode}
@@ -4007,10 +4013,12 @@ const DetailView: React.FC<DetailViewProps> = ({
               sentence: detail.context || detail.sentence,
               hasRewrite: detail.hasRewrite,
               revisedSentence: detail.revisedSentence,
-              score: detail.score,
+              // The API returns null for an unscored sentence; ConsultationScoring
+              // treats "no score" as the prop being absent.
+              score: detail.score ?? undefined,
               revisedScore: detail.revisedScore,
             }))}
-            highlightPosition={data.score}
+            highlightPosition={data.score ?? undefined}
             leftLabel={leftLabelByTopic(topicName)}
             selectedIdx={selectedSentenceIdx}
             onSentenceClick={(idx) => setSelectedSentenceIdx(idx)}
@@ -4069,7 +4077,7 @@ const DetailView: React.FC<DetailViewProps> = ({
                 Learning Tool
               </span>
             </div>
-            {/* Commented out per Ivan's feedback: no history, no stats tracking
+            {/* Commented out per the manager's feedback: no history, no stats tracking
             <div className="flex items-center gap-2">
               {currentSentence?.hasRewrite && (
                 <button
@@ -4166,7 +4174,7 @@ const DetailView: React.FC<DetailViewProps> = ({
                   </div>
                 </div>
 
-                {/* Commented out per Ivan's feedback: rewrite is feedback-only, no history/score saving
+                {/* Commented out per the manager's feedback: rewrite is feedback-only, no history/score saving
                 {currentSentence.hasRewrite && (
                   <div>
                     <div className="flex items-center gap-2 mb-2">
@@ -4899,7 +4907,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
     if (!scoreAverage?.data) return;
 
     // TEMPORARY: Use placeholder random scores (1-5) instead of .pred_1 averages
-    // Will be replaced by Guillermo's AI scoring sub-pipeline (Step 8)
+    // Will be replaced by the AI scoring sub-pipeline (Step 8)
     // The .pred_1 values are sentence relevance probabilities, NOT consultation quality scores.
     setPatients((prev) => {
       if (prev.length === 0) return prev;
@@ -5013,7 +5021,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
     });
 
     if (scoreSummary?.by_class) {
-      scoreSummary.by_class.forEach((item: any) => {
+      scoreSummary.by_class.forEach((item: ScoreSummaryClassItem) => {
         const topicName = CLASS_TO_TOPIC[item.class];
         if (topicName && result[topicName]) {
           // A domain can have several by_class rows (one per treatment for
@@ -5022,13 +5030,12 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           // Original Sentence match the per-domain MAX used by the rubric /
           // Patient Reports. (Was last-row-wins, which only agreed by luck of
           // row order.)
-          const s = item.score ?? item.avg_score ?? null;
+          const s = item.score ?? null;
           const cur = result[topicName].score;
           if (s != null && (cur == null || s > cur)) {
             result[topicName].score = s;
             result[topicName].representativeI = item.i ?? null;
             result[topicName].representativeI2 = item.i2 ?? null;
-            result[topicName].predScore = item.pred_score ?? null;
             result[topicName].representativeTreatment = item.treatment ?? null;
             console.log(`[topicsData] ${topicName}: max score=${s}, sentence="${(item.sentence || "").slice(0, 50)}..."`);
           }
@@ -5045,9 +5052,9 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
     if (!selectedTopic?.name) return;
     const data = topicsData[selectedTopic.name];
     if (!data) return;
-    const repI = (data as any).representativeI;
-    const repI2 = (data as any).representativeI2;
-    if (repI !== null && repI !== undefined && repI2 !== null && repI2 !== undefined) {
+    const repI = data.representativeI;
+    const repI2 = data.representativeI2;
+    if (repI != null && repI2 != null) {
       const idx = data.sentenceDetails.findIndex((d) => d.i === repI && d.i2 === repI2);
       if (idx >= 0) {
         console.log(`[selectedSentenceIdx] Setting to representative: idx=${idx}, i=${repI}, i2=${repI2}`);
