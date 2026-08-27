@@ -15,6 +15,7 @@
 | `SAME_PATIENT_DIFF_DOCTOR.md` / `_KR` | EN/KR | Why **same-patient/different-doctor** data never mixes (file = patient+doctor+date is the key) |
 | `REDCAP_RECORD_ID_MAPPING.md` / `_KR` | EN/KR | **REDCap record_id** — a survey is attributed to the record whose record_id is the study SID (record_id == SID) |
 | `ARCHITECTURE.md` | EN | System overview · deployment · module layout |
+| `WEBAPP_ARCHITECTURE.md` / `_KR` | EN/KR | **Webapp internals** — query-string routing · admin gate · Zustand stores and their consumers · component tree per persona · what is dead (Mermaid diagrams) |
 
 ---
 
