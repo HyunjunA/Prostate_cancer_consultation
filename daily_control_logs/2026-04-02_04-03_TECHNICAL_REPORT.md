@@ -5,7 +5,7 @@
 **Commits:** 39 (Apr 2) + 6 (Apr 3) = 45 total
 **Scope:** 101 files changed, +8,949 / −10,725 lines (net −1,776 lines)
 
-> Collaborator names are replaced with role labels per `CLAUDE.md` rule 4.
+> Collaborator names are replaced with role labels per repository convention.
 
 ---
 

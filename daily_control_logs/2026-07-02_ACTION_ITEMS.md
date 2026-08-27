@@ -1,6 +1,6 @@
 # 2026-07-02 — Action items
 
-> Real collaborator names are replaced with role labels per `CLAUDE.md` rule 4:
+> Real collaborator names are replaced with role labels per repository convention:
 > **the manager**, **the transcript / de-identification owner**, **the study team**.
 
 ---

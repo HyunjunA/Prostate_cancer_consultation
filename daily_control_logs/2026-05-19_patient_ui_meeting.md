@@ -9,7 +9,7 @@
 
 ## Document conventions
 
-Real names are replaced with role labels per `CLAUDE.md` rule 4:
+Real names are replaced with role labels per repository convention:
 
 | Role label | Who |
 |---|---|

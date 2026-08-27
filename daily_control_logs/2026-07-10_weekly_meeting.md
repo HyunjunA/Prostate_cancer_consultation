@@ -1,6 +1,6 @@
 # 2026-07-10 (Fri) — weekly meeting notes and follow-up
 
-> Real names are replaced with role labels per `CLAUDE.md` rule 4:
+> Real names are replaced with role labels per repository convention:
 > **the developer** (me), **the manager**, **the study coordinator**,
 > **the NLP team**, **the AI pipeline author**, **the de-identification tool author**,
 > **another study team member**, **the lab lead**, **the senior investigator**.

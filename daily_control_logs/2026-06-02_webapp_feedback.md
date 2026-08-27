@@ -5,8 +5,8 @@
   demo segment from minute 27 to the end
 - **Sections**: patient UI / physician dashboard / shared (data, PHI, technical)
 
-> **Document convention**: real names are replaced with role labels per `CLAUDE.md`
-> rule 4 — PI / lead developer / maintenance developer / survey collaborator /
+> **Document convention**: real names are replaced with role labels per repository
+> convention — PI / lead developer / maintenance developer / survey collaborator /
 > de-identification owner. Each work item gets its own `dev_docs/<item>_PLAN.md`
 > before implementation.
 

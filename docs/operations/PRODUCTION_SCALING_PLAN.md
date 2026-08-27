@@ -222,7 +222,7 @@ Worth recording: the pipeline serialises domain classification per transcript, s
 
 There is currently no Prometheus, Sentry, OpenTelemetry, statsd, or log aggregation. Logging is a single `logging.basicConfig` in `app/Backend/core/logging.py` producing plain text.
 
-1. **Activate structlog.** `structlog==25.5.0` is already pinned in `app/Backend/requirements.txt:48`, and both `CLAUDE.md` files state that `core/logging.py` configures it — **but it is imported nowhere in the backend.** The dependency is dead weight today. Wiring it up is a small change that makes every later step easier.
+1. **Activate structlog.** `structlog==25.5.0` is already pinned in `app/Backend/requirements.txt:48`, and the developer notes state that `core/logging.py` configures it — **but it is imported nowhere in the backend.** The dependency is dead weight today. Wiring it up is a small change that makes every later step easier.
 2. **Expose metrics.** Request rate, latency percentiles, error rate, DB pool utilisation — pool utilisation especially, given the ceiling identified in Phase 3.
 3. **Alert on the watcher.** A liveness signal the watcher updates each poll, plus an alert when it goes stale. This is the highest-value single alert in the system.
 4. **Install log rotation.** `deploy/logrotate/compass` is written and syntax-checked, and its own header states it is **"NOT INSTALLED BY ANY SCRIPT IN THIS REPOSITORY"**. It needs one `sudo cp` into `/etc/logrotate.d/`. At 100 users the access and audit logs grow fast enough that this stops being cosmetic.

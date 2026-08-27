@@ -194,7 +194,7 @@ P2 (stabilisation).
 ## 4. Risks and contradictions to settle before starting
 
 - ⚠️ **Documentation drift**: migrations are actually at **034**, but `README.md` says 015,
-  `CLAUDE.md` says 029, and `init-db-native.sh` says 030. `db.py` is async-only while the
+  the developer notes say 029, and `init-db-native.sh` says 030. `db.py` is async-only while the
   docs say "async + sync". **Correct these before handing operations over** — they cause
   operator error during recovery.
 - ⚠️ **PHI-off-server policy contradiction**: the server-side de-identification path in

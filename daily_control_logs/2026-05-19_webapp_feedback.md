@@ -8,7 +8,7 @@
 - **Status**: open — awaiting full feedback body for remaining items
 
 ## Document conventions
-- Real names replaced with role labels per repo rule (CLAUDE.md §4).
+- Real names replaced with role labels per repository convention.
 - Companion Korean version: `2026-05-19_webapp_feedback_KR.md`.
 - Each task should move into a dedicated plan doc under `dev_docs/` before implementation begins.
 
@@ -206,7 +206,7 @@ Paraphrased outgoing reply that anchors the upcoming-tasks section below:
 
 ### 3. Patient ID randomization / hash functionality
 - **Goal**: Replace / obscure raw patient identifiers with randomized or hashed equivalents in the webapp surface and supporting backend paths.
-- **Scope**: URL parameters, displayed IDs, tracking logs; PHI must not leak through any client-stored value (Webapp CLAUDE.md §2).
+- **Scope**: URL parameters, displayed IDs, tracking logs; PHI must not leak through any client-stored value (webapp convention).
 - **Open questions**:
   - Hash scheme (deterministic vs. salted random) — needs decision.
   - Reverse-lookup path for authorized backend operations.

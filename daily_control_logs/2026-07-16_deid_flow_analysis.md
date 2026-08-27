@@ -1,6 +1,6 @@
 # De-identification flow analysis — understanding the full requirement (2026-07-16)
 
-> Names are replaced with role labels per `CLAUDE.md` rule 4: **the manager**,
+> Names are replaced with role labels per repository convention: **the manager**,
 > **the study coordinator**, **the AI pipeline author**. Transcript excerpts are
 > replaced with placeholders — no PHI appears in this document.
 

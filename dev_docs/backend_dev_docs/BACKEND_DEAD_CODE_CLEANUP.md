@@ -7,7 +7,7 @@
 
 **Method:** router wiring read from `main.py`; per-module reference counts via
 import/usage grep across `*.py`; git-tracked vs gitignored status; cross-checked
-against `CLAUDE.md` (Docker mode = legacy; native is canonical).
+against the documented conventions (Docker mode = legacy; native is canonical).
 
 ---
 
@@ -19,7 +19,7 @@ and not imported by the running app:
 
 | File | What it was | Why it's dead |
 |---|---|---|
-| `archive/transcript_service.py` | the old in-dashboard transcript pipeline | orchestration moved to the AI repo (`main_complete_pipeline_db*.py`); see `app/Backend/CLAUDE.md` "archive/decoupled_pipeline" note |
+| `archive/transcript_service.py` | the old in-dashboard transcript pipeline | orchestration moved to the AI repo (`main_complete_pipeline_db*.py`); see the backend developer notes, "archive/decoupled_pipeline" |
 | `archive/Test/load_test.py` | locust/load harness | one-off load testing, not part of the suite |
 | `archive/Test/locustfile.py` | locust config | same |
 | `archive/Test/cleanup_redcap_load_test.py` | load-test teardown | same |
@@ -60,7 +60,7 @@ instructions are dead/misleading.
 
 ## C. Review required — depends on the "retire Docker mode" decision (MEDIUM)
 
-`CLAUDE.md` states native is canonical and **Docker mode is legacy** (still listed
+The developer notes state native is canonical and **Docker mode is legacy** (still listed
 as `scripts/run-docker.sh up`). The following exist **only to support Docker mode**
 and are NOT used by native deployment:
 
@@ -97,7 +97,7 @@ All confirmed wired/imported; listed to prevent accidental removal:
 2. **A-3 / A-2** (clear gitignored cruft + logs — zero git impact).
 3. **A-1** (`git rm` tracked archive files — commit on a branch; CI/tests unaffected).
 4. **C** — only after an explicit decision to drop Docker mode; remove the whole
-   group together and update `CLAUDE.md` / `docs/setup`.
+   group together and update the developer notes / `docs/setup`.
 
 **Post-removal verification (every step):**
 `cd app/Backend && pytest -m "not e2e"` (collection + unit), `ruff check .`, and a

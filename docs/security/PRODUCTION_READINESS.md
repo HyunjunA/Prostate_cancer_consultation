@@ -268,7 +268,7 @@ Nothing in this axis exists.
 
 ### Logging does not match its documentation
 
-`core/logging.py` uses plain `logging.basicConfig`. It does **not** use structlog — while `app/Backend/CLAUDE.md` states "structlog is configured in `core/logging.py`". A new contributor reading that will look for structured output that is not there.
+`core/logging.py` uses plain `logging.basicConfig`. It does **not** use structlog — while the backend's developer notes state "structlog is configured in `core/logging.py`". A new contributor reading that will look for structured output that is not there.
 
 Without correlation IDs, a request cannot be followed from the webapp proxy through to the backend handler, which makes incident diagnosis guesswork.
 
@@ -283,7 +283,7 @@ Worse, that directory is **not where the running backend writes.** `uvicorn_nati
 1. Alerting first, and route it somewhere a human reads. Start with the nightly CI result and a liveness check on the two supervised units.
 2. `logrotate` for the log directories with a defined retention that matches the PHI retention policy (axis E).
 3. Correlation ID middleware, propagated from the Next.js proxy.
-4. Either adopt structlog or correct `CLAUDE.md`. Documentation that lies is a defect.
+4. Either adopt structlog or correct the developer notes. Documentation that lies is a defect.
 5. Error tracking (self-hosted, given PHI and BAA constraints — a hosted SaaS would need its own agreement).
 
 ---
@@ -384,7 +384,7 @@ The App Router contains **zero** `error.tsx`, `global-error.tsx`, `not-found.tsx
 | Files over the repo's own 150-line limit | **89** |
 | Largest file | `ReportDownload.tsx` — **8,178 lines** |
 
-`CLAUDE.md` specifies "component files < 150 lines". Ninety percent of components violate it, several by two orders of magnitude.
+The coding conventions specify "component files < 150 lines". Ninety percent of components violate it, several by two orders of magnitude.
 
 ### Version proliferation obscures what is live
 
@@ -400,7 +400,7 @@ Sixty-two versioned variants of five components. Determining which one a given r
 
 ### A convention violation worth naming
 
-`PhysicianReportsModifiedV41Timothy.tsx` embeds a person's given name in a filename. `CLAUDE.md` absolute rule 4 forbids real collaborator names in source. It is referenced from two places, so removing it is a rename plus two import updates.
+`PhysicianReportsModifiedV41Timothy.tsx` embeds a person's given name in a filename. The repository's absolute rules forbid real collaborator names in source. It is referenced from two places, so removing it is a rename plus two import updates.
 
 ### The proxy discards the client's identity
 
@@ -461,7 +461,7 @@ Searching `docs/` for runbook, incident, rollback, or monitoring material return
 - A deploy went wrong — how is it reversed?
 - A patient reports seeing another patient's data — what is the response procedure? (HIPAA requires one.)
 
-`CLAUDE.md`'s structlog claim is factually wrong (axis C), which is a documentation defect in its own right.
+The developer notes' structlog claim is factually wrong (axis C), which is a documentation defect in its own right.
 
 ---
 
@@ -555,7 +555,7 @@ Neither `X-Forwarded-For` nor `X-Real-IP` is forwarded. **The log exists; the id
 ### The log lives in `/tmp`
 
 ```
-/tmp/claude-1007/-home-choih2-test-prostate-cancer/
+/tmp/<tooling-scratchpad>/-home-choih2-test-prostate-cancer/
   <session-id>/scratchpad/backend_18001.log
   2.7 MB · 30,844 lines · 12,071 access entries
 ```
@@ -651,7 +651,7 @@ Nothing here requires a certificate, a reboot, or institutional sign-off. Togeth
 
 7. `logrotate` with compression and a defined retention (C, E, J)
 7a. **Forward `X-Forwarded-For` from the proxy** and run uvicorn with `--proxy-headers --forwarded-allow-ips=127.0.0.1`. Until this lands, every access record names the container instead of a user — which makes item 16 below worthless (J)
-8. Correlation ID middleware; reconcile structlog with `CLAUDE.md` (C, H)
+8. Correlation ID middleware; reconcile structlog with the developer notes (C, H)
 9. Git tags on deploy, plus a written rollback procedure (A, H)
 10. `error.tsx` / `global-error.tsx` / `not-found.tsx` (F)
 11. Remove `ignoreBuildErrors` / `ignoreDuringBuilds`; add an ESLint config (B)

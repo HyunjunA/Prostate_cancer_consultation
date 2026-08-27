@@ -505,7 +505,7 @@ async def import_to_redcap(submission: SurveySubmission, timestamp: str) -> dict
         }
 
     except Exception as e:
-        # CLAUDE.md forbids print() in production code; this used to dump
+        # print() is not allowed in production code; this used to dump
         # the exception via print() and lost the traceback. logger.error
         # with exc_info=True keeps the full stack and routes through the
         # configured log level instead of polluting stdout.
