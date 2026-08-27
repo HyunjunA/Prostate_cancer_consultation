@@ -6,8 +6,14 @@
 #    docker-compose-frontend.yml publishes 3001 on 0.0.0.0 so the dashboard is
 #    reachable across the LAN. That serves patient reports and survey answers
 #    over plain HTTP with no TLS, so the exposure was agreed as a fixed window
-#    (2026-08-07 .. 2026-08-14) rather than left open. Every previous open/close
-#    in this project was manual and depended on someone remembering.
+#    rather than left open. Every previous open/close in this project was
+#    manual and depended on someone remembering.
+#
+#    Windows so far:
+#      1st  2026-08-07 .. 2026-08-14  — closed itself on schedule
+#      2nd  2026-08-18 .. 2026-08-21  — extended before it fired (see 3rd)
+#      3rd  2026-08-21 .. 2026-09-04  — extended before it fired (see 4th)
+#      4th  2026-08-27 .. 2026-09-30  — current (to the end of September, on request)
 #
 #  WHY A RECURRING CHECK, NOT A ONE-SHOT AT THE DEADLINE
 #    A job scheduled for the deadline minute fails OPEN: if the machine is down
@@ -29,8 +35,8 @@
 set -euo pipefail
 
 # Local time. The server runs America/Los_Angeles; the window ends after
-# Friday 2026-08-14, i.e. the first instant of the 15th.
-DEADLINE="2026-08-15 00:00:00"
+# Wednesday 2026-09-30, i.e. the first instant of October.
+DEADLINE="2026-10-01 00:00:00"
 
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

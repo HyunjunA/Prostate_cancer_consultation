@@ -55,10 +55,14 @@ services:
     ports:
       # webapp directly on 3001 (no nginx in native mode).
       # LAN-exposed on user request: http://10.226.8.205:3001
-      # WINDOW: 2026-08-07 .. 2026-08-14. scripts/close-lan-exposure.sh runs from
-      # cron every 15 min and flips this line back to 127.0.0.1 once that date
-      # passes, then removes its own cron entry. Re-opening later is therefore
-      # safe, but it is again open-ended unless a new window is set.
+      # WINDOW: 2026-08-27 .. 2026-09-30 (fourth window, to the end of September,
+      # extended on request on 2026-08-27 before the third window fired; earlier
+      # windows ran 2026-08-07 .. 2026-08-14, 2026-08-18 .. 2026-08-21, and
+      # 2026-08-21 .. 2026-09-04).
+      # scripts/close-lan-exposure.sh runs from cron every 15 min and flips this
+      # line back to 127.0.0.1 once that date passes, then removes its own cron
+      # entry. Re-opening later is therefore safe, but it is again open-ended
+      # unless a new window is set.
       # WARNING: while open, anyone on the LAN can read patient reports and
       # survey answers — plain HTTP, no TLS, no network-level access control.
       # This is the state the file ships in, so a fresh checkout starts exposed.
