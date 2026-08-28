@@ -49,9 +49,9 @@ sibling AI repository (`secure_transcript_prep/`, the desktop de-identifier).
 
 | # | Requirement | Repo | Effort | Status |
 |---|---|---|---|---|
-| R1 | Put the patient and doctor entry points behind admin; make the admin page the landing page, with a tracking link on it | dashboard (`app/Webapp`) | small–medium | ✅ done 2026-08-27 |
-| R2 | Let the user choose the de-identifier tool's output directory (so it can point at a shared OneDrive folder) | AI repo (`secure_transcript_prep`) | small | ⬜ not started |
-| R3 | Add a page to the de-identifier interface that shows the mapping and the links, so the mapping CSV is never opened by hand | AI repo (`secure_transcript_prep`) | medium | ⬜ not started |
+| R1 | Put the patient and doctor entry points behind admin; make the admin page the landing page, with a tracking link on it | dashboard (`app/Webapp`) | small–medium | ✅ done 2026-08-27, re-verified 2026-08-28 |
+| R2 | Let the user choose the de-identifier tool's output directory (so it can point at a shared OneDrive folder) | AI repo (`secure_transcript_prep`) | small | ⬜ not started as of 2026-08-28 |
+| R3 | Add a page to the de-identifier interface that shows the mapping and the links, so the mapping CSV is never opened by hand | AI repo (`secure_transcript_prep`) | medium | ⬜ not started as of 2026-08-28 |
 
 ---
 
@@ -112,6 +112,11 @@ required; only the `webapp` service was recreated):
 
 - signed out: `/admin`, `/admin/patients`, `/admin/physicians`, `/admin/tracking`
   → 307 to `/admin/login`; `/` and `/admin/login` → 200
+  - ✅ **Still true on 2026-08-28 after three more `up -d --build webapp` runs**
+    (the `/admin/upload` progress fix). `/admin/upload` → 307 as well, which is
+    the first route added under `/admin` since R1 shipped — evidence that R1-d's
+    claim (the untouched `matcher: ["/admin/:path*"]` covers new sub-routes for
+    free) holds for routes nobody re-checked by hand.
 - `/` renders no `<table>`, no Physician View link, no row buttons; the retired
   `?select=physician` falls back to the landing screen
 - all three distributed deep links still render: `?f=…&view=first-report`,
@@ -122,6 +127,9 @@ required; only the `webapp` service was recreated):
   `/admin/tracking`, which now shows only its three behavior dashboards
 - 262/262 Jest tests pass; production build clean; `JWT_SECRET` still present in
   the container; port binding still `0.0.0.0:3001`
+  - ✅ **Re-checked 2026-08-28: 272/272 across 28 suites.** The +10 is
+    `src/__tests__/adminUploadPage.test.tsx`, added by the unrelated
+    `/admin/upload` progress work — no R1 test was removed or changed.
 - `public-landing.spec.ts` passes 6/6 against the running container. The
   admin-gated specs still skip: they need `E2E_ADMIN_USER` / `E2E_ADMIN_PASSWORD`.
   Unrelated pre-existing failures remain in `survey-submit-flow.spec.ts` and
@@ -224,6 +232,11 @@ prepend the host itself.
 
 ## 4. Open questions for Thursday's discussion
 
+> **Status 2026-08-28 (Fri).** The Thursday date has passed. The two R1 boxes were
+> settled by implementing R1; the remaining five are **still open and unanswered**,
+> and no record of the Thursday discussion reached this log. They are not blocked on
+> the developer — each needs the manager's answer.
+
 - [x] **R1 scope** — implemented as "only the browsable index is gated; the
       per-person deep links stay public". Confirm with the manager; the
       alternative breaks every link already distributed.
@@ -235,8 +248,9 @@ prepend the host itself.
       approved?
 - [ ] **R3 scope** — read-only viewer only, or also editing/deletion of rows?
 - [ ] **R3 links** — set `DASHBOARD_BASE_URL` so the mapping stores absolute URLs?
-- [ ] **Deadline** — the email says "later this week"; today (Thursday) is already
-      the discussion date, so a target date is needed.
+- [ ] **Deadline** — the email says "later this week". Thursday 2026-08-27 was the
+      discussion date and it has passed with no target date set. "Later this week"
+      now means **today**, and R2/R3 have not been started.
 
 ## 5. Next actions
 
@@ -250,11 +264,29 @@ prepend the host itself.
 4. R3 in the same GUI change set, so the coordinator gets one rebuild rather
    than two.
 
+**Progress 2026-08-28 (Fri).**
+
+- ✅ R1 re-verified after redeployment (see the R1 section); nothing regressed.
+- ⬜ R2 and R3 unchanged — **no code written.** The day went to an unrelated defect:
+  `/admin/upload` reported every upload as a green "done" the moment the POST
+  returned, so a transcript that was still being processed and one that had
+  finished looked identical. Fixed and deployed; recorded separately in
+  `2026-08-28_admin_upload_progress_visibility.md`.
+- ⚠️ Item 2 above is still the gate on R2: its two ⚠️ questions (OneDrive conflict
+  policy, compliance sign-off for syncing the re-identification mapping) remain
+  unanswered, so starting R2 now would mean writing code against a design that the
+  answers could invalidate.
+
 ## 6. Not affected
 
 - The 2–4 PM testing session referenced in the email is unaffected; the email
   explicitly defers all three items.
 - No pipeline, backend, or database change is implied by any of the three requests.
+  This is a statement about **R1–R3 only**. Backend and database changes did land on
+  2026-08-28 (`routes_admin_upload.py`, `core/settings.py`, and a cleanup of the
+  analysis rows for two test transcripts) — they belong to the `/admin/upload`
+  progress work, not to anything in the manager's email. Do not cite this line as
+  evidence that the backend was untouched in late August.
 - No change to the de-identification algorithm itself (AES-SIV hashing and the
   PHI_Removal text stage are untouched).
 
