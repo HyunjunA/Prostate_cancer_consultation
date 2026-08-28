@@ -59,17 +59,6 @@ export function formatWait(seconds: number): string {
   return `${Math.round(seconds / 60)} min`;
 }
 
-/**
- * Link to the finished report, or null.
- *
- * The main page reconstructs the filename from `?f=` as `<stem>.csv`, so a stem from
- * an .xlsx upload would resolve to a file that does not exist — only link .csv rows.
- */
-function reportHref(name: string): string | null {
-  if (!/\.csv$/i.test(name)) return null;
-  return `/?f=${encodeURIComponent(name.replace(/\.csv$/i, ""))}&view=first-report`;
-}
-
 interface Props {
   items: Item[];
 }
@@ -77,40 +66,27 @@ interface Props {
 export default function AdminUploadQueue({ items }: Props) {
   return (
     <ul className="mt-6 space-y-2">
-      {items.map((it) => {
-        const href = it.status === "analyzed" ? reportHref(it.name) : null;
-        return (
-          <li
-            key={it.uid}
-            className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3"
-          >
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-slate-800">{it.name}</p>
-              {it.message && <p className="mt-0.5 text-xs text-slate-500">{it.message}</p>}
-              {href && (
-                <a
-                  href={href}
-                  className="mt-0.5 inline-block text-xs font-semibold text-violet-600 hover:underline"
-                >
-                  View report →
-                </a>
-              )}
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              {it.elapsedSeconds !== undefined && it.status !== "pending" && (
-                <span className="text-xs tabular-nums text-slate-400">
-                  {formatWait(it.elapsedSeconds)}
-                </span>
-              )}
-              <span
-                className={`rounded-full px-2.5 py-1 text-xs font-semibold ${BADGE[it.status]}`}
-              >
-                {it.status}
+      {items.map((it) => (
+        <li
+          key={it.uid}
+          className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3"
+        >
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-slate-800">{it.name}</p>
+            {it.message && <p className="mt-0.5 text-xs text-slate-500">{it.message}</p>}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {it.elapsedSeconds !== undefined && it.status !== "pending" && (
+              <span className="text-xs tabular-nums text-slate-400">
+                {formatWait(it.elapsedSeconds)}
               </span>
-            </div>
-          </li>
-        );
-      })}
+            )}
+            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${BADGE[it.status]}`}>
+              {it.status}
+            </span>
+          </div>
+        </li>
+      ))}
     </ul>
   );
 }
