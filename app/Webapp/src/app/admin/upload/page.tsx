@@ -13,9 +13,22 @@
  * confirmation. Without that warning a duplicate is a silent no-op — the pipeline
  * watcher dedupes drop-folder files by path in an in-memory set, so it skips the
  * file with no log line and no error and the file just sits in the folder.
+ *
+ * Progress: a run takes 3-12 minutes (measured), so the page polls
+ * GET /api/admin/upload-log every 5s while anything is in flight and renders the
+ * state the backend DERIVES for each file. It used to show a green "done" the
+ * instant the POST returned and again on every refresh, which made a run that had
+ * not started yet indistinguishable from one that had finished — and from the
+ * upload silently failing, which is how this was reported.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import AdminUploadQueue, {
+  formatWait,
+  Item,
+  LIVE,
+  Status,
+} from "@/components/AdminUploadQueue";
 import DuplicateUploadDialog from "@/components/DuplicateUploadDialog";
 import usePipelineGate from "@/hooks/usePipelineGate";
 
@@ -28,33 +41,12 @@ import usePipelineGate from "@/hooks/usePipelineGate";
 const ALLOWED_EXT = /\.(csv|xlsx|xls)$/i;
 const DEID_NAME_RX = /^[A-Z0-9]+_[A-Z0-9]+(_[A-Z0-9]+)?\.(csv|xlsx)$/i;
 
-type Status =
-  | "pending"
-  | "invalid"
-  | "rejected"
-  | "duplicate"
-  | "uploading"
-  | "done"
-  | "error";
-
-interface Item {
-  // `uid` is a stable client-side key: the async precheck patches an item after the
-  // list may already have grown, so a list index would point at the wrong row.
-  uid: number;
-  // Always present. `file` is only set for a freshly-picked file this session; items
-  // rebuilt from the server's upload log on refresh have a name but no File object
-  // (the browser cannot restore a File), and are already "done"/"error" so they are
-  // never re-uploaded.
-  name: string;
-  file?: File;
-  status: Status;
-  message?: string;
-}
-
 interface UploadLogRow {
   queued?: string;
   status?: string;
+  state?: string;
   message?: string;
+  elapsed_seconds?: number | null;
 }
 
 interface PrecheckResult {
@@ -67,10 +59,37 @@ interface PrecheckResult {
 // warning, not a block, and re-processing is legitimate (e.g. after a DB reset).
 const UPLOADABLE: Status[] = ["pending", "error", "duplicate"];
 
-/** "45s" / "3 min" — how long a transcript has been sitting in the drop folder. */
-function formatWait(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  return `${Math.round(seconds / 60)} min`;
+// Statuses that describe the file the user just picked, not a past run. The poll
+// must not overwrite these: a re-upload of an already-processed name would otherwise
+// be relabelled "analyzed" from the PREVIOUS run before it has even been sent.
+const LOCAL_ONLY: Status[] = ["pending", "invalid", "rejected", "duplicate", "uploading"];
+
+const POLL_MS = 5000;
+
+/** What the row's derived server state means for the badge and the caption. */
+function fromLogRow(r: UploadLogRow): Pick<Item, "status" | "message" | "elapsedSeconds"> {
+  // Fall back to "queued", never "done": an older backend without `state` knows only
+  // that the file was accepted, which is exactly what "queued" says.
+  const state = r.state ?? (r.status === "error" ? "error" : "queued");
+  const elapsedSeconds = r.elapsed_seconds ?? undefined;
+  if (state === "error") {
+    return { status: "error", message: r.message || "Upload failed.", elapsedSeconds };
+  }
+  if (state === "analyzed") {
+    return { status: "analyzed", message: "Analysis complete.", elapsedSeconds };
+  }
+  if (state === "processing") {
+    return {
+      status: "processing",
+      message: "The pipeline is working on this file — a run takes about 3-12 minutes.",
+      elapsedSeconds,
+    };
+  }
+  return {
+    status: "queued",
+    message: "Waiting for the pipeline watcher to pick it up.",
+    elapsedSeconds,
+  };
 }
 
 export default function AdminUploadPage() {
@@ -87,25 +106,55 @@ export default function AdminUploadPage() {
   const uidRef = useRef(0);
   const nextUid = () => ++uidRef.current;
 
-  // On load, rebuild the list from the server's upload history so a refresh does not
-  // wipe it. These carry only the de-identified queued name (no real study id).
+  // Rebuild the list from the server's upload history — on load so a refresh does not
+  // wipe it, and on a timer so a running file visibly advances. These carry only the
+  // de-identified queued name (no real study id).
+  const refreshLog = useCallback(
+    () =>
+      fetch("/api/admin/upload-log")
+        .then((r) => (r.ok ? r.json() : { uploads: [] }))
+        .then((data: { uploads?: UploadLogRow[] }) => {
+          const rows = (data.uploads || []).filter((r) => r.queued);
+          setItems((prev) => {
+            // Newest row wins per name — the server orders newest first, so the first
+            // occurrence of a name is its latest run.
+            const latest = new Map<string, UploadLogRow>();
+            for (const r of rows) {
+              if (!latest.has(r.queued as string)) latest.set(r.queued as string, r);
+            }
+            const matched = new Set<string>();
+            const updated = prev.map((it) => {
+              const r = latest.get(it.name);
+              if (!r) return it;
+              matched.add(it.name);
+              return LOCAL_ONLY.includes(it.status) ? it : { ...it, ...fromLogRow(r) };
+            });
+            const fresh: Item[] = [];
+            for (const [name, r] of latest) {
+              if (matched.has(name)) continue;
+              fresh.push({ uid: nextUid(), name, ...fromLogRow(r) });
+            }
+            return [...fresh, ...updated];
+          });
+        })
+        .catch(() => {
+          /* history is best-effort */
+        }),
+    []
+  );
+
   useEffect(() => {
-    let cancelled = false;
-    fetch("/api/admin/upload-log")
-      .then((r) => (r.ok ? r.json() : { uploads: [] }))
-      .then((data: { uploads?: UploadLogRow[] }) => {
-        if (cancelled) return;
-        const history: Item[] = (data.uploads || []).map((u) => ({
-          uid: nextUid(),
-          name: u.queued || "(unknown)",
-          status: u.status === "error" ? "error" : "done",
-          message: u.message || (u.status === "error" ? "Upload failed." : "Queued for processing."),
-        }));
-        setItems((prev) => [...history, ...prev]);
-      })
-      .catch(() => { /* history is best-effort */ });
-    return () => { cancelled = true; };
-  }, []);
+    void refreshLog();
+  }, [refreshLog]);
+
+  // Poll only while something is actually in flight, and stop once it lands — an
+  // idle admin page should not hit the API forever.
+  const hasLive = items.some((it) => LIVE.includes(it.status));
+  useEffect(() => {
+    if (!hasLive) return;
+    const timer = window.setInterval(() => void refreshLog(), POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [hasLive, refreshLog]);
 
   const setByUid = (uid: number, patch: Partial<Item>) =>
     setItems((prev) => prev.map((x) => (x.uid === uid ? { ...x, ...patch } : x)));
@@ -167,7 +216,7 @@ export default function AdminUploadPage() {
     setBusy(true);
     const snapshot = items;
     for (const it of snapshot) {
-      // Skip already-done, client-rejected (raw / wrong type), and any history item
+      // Skip already-sent, client-rejected (raw / wrong type), and any history item
       // rebuilt without a File (browsers can't restore a File — not re-uploadable).
       if (!UPLOADABLE.includes(it.status) || !it.file) continue;
       if (it.status === "duplicate" && !includeDuplicates) continue;
@@ -181,8 +230,16 @@ export default function AdminUploadPage() {
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
-          const message = `Queued for processing: ${data.queued}${data.replaced ? " (replaced existing)" : ""}`;
-          setByUid(it.uid, { status: "done", message });
+          // Accepted into the drop folder — the run has NOT happened yet. Calling
+          // this "done" was the original defect; the poll advances it from here.
+          setByUid(it.uid, {
+            status: "queued",
+            name: data.queued || it.name,
+            message:
+              `Queued for processing${data.replaced ? " (replaced existing)" : ""} — ` +
+              "a run takes about 3-12 minutes.",
+            elapsedSeconds: 0,
+          });
         } else {
           setByUid(it.uid, { status: "error", message: data.detail || `Upload failed (${res.status}).` });
         }
@@ -191,6 +248,7 @@ export default function AdminUploadPage() {
       }
     }
     setBusy(false);
+    void refreshLog();
   };
 
   const duplicates = items.filter((it) => it.status === "duplicate" && it.file);
@@ -212,16 +270,32 @@ export default function AdminUploadPage() {
     if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files);
   };
 
-  const badge: Record<Status, string> = {
-    pending: "bg-slate-100 text-slate-600",
-    invalid: "bg-amber-100 text-amber-700",
-    rejected: "bg-rose-100 text-rose-700",
-    duplicate: "bg-amber-100 text-amber-800",
-    uploading: "bg-blue-100 text-blue-700",
-    done: "bg-emerald-100 text-emerald-700",
-    error: "bg-rose-100 text-rose-700",
-  };
   const hasUploadable = items.some((it) => UPLOADABLE.includes(it.status) && it.file);
+
+  // Why the button is dead. It used to disable on `!hasUploadable` while still
+  // reading "Upload" with no tooltip and nothing on the page, so a coordinator whose
+  // files were all rejected saw a button that simply did nothing when clicked.
+  const disabledReason = useMemo(() => {
+    if (busy) return null;
+    if (gateLocked) return "The pipeline is still processing a transcript.";
+    if (hasUploadable) return null;
+    const blocked = items.filter(
+      (it) => it.file && (it.status === "invalid" || it.status === "rejected")
+    ).length;
+    if (blocked > 0) {
+      return `${blocked} selected file${blocked > 1 ? "s were" : " was"} not accepted — ` +
+        "see the reason on each row, then add a corrected file.";
+    }
+    return "Nothing to upload — add a de-identified transcript.";
+  }, [busy, gateLocked, hasUploadable, items]);
+
+  const buttonLabel = busy
+    ? "Uploading…"
+    : gateLocked
+    ? "Pipeline busy…"
+    : hasUploadable
+    ? "Upload"
+    : "Nothing to upload";
 
   return (
     <main className="max-w-3xl mx-auto px-6 py-10">
@@ -233,6 +307,15 @@ export default function AdminUploadPage() {
           Upload only files already de-identified by the Secure Transcript Preparation app.
         </p>
       </div>
+
+      {!gate.reachable && (
+        <div role="status" className="mt-3 rounded-xl border border-slate-300 bg-slate-50 p-4">
+          <p className="text-sm font-semibold text-slate-700">
+            <span aria-hidden>❔</span> Pipeline status unavailable — the state below may
+            be out of date. Uploading still works.
+          </p>
+        </div>
+      )}
 
       {gate.busy && (
         <div
@@ -253,9 +336,10 @@ export default function AdminUploadPage() {
               </>
             ) : (
               <>
-                Pipeline is processing {gate.queued[0]}
-                {gate.queued.length > 1 && ` (+${gate.queued.length - 1} more queued)`} —
-                upload is disabled until it finishes.
+                Processing {gate.queued[0]}
+                {gate.queued.length > 1 && ` (+${gate.queued.length - 1} more queued)`} —{" "}
+                {formatWait(gate.waitingSeconds)} elapsed, typically 3-12 minutes. Upload
+                is disabled until it finishes.
               </>
             )}
           </p>
@@ -276,46 +360,40 @@ export default function AdminUploadPage() {
       >
         <p className="text-sm font-semibold text-slate-700">Drop files here, or click to choose</p>
         <p className="text-xs text-slate-400">.csv, .xlsx, or .xls · up to 25 MB each</p>
-        <input
-          ref={inputRef}
-          type="file"
-          multiple
-          accept=".csv,.xlsx,.xls"
-          className="hidden"
-          onChange={(e) => {
-            if (e.target.files?.length) addFiles(e.target.files);
-            e.target.value = "";
-          }}
-        />
+        {/* The chooser applies the input's `accept` filter; a drop does not. If the
+            file is greyed out or missing in the chooser, dragging it in still works. */}
+        <p className="text-xs text-slate-400">
+          File not listed in the chooser? Drag it onto this box instead.
+        </p>
       </div>
+
+      {/* Outside the drop zone on purpose: nested, the programmatic .click() bubbles
+          back into the zone's own onClick and re-enters the handler. */}
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        accept=".csv,.xlsx,.xls"
+        className="hidden"
+        onClick={(e) => e.stopPropagation()}
+        onChange={(e) => {
+          if (e.target.files?.length) addFiles(e.target.files);
+          e.target.value = "";
+        }}
+      />
 
       {items.length > 0 && (
         <>
-          <ul className="mt-6 space-y-2">
-            {items.map((it) => (
-              <li
-                key={it.uid}
-                className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-slate-800">{it.name}</p>
-                  {it.message && <p className="mt-0.5 text-xs text-slate-500">{it.message}</p>}
-                </div>
-                <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${badge[it.status]}`}>
-                  {it.status}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <AdminUploadQueue items={items} />
           <div className="mt-4 flex gap-2">
             <button
               type="button"
               disabled={busy || !hasUploadable || gateLocked}
               onClick={onUploadClick}
-              title={gateLocked ? "The pipeline is still processing a transcript." : undefined}
+              title={disabledReason ?? undefined}
               className="rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
-              {busy ? "Uploading…" : gateLocked ? "Pipeline busy…" : "Upload"}
+              {buttonLabel}
             </button>
             <button
               type="button"
@@ -326,6 +404,9 @@ export default function AdminUploadPage() {
               Clear
             </button>
           </div>
+          {disabledReason && (
+            <p className="mt-2 text-xs text-slate-500">{disabledReason}</p>
+          )}
         </>
       )}
 

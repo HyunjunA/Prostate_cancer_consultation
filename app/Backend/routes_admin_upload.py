@@ -21,6 +21,7 @@ import logging
 import os
 import re
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import (
@@ -32,7 +33,7 @@ from fastapi import (
     status,
 )
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth.admin_session import require_admin_user
@@ -296,29 +297,109 @@ async def upload_precheck(
     }
 
 
+# When a run actually finished. analyzed_at is only the NLP save (step 8); the AI
+# stage lands later and stamps processed_at (step 9). Older rows predate
+# processed_at, so fall back to analyzed_at rather than reporting nothing.
+_COMPLETED_AT = func.coalesce(
+    TranscriptAnalysisLog.processed_at, TranscriptAnalysisLog.analyzed_at
+)
+
+
+def _derive_state(
+    row: AdminUploadLog,
+    completed_at: datetime | None,
+    in_drop_folder: set[str],
+) -> str:
+    """Where this upload actually is in the pipeline.
+
+    ``admin_upload_log.status`` cannot answer this — see get_upload_log. Priority
+    order matters: a rejected upload stays an error even if some earlier run
+    happens to match the name.
+    """
+    if row.status == "error":
+        return "error"
+    if completed_at is not None:
+        return "analyzed"
+    if row.queued_filename and row.queued_filename in in_drop_folder:
+        return "processing"
+    return "queued"
+
+
 @router.get("/upload-log", dependencies=[Depends(require_admin_user)])
 async def get_upload_log(
     limit: int = 50,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Recent admin uploads, newest first — lets /admin/upload rebuild its list after
-    a refresh. Contains only de-identified queued names, never the real study id."""
+    """Recent admin uploads, newest first, each with where it actually is in the
+    pipeline — so /admin/upload can rebuild its list after a refresh AND show
+    progress instead of a single frozen badge.
+
+    ``admin_upload_log.status`` is written once, at POST time, and is never
+    advanced: the pipeline runs in the AI repo and has no handle on this table, so
+    every row reads 'queued' forever even after its run finished. Rendering that
+    column literally showed a green "done" for transcripts that had not been
+    started yet and for ones that were mid-run, which is indistinguishable from
+    the upload silently failing.
+
+    The state is therefore DERIVED from the two sources that ARE authoritative:
+
+    * ``transcript_analysis_log.source_filename`` — the same de-identified name the
+      drop folder receives. This is the join ``upload_precheck`` already relies on.
+    * the drop folder itself — the watcher only moves a file to archive/ once the
+      run returns, so a file still sitting there is queued or running right now.
+
+    The analysis must have completed AFTER this upload (``_COMPLETED_AT >
+    uploaded_at``). Without that comparison, re-uploading an already-processed name
+    would immediately report the PREVIOUS run's result and the page would claim the
+    new run was done before it started.
+
+    Contains only de-identified queued names, never the real study id.
+    """
     limit = max(1, min(limit, 500))
+
+    # Earliest run that finished after this upload — the one this upload triggered.
+    # A correlated scalar subquery, not a LEFT JOIN: a name processed several times
+    # would otherwise multiply the log rows.
+    completed_at = (
+        select(func.min(_COMPLETED_AT))
+        .where(
+            TranscriptAnalysisLog.source_filename == AdminUploadLog.queued_filename,
+            TranscriptAnalysisLog.processed.is_(True),
+            _COMPLETED_AT > AdminUploadLog.uploaded_at,
+        )
+        .correlate(AdminUploadLog)
+        .scalar_subquery()
+    )
+
     stmt = (
-        select(AdminUploadLog)
+        select(AdminUploadLog, completed_at.label("completed_at"))
         .order_by(AdminUploadLog.uploaded_at.desc(), AdminUploadLog.id.desc())
         .limit(limit)
     )
-    rows = (await db.execute(stmt)).scalars().all()
-    return {
-        "uploads": [
-            {
-                "queued": r.queued_filename,
-                "status": r.status,
-                "message": r.message,
-                "uploaded_by": r.uploaded_by,
-                "uploaded_at": r.uploaded_at.isoformat() if r.uploaded_at else None,
-            }
-            for r in rows
-        ]
-    }
+    rows = (await db.execute(stmt)).all()
+
+    # One folder scan for the whole page, not one per row.
+    drop_dir = Path(get_settings().pipeline_drop_dir).resolve()
+    in_drop_folder = (
+        set(_queue_state(drop_dir)["queued"]) if drop_dir.is_dir() else set()
+    )
+    now = datetime.now(timezone.utc)
+
+    uploads = []
+    for row, finished in rows:
+        # How long the run took, or has been going so far. The page renders a live
+        # timer off this: a run is minutes long, and a static badge reads as stuck.
+        elapsed = None
+        if row.uploaded_at is not None:
+            elapsed = max(int(((finished or now) - row.uploaded_at).total_seconds()), 0)
+        uploads.append({
+            "queued": row.queued_filename,
+            "status": row.status,      # raw column, kept so older clients still work
+            "state": _derive_state(row, finished, in_drop_folder),
+            "message": row.message,
+            "uploaded_by": row.uploaded_by,
+            "uploaded_at": row.uploaded_at.isoformat() if row.uploaded_at else None,
+            "analyzed_at": finished.isoformat() if finished else None,
+            "elapsed_seconds": elapsed,
+        })
+    return {"uploads": uploads}

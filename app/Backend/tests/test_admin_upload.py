@@ -268,7 +268,10 @@ class TestUploadPrecheck:
 
 class TestUploadLog:
     @pytest_asyncio.fixture
-    async def logged(self, db):
+    async def logged(self, db, drop_dir):
+        # drop_dir is required, not incidental: the endpoint scans the drop folder to
+        # decide which uploads are running right now, and without the redirect these
+        # tests would read the live watched folder.
         base = datetime(2026, 7, 31, 9, 0, tzinfo=timezone.utc)
         for idx in range(3):
             db.add(AdminUploadLog(
@@ -299,3 +302,123 @@ class TestUploadLog:
                 "/api/admin/upload-log", params={"limit": limit}, headers=api_headers
             )
             assert resp.status_code == 200
+
+
+# ── GET /upload-log — the derived pipeline state ─────────────────────────────
+
+class TestUploadLogDerivedState:
+    """`state` must reflect where the file actually is, not admin_upload_log.status.
+
+    That column is written once, at POST time, and never advanced — the pipeline runs
+    in a separate repo with no handle on this table, so every row reads 'queued'
+    forever. The page rendered that as a green "done", which made a run that had not
+    started, one still going, and one long finished all look identical.
+    """
+
+    UPLOADED_AT = datetime(2026, 7, 31, 9, 0, tzinfo=timezone.utc)
+
+    async def _log(self, db, name, *, status="queued", uploaded_at=None):
+        db.add(AdminUploadLog(
+            queued_filename=name, status=status, uploaded_by="admin",
+            uploaded_at=uploaded_at or self.UPLOADED_AT,
+        ))
+        await db.commit()
+
+    async def _analysis(self, db, name, *, processed_at, processed=True):
+        db.add(TranscriptAnalysisLog(
+            patient_id="GCZ3FKMI", source_filename=name,
+            total_sentences=10, top_n=5, context_window=3,
+            xlsx_data=b"x", processed=processed,
+            analyzed_at=processed_at, processed_at=processed_at,
+        ))
+        await db.commit()
+
+    async def _row(self, client, api_headers):
+        body = (await client.get("/api/admin/upload-log", headers=api_headers)).json()
+        return body["uploads"][0]
+
+    async def test_no_analysis_and_not_in_the_folder_is_queued(
+        self, client, db, drop_dir, api_headers
+    ):
+        await self._log(db, DEID_NAME)
+        assert (await self._row(client, api_headers))["state"] == "queued"
+
+    async def test_a_file_still_in_the_drop_folder_is_processing(
+        self, client, db, drop_dir, api_headers
+    ):
+        # The watcher only archives a file once its run returns, so a file still
+        # sitting in the folder is queued or running right now.
+        await self._log(db, DEID_NAME)
+        (drop_dir / DEID_NAME).write_bytes(CSV_BYTES)
+
+        row = await self._row(client, api_headers)
+        assert row["state"] == "processing"
+        assert row["elapsed_seconds"] > 0  # so the page can show a live timer
+
+    async def test_an_analysis_after_the_upload_is_analyzed(
+        self, client, db, drop_dir, api_headers
+    ):
+        await self._log(db, DEID_NAME)
+        await self._analysis(
+            db, DEID_NAME, processed_at=self.UPLOADED_AT + timedelta(minutes=5)
+        )
+
+        row = await self._row(client, api_headers)
+        assert row["state"] == "analyzed"
+        assert row["analyzed_at"] is not None
+        assert row["elapsed_seconds"] == 300
+
+    async def test_an_analysis_before_the_upload_is_not_this_run(
+        self, client, db, drop_dir, api_headers
+    ):
+        """The re-upload regression: an OLD run of the same name must not count.
+
+        The join key is the de-identified filename, which is stable across
+        re-uploads. Without comparing timestamps, re-uploading a name that was
+        processed last month would report 'analyzed' before the watcher had even
+        looked at the new file.
+        """
+        await self._analysis(
+            db, DEID_NAME, processed_at=self.UPLOADED_AT - timedelta(days=30)
+        )
+        await self._log(db, DEID_NAME)
+
+        row = await self._row(client, api_headers)
+        assert row["state"] == "queued"
+        assert row["analyzed_at"] is None
+
+    async def test_an_incomplete_analysis_is_not_analyzed(
+        self, client, db, drop_dir, api_headers
+    ):
+        """processed=False means the AI stage has not landed — the run is not done."""
+        await self._log(db, DEID_NAME)
+        await self._analysis(
+            db, DEID_NAME,
+            processed_at=self.UPLOADED_AT + timedelta(minutes=5), processed=False,
+        )
+        assert (await self._row(client, api_headers))["state"] == "queued"
+
+    async def test_a_rejected_upload_stays_an_error(
+        self, client, db, drop_dir, api_headers
+    ):
+        """An upload that never reached the folder stays an error, analysis or not."""
+        await self._log(db, DEID_NAME, status="error")
+        await self._analysis(
+            db, DEID_NAME, processed_at=self.UPLOADED_AT + timedelta(minutes=5)
+        )
+        assert (await self._row(client, api_headers))["state"] == "error"
+
+    async def test_a_name_analysed_twice_yields_one_row(
+        self, client, db, drop_dir, api_headers
+    ):
+        """A correlated subquery, not a join — a join would multiply the upload row."""
+        await self._log(db, DEID_NAME)
+        for minutes in (5, 40):
+            await self._analysis(
+                db, DEID_NAME, processed_at=self.UPLOADED_AT + timedelta(minutes=minutes)
+            )
+
+        body = (await client.get("/api/admin/upload-log", headers=api_headers)).json()
+        assert len(body["uploads"]) == 1
+        # the EARLIEST qualifying run is the one this upload triggered
+        assert body["uploads"][0]["elapsed_seconds"] == 300
