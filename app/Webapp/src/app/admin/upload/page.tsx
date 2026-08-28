@@ -81,7 +81,10 @@ function fromLogRow(r: UploadLogRow): Pick<Item, "status" | "message" | "elapsed
   if (state === "processing") {
     return {
       status: "processing",
-      message: "The pipeline is working on this file — a run takes about 3-12 minutes.",
+      // No estimate here on purpose: run time varies with transcript length and
+      // queue depth, and a figure the page cannot honour costs more trust than the
+      // reassurance is worth. The elapsed counter reports what is actually true.
+      message: "The pipeline is working on this file.",
       elapsedSeconds,
     };
   }
@@ -235,9 +238,7 @@ export default function AdminUploadPage() {
           setByUid(it.uid, {
             status: "queued",
             name: data.queued || it.name,
-            message:
-              `Queued for processing${data.replaced ? " (replaced existing)" : ""} — ` +
-              "a run takes about 3-12 minutes.",
+            message: `Queued for processing${data.replaced ? " (replaced existing)" : ""}.`,
             elapsedSeconds: 0,
           });
         } else {
@@ -338,8 +339,8 @@ export default function AdminUploadPage() {
               <>
                 Processing {gate.queued[0]}
                 {gate.queued.length > 1 && ` (+${gate.queued.length - 1} more queued)`} —{" "}
-                {formatWait(gate.waitingSeconds)} elapsed, typically 3-12 minutes. Upload
-                is disabled until it finishes.
+                {formatWait(gate.waitingSeconds)} elapsed. Upload is disabled until it
+                finishes.
               </>
             )}
           </p>

@@ -143,15 +143,31 @@ describe("/admin/upload — drag-and-drop vs. click-to-choose", () => {
 
   it("shows the file as queued after a successful upload, not done", async () => {
     // D3: the POST only drops the file in the watcher's folder. The run itself takes
-    // 3-12 minutes, and the page used to paint a green "done" the instant it
-    // returned — the same badge a finished analysis gets.
+    // minutes, and the page used to paint a green "done" the instant it returned —
+    // the same badge a finished analysis gets.
     render(<AdminUploadPage />);
     await userEvent.upload(fileInput(), makeFile());
     await waitFor(() => expect(listState()).toHaveLength(1));
 
     await userEvent.click(screen.getByRole("button", { name: /^upload$/i }));
     await waitFor(() => expect(listState()[0].badge).toBe("queued"));
-    expect(screen.getByText(/3-12 minutes/i)).toBeInTheDocument();
+    expect(screen.getByText(/queued for processing/i)).toBeInTheDocument();
+  });
+
+  it("never promises how long a run will take", async () => {
+    // A duration the page cannot honour is worse than no duration: the run time
+    // depends on transcript length and how many files are already queued, so a
+    // "3-12 minutes" style estimate reads as a broken promise the moment it slips.
+    mockApi([
+      { queued: "AAAA_BBBB_1.csv", status: "queued", state: "processing", elapsed_seconds: 900 },
+    ]);
+    render(<AdminUploadPage />);
+    await waitFor(() => expect(listState()).toHaveLength(1));
+
+    expect(document.body.textContent).not.toMatch(/\d+\s*-\s*\d+\s*min/i);
+    expect(document.body.textContent).not.toMatch(/typically|about \d+|takes about/i);
+    // the measured elapsed time is still shown — that one is a fact, not a forecast
+    expect(screen.getByText("15 min")).toBeInTheDocument();
   });
 
   it("runs the duplicate precheck on both paths", async () => {
