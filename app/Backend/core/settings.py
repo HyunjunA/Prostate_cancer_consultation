@@ -129,10 +129,15 @@ class Settings(BaseSettings):
     # How long a file may sit in the drop folder before /admin/upload stops
     # treating it as "the pipeline is working" and starts calling it stuck. The
     # upload button is disabled while the folder is busy, so without this a file
-    # the watcher can never process would disable uploading forever. A normal run
-    # is 1-2 minutes; 15 minutes is well clear of that. Override with
-    # UPLOAD_GATE_STALE_SECONDS.
-    upload_gate_stale_seconds: int = Field(900, ge=60)
+    # the watcher can never process would disable uploading forever.
+    #
+    # Measured against admin_upload_log x transcript_analysis_log, a single run
+    # takes 3-4 minutes, and because the watcher processes the folder serially a
+    # batch grows from there: a 3-file batch put its last file at 705s. The old
+    # 900s was set on a "1-2 minutes" assumption, so a 4-file batch would have
+    # reported a perfectly healthy watcher as stuck. 30 minutes clears a batch of
+    # roughly eight. Override with UPLOAD_GATE_STALE_SECONDS.
+    upload_gate_stale_seconds: int = Field(1800, ge=60)
 
     # ── Background worker (CLI watch mode) ───────────────────────────
     # Legacy knobs kept for backwards compatibility with older config
