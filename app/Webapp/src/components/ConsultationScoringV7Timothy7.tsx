@@ -453,22 +453,31 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
                 5: "bg-emerald-500",
               };
               return (
+                // The whole 100 px column — digit AND the label under it — is the
+                // target. It used to be the bare digit glyph, measured at 13x32 px:
+                // 4% of the cell, so a reader aiming at "Imprecise Quantification"
+                // got nothing back from either the click or the hover tooltip. That
+                // is what made the scale feel unresponsive. `group` therefore sits
+                // here rather than on the digit wrapper, while the tooltip keeps
+                // anchoring to the digit (that inner div stays `relative`).
                 <div
                   key={item.value}
-                  className="absolute text-center"
+                  className={`absolute text-center ${
+                    onScoreClick ? "cursor-pointer" : "cursor-help"
+                  } group`}
                   style={{
                     left: `${(index / 5) * 100}%`,
                     transform: "translateX(-50%)",
                     width: "100px",
                   }}
+                  onClick={() => onScoreClick?.(item.value)}
                 >
-                  <div className="relative group inline-block">
+                  <div className="relative inline-block">
                     <div
                       className={`text-lg font-bold ${numberColor} mb-1 border-b-2 border-dashed ${
                         isDarkMode ? "border-slate-500" : "border-slate-400"
-                      } ${onScoreClick ? "cursor-pointer hover:scale-110 transition-transform" : "cursor-help"}`}
+                      } ${onScoreClick ? "group-hover:scale-110 transition-transform" : ""}`}
                       style={{ paddingBottom: "2px" }}
-                      onClick={() => onScoreClick?.(item.value)}
                     >
                       {item.value}
                     </div>
@@ -546,8 +555,14 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
       <div className="text-center mt-4">
         <h2 className={`text-xl font-semibold ${subtitleColor}`}>{subtitle}</h2>
         {allRubricLevels && allRubricLevels.length > 0 && (
+          // Says "click", not "hover". Hovering does raise a tooltip, but it is a
+          // pointer-only affordance and it stays silent on score 0 (no rubric entry
+          // maps to 0), so a reader who follows the hint can get nothing back.
+          // Clicking always opens the rubric at that level, on touch devices too.
           <p className={`text-sm mt-2 ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}>
-            Hover over score numbers above for rubric guidance
+            {onScoreClick
+              ? "Click a score number above for rubric guidance"
+              : "Hover over score numbers above for rubric guidance"}
           </p>
         )}
       </div>

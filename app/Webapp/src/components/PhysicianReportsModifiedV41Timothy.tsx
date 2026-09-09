@@ -4013,8 +4013,16 @@ const DetailView: React.FC<DetailViewProps> = ({
         {scoreAverageData && scoreAverageData.length > 0 && (() => {
           const classFullName = TOPIC_TO_CLASS[topicName];
           const classShortName = TOPIC_TO_MODEL[topicName];
+          // Files that belong to the doctor currently signed in. The score-average
+          // endpoint is doctor-scoped at both call sites, but this chart is the
+          // one place that plots every row it is handed, so it re-checks rather
+          // than trusting the payload — an unscoped response would otherwise put
+          // another physician's consultations on this physician's screen and
+          // inflate the count below.
+          const ownFiles = new Set((allPatients ?? []).map((p) => p.fileName));
           const topicScores = scoreAverageData
             .filter((item) => (item.class === classFullName || item.class === classShortName) && item.avg_score !== null)
+            .filter((item) => ownFiles.size === 0 || ownFiles.has(item.file))
             .map((item, idx) => {
               const isCurrentPatient = item.file === patient.fileName;
               const patientInfo = allPatients?.find((p) => p.fileName === item.file);
@@ -5064,8 +5072,13 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       setLoading(false);
       console.log("Patients created from files (sorted):", patientList);
 
-      // Fetch scores for all patients (no speaker filter — speakers vary per file)
-      fetchScoreAverage(undefined, undefined, undefined);
+      // Fetch scores for all of THIS doctor's patients (no speaker filter —
+      // speakers vary per file). `doctorId` is required: without it the endpoint
+      // returns every file in the database, i.e. other physicians' consultations
+      // too. This call races the doctor-scoped one in the effect above, so
+      // whichever landed last used to win — which is how the topic overview chart
+      // ended up reporting twice the real patient count.
+      fetchScoreAverage(undefined, undefined, undefined, doctorId);
     }
   }, [files, selectedSpeaker, fileDateMap, fileVisitMap, showPatientId]);
 
