@@ -296,6 +296,28 @@ const ALL_TOPICS: TopicName[] = [
 const cx = (...classes: (string | false | null | undefined)[]) =>
   classes.filter(Boolean).join(" ");
 
+/**
+ * Classes for the sentence the pipeline marked with `<main>…</main>` — the one
+ * that was actually scored inside its surrounding utterance.
+ *
+ * A highlighter mark rather than bold + underline. The same sentence is shown in
+ * three places on the physician's path (the grid table cell, the Consultation
+ * Scoring bubble, the "Original Sentence" panel), so the mark has to be the same
+ * in all three or the reader cannot tell it is the same sentence. The matching
+ * declaration inside the scoring component is `highlightBg` in
+ * `ConsultationScoringV7Timothy7.tsx` — keep the two in step.
+ *
+ * The yellow is solid, not translucent: these three surfaces have three different
+ * backgrounds, and an alpha yellow would composite to a different colour on each.
+ * `box-decoration-clone` matters because the sentence wraps — without it the
+ * padding and rounded ends land only at the very start and the very end.
+ */
+const focusSentenceMark = (isDarkMode: boolean): string =>
+  cx(
+    "px-1 rounded box-decoration-clone",
+    isDarkMode ? "bg-yellow-300 text-slate-900" : "bg-yellow-200 text-slate-900",
+  );
+
 const formatScore = (score: number | null): string => {
   if (score === null || score === undefined) return "N/A";
   return score.toFixed(2);
@@ -612,6 +634,13 @@ const RUBRIC_SCORE_LEVELS = [
   { score: 4, label: "Specific Quantification", color: "bg-green-500" },
   { score: 5, label: "Patient-centered Estimate", color: "bg-emerald-500" },
 ];
+
+// Level the rubric opens on when nothing else selected it. Opening unseeded left
+// every domain reading "Select a score above", so the physician had to click once
+// before the rubric said anything. 5 is the level they are working towards, so its
+// criteria are the ones worth showing first. An explicit choice — clicking a score
+// tick or a score badge — still wins over this.
+const RUBRIC_DEFAULT_SCORE = 5;
 
 // ═══════════════════════════════════════════════════════════
 // RubricBody — the shared "Quality of Risk Communication" rubric content:
@@ -1012,7 +1041,7 @@ const RubricLegendStrip: React.FC<RubricLegendStripProps> = ({
               setExpanded(false);
               onTrackEvent?.("rubric_strip_collapse", "rubric_strip_view_all");
             } else {
-              expandAt(null);
+              expandAt(RUBRIC_DEFAULT_SCORE);
               onTrackEvent?.("rubric_strip_expand", "rubric_strip_view_all");
             }
           }}
@@ -1732,7 +1761,7 @@ const RubricFloatingButton: React.FC<RubricFloatingButtonProps> = ({
           style={{ animationDuration: "2s" }}
         />
         <button
-          onClick={() => { setBodyScore(null); setBodyTab("All Domains"); setBodyKey((k) => k + 1); setOpen(true); onTrackEvent?.("rubric_modal_open", "rubric_floating_button"); }}
+          onClick={() => { setBodyScore(RUBRIC_DEFAULT_SCORE); setBodyTab("All Domains"); setBodyKey((k) => k + 1); setOpen(true); onTrackEvent?.("rubric_modal_open", "rubric_floating_button"); }}
           className={cx(
             "relative flex items-center gap-2 px-4 py-2.5 rounded-full font-semibold text-sm transition-all",
             "hover:scale-105 active:scale-95 animate-pulse",
@@ -2591,12 +2620,20 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
             >
               Overall Quality of Risk Communication Score Trajectory
             </h2>
-            {/* Mode toggle: cumulative average vs each consultation's own score */}
+            {/* Mode indicator. This used to be an individual/average toggle; the
+                "average" (cumulative) button was dropped on request (2026-09-01
+                feedback, item 4), and the remaining "individual" chip was hidden
+                too (item 5), so the card header now carries only its title.
+                Commented out rather than deleted, same as the rubric legend strip
+                and the patient search box, so restoring it is a matter of
+                uncommenting this block and putting "average" back in the array.
+                viewMode is fixed at its initial "individual" value; the average
+                code paths below stay valid but unreachable.
             <div
               className="inline-flex rounded-md border overflow-hidden text-xs"
               style={{ borderColor: isDarkMode ? "#475569" : "#cbd5e1" }}
             >
-              {(["individual", "average"] as const).map((m) => (
+              {(["individual"] as const).map((m) => (
                 <button
                   key={m}
                   onClick={() => setViewMode(m)}
@@ -2613,6 +2650,7 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                 </button>
               ))}
             </div>
+            */}
           </div>
           {/* B-2: Overall score trajectory line chart */}
           <div ref={chartBoxRef} className="relative flex-1 min-h-[180px]">
@@ -2825,11 +2863,17 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* ── Row 2b: Always-visible scoring legend (full width) ── */}
+      {/* ── Row 2b: Always-visible scoring legend (full width) ──
+           Hidden on request (2026-09-01 feedback, item 2). Commented out rather
+           than deleted: this is a temporary hide, so restoring it is a matter of
+           uncommenting this block. The rubric itself is still reachable — the
+           floating "Scoring Rubric" button and the score-badge click both open
+           RubricFloatingButton, which does not depend on this strip.
       <RubricLegendStrip
         isDarkMode={isDarkMode}
         onTrackEvent={onTrackEvent}
       />
+      */}
 
       {/* Per-patient Rubric Report modal (opened from an Overall Score click) */}
       <PatientRubricReportModal
@@ -2851,7 +2895,7 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
             : "bg-white border-slate-200 shadow-sm",
         )}
       >
-        {/* Table header with search */}
+        {/* Table header */}
         <div
           className={cx(
             "px-6 py-3 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3",
@@ -2876,6 +2920,11 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
               {filteredPatients.length} of {patients.length}
             </span>
           </h2>
+          {/* Patient search box — hidden on request (2026-09-01 feedback, item 3).
+              Commented out rather than deleted, same as the rubric legend strip,
+              so restoring it is a matter of uncommenting this block. The `search`
+              state it wrote to stays owned by the parent and simply never changes
+              from "", which leaves filteredPatients equal to the full list.
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -2887,6 +2936,7 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                 : "bg-white border-slate-300 text-slate-900 placeholder-slate-400",
             )}
           />
+          */}
         </div>
 
         <div className="overflow-x-auto">
@@ -3117,6 +3167,15 @@ const GridView: React.FC<GridViewProps> = ({
   const isLoadingSentences =
     apiLoading && (!sentences?.data || sentences.data.length === 0);
 
+  // Flips one frame after mount so the topic tiles transition in from their
+  // off state instead of being painted in place. Runs once per visit to the
+  // grid; it is the whole resting animation budget for that column.
+  const [entered, setEntered] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
   // Representative sentence: from sentences API, matched by AI-selected (i, i2)
   const getRepresentativeSentence = (data: TopicData): string => {
     const repI = data.representativeI;
@@ -3317,7 +3376,31 @@ const GridView: React.FC<GridViewProps> = ({
                   )}
                   style={{ width: "15%" }}
                 >
-                  Topic
+                  {/* The "click me" wording lives here, once, rather than inside
+                      each of the five tiles. Same chip treatment as the "Guide"
+                      badge on the How to Improve header below, so it reads as
+                      part of the table's own language. The onboarding tour also
+                      says this, but only on a user's first visit and buried in a
+                      paragraph — this stays on screen for everyone.
+
+                      Wording and size are measured, not chosen by eye: at 12 px
+                      "Click to review" needs 110 px and pushes the TOPIC column
+                      from 182 px to 199 px, which shifts every other column. At
+                      10 px "Click a topic" is 80 px and the column stays exactly
+                      182 px. Without nowrap the chip breaks into two lines. */}
+                  <div className="flex items-center gap-1.5">
+                    Topic
+                    <span
+                      className={cx(
+                        "whitespace-nowrap text-[10px] font-normal normal-case px-1.5 py-0.5 rounded",
+                        isDarkMode
+                          ? "bg-cyan-900/60 text-cyan-300"
+                          : "bg-cyan-100 text-cyan-700",
+                      )}
+                    >
+                      Click a topic
+                    </span>
+                  </div>
                 </th>
                 <th
                   className={cx(
@@ -3380,7 +3463,7 @@ const GridView: React.FC<GridViewProps> = ({
                 isDarkMode ? "divide-slate-700" : "divide-slate-200",
               )}
             >
-              {ALL_TOPICS.map((topicName) => {
+              {ALL_TOPICS.map((topicName, topicIdx) => {
                 const data = topicsData[topicName];
                 const representativeSentence = getRepresentativeSentence(data);
                 const lastScore = getLastSentenceScore(data, topicName);
@@ -3393,14 +3476,32 @@ const GridView: React.FC<GridViewProps> = ({
                   <tr
                     key={topicName}
                     className={cx(
-                      "transition-colors duration-200",
+                      // `group` (unnamed) drives the topic tile's row-level
+                      // response, so pointing anywhere in the row lifts it.
+                      "group transition-colors duration-200",
                       isDarkMode
                         ? "hover:bg-slate-700/50"
                         : "hover:bg-slate-100/50",
                     )}
                   >
-                    {/* Topic Column */}
-                    <td className="px-4 py-5">
+                    {/* Topic Column — a navigation tile in the same idiom as the
+                        "View Report" button (:3078): solid cyan, rounded-lg, no
+                        glow, no resting animation. It deliberately does NOT copy
+                        the floating "Scoring Rubric" button (:1741), which is a
+                        reference control and earns its gradient, glow and endless
+                        pulse by being the only one on screen. An earlier revision
+                        did copy it and the two became indistinguishable
+                        (2026-09-01 feedback, item 6). Click inducement comes from
+                        the solid fill, the "Review" verb and the arrow that
+                        advances on hover — direction, not a pulse.
+
+                        The button stays out of flow (absolute inset-0 inside a
+                        relative td) so the whole cell is the click target, which
+                        took it from 137x20 px to 182x202 px: `h-full` is not an
+                        option because it does not resolve for a td child
+                        (measured 60 px against the row's 202 px). The <th width>
+                        hints hold the column, so nothing reflows. */}
+                    <td className="relative p-0">
                       <button
                         onClick={() => {
                           setSelectedSuggestion(null);
@@ -3412,14 +3513,97 @@ const GridView: React.FC<GridViewProps> = ({
                           setShowRewrite(false);
                           setCurrentView("detail");
                         }}
+                        title={`Open sentence-level review for ${topicName}`}
+                        aria-label={`Open sentence-level review for ${topicName}`}
                         className={cx(
-                          "text-sm font-semibold underline transition-colors text-left",
+                          "group/topic absolute inset-0 w-full flex items-center px-4 py-5",
+                          "outline-none focus-visible:ring-2 focus-visible:ring-inset",
                           isDarkMode
-                            ? "text-cyan-400 hover:text-cyan-300"
-                            : "text-cyan-600 hover:text-cyan-800",
+                            ? "focus-visible:ring-cyan-400"
+                            : "focus-visible:ring-cyan-500",
                         )}
                       >
-                        {topicName}
+                        {/* Entrance lives on its own wrapper, not on the tile.
+                            transitionDelay applies to every transition on the
+                            element it is set on, so staggering the tile itself
+                            would also delay row 5's hover response by 280 ms and
+                            make it feel unresponsive. One pass only — the tiles
+                            slide in left to right and then stay still, which is
+                            deliberately a different family from the rubric
+                            button's endless radial pulse. */}
+                        <span
+                          className={cx(
+                            "block w-full transition-all duration-500",
+                            entered
+                              ? "opacity-100 translate-x-0"
+                              : "opacity-0 -translate-x-3",
+                          )}
+                          style={{ transitionDelay: `${topicIdx * 70}ms` }}
+                        >
+                          <span
+                            className={cx(
+                              // The arrow chip takes 32 px of the 126 px text box,
+                              // so all five labels wrap to two lines and the tiles
+                              // come out the same height on their own (measured
+                              // 60 px + the 4 px ledge). min-h is kept anyway so a
+                              // future one-line label could not break the column.
+                              "relative w-full min-h-[64px] flex items-center justify-between gap-2 px-3 py-2.5",
+                              "rounded-lg text-sm font-semibold text-white text-left shadow-sm",
+                              // A raised bottom edge, like the front face of a key.
+                              // This is the main "you can press me" signal now that
+                              // the Review label is gone: it is a shape cue rather
+                              // than a word, so it does not repeat five times down
+                              // the column the way the text did.
+                              "border-b-4",
+                              "transition-all duration-200",
+                              // Idle motion, kept slight on purpose. `breathe`
+                              // only moves brightness 1 -> 1.14, so the tile
+                              // stays put and the text does not shimmer; five
+                              // tiles pulsing in size or opacity would fight
+                              // with reading the sentence column. It is also
+                              // staggered per row below, so the column ripples
+                              // instead of throbbing in unison. It stops the
+                              // moment the pointer enters the row, handing over
+                              // to the deliberate hover feedback.
+                              "motion-safe:animate-breathe group-hover:animate-none",
+                              // Three levels of feedback: the row raises the tile
+                              // (attention, from anywhere in the row), the cell
+                              // deepens the fill (direct, under the pointer), and
+                              // pressing drops the face 2 px while the ledge
+                              // halves from 4 px to 2 px, so the key reads as
+                              // having sunk into its base. Measured: hover -2 px,
+                              // pressed +2 px, tile height constant at 64 px, so
+                              // nothing in the row reflows during the press.
+                              "group-hover:-translate-y-0.5 group-hover:shadow-md",
+                              "group-active/topic:translate-y-0.5 group-active/topic:border-b-2 group-active/topic:shadow-sm",
+                              isDarkMode
+                                ? "bg-cyan-600 border-cyan-800 group-hover/topic:bg-cyan-500 group-hover/topic:border-cyan-700"
+                                : "bg-cyan-500 border-cyan-700 group-hover/topic:bg-cyan-600 group-hover/topic:border-cyan-800",
+                            )}
+                            style={{ animationDelay: `${topicIdx * 320}ms` }}
+                          >
+                            <span>{topicName}</span>
+                            {/* The arrow sits in a chip rather than loose in the
+                                text, so it reads as a control to operate instead
+                                of punctuation. It drifts 4 px right and back on a
+                                loop; on row hover the loop is dropped and the same
+                                4 px becomes a held transition, so the idle hint
+                                and the hover response land in exactly the same
+                                place instead of fighting each other. */}
+                            <span
+                              aria-hidden
+                              className={cx(
+                                "shrink-0 flex h-6 w-6 items-center justify-center rounded-full bg-white/20",
+                                "text-sm leading-none transition-transform duration-200",
+                                "motion-safe:animate-nudge-x",
+                                "group-hover:animate-none group-hover:translate-x-1",
+                              )}
+                              style={{ animationDelay: `${topicIdx * 320}ms` }}
+                            >
+                              →
+                            </span>
+                          </span>
+                        </span>
                       </button>
                     </td>
 
@@ -3465,7 +3649,7 @@ const GridView: React.FC<GridViewProps> = ({
                               const [highlighted, rest] = part.split("</main>");
                               return (
                                 <span key={idx}>
-                                  <span className={cx("font-bold underline", isDarkMode ? "text-cyan-300" : "text-cyan-700")}>{highlighted}</span>
+                                  <span className={focusSentenceMark(isDarkMode)}>{highlighted}</span>
                                   {rest}
                                 </span>
                               );
@@ -4161,7 +4345,7 @@ const DetailView: React.FC<DetailViewProps> = ({
                           const [highlighted, rest] = part.split("</main>");
                           return (
                             <span key={idx}>
-                              <span className={cx("font-bold underline", isDarkMode ? "text-cyan-300" : "text-cyan-700")}>{highlighted}</span>
+                              <span className={focusSentenceMark(isDarkMode)}>{highlighted}</span>
                               {rest}
                             </span>
                           );

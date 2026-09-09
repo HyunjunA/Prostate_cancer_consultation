@@ -290,7 +290,15 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
   const aiRewriteTextColor = isDarkMode
     ? "text-emerald-100"
     : "text-emerald-900";
-  const highlightBg = isDarkMode ? "bg-yellow-600/50" : "bg-yellow-200";
+  // Highlighter mark for the sentence the score belongs to. Solid, not
+  // translucent: the same mark is drawn on three different surfaces (this bubble,
+  // the context panel below, the grid table cell), and an alpha yellow composites
+  // to a different colour on each one. Dark mode uses a brighter yellow so it
+  // still reads as a highlighter against a dark page, and keeps dark text — a
+  // highlighter is a light mark with the text showing through, not a tinted glow.
+  const highlightBg = isDarkMode
+    ? "bg-yellow-300 text-slate-900"
+    : "bg-yellow-200 text-slate-900";
 
   return (
     <div className={`w-full max-w-6xl mx-auto p-8 ${outerBg}`}>
@@ -351,7 +359,20 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
                               const [highlighted, rest] = part.split("</main>");
                               return (
                                 <span key={pidx}>
-                                  <span className="font-bold underline text-cyan-600 dark:text-cyan-300">{highlighted}</span>
+                                  {/* The scored sentence inside its surrounding
+                                      utterance. A highlighter mark, not bold +
+                                      underline: an underline reads as a link on
+                                      the web (this screen already underlines the
+                                      "all revisions" button), while a yellow
+                                      stripe needs no interpretation. Weight stays
+                                      normal — the mark is the emphasis, and
+                                      bolding a two-line sentence on top of it is
+                                      one signal too many. `box-decoration-clone`
+                                      is load-bearing: this span wraps onto two
+                                      lines, and without it the padding and the
+                                      rounded ends only appear at the very start
+                                      and the very end. */}
+                                  <span className={`${highlightBg} px-1 rounded box-decoration-clone`}>{highlighted}</span>
                                   {rest}
                                 </span>
                               );
@@ -671,7 +692,7 @@ const ConsultationScoring: React.FC<ConsultationScoringProps> = ({
                   <>
                     {highlightedContext.before}
                     <span
-                      className={`${highlightBg} font-semibold px-1 rounded`}
+                      className={`${highlightBg} px-1 rounded box-decoration-clone`}
                     >
                       {highlightedContext.match}
                     </span>

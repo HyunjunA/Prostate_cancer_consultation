@@ -36,10 +36,24 @@ module.exports = {
           "0%, 100%": { backgroundColor: "#00000005" },
           "50%": { backgroundColor: "#00000020" },
         },
+        // Idle attention for the grid's topic tiles. Deliberately horizontal
+        // and shallow: the floating Scoring Rubric button owns the radial
+        // ping/pulse vocabulary, and five tiles repeating it made the two
+        // controls read as the same thing.
+        "nudge-x": {
+          "0%, 55%, 100%": { transform: "translateX(0)" },
+          "27%": { transform: "translateX(4px)" },
+        },
+        breathe: {
+          "0%, 100%": { filter: "brightness(1)" },
+          "50%": { filter: "brightness(1.14)" },
+        },
       },
       animation: {
         "glow-dark": "glow-dark 1.5s ease-in-out infinite",
         "glow-light": "glow-light 1.5s ease-in-out infinite",
+        "nudge-x": "nudge-x 1.4s ease-in-out infinite",
+        breathe: "breathe 3.2s ease-in-out infinite",
       },
     },
   },
