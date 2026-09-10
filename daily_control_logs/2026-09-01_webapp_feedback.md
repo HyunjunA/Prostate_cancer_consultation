@@ -1384,10 +1384,9 @@ and did not take on the requester's machine, so the fix moved to where it
 belongs — the deployment, not each tester's browser:
 
 - `webapp-tls` (nginx:1.27-alpine) in `docker-compose-frontend.yml` serves the
-  identical webapp over TLS, proxying to the same container. It **owns LAN port
-  3001**, the port everyone's existing links already use; the webapp container
-  itself is now published host-locally only (`127.0.0.1:3002`) as the plain-HTTP
-  door for tooling and tunnels. Port 3443 is kept as an alias.
+  identical webapp over TLS on **port 3443**, proxying to the same container.
+  It is an additional door, not a replacement: the webapp stays published on
+  `0.0.0.0:3001` exactly as before.
 - **Reverted the same day: `:3001` stays plain http.** For a few minutes nginx
   owned 3001 and redirected it to https so existing links would upgrade
   themselves. The requester did not want the automatic redirect, so it was
@@ -1401,13 +1400,26 @@ belongs — the deployment, not each tester's browser:
   believing it. Fixing that needed a cache clear on the client. Any redirect
   that might ever be withdrawn must not be cacheable.
 - `scripts/generate-webapp-tls-cert.sh` issues the certificate (SAN
-  `IP:10.226.8.205, IP:127.0.0.1, DNS:localhost`, 825 days) into `_tls/`, which
-  is gitignored — the private key must never enter the repository.
-- Self-signed, because no public CA issues certificates for private 10.x
-  address space. The cost is a one-time "not private" click-through per browser;
-  after it the origin is a full secure context, which is all the microphone
-  needs. Unlike the flag, this needs nothing from the tester and works in
-  Chrome, Edge, Safari and Firefox alike.
+  `IP:10.226.8.205, IP:127.0.0.1, DNS:localhost`) into `_tls/`, which is
+  gitignored — the private key must never enter the repository.
+- Not publicly trusted, because no public CA issues certificates for private
+  10.x address space. The cost is a one-time "not private" click-through per
+  browser; after it the origin is a full secure context, which is all the
+  microphone needs. Unlike the flag, this needs nothing from the tester and
+  works in Chrome, Edge, Safari and Firefox alike.
+- **The first certificate made 3443 unreachable, not merely warned about, and
+  the log's advice to "click through the warning" was impossible to follow.**
+  It was written with the old 825-day convention. Chrome caps certificate
+  lifetime at 398 days and answers `ERR_CERT_INVALID` for anything longer —
+  which, unlike `ERR_CERT_AUTHORITY_INVALID`, has **no "proceed anyway" link**.
+  The page simply could not be opened. `curl -k` and Playwright with
+  `ignoreHTTPSErrors` both hid this; probing with a real Chromium that was *not*
+  told to ignore certificate errors is what surfaced it. Replaced with a local
+  CA plus a **397-day** leaf, served leaf-then-issuer in one file so a browser
+  that has imported the CA can build the chain. Chrome now shows the ordinary
+  bypassable interstitial and voice works behind it. Having a CA of our own also
+  makes the warning removable outright: import `_tls/ca.crt` once on a client
+  and there is no interstitial at all.
 
 - `scripts/close-lan-exposure.sh` now closes **both** doors — `0.0.0.0:3001:3000`
   (webapp) and `0.0.0.0:3443:443` (webapp-tls) — and recreates both containers.
@@ -1422,10 +1434,66 @@ with no redirect, as before, and shows the disabled button with its tooltip.
 
 **Remaining friction, and the honest limit.** Plain http can never open a
 microphone — the API is absent, not merely blocked, so this is not something
-application code can be made to do. What is left is the one-time self-signed
-certificate warning. Removing that needs either the certificate installed in
-each tester's trust store, or a hostname under a domain the project controls so
-a publicly trusted certificate can be issued; neither was in scope today.
+application code can be made to do. What is left is the one-time certificate
+warning. Removing that needs either `_tls/ca.crt` installed in each tester's
+trust store, or a hostname under a domain the project controls so a publicly
+trusted certificate can be issued; neither was in scope today.
+
+**Does this need a GPU? No — and that was the question that mattered.** The
+target users are clinicians, whose machines are unlikely to have one. The worker
+picks its backend at runtime (`stt.worker.ts:74`): WebGPU when an adapter is
+granted, otherwise onnxruntime-web's WebAssembly backend on the CPU. Every run
+verified above took the **CPU path** — the test browser exposes `navigator.gpu`
+but is granted no adapter — so the numbers already recorded are CPU numbers.
+
+Measured directly on `https://10.226.8.205:3443`, 18 sentences over one warm
+session (`hardwareConcurrency: 52`, `crossOriginIsolated: false`):
+
+| | |
+|---|---|
+| Model ready after click | 8.9 s (one-time; weights then sit in the Cache API) |
+| Per-sentence latency, warm, median | **1.6 s** |
+| Real-time factor | ≈ 0.18 (a 9-second sentence transcribes in 1.6 s) |
+
+The earlier "18 s" figure was the *first* transcript and included the 123 MB
+download and model init. Separating the two is what shows the steady-state cost
+is under two seconds, so no optimisation is warranted yet. Two levers remain
+unspent if a slower clinician laptop needs them: the WASM backend is currently
+**single-threaded** because no `COOP`/`COEP` headers are sent, and `STT_MODEL_ID`
+can drop to a 63 MB or 28 MB build.
+
+Why Moonshine rather than Whisper matters most on CPU: Whisper pads every input
+to a fixed 30-second mel spectrogram, so a five-second dictation costs thirty
+seconds of encoder work. Moonshine takes the raw waveform at its natural length
+(rotary position embeddings, so nothing forces padding), and encoder cost tracks
+the actual utterance. On a GPU that difference is hidden; on a CPU it is the
+difference between usable and not.
+
+### Item 8b. Introduce the Speak button in the onboarding tour
+
+**Feedback (2026-09-10).** Add the Speak button to the guided tour popups, with
+a proper explanation that the box can be dictated into.
+
+**Why it was needed.** The button shipped with only a hover tooltip. A doctor who
+never hovers it has no way to learn the box can be spoken into at all, and no way
+to learn that the audio stays on their own machine — which is the fact most
+likely to decide whether a clinician uses it.
+
+**Change.** A "Dictate Your Re-write" step was added to the detail-view tour
+(`OnboardingTour.tsx`), anchored to a new `data-tour='rewrite-voice-button'` on
+`RewriteVoiceInput.tsx`. It states the three things the button cannot say for
+itself: dictated sentences land in the same box that can still be typed in, the
+audio is never recorded or uploaded, and a greyed-out "Voice unavailable" means
+the page was opened over plain http, where browsers expose no microphone at all.
+
+**Tour completion is now versioned per view.** It was a bare boolean, so anyone
+who had already finished the detail tour would never have seen the new step.
+Completion now records a version number and only `detail` was bumped to 2, so
+that one view replays once and the dashboard and grid tours are left alone. A
+legacy `true` reads as version 1, so existing records keep working.
+
+**Verified.** `tsc` clean for both files, `next lint` clean. Not yet rebuilt or
+redeployed — the running container still serves the previous build.
 
 ## 3. Status as of 2026-09-04
 
@@ -1447,7 +1515,8 @@ the code.
 | 6e | "Review" removed; ledge + arrow chip + press | ✅ | ✅ | ✅ | ❌ |
 | 6f | "Click a topic" chip on the TOPIC header | ✅ | ✅ | ✅ | ❌ |
 | 7 | Focus sentence highlighted yellow, not bold+underline | ✅ | ✅ | ✅ | ❌ |
-| 8 | Voice input for the rewrite box | ⬜ | ⬜ | ⬜ | ⬜ |
+| 8 | Voice input for the rewrite box | ✅ | ✅ | ✅ (https on `:3443`) | ✅ |
+| 8b | Speak button explained in the onboarding tour | ✅ | ✅ | ⬜ | ✅ |
 
 "Verified" means measured in a headless browser, not just built. Each item's own
 section above carries the measurement table.
@@ -1466,7 +1535,7 @@ which carries the full "why it said 10" chain.
 1. ~~**Nothing is committed.**~~ **Committed on 2026-09-08** as
    `feat(webapp): make the rubric and topic tiles readable at a glance`
    (`cf8c1ab`) on `staging/caire` — the first twelve rows above (items 1-7 plus
-   follow-ups 6b-6f; item 8 is not started), together with
+   follow-ups 6b-6f; item 8 came later, on `feat/rewrite-voice-input`), together with
    `app/Webapp/src/components/PhysicianReportsModifiedV41Timothy.tsx`,
    `app/Webapp/src/components/ConsultationScoringV7Timothy7.tsx`,
    `app/Webapp/tailwind.config.js` and this log file. Both component files also
