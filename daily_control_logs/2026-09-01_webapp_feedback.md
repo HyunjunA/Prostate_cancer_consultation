@@ -1572,9 +1572,7 @@ latency above was measured.
 engine and the same four APIs, but an iPhone or a Mac still deserves one manual
 check before that is called proven.
 
-**Not deployed.** The Firefox fix is committed but the running containers still
-serve the pre-fix build, so Firefox users still hit the failure until a rebuild is
-authorised.
+**Deployed** together with item 8d — the Firefox fix rides in the same build.
 
 **Running WebKit on this host.** Its Playwright build needs
 `libgstcodecparsers-1.0.so.0`, `libavif.so.13`, `libgav1.so.0` and `libyuv.so.0`,
@@ -1583,6 +1581,40 @@ unpacked without root (`apt-get download` + `dpkg-deb -x`) and copied into
 `~/.cache/ms-playwright/webkit-*/minibrowser-wpe/sys/lib/`. Copied, not exported:
 the bundle's `MiniBrowser` launcher *overwrites* `LD_LIBRARY_PATH`, so an
 inherited path is ignored.
+
+### Item 8d. Move the Speak button somewhere more appropriate
+
+**Feedback (2026-09-10).** Can the Speak button be put in a better place?
+
+**Where it was, and why that was wrong.** It sat at the far right of the
+"2 — How would you say it better?" heading row. That reads as a property of the
+heading rather than as an input method for the box, and it put two other controls
+(the numbered heading and the "Scoring rubric" toggle) between the button and the
+textarea it writes into. Worse, opening the inline rubric pushed the textarea down
+past the whole criteria table: measured on a 1600 × 1000 viewport, the button
+ended up **492 px** from the box it feeds.
+
+**Where it is now.** On the textarea's own top edge, right-aligned to it, with a
+quiet "Type below, or" lead-in so the two input methods read as one offer. It is
+still outside the textarea rather than floating over it, which was the original
+reason it was not placed there — a floating button covers the text being written.
+
+**Measured** in a headless browser at 1600 × 1000, in the built production bundle:
+
+| Rubric | Gap, button bottom → textarea top | Right edges | Distance from heading |
+|---|---|---|---|
+| collapsed | 8 px | aligned to 0 px | 68 px |
+| expanded | 8 px | aligned to 0 px | 492 px |
+
+The point of the move is the first column: the gap to the textarea is now constant
+whatever the rubric does, where before the button drifted with it.
+
+**Verified.** `tsc` clean, `next lint` clean (only the pre-existing warnings),
+278/278 Jest tests pass, production build succeeds. The onboarding step added in
+8b still finds the button: the detail tour reaches "Dictate Your Re-write" as
+**5 of 7** and the spotlight encloses the button at its new position. The
+cross-browser dictation spec from 8c still passes in all three engines against
+this build, so the DOM move did not disturb the click path.
 
 ## 3. Status as of 2026-09-04
 
@@ -1606,7 +1638,8 @@ the code.
 | 7 | Focus sentence highlighted yellow, not bold+underline | ✅ | ✅ | ✅ | ❌ |
 | 8 | Voice input for the rewrite box | ✅ | ✅ | ✅ (https on `:3443`) | ✅ |
 | 8b | Speak button explained in the onboarding tour | ✅ | ✅ | ✅ | ✅ |
-| 8c | Dictation works in Firefox and WebKit too | ✅ | ✅ (all 3 engines) | ❌ awaiting authorisation | ✅ |
+| 8c | Dictation works in Firefox and WebKit too | ✅ | ✅ (all 3 engines) | ✅ | ✅ |
+| 8d | Speak button moved onto the textarea's top edge | ✅ | ✅ | ✅ | ✅ |
 
 "Verified" means measured in a headless browser, not just built. Each item's own
 section above carries the measurement table.
