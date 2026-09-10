@@ -41,10 +41,15 @@ DEADLINE="2026-10-01 00:00:00"
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="$REPO_ROOT/docker-compose-frontend.yml"
-SERVICE="webapp"
+# 2026-09-10: the LAN ports moved to the TLS front door. The webapp container
+# is now published host-locally only (127.0.0.1:3002), so it is no longer this
+# guard's business — closing the two nginx bindings closes the LAN.
+SERVICE="webapp-tls"
 
-OPEN_BINDING='- "0.0.0.0:3001:3000"'
-CLOSED_BINDING='- "127.0.0.1:3001:3000"'
+OPEN_BINDING='- "0.0.0.0:3001:443"'
+CLOSED_BINDING='- "127.0.0.1:3001:443"'
+OPEN_BINDING_ALT='- "0.0.0.0:3443:443"'
+CLOSED_BINDING_ALT='- "127.0.0.1:3443:443"'
 
 log() { printf '%s  %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$*"; }
 
@@ -58,15 +63,17 @@ deadline_epoch=$(date -d "$DEADLINE" +%s)
 (( now_epoch < deadline_epoch )) && exit 0
 
 # Already closed (by this script on an earlier run, or by hand). Nothing to do.
-if ! grep -qF -- "$OPEN_BINDING" "$COMPOSE_FILE"; then
+if ! grep -qF -- "$OPEN_BINDING" "$COMPOSE_FILE" && \
+   ! grep -qF -- "$OPEN_BINDING_ALT" "$COMPOSE_FILE"; then
     exit 0
 fi
 
-log "Deadline $DEADLINE passed — closing the LAN exposure of port 3001."
+log "Deadline $DEADLINE passed — closing the LAN exposure of ports 3001/3443."
 
-# Rewrite the published port. -i.bak leaves the previous file alongside, so a
+# Rewrite the published ports. -i.bak leaves the previous file alongside, so a
 # botched edit to a deployment file is recoverable.
-sed -i.bak "s|${OPEN_BINDING}|${CLOSED_BINDING}|" "$COMPOSE_FILE"
+sed -i.bak -e "s|${OPEN_BINDING}|${CLOSED_BINDING}|" \
+           -e "s|${OPEN_BINDING_ALT}|${CLOSED_BINDING_ALT}|" "$COMPOSE_FILE"
 
 if ! grep -qF -- "$CLOSED_BINDING" "$COMPOSE_FILE"; then
     log "ERROR: rewrite did not take effect — restoring and leaving the port open."

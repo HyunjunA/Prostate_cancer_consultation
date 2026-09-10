@@ -1384,8 +1384,17 @@ and did not take on the requester's machine, so the fix moved to where it
 belongs — the deployment, not each tester's browser:
 
 - `webapp-tls` (nginx:1.27-alpine) in `docker-compose-frontend.yml` serves the
-  identical webapp over **`https://10.226.8.205:3443`**, proxying to the same
-  container. Plain `:3001` is untouched, so no existing link breaks.
+  identical webapp over TLS, proxying to the same container. It **owns LAN port
+  3001**, the port everyone's existing links already use; the webapp container
+  itself is now published host-locally only (`127.0.0.1:3002`) as the plain-HTTP
+  door for tooling and tunnels. Port 3443 is kept as an alias.
+- **An existing `http://10.226.8.205:3001/?…` link still works.** Plain http
+  arriving on a TLS port is answered by nginx with its status 497, which
+  `tls.conf` turns into a 301 to the same host, port and query string over
+  https. So nobody has to edit a URL, and the page they land on is one where
+  the microphone can open. A second door on a second port was tried first and
+  the requester could not reach it — hence taking over the port already proven
+  reachable from their machine.
 - `scripts/generate-webapp-tls-cert.sh` issues the certificate (SAN
   `IP:10.226.8.205, IP:127.0.0.1, DNS:localhost`, 825 days) into `_tls/`, which
   is gitignored — the private key must never enter the repository.
@@ -1395,10 +1404,23 @@ belongs — the deployment, not each tester's browser:
   needs. Unlike the flag, this needs nothing from the tester and works in
   Chrome, Edge, Safari and Firefox alike.
 
-Verified end to end on the deployed HTTPS URL with the requester's own query
-string: `isSecureContext: true`, button enabled, transcript in the textarea 18 s
-after the click. `:3001` still answers 200 and still shows the disabled button
-with its explanatory tooltip.
+- `scripts/close-lan-exposure.sh` was updated in the same change. It matched the
+  literal string `- "0.0.0.0:3001:3000"`; after the port move that line no
+  longer exists, so on 2026-10-01 the guard would have found nothing, exited 0
+  and left the LAN open with nobody aware. It now closes both nginx bindings and
+  recreates `webapp-tls`.
+
+Verified end to end starting from the requester's **original http URL**,
+unedited: 301 to the https equivalent with the query string intact,
+`isSecureContext: true`, button enabled, transcript in the textarea 18 s after
+the click.
+
+**Remaining friction, and the honest limit.** Plain http can never open a
+microphone — the API is absent, not merely blocked, so this is not something
+application code can be made to do. What is left is the one-time self-signed
+certificate warning. Removing that needs either the certificate installed in
+each tester's trust store, or a hostname under a domain the project controls so
+a publicly trusted certificate can be issued; neither was in scope today.
 
 ## 3. Status as of 2026-09-04
 
