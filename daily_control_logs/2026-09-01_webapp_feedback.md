@@ -1505,6 +1505,85 @@ Dictation itself re-measured on the new build: 8 sentences, median warm latency
 **Deployed** to `prostatecancer-webapp-native`; `:3001` and `:3443` both answer
 200.
 
+### Item 8c. Does the Speak button work in browsers other than Chromium?
+
+**Question (2026-09-10).** Does the speech-to-text button work in every browser,
+and is there a way to check that programmatically?
+
+**Why reading the code could not answer it.** The feature rests on four things
+that are not uniformly supported — a secure context for `getUserMedia`, an
+AudioWorklet, a module Worker, and onnxruntime-web's WebAssembly backend — and
+every check up to this point had been run in Chromium only. Whether the other two
+engines get as far as a transcript is a property of the engines, not of the
+source.
+
+**What was built.** `e2e/voice-input-cross-browser.spec.ts` drives the whole
+path — capability probe, model download, VAD, transcription — in Chromium,
+Firefox and WebKit. It runs under its own config (`playwright.voice.config.ts`,
+`npm run test:e2e:voice`) and is excluded from the ordinary e2e run, because the
+weights are a ~123 MB download per browser. The dashboard URL comes from
+`VOICE_TEST_URL`: it carries a de-identified study token and is never committed.
+
+The microphone is replaced by a `MediaStream` fed from a decoded WAV rather than
+by `--use-file-for-fake-audio-capture`, which only Chromium has. Firefox's own
+fake device emits a tone, which the VAD correctly declines to call a sentence.
+
+**Defect found in Firefox, and fixed.** The button failed at the click:
+
+> `AudioContext.createMediaStreamSource: Connecting AudioNodes from AudioContexts with different sample-rate is currently not supported.`
+
+Firefox ignores the `sampleRate` constraint passed to `getUserMedia` — the track
+settings do not even report a rate — and then refuses to connect the device-rate
+stream into the 16 kHz context the hook builds. Confirmed against Firefox's own
+fake device before any code was touched, so this is the browser and not the test
+harness: the same stream connects without complaint to a context left at 44.1 kHz.
+
+The 16 kHz context stays the first choice, because an engine that accepts it
+resamples the microphone with a better filter than anything affordable on the
+audio thread. Only when `createMediaStreamSource` throws does the hook rebuild the
+context at the device rate, and `public/vad-processor.js` then rate-converts to
+16 kHz itself, averaging the input samples each output sample spans rather than
+point-sampling them — plain decimation would fold everything above 8 kHz back
+into the speech band as aliasing. Chromium and WebKit never reach that branch.
+
+**WebKit needed a harness fix, not a product fix.** WebKit first appeared to fail
+the same way, showing `Invalid constraint` beside the button. Stepping through the
+hook's audio path in WebKit directly showed every stage working — 16 kHz context,
+worklet, frames flowing. The real cause was in the test: the fake `getUserMedia`
+had been defined as an own property on `navigator.mediaDevices`, and WebKit
+collects the JS wrapper for a DOM object nothing references and mints a fresh one
+on the next access. The override vanished between page load and the click, the app
+reached the real capture stack, and a headless build with no audio device rejects
+even `{audio: true}`. Defining it on `MediaDevices.prototype` survives.
+
+**Result.** All three engines transcribe the sample identically:
+
+| Engine | Secure ctx | AudioWorklet | Module worker | WASM SIMD | Context rate | Transcript |
+|---|---|---|---|---|---|---|
+| Chromium 143 | ✅ | ✅ | ✅ | ✅ | 16 000 Hz | ✅ |
+| Firefox 145 | ✅ | ✅ | ✅ | ✅ | 16 000 Hz | ✅ (after the fix) |
+| WebKit 26.0 | ✅ | ✅ | ✅ | ✅ | 16 000 Hz | ✅ |
+
+`crossOriginIsolated` is `false` in all three, so onnxruntime-web runs
+single-threaded everywhere — the same condition under which the 1.1 s median warm
+latency above was measured.
+
+**Caveat.** Playwright's WebKit is the WPE port, not macOS Safari. It is the same
+engine and the same four APIs, but an iPhone or a Mac still deserves one manual
+check before that is called proven.
+
+**Not deployed.** The Firefox fix is committed but the running containers still
+serve the pre-fix build, so Firefox users still hit the failure until a rebuild is
+authorised.
+
+**Running WebKit on this host.** Its Playwright build needs
+`libgstcodecparsers-1.0.so.0`, `libavif.so.13`, `libgav1.so.0` and `libyuv.so.0`,
+which this shared machine does not have and which need root to install. They were
+unpacked without root (`apt-get download` + `dpkg-deb -x`) and copied into
+`~/.cache/ms-playwright/webkit-*/minibrowser-wpe/sys/lib/`. Copied, not exported:
+the bundle's `MiniBrowser` launcher *overwrites* `LD_LIBRARY_PATH`, so an
+inherited path is ignored.
+
 ## 3. Status as of 2026-09-04
 
 Intake is still open — more items are expected. This section records only what
@@ -1527,6 +1606,7 @@ the code.
 | 7 | Focus sentence highlighted yellow, not bold+underline | ✅ | ✅ | ✅ | ❌ |
 | 8 | Voice input for the rewrite box | ✅ | ✅ | ✅ (https on `:3443`) | ✅ |
 | 8b | Speak button explained in the onboarding tour | ✅ | ✅ | ✅ | ✅ |
+| 8c | Dictation works in Firefox and WebKit too | ✅ | ✅ (all 3 engines) | ❌ awaiting authorisation | ✅ |
 
 "Verified" means measured in a headless browser, not just built. Each item's own
 section above carries the measurement table.

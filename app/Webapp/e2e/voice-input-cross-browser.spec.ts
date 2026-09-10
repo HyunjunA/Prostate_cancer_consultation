@@ -155,23 +155,33 @@ async function installFakeMicAndWorkerTap(page: Page): Promise<void> {
     window.Worker = Tapped;
 
     if (!navigator.mediaDevices) return;
-    Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
+    const fakeMic = async () => {
+      // Created inside the call, which happens on the button click, so the
+      // context starts in a user gesture and no autoplay policy blocks it.
+      const ac = new AudioContext();
+      await ac.resume();
+      const response = await fetch("/__stt_test_audio.wav");
+      const decoded = await ac.decodeAudioData(await response.arrayBuffer());
+      const source = ac.createBufferSource();
+      source.buffer = decoded;
+      source.loop = true;
+      const destination = ac.createMediaStreamDestination();
+      source.connect(destination);
+      source.start();
+      return destination.stream;
+    };
+
+    // The override goes on MediaDevices.prototype, not on navigator.mediaDevices
+    // itself. WebKit collects the JS wrapper for a DOM object nothing holds a
+    // reference to and mints a fresh one on the next access — an own property
+    // defined on the instance quietly disappears somewhere between page load and
+    // the click, and the app then reaches the real capture stack (which in a
+    // headless build has no device and rejects even `{audio:true}` with
+    // "OverconstrainedError: Invalid constraint"). The prototype survives.
+    Object.defineProperty(MediaDevices.prototype, "getUserMedia", {
       configurable: true,
-      value: async () => {
-        // Created inside the call, which happens on the button click, so the
-        // context starts in a user gesture and no autoplay policy blocks it.
-        const ac = new AudioContext();
-        await ac.resume();
-        const response = await fetch("/__stt_test_audio.wav");
-        const decoded = await ac.decodeAudioData(await response.arrayBuffer());
-        const source = ac.createBufferSource();
-        source.buffer = decoded;
-        source.loop = true;
-        const destination = ac.createMediaStreamDestination();
-        source.connect(destination);
-        source.start();
-        return destination.stream;
-      },
+      writable: true,
+      value: fakeMic,
     });
   });
 }
