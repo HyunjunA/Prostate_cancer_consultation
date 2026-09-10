@@ -41,13 +41,14 @@ DEADLINE="2026-10-01 00:00:00"
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="$REPO_ROOT/docker-compose-frontend.yml"
-# 2026-09-10: the LAN ports moved to the TLS front door. The webapp container
-# is now published host-locally only (127.0.0.1:3002), so it is no longer this
-# guard's business — closing the two nginx bindings closes the LAN.
-SERVICE="webapp-tls"
+# 2026-09-10: there are two LAN doors now — the webapp on plain 3001 as always,
+# and the webapp-tls front door on 3443 (added so the voice input's getUserMedia
+# call has a secure context). Both have to be closed, and both containers
+# recreated, or the deadline closes only half the exposure.
+SERVICES=("webapp" "webapp-tls")
 
-OPEN_BINDING='- "0.0.0.0:3001:443"'
-CLOSED_BINDING='- "127.0.0.1:3001:443"'
+OPEN_BINDING='- "0.0.0.0:3001:3000"'
+CLOSED_BINDING='- "127.0.0.1:3001:3000"'
 OPEN_BINDING_ALT='- "0.0.0.0:3443:443"'
 CLOSED_BINDING_ALT='- "127.0.0.1:3443:443"'
 
@@ -75,21 +76,22 @@ log "Deadline $DEADLINE passed — closing the LAN exposure of ports 3001/3443."
 sed -i.bak -e "s|${OPEN_BINDING}|${CLOSED_BINDING}|" \
            -e "s|${OPEN_BINDING_ALT}|${CLOSED_BINDING_ALT}|" "$COMPOSE_FILE"
 
-if ! grep -qF -- "$CLOSED_BINDING" "$COMPOSE_FILE"; then
-    log "ERROR: rewrite did not take effect — restoring and leaving the port open."
+if grep -qF -- "$OPEN_BINDING" "$COMPOSE_FILE" || \
+   grep -qF -- "$OPEN_BINDING_ALT" "$COMPOSE_FILE"; then
+    log "ERROR: rewrite did not take effect — restoring and leaving the ports open."
     mv "$COMPOSE_FILE.bak" "$COMPOSE_FILE"
     exit 1
 fi
-log "compose: published port is now 127.0.0.1:3001."
+log "compose: published ports are now 127.0.0.1:3001 and 127.0.0.1:3443."
 
-# Recreate the webapp container only. This box runs 13+ other projects, so never
-# `down` the project or prune anything — act on the one service by name.
+# Recreate the two dashboard containers only. This box runs 13+ other projects,
+# so never `down` the project or prune anything — act on services by name.
 cd "$REPO_ROOT"
-if docker compose -f "$COMPOSE_FILE" up -d "$SERVICE" >/dev/null 2>&1; then
-    log "container recreated; 3001 is no longer published on the LAN."
+if docker compose -f "$COMPOSE_FILE" up -d "${SERVICES[@]}" >/dev/null 2>&1; then
+    log "containers recreated; 3001 and 3443 are no longer published on the LAN."
 else
     log "ERROR: docker compose up failed. The compose file is closed but the"
-    log "       RUNNING container may still publish 0.0.0.0 — check by hand."
+    log "       RUNNING containers may still publish 0.0.0.0 — check by hand."
     exit 1
 fi
 

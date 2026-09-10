@@ -1388,13 +1388,18 @@ belongs — the deployment, not each tester's browser:
   3001**, the port everyone's existing links already use; the webapp container
   itself is now published host-locally only (`127.0.0.1:3002`) as the plain-HTTP
   door for tooling and tunnels. Port 3443 is kept as an alias.
-- **An existing `http://10.226.8.205:3001/?…` link still works.** Plain http
-  arriving on a TLS port is answered by nginx with its status 497, which
-  `tls.conf` turns into a 301 to the same host, port and query string over
-  https. So nobody has to edit a URL, and the page they land on is one where
-  the microphone can open. A second door on a second port was tried first and
-  the requester could not reach it — hence taking over the port already proven
-  reachable from their machine.
+- **Reverted the same day: `:3001` stays plain http.** For a few minutes nginx
+  owned 3001 and redirected it to https so existing links would upgrade
+  themselves. The requester did not want the automatic redirect, so it was
+  undone — `:3001` behaves exactly as it always has, and https lives only on
+  3443. The consequence is accepted deliberately: **voice input does not work
+  on `:3001` and will not**, because plain http has no `getUserMedia` to call.
+- **Lesson kept in the config: the upgrade redirect is now 302 + `no-store`,
+  not 301.** A permanent redirect is cached by the browser indefinitely, so
+  after the revert the requester's browser kept jumping to https on its own —
+  the server had stopped sending the redirect, but the browser had not stopped
+  believing it. Fixing that needed a cache clear on the client. Any redirect
+  that might ever be withdrawn must not be cacheable.
 - `scripts/generate-webapp-tls-cert.sh` issues the certificate (SAN
   `IP:10.226.8.205, IP:127.0.0.1, DNS:localhost`, 825 days) into `_tls/`, which
   is gitignored — the private key must never enter the repository.
@@ -1404,16 +1409,16 @@ belongs — the deployment, not each tester's browser:
   needs. Unlike the flag, this needs nothing from the tester and works in
   Chrome, Edge, Safari and Firefox alike.
 
-- `scripts/close-lan-exposure.sh` was updated in the same change. It matched the
-  literal string `- "0.0.0.0:3001:3000"`; after the port move that line no
-  longer exists, so on 2026-10-01 the guard would have found nothing, exited 0
-  and left the LAN open with nobody aware. It now closes both nginx bindings and
-  recreates `webapp-tls`.
+- `scripts/close-lan-exposure.sh` now closes **both** doors — `0.0.0.0:3001:3000`
+  (webapp) and `0.0.0.0:3443:443` (webapp-tls) — and recreates both containers.
+  It previously matched one literal string; with a second LAN port added, the
+  2026-10-01 deadline would otherwise have closed half the exposure and reported
+  success.
 
-Verified end to end starting from the requester's **original http URL**,
-unedited: 301 to the https equivalent with the query string intact,
-`isSecureContext: true`, button enabled, transcript in the textarea 18 s after
-the click.
+Verified end to end on `https://10.226.8.205:3443` with the requester's own
+query string: `isSecureContext: true`, button enabled, transcript in the
+textarea 18 s after the click. `http://10.226.8.205:3001` answers 200 directly
+with no redirect, as before, and shows the disabled button with its tooltip.
 
 **Remaining friction, and the honest limit.** Plain http can never open a
 microphone — the API is absent, not merely blocked, so this is not something

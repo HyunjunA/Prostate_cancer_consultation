@@ -69,11 +69,13 @@ services:
       # Close by hand with "127.0.0.1:3001:3000" and use a tunnel instead:
       #   ssh -L 3001:127.0.0.1:3001 <user>@<host>   ->   http://localhost:3001
       #
-      # 2026-09-10: LAN port 3001 now belongs to the webapp-tls front door
-      # below, which terminates TLS and forwards here over the compose network.
-      # The container itself is published host-locally only, as the plain-HTTP
-      # door for tooling and tunnels. Nothing on the LAN reaches this line.
-      - "127.0.0.1:3002:3000"
+      # 2026-09-10: briefly moved behind the TLS front door so that existing
+      # :3001 links would upgrade themselves; reverted the same day on request —
+      # :3001 stays plain http exactly as it always was. The consequence is that
+      # the Re-write Practice voice input cannot work on this port (browsers
+      # expose getUserMedia only in a secure context); https on 3443 is where it
+      # does. That trade is the requester's call and is deliberate.
+      - "0.0.0.0:3001:3000"
     healthcheck:
       # 127.0.0.1, not localhost: in-container localhost resolves to ::1 but
       # Next.js listens on IPv4 only -> false "unhealthy".
@@ -89,12 +91,9 @@ services:
   # over plain http no matter what the app does. Neither can the application
   # work around it — the API is simply absent.
   #
-  # It owns the established LAN port 3001 rather than sitting on a second port,
-  # because the links people already have are http://10.226.8.205:3001/?…
-  # A plain-http request to a TLS port is answered by nginx with 497, which
-  # tls.conf turns into a redirect to the same URL over https — so an existing
-  # link keeps working and arrives somewhere the microphone can open. 3443 is
-  # kept as an alias for anyone who was given that address.
+  # It sits on its own port. Taking over 3001 and redirecting was tried on
+  # 2026-09-10 and reverted the same day: plain :3001 is to keep behaving
+  # exactly as it always has. Voice input therefore works here and not there.
   #
   # The certificate is self-signed — a private 10.x address cannot get one
   # from a public CA — so the first visit shows a warning to click through
@@ -108,10 +107,9 @@ services:
       - ./app/Webapp/nginx_setup/tls.conf:/etc/nginx/conf.d/default.conf:ro
       - ./_tls:/etc/nginx/tls:ro
     ports:
-      # Same LAN-exposure window as before (see the webapp service above, and
-      # scripts/close-lan-exposure.sh, which now closes these two lines) — but
-      # the traffic is at least encrypted now, which plain :3001 never was.
-      - "0.0.0.0:3001:443"
+      # Same LAN-exposure window as the webapp service above; both lines are
+      # closed by scripts/close-lan-exposure.sh. Traffic here is encrypted,
+      # which plain :3001 is not.
       - "0.0.0.0:3443:443"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- --no-check-certificate https://127.0.0.1/nginx-health || exit 1"]
