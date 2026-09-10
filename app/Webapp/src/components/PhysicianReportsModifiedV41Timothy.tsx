@@ -2699,17 +2699,13 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                   tickLine={false}
                   axisLine={{ stroke: isDarkMode ? "#475569" : "#cbd5e1" }}
                 />
-                <ReferenceLine
-                  y={3}
-                  stroke={isDarkMode ? "#475569" : "#cbd5e1"}
-                  strokeDasharray="6 3"
-                  label={{
-                    value: "Avg",
-                    position: "right",
-                    fontSize: 10,
-                    fill: isDarkMode ? "#64748b" : "#94a3b8",
-                  }}
-                />
+                {/* The dashed "Avg" line at y=3 was removed on request (2026-09-10
+                    feedback). It was never an average of anything: y was the
+                    literal constant 3, the midpoint of the 0-5 scale, so on a
+                    chart where every visit scores 0-2 it read as "you are below
+                    average" when no average had been computed. Deleted rather
+                    than commented out — a real cohort average would be a
+                    different value from a different endpoint, not this line. */}
                 {/* recharts Tooltip intentionally removed — replaced by the
                     custom hover tooltip below (rendered outside the chart). */}
                 <Line
