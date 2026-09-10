@@ -1374,11 +1374,31 @@ first transcript in the textarea at 18 s, text correct. The same run on the
 LAN URL (`http://10.226.8.205:3900`, not a secure context) shows the disabled
 button with its tooltip and a still-working textarea.
 
-**Status.** ✅ Implemented and verified. **Operational caveat for the pilot:** on
-`http://10.226.8.205:3001` the microphone cannot open at all — that is the
-browser's rule, not this code. Each tester either adds the origin to
-`chrome://flags/#unsafely-treat-insecure-origin-as-secure`, or reaches the app
-over `localhost` (SSH tunnel), or the deployment gets TLS.
+**Status.** ✅ Implemented, verified and deployed.
+
+**Follow-up the same day — the pilot needed HTTPS, so the deployment now has
+it.** On `http://10.226.8.205:3001` the microphone cannot open at all; that is
+the browser's secure-context rule and no application code can lift it. The
+`chrome://flags/#unsafely-treat-insecure-origin-as-secure` route was tried first
+and did not take on the requester's machine, so the fix moved to where it
+belongs — the deployment, not each tester's browser:
+
+- `webapp-tls` (nginx:1.27-alpine) in `docker-compose-frontend.yml` serves the
+  identical webapp over **`https://10.226.8.205:3443`**, proxying to the same
+  container. Plain `:3001` is untouched, so no existing link breaks.
+- `scripts/generate-webapp-tls-cert.sh` issues the certificate (SAN
+  `IP:10.226.8.205, IP:127.0.0.1, DNS:localhost`, 825 days) into `_tls/`, which
+  is gitignored — the private key must never enter the repository.
+- Self-signed, because no public CA issues certificates for private 10.x
+  address space. The cost is a one-time "not private" click-through per browser;
+  after it the origin is a full secure context, which is all the microphone
+  needs. Unlike the flag, this needs nothing from the tester and works in
+  Chrome, Edge, Safari and Firefox alike.
+
+Verified end to end on the deployed HTTPS URL with the requester's own query
+string: `isSecureContext: true`, button enabled, transcript in the textarea 18 s
+after the click. `:3001` still answers 200 and still shows the disabled button
+with its explanatory tooltip.
 
 ## 3. Status as of 2026-09-04
 
