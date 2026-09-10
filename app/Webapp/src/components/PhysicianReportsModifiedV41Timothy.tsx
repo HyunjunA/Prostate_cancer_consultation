@@ -31,6 +31,7 @@ import {
 // import ConsultationScoring from "./ConsultationScoringV7Timothy5";
 import ConsultationScoring from "./ConsultationScoringV7Timothy7";
 import HistoryModal from "./HistoryModal";
+import RewriteVoiceInput from "./RewriteVoiceInput";
 import OnboardingTour, { RestartTourButton } from "./OnboardingTour";
 import {
   useDoctorData,
@@ -48,6 +49,7 @@ import {
 // ═══════════════════════════════════════════════════════════
 // Store imports
 // ═══════════════════════════════════════════════════════════
+import { appendTranscript } from "@/lib/sttConstants";
 import { useFileId } from "@/stores/useFileId";
 import { useDoctorId } from "@/stores/useDoctorId";
 
@@ -183,7 +185,9 @@ interface DetailViewProps {
   showRewrite: boolean;
   setShowRewrite: (show: boolean) => void;
   newSentence: string;
-  setNewSentence: (value: string) => void;
+  // Full setState signature: dictation appends to whatever is already there, and
+  // sentences can arrive back-to-back, so it needs the functional form.
+  setNewSentence: React.Dispatch<React.SetStateAction<string>>;
   selectedSuggestion: ImprovementSuggestion | null;
   setSelectedSuggestion: (suggestion: ImprovementSuggestion | null) => void;
   saveStatus: {
@@ -3881,6 +3885,26 @@ const DetailView: React.FC<DetailViewProps> = ({
     setShowRewrite(true);
   };
 
+  // Dictated speech arrives one sentence at a time and is APPENDED, so voice and
+  // typing can be mixed freely. The audio stays in the browser (see
+  // src/lib/sttConstants.ts); only this text ever reaches the app.
+  const handleVoiceText = useCallback(
+    (text: string) => {
+      setNewSentence((prev) => appendTranscript(prev, text));
+      if (selectedSpeaker) {
+        // Reuse the existing rewrite_input event — event_type is a DB enum, and
+        // a new value would need a migration to record the same thing.
+        trackDoctor(selectedSpeaker, selectedFile || null, {
+          event_type: "rewrite_input",
+          target_type: "sentence",
+          target_id: currentSentence ? String(currentSentence.i) : "",
+          metadata: { topic: topicName, source: "voice", length: text.length },
+        });
+      }
+    },
+    [setNewSentence, selectedSpeaker, selectedFile, currentSentence, topicName],
+  );
+
   // Score-only handler: no DB save, just instant feedback
   const handleSaveRewrite = async () => {
     if (!newSentence.trim() || !currentSentence) return;
@@ -4465,6 +4489,14 @@ const DetailView: React.FC<DetailViewProps> = ({
                     >
                       How would you say it better?
                     </span>
+                    {/* Dictation. Sits beside the prompt rather than over the
+                        textarea so it cannot cover the text being written. */}
+                    <div className="ml-auto">
+                      <RewriteVoiceInput
+                        isDarkMode={isDarkMode}
+                        onText={handleVoiceText}
+                      />
+                    </div>
                   </div>
 
                   {/* B2: collapsible scoring rubric right under the prompt.

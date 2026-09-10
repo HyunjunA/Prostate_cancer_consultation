@@ -1293,8 +1293,92 @@ by an order of magnitude, so they are recorded rather than guessed at:
 5. **Where the transcript lands.** Replace the textarea contents, or append at the
    caret so dictation and typing can be mixed.
 
-**Status.** ⬜ Not started. Logged on the requester's instruction to record it
-first; implementation awaits a decision on questions 1 and 2 above.
+---
+
+**Implemented 2026-09-10** on branch `feat/rewrite-voice-input` (base
+`staging/caire` @ `6855d35`). The five open questions above were settled as
+follows, and the answer to (1) is what makes (2) and (3) stop being questions:
+
+1. **Which engine — neither of the two originally listed.** Speech becomes text
+   **inside the browser tab** via `@huggingface/transformers` (`transformers.js`)
+   running ONNX Runtime Web. No browser `SpeechRecognition` (which streams audio
+   to a vendor), and no server-side transcription endpoint.
+2. **Whether the speech counts as PHI — moot by construction.** The audio never
+   leaves the machine: it goes microphone → `AudioContext` → worker → text. There
+   is no upload path to disable, so no BAA and no vendor boundary to argue about.
+   The resulting text reaches the Backend only where the typed text already did,
+   through the unchanged "Try & Score" / `/api/doctor/rewrites` call.
+3. **Whether audio is stored — no.** Nothing is written to disk, IndexedDB or the
+   network. Only the model weights are cached (browser Cache API, first visit only).
+4. **Browser support — a capability check, not a dead button.** `getUserMedia`
+   exists only in a secure context, so on plain HTTP the control renders disabled
+   with the reason in its tooltip ("Voice input needs a secure connection (HTTPS or
+   localhost)."). Typing is untouched either way.
+5. **Where the transcript lands — appended, never replacing.** `appendTranscript()`
+   joins each recognised sentence to whatever is already in the box with a single
+   space, and attaches a lone closing mark without one. Dictation and typing mix
+   freely.
+
+**Model — Moonshine, and the reason is compute shape, not file size.** Whisper
+pads every input to 30 seconds of mel frames, so a five-second dictation still
+costs thirty seconds of encoder work. Moonshine takes variable-length audio, so
+cost tracks the actual utterance — exactly the short-phrase case this box is.
+Measured ONNX download (encoder fp32 + decoder q8, the WASM combination):
+
+| Model | encoder | decoder (merged) | total |
+|---|---|---|---|
+| **moonshine-base** (chosen) | fp32 80.8 MB | q8 42.5 MB | **123 MB** |
+| moonshine-base, int8 encoder | 20.5 MB | 42.5 MB | 63 MB |
+| moonshine-tiny | 7.9 MB | 20.2 MB | 28 MB |
+| whisper-base | 82.5 MB | 53.7 MB | 136 MB |
+| whisper-tiny.en | 32.9 MB | 30.7 MB | 64 MB |
+| silero-vad (voice activity, always loaded) | — | 2.2 MB | 2.2 MB |
+
+The model id is a single constant (`STT_MODEL_ID` in `src/lib/sttConstants.ts`)
+and both families use the same `pipeline("automatic-speech-recognition", …)` call,
+so switching is a one-line change if quality or load time argues for it.
+
+**Files.** New: `src/lib/sttConstants.ts` (thresholds, model ids,
+`appendTranscript`), `src/workers/stt.worker.ts` (VAD state machine + inference,
+off the main thread), `src/hooks/useSpeechToText.tsx` (microphone, 16 kHz
+`AudioContext`, worker lifecycle, cleanup), `src/components/RewriteVoiceInput.tsx`
+(the button, 106 lines), `public/vad-processor.js` (`AudioWorklet` that re-chunks
+the mic stream to 512-sample frames — served statically so the bundler never has
+to handle a worklet), `.npmrc`, and a unit test for `appendTranscript`.
+Modified: `PhysicianReportsModifiedV41Timothy.tsx` (button in the "How would you
+say it better?" header row; `setNewSentence` widened to the full setState
+signature because sentences arrive back-to-back and must append, not overwrite),
+`next.config.js`, `Dockerfile`, `package.json` / lock.
+
+**No migration.** `event_type` is a Postgres enum, so voice usage reuses the
+existing `rewrite_input` value with `metadata: { source: "voice" }` rather than
+adding a value that would need migration 030.
+
+**Two build obstacles, both real rather than worked around.**
+`onnxruntime-node`'s postinstall aborts on a CUDA 11 host; `.npmrc` sets
+`onnxruntime-node-install-cuda=skip`, which is correct here because inference is
+browser-side and that binding is never loaded (`next.config.js` also aliases it
+to `false`). Separately, Terser died on `ort.bundle.min.*.mjs` — a pre-built ESM
+file with top-level `import.meta` — so a small webpack plugin marks it
+`minimized: true`, which is a statement of fact about an already-minified file,
+not a suppression.
+
+**Verified.** `tsc` clean for the new files (the 609-error baseline is unchanged),
+`next lint` clean, 278/278 Jest tests pass including six for `appendTranscript`,
+production build succeeds, and `app-build-manifest.json` confirms the
+transformers/ORT chunks are **not** in the eager set for `/` — they load only
+inside the worker, so First Load JS stays at 387 kB. End-to-end in headless
+Chromium against a throwaway production server on `:3900`, with a public-domain
+speech clip fed through `--use-file-for-fake-audio-capture`: model ready at 9 s,
+first transcript in the textarea at 18 s, text correct. The same run on the
+LAN URL (`http://10.226.8.205:3900`, not a secure context) shows the disabled
+button with its tooltip and a still-working textarea.
+
+**Status.** ✅ Implemented and verified. **Operational caveat for the pilot:** on
+`http://10.226.8.205:3001` the microphone cannot open at all — that is the
+browser's rule, not this code. Each tester either adds the origin to
+`chrome://flags/#unsafely-treat-insecure-origin-as-secure`, or reaches the app
+over `localhost` (SSH tunnel), or the deployment gets TLS.
 
 ## 3. Status as of 2026-09-04
 

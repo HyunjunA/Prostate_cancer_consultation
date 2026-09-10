@@ -16,7 +16,11 @@ ARG NEXT_PUBLIC_POSTHOG_HOST
 ENV NEXT_PUBLIC_POSTHOG_KEY=$NEXT_PUBLIC_POSTHOG_KEY
 ENV NEXT_PUBLIC_POSTHOG_HOST=$NEXT_PUBLIC_POSTHOG_HOST
 
-COPY package*.json ./
+# .npmrc travels with the manifests: it tells onnxruntime-node's postinstall to
+# skip the CUDA execution-provider download. Inference runs in the browser
+# (onnxruntime-web), so that binary is never loaded, and on a linux/x64 builder
+# the script otherwise goes hunting for a CUDA toolkit that is not there.
+COPY package*.json .npmrc ./
 RUN npm ci
 COPY . .
 RUN npm run build

@@ -23,6 +23,52 @@ const nextConfig = {
     // runs the checker on demand so the count cannot drift upward unnoticed.
     ignoreBuildErrors: true,
   },
+  webpack: (config, { webpack }) => {
+    // @huggingface/transformers (Re-write Practice voice input) can resolve to a
+    // Node entry point that pulls in the native onnxruntime-node binding and
+    // sharp. Inference here always runs in the browser via onnxruntime-web, so
+    // both are stubbed out — without this the server compile tries to bundle a
+    // platform-specific .node binary that is not installed (see .npmrc).
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      "onnxruntime-node": false,
+      sharp: false,
+    };
+
+    // onnxruntime-web ships its WebGPU proxy worker as a pre-built ESM file
+    // (ort.bundle.min.mjs) that webpack copies into static/media verbatim. The
+    // minifier then tries to minify it a second time and dies on its top-level
+    // `import.meta`: "'import.meta' cannot be used outside of module code."
+    //
+    // The file is already minified, so saying so is the accurate fix rather than
+    // a workaround — Next's minifier skips any asset flagged `minimized`. Runs
+    // one stage before the minifier's own PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE tap.
+    config.plugins.push({
+      apply(compiler) {
+        compiler.hooks.compilation.tap("SkipPrebuiltOrtBundle", (compilation) => {
+          compilation.hooks.processAssets.tap(
+            {
+              name: "SkipPrebuiltOrtBundle",
+              stage:
+                webpack.Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE - 1,
+            },
+            (assets) => {
+              for (const name of Object.keys(assets)) {
+                // e.g. "static/media/ort.bundle.min.135f155b.mjs"
+                if (/(^|[\\/])ort[\w.-]*\.mjs$/.test(name)) {
+                  compilation.updateAsset(name, (source) => source, {
+                    minimized: true,
+                  });
+                }
+              }
+            },
+          );
+        });
+      },
+    });
+
+    return config;
+  },
   // `eslint.ignoreDuringBuilds` is deliberately absent: .eslintrc.json now
   // exists, `next lint` reports 0 errors, and the build gates on errors only
   // (the 329 remaining findings are warnings), so the lint gate is live.
