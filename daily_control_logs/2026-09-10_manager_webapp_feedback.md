@@ -20,7 +20,7 @@
 
 | # | Item | Detail | Repo / target | Status |
 |---|---|---|---|---|
-| 1 | **Remove the dashed average line from the trajectory chart** | The horizontal dashed line labelled "Avg" across the "Overall Quality of Risk Communication Score Trajectory" card; extended on the developer's word to the detail view's twin of the same line | dashboard (`app/Webapp`) | ⚠️ done and verified, built, **not deployed** |
+| 1 | **Remove the dashed average line from the trajectory chart** | The horizontal dashed line labelled "Avg" across the "Overall Quality of Risk Communication Score Trajectory" card; extended on the developer's word to the detail view's twin of the same line | dashboard (`app/Webapp`) | ✅ deployed 2026-09-10 |
 
 ---
 
@@ -87,25 +87,32 @@ was an SVG overlay, so removing it must not resize or reflow anything. It did no
 The repo's pre-existing type errors (`ChartSettings`, `FilterSidebarV3`,
 `InstituteSettings`, `PatientConsultationReports`) are unrelated and untouched.
 
-**Built but NOT deployed.** The image
-`prostate_cancer_consultation_dashboard-webapp` now carries both removals, but
-`docker compose up -d webapp` was not run: the standing instruction is no deploy
-until the developer explicitly asks for one, and "proceed" was read as covering
-the code and the build, not the swap of the live container. `:3001` / `:3443`
-therefore still show the dashed lines. The backend is not involved — this is a
-webapp-only change, and the deploy is a single `up -d webapp` when authorised.
+**Deployed.** `docker compose -f docker-compose-frontend.yml up -d webapp`
+recreated `prostatecancer-webapp-native` only; `prostatecancer-webapp-tls` was
+left running and kept routing to the new container without a restart of its own
+(its upstream resolves by service name, so a recreated container does not strand
+it). Both came back healthy, `:3001` and `:3443` both 200.
+
+Re-measured on the live containers, both entry points, both charts:
+
+| Entry point | Overall chart | Detail chart |
+|---|---|---|
+| `http://…:3001` | 0 dashed, no `Avg`, `896 × 270` | 0 dashed, `1150 × 314` |
+| `https://…:3443` | 0 dashed, no `Avg`, `896 × 270` | 0 dashed, `1150 × 314` |
+
+Identical to the throwaway-port numbers, so the deploy carried exactly what was
+tested. Regression check on the same page: the Item 4 visit labels are intact —
+`Visit 1 week of 5/18/2026` … `Visit 5 week of 8/31/2026`.
 
 ## 3. Status as of 2026-09-10
 
 | # | Item | Code | Verified | Built | Deployed | Committed |
 |---|---|---|---|---|---|---|
-| 1 | Dashed "Avg" line removed from both charts | ✅ | ✅ (on `:3900`) | ✅ | ⬜ | ✅ |
+| 1 | Dashed "Avg" line removed from both charts | ✅ | ✅ (`:3900`, then live) | ✅ | ✅ | ✅ |
 
 ### Outstanding
 
-1. **Built, not deployed.** One `docker compose -f docker-compose-frontend.yml
-   up -d webapp` from the repo root makes it live. No backend change.
-2. **A real average is still unbuilt.** If the intent behind the original line was
+1. **A real average is still unbuilt.** If the intent behind the original line was
    ever "show me how I compare", removing it leaves that need unmet. Worth asking
    whether a cohort average is wanted as a genuine, computed series — which would
    need an endpoint and a decision about whose scores form the cohort.
