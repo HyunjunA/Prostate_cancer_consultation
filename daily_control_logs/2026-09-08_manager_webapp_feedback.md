@@ -26,7 +26,7 @@
 | 1 | **Topic overview chart reports twice the real patient count** | Cancer Prognosis has 5 visits but the chart header reads "10 patients"; Life Expectancy shows the same doubled count | dashboard (`app/Webapp`) | ✅ done |
 | 2 | **The score scale says "hover" but only responds to a click** | The hint under the 0-5 scale reads "Hover over score numbers above for rubric guidance"; hovering appears to do nothing, clicking works | dashboard (`app/Webapp`) | ✅ done |
 | 3 | **"Avg Score" should read "Your Avg Score"** | The summary panel's average is the signed-in physician's own, but the label does not say so | dashboard (`app/Webapp`) | ✅ done |
-| 4 | **Show the week of each visit next to "Visit N"** | e.g. `Visit 1 week of 9/7/2026` on page 1 | dashboard + backend | ⚠️ written and verified, awaiting deploy |
+| 4 | **Show the week of each visit next to "Visit N"** | e.g. `Visit 1 week of 9/7/2026` on page 1 | dashboard + backend | ✅ deployed 2026-09-10 |
 
 Items 3 and 4 are logged here rather than in a new file because the source and the
 build under review are the same.
@@ -526,7 +526,7 @@ because it can be seen today.
 | 1 | Topic overview chart counts only this doctor's consultations | ✅ | ✅ | ✅ | ❌ |
 | 2 | Score scale says "click" and the whole column is the target | ✅ | ✅ | ✅ | ❌ |
 | 3 | Summary panel reads "Your Avg Score" | ✅ | ✅ | ✅ | ❌ |
-| 4 | Visit rows read "Visit N week of M/D/YYYY" | ✅ | ✅ | ⬜ | ❌ |
+| 4 | Visit rows read "Visit N week of M/D/YYYY" | ✅ | ✅ | ✅ (2026-09-10) | ✅ `6855d35` |
 
 **Item 4 needs a backend restart, not just a webapp rebuild.** It is the first item
 in this log that changes Python. The running backend on `:18001` is the process
@@ -574,6 +574,40 @@ columns `182·121·486·425` and rows `203·309·242·329·348` unchanged; topic
 underlines; 0 "Individual", 0 "Average", 0 search `<input>`. So items 1-7 of the
 2026-09-01 log are intact.
 
+### Deployment, 2026-09-10
+
+The webapp half had already shipped: the container built for the 2026-09-10 voice
+work is based on `6855d35`, and `week of` is present in its static chunks. Only the
+backend was stale — PID 1551880, started 2026-08-28 08:25, predating the field. So
+the deploy was one command, and no rebuild:
+
+```
+systemctl --user restart compass-backend.service
+```
+
+`kill` + `nohup uvicorn` would have been wrong twice over: the unit is
+`Restart=always` (systemd respawns the old code five seconds later), and its
+`WorkingDirectory` is `app/Backend`, which is how `DEID_KEY` gets read at all.
+
+Measured immediately after, through the webapp proxy and a headless browser
+against `:3443`:
+
+| Check | Result |
+|---|---|
+| `/files` carries `visit_week` | 10/10 files, across all 5 doctors |
+| Every value is a Monday | 10/10, asserted on the parsed weekday, not the string |
+| Format is unpadded `M/D/YYYY` | 10/10 (`5/18/2026`, not `05/18/2026`) |
+| `/scores/trajectory` carries it | ✅ 5/5 events |
+| Visit order unchanged by the restart | `1·2·3·4·5` before and after, same files |
+| Table row label | `Visit 1 week of 5/18/2026` … `Visit 5 week of 8/31/2026` |
+| No layout shift | every row 65 px tall, first column 583 px — nothing wrapped |
+| Chart X-axis | still plain `Visit 1…5`, as designed |
+
+Visits 1 and 2 share `5/18/2026`, and visits 3 and 4 share `8/24/2026`. That is
+the data, not a defect: two consultations really did fall in the same week, and
+week granularity cannot separate them. Flagged here because it is the first thing
+that will look wrong to someone reading the table.
+
 ### Outstanding
 
 1. ~~**Not committed.**~~ **Committed on 2026-09-08** as
@@ -583,10 +617,10 @@ underlines; 0 "Individual", 0 "Average", 0 search `<input>`. So items 1-7 of the
    sets of changes, so the two commits were split hunk-by-hunk rather than by
    file. Working tree clean, git now matches what runs on `:3001`. Not pushed.
    **Item 3 came in after those commits and is not in either of them** — the
-   one-line label change and this log's item-3 sections are uncommitted.
-2. **Item 4 is written and verified but not deployed**, and it is the first item
-   here that needs the **backend** restarted as well as the webapp rebuilt. Until
-   both happen, `:3001` keeps showing plain `Visit N`.
+   one-line label change and this log's item-3 sections went in with `6855d35`
+   instead. Nothing from this log is uncommitted as of 2026-09-10.
+2. ~~**Item 4 is written and verified but not deployed.**~~ **Deployed 2026-09-10.**
+   See "Deployment, 2026-09-10" below.
 3. **The week is now a client-visible value.** Anything that renders a `PatientRow`
    name, or logs it, now carries a 7-day locator for a real consultation. Nothing
    currently writes it to storage — `PatientRow` is never persisted, and the
