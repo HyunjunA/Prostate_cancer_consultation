@@ -4489,6 +4489,15 @@ const DetailView: React.FC<DetailViewProps> = ({
                     >
                       How would you say it better?
                     </span>
+                    {/* Dictation, immediately after the prompt it answers, so it
+                        reads as the second way of answering rather than as a
+                        control parked on the far side of the row. Kept out of
+                        the textarea itself: a button floating over the box would
+                        cover the text being written. */}
+                    <RewriteVoiceInput
+                      isDarkMode={isDarkMode}
+                      onText={handleVoiceText}
+                    />
                   </div>
 
                   {/* B2: collapsible scoring rubric right under the prompt.
@@ -4566,27 +4575,6 @@ const DetailView: React.FC<DetailViewProps> = ({
                         />
                       </div>
                     )}
-                  </div>
-                  {/* Dictation sits on the top edge of the box it writes into.
-                      It is an input method for the textarea, not a property of
-                      the section heading, and it has to stay next to the box
-                      even when the rubric above is expanded — from the heading
-                      row an open rubric pushed it a full panel away. Still
-                      outside the textarea rather than floating over it, so it
-                      can never cover what is being written. */}
-                  <div className="flex items-center justify-end gap-2 mb-2">
-                    <span
-                      className={cx(
-                        "text-xs",
-                        isDarkMode ? "text-slate-400" : "text-slate-500",
-                      )}
-                    >
-                      Type below, or
-                    </span>
-                    <RewriteVoiceInput
-                      isDarkMode={isDarkMode}
-                      onText={handleVoiceText}
-                    />
                   </div>
                   <textarea
                     value={newSentence}

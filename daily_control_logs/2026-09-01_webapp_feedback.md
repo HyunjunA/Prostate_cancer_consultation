@@ -1594,20 +1594,28 @@ textarea it writes into. Worse, opening the inline rubric pushed the textarea do
 past the whole criteria table: measured on a 1600 × 1000 viewport, the button
 ended up **492 px** from the box it feeds.
 
-**Where it is now.** On the textarea's own top edge, right-aligned to it, with a
-quiet "Type below, or" lead-in so the two input methods read as one offer. It is
-still outside the textarea rather than floating over it, which was the original
-reason it was not placed there — a floating button covers the text being written.
+**First attempt, rejected.** It was moved to the textarea's own top edge,
+right-aligned to it, with a "Type below, or" lead-in. That fixed the distance
+problem — a constant 8 px gap to the box whatever the rubric did — but the manager
+found the result stranger than the original: right-aligned on an otherwise empty
+row, the button floats in white space with nothing beside it, while the rubric
+toggle sits alone at the far left of the row above.
+
+**Where it is now.** Immediately after the prompt it answers —
+`2  How would you say it better?  [🎤 Speak]` — 8 px to the right of the text, on
+the same baseline. Reading order now carries the meaning: the question, then the
+two ways of answering it. It is still outside the textarea rather than floating
+over it, which was the original reason it was not placed inside — a button over
+the box covers the text being written.
 
 **Measured** in a headless browser at 1600 × 1000, in the built production bundle:
+gap after the prompt **8 px**, vertically centred on the same row (centres within
+3 px), unchanged whether the inline rubric is collapsed or expanded.
 
-| Rubric | Gap, button bottom → textarea top | Right edges | Distance from heading |
-|---|---|---|---|
-| collapsed | 8 px | aligned to 0 px | 68 px |
-| expanded | 8 px | aligned to 0 px | 492 px |
-
-The point of the move is the first column: the gap to the textarea is now constant
-whatever the rubric does, where before the button drifted with it.
+The trade-off accepted here is the one the first attempt was avoiding: with the
+rubric open, the button is a criteria table away from the textarea. That is the
+manager's call, and proximity to the prompt was judged to matter more than
+proximity to the box.
 
 **Verified.** `tsc` clean, `next lint` clean (only the pre-existing warnings),
 278/278 Jest tests pass, production build succeeds. The onboarding step added in
@@ -1639,7 +1647,7 @@ the code.
 | 8 | Voice input for the rewrite box | ✅ | ✅ | ✅ (https on `:3443`) | ✅ |
 | 8b | Speak button explained in the onboarding tour | ✅ | ✅ | ✅ | ✅ |
 | 8c | Dictation works in Firefox and WebKit too | ✅ | ✅ (all 3 engines) | ✅ | ✅ |
-| 8d | Speak button moved onto the textarea's top edge | ✅ | ✅ | ✅ | ✅ |
+| 8d | Speak button moved next to the "say it better?" prompt | ✅ | ✅ | ✅ | ✅ |
 
 "Verified" means measured in a headless browser, not just built. Each item's own
 section above carries the measurement table.
