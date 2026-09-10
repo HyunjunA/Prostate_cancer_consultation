@@ -1492,8 +1492,18 @@ Completion now records a version number and only `detail` was bumped to 2, so
 that one view replays once and the dashboard and grid tours are left alone. A
 legacy `true` reads as version 1, so existing records keep working.
 
-**Verified.** `tsc` clean for both files, `next lint` clean. Not yet rebuilt or
-redeployed — the running container still serves the previous build.
+**Verified.** `tsc` clean for both files, `next lint` clean, 278/278 Jest tests
+pass, production build succeeds. Driven in a headless browser on a throwaway
+server (`:3900`) and again on the deployed TLS door: the step appears as **5 of
+7**, immediately after "Re-write Practice", with the spotlight on the Speak
+button and the tooltip beside it. The version bump was confirmed by accident —
+a probe script that seeded the old `detail: true` had its clicks blocked by the
+replaying tour, which is exactly the intended behaviour for a returning doctor.
+Dictation itself re-measured on the new build: 8 sentences, median warm latency
+1.1 s.
+
+**Deployed** to `prostatecancer-webapp-native`; `:3001` and `:3443` both answer
+200.
 
 ## 3. Status as of 2026-09-04
 
@@ -1516,7 +1526,7 @@ the code.
 | 6f | "Click a topic" chip on the TOPIC header | ✅ | ✅ | ✅ | ❌ |
 | 7 | Focus sentence highlighted yellow, not bold+underline | ✅ | ✅ | ✅ | ❌ |
 | 8 | Voice input for the rewrite box | ✅ | ✅ | ✅ (https on `:3443`) | ✅ |
-| 8b | Speak button explained in the onboarding tour | ✅ | ✅ | ⬜ | ✅ |
+| 8b | Speak button explained in the onboarding tour | ✅ | ✅ | ✅ | ✅ |
 
 "Verified" means measured in a headless browser, not just built. Each item's own
 section above carries the measurement table.
