@@ -20,7 +20,7 @@
 
 | # | Item | Detail | Repo / target | Status |
 |---|---|---|---|---|
-| 1 | **Remove the dashed average line from the trajectory chart** | The horizontal dashed line labelled "Avg" across the "Overall Quality of Risk Communication Score Trajectory" card | dashboard (`app/Webapp`) | ⚠️ code done, not built or deployed |
+| 1 | **Remove the dashed average line from the trajectory chart** | The horizontal dashed line labelled "Avg" across the "Overall Quality of Risk Communication Score Trajectory" card; extended on the developer's word to the detail view's twin of the same line | dashboard (`app/Webapp`) | ⚠️ done and verified, built, **not deployed** |
 
 ---
 
@@ -61,41 +61,51 @@ rubric legend strip, which were commented out because restoring them means
 uncommenting. A real average would be a different value from a different endpoint,
 not this line, so there is nothing here worth keeping warm.
 
-**Scope.** Only the chart the manager named. A second, unlabelled `ReferenceLine
-y={3}` exists in the detail view's "*Topic* — All Patients Score Overview" chart
-(same file). It was left alone: the request named one chart, and on that chart a
-midline is at least defensible because the series really is a cohort. Flagged
-under Outstanding — it has the same "constant pretending to be a statistic"
-problem and the manager may want it gone too.
+**Scope — both charts.** The request named one chart, but a second, unlabelled
+`ReferenceLine y={3}` existed in the detail view's "*Topic* — All Patients Score
+Overview" chart (same file), with the same constant and the same problem. Raised
+with the developer rather than decided unilaterally; the answer was to remove that
+one too, so both are gone. `ReferenceLine` is no longer used anywhere in the file,
+so its `recharts` import was dropped with it.
 
-**Verification.**
+**Verification.** The image was built and run on a **throwaway port (`:3900`,
+bound to `127.0.0.1` only)**, so the live containers were never touched — they
+stayed up throughout. Both charts were read out of the DOM, not eyeballed:
 
-| Check | Result |
-|---|---|
-| `tsc --noEmit` on the edited file | ✅ no errors (the repo's pre-existing errors are all in `ChartSettings` / `FilterSidebarV3` / `InstituteSettings` / `PatientConsultationReports`, none touched here) |
-| `ReferenceLine` import still needed | ✅ yes — still used by the detail-view chart, so the import stays |
-| Rendered result | ⬜ **not verified** — see below |
+| Check | Before (`:3443`) | After (`:3900`) |
+|---|---|---|
+| `stroke-dasharray="6 3"` in `[data-tour="trajectory-chart"]` | 1 `<line>` at `y=63.2` | **0** |
+| `Avg` text label in that card | present | **absent** |
+| Overall trajectory card size | `896 × 270` | `896 × 270` — unchanged |
+| `stroke-dasharray="6 3"` in `[data-tour="detail-topic-trajectory"]` | 1 | **0** |
+| Detail chart card size | — | `1150 × 314` |
+| `tsc --noEmit` on the edited file | — | ✅ no errors |
 
-**Not built, not deployed.** The standing instruction is no rebuild and no deploy
-until the developer asks, and this request said only "remove it". The dashed line
-is still on `:3001` / `:3443` until a webapp rebuild happens; the backend is not
-involved. After the rebuild the check is: zero `stroke-dasharray="6 3"` elements
-inside `[data-tour="trajectory-chart"]`, no `Avg` label, and the card still
-`896 × 270` (the line was an overlay, so removing it must not resize anything).
+The card size is the load-bearing check, not the line count: the reference line
+was an SVG overlay, so removing it must not resize or reflow anything. It did not.
+
+The repo's pre-existing type errors (`ChartSettings`, `FilterSidebarV3`,
+`InstituteSettings`, `PatientConsultationReports`) are unrelated and untouched.
+
+**Built but NOT deployed.** The image
+`prostate_cancer_consultation_dashboard-webapp` now carries both removals, but
+`docker compose up -d webapp` was not run: the standing instruction is no deploy
+until the developer explicitly asks for one, and "proceed" was read as covering
+the code and the build, not the swap of the live container. `:3001` / `:3443`
+therefore still show the dashed lines. The backend is not involved — this is a
+webapp-only change, and the deploy is a single `up -d webapp` when authorised.
 
 ## 3. Status as of 2026-09-10
 
-| # | Item | Code | Verified | Deployed | Committed |
-|---|---|---|---|---|---|
-| 1 | Dashed "Avg" line removed from the trajectory chart | ✅ | ⚠️ typecheck only | ⬜ | ⬜ |
+| # | Item | Code | Verified | Built | Deployed | Committed |
+|---|---|---|---|---|---|---|
+| 1 | Dashed "Avg" line removed from both charts | ✅ | ✅ (on `:3900`) | ✅ | ⬜ | ✅ |
 
 ### Outstanding
 
-1. **Needs a webapp rebuild + redeploy** to become visible. No backend change.
-2. **The detail view has the same line**, unlabelled, in "*Topic* — All Patients
-   Score Overview". Ask the manager whether that one should go too rather than
-   deciding unilaterally in either direction.
-3. **A real average is still unbuilt.** If the intent behind the original line was
+1. **Built, not deployed.** One `docker compose -f docker-compose-frontend.yml
+   up -d webapp` from the repo root makes it live. No backend change.
+2. **A real average is still unbuilt.** If the intent behind the original line was
    ever "show me how I compare", removing it leaves that need unmet. Worth asking
    whether a cohort average is wanted as a genuine, computed series — which would
    need an endpoint and a decision about whose scores form the cohort.

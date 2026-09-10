@@ -24,7 +24,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  ReferenceLine,
 } from "recharts";
 // import ConsultationScoring from "./ConsultationScoringV7Timothy";
 // import ConsultationScoring from "./ConsultationScoringV7Timothy3";
@@ -4152,11 +4151,10 @@ const DetailView: React.FC<DetailViewProps> = ({
                         return item ? item.label : "";
                       }}
                     />
-                    <ReferenceLine
-                      y={3}
-                      stroke={isDarkMode ? "#475569" : "#cbd5e1"}
-                      strokeDasharray="6 3"
-                    />
+                    {/* The dashed y=3 line was removed here too (2026-09-10
+                        feedback), for the same reason as the one on the overall
+                        trajectory chart: y was the constant 3, the midpoint of
+                        the scale, not a computed average of these patients. */}
                     <Line
                       type="monotone"
                       dataKey="score"
