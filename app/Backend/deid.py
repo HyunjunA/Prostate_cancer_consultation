@@ -20,6 +20,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import re
+from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Optional
 
@@ -33,9 +34,10 @@ from core.settings import get_settings
 DOMAIN_PATIENT = b"patient"
 DOMAIN_DOCTOR = b"doctor"
 # The visit date is hashed the same way (its own domain), so the real MMDDYYYY never
-# leaves the clinical machine. The server decrypts it only to reconstruct the visit
-# ORDER for the doctor timeline; the date itself is never stored or returned. Must
-# match ``deidentify_transcript.DOMAIN_DATE`` byte-for-byte.
+# leaves the clinical machine. The server decrypts it to reconstruct the visit ORDER
+# for the doctor timeline, and — since 2026-09-08, at the manager's request — to
+# derive the WEEK a visit falls in (:func:`visit_week_start`). The exact day is never
+# stored or returned. Must match ``deidentify_transcript.DOMAIN_DATE`` byte-for-byte.
 DOMAIN_DATE = b"date"
 
 
@@ -127,17 +129,47 @@ def unhash_doctor_num(speaker_or_file: str) -> Optional[str]:
     return f"doc{number}" if number is not None else None
 
 
+def _legacy_plaintext_date(speaker_or_file: str) -> Optional[str]:
+    """The trailing plaintext ``MMDDYYYY`` of a LEGACY de-id name, else None.
+
+    Names produced before the pipeline hashed the date end in a readable 8-digit
+    date, which :func:`_hash_tokens` discards (it is not a Base32 token). Read it
+    here instead of losing it: no key is involved, the date is already in the clear.
+    Only a value that parses as a real calendar date is accepted, so an 8-digit
+    patient code cannot be mistaken for one.
+    """
+    stem = re.sub(r"\.(csv|xlsx|xls)$", "", speaker_or_file, flags=re.IGNORECASE)
+    parts = stem.split("_")
+    if len(parts) < 2 or not re.fullmatch(r"\d{8}", parts[-1]):
+        return None
+    try:
+        datetime.strptime(parts[-1], "%m%d%Y")
+    except ValueError:
+        return None
+    return parts[-1]
+
+
 def unhash_visit_date(speaker_or_file: str) -> Optional[str]:
     """Return the real ``"MMDDYYYY"`` visit date hidden in a de-id name, else None.
 
-    The visit date is the LAST hash token (the de-id pipeline hashes it under
-    :data:`DOMAIN_DATE`). Used ONLY to reconstruct the visit order for the doctor
-    timeline — the returned date is never stored or sent to the client. Returns None
-    for legacy plaintext-date names, names with no hashed date, or a wrong key
-    (the token fails to authenticate under the date domain).
+    On current names the visit date is the LAST hash token (the de-id pipeline
+    hashes it under :data:`DOMAIN_DATE`); on legacy names it is a trailing plaintext
+    ``MMDDYYYY``. Both are handled, so the two file generations order and label
+    identically — before, legacy names fell back to the AI processing timestamp for
+    their visit order, which is not the visit date.
+
+    The raw date stays server-side. It reconstructs the visit ORDER, and
+    :func:`visit_week_start` coarsens it to a week for the doctor dashboard; the
+    exact day is never returned to a client. Returns None with no key, no date in
+    the name, or a token that fails to authenticate under the date domain.
     """
+    if not speaker_or_file:
+        return None
+    legacy = _legacy_plaintext_date(speaker_or_file)
+    if legacy:
+        return legacy
     key = get_settings().deid_key
-    if not speaker_or_file or not key:
+    if not key:
         return None
     tokens = _hash_tokens(speaker_or_file)
     if not tokens:
@@ -145,3 +177,26 @@ def unhash_visit_date(speaker_or_file: str) -> Optional[str]:
     # _unhash_number returns the decrypted plaintext string; for a date that is the
     # 8-char "MMDDYYYY" (leading zeros preserved), for an id it is the number.
     return _unhash_number(tokens[-1], key, DOMAIN_DATE)
+
+
+def visit_week_start(speaker_or_file: str) -> Optional[str]:
+    """Return the ``"M/D/YYYY"`` MONDAY of the week a visit falls in, else None.
+
+    The one date-derived value the doctor dashboard is allowed to render, added at
+    the manager's request (2026-09-08) so a visit row reads "Visit 1 week of
+    9/7/2026" instead of a bare "Visit 1". It is a deliberate, bounded relaxation of
+    the rule that no date leaves the server: it locates the visit to a 7-day window
+    and never to a day. Do not add a day-level variant of this function without the
+    same explicit request.
+
+    Not zero-padded, matching the format the request was written in.
+    """
+    raw = unhash_visit_date(speaker_or_file)
+    if not raw:
+        return None
+    try:
+        visit = datetime.strptime(raw, "%m%d%Y")
+    except ValueError:
+        return None
+    monday = visit - timedelta(days=visit.weekday())
+    return f"{monday.month}/{monday.day}/{monday.year}"

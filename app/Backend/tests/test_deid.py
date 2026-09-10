@@ -130,10 +130,22 @@ class TestUnhashVisitDate:
         name = f"{_aes_hash(22)}_{_doctor_hash(2)}_{_date_hash('01022026')}.csv"
         assert deid.unhash_visit_date(name) == "01022026"
 
-    def test_legacy_plaintext_date_returns_none(self):
-        # The trailing \d{8} is stripped, so the last token is the doctor, which does
-        # not authenticate under the date domain.
-        assert deid.unhash_visit_date(f"{_aes_hash(22)}_{_doctor_hash(2)}_07022026") is None
+    def test_legacy_plaintext_date_is_read_as_is(self):
+        """Legacy names carry the date in the clear; read it instead of losing it.
+
+        This used to return None (``_hash_tokens`` discards the trailing plaintext
+        date, so the last token was the doctor's and failed the date domain), which
+        silently pushed those files onto the processing-timestamp fallback for their
+        visit order.
+        """
+        assert deid.unhash_visit_date(f"{_aes_hash(22)}_{_doctor_hash(2)}_07022026") == "07022026"
+
+    def test_legacy_plaintext_date_needs_no_key(self, monkeypatch):
+        monkeypatch.setattr(deid, "get_settings", lambda: SimpleNamespace(deid_key=None))
+        assert deid.unhash_visit_date(f"{_aes_hash(22)}_07022026.csv") == "07022026"
+
+    def test_eight_digits_that_are_not_a_date_are_not_read_as_one(self):
+        assert deid.unhash_visit_date(f"{_aes_hash(22)}_99999999") is None
 
     def test_patient_and_doctor_still_read_with_a_hashed_date(self):
         name = f"Patient_{_aes_hash(22)}_{_doctor_hash(2)}_{_date_hash('07162026')}"
@@ -144,6 +156,36 @@ class TestUnhashVisitDate:
         monkeypatch.setattr(deid, "get_settings", lambda: SimpleNamespace(deid_key=None))
         name = f"{_aes_hash(22)}_{_date_hash('07162026')}.csv"
         assert deid.unhash_visit_date(name) is None
+
+
+class TestVisitWeekStart:
+    """The week label the doctor dashboard shows next to "Visit N".
+
+    The only date-derived value that reaches a client, and only ever the Monday of
+    the week — a visit is locatable to 7 days, never to a day.
+    """
+
+    def test_returns_the_monday_of_that_week(self):
+        # 07/16/2026 is a Thursday; its week starts Monday 07/13/2026.
+        name = f"{_aes_hash(22)}_{_doctor_hash(2)}_{_date_hash('07162026')}.csv"
+        assert deid.visit_week_start(name) == "7/13/2026"
+
+    def test_a_monday_visit_is_its_own_week_start(self):
+        name = f"{_aes_hash(22)}_{_date_hash('09072026')}.csv"
+        assert deid.visit_week_start(name) == "9/7/2026"
+
+    def test_a_sunday_visit_belongs_to_the_week_that_started_six_days_earlier(self):
+        # 01/04/2026 is a Sunday — ISO weeks end on Sunday, so it is NOT a new week.
+        name = f"{_aes_hash(22)}_{_date_hash('01042026')}.csv"
+        assert deid.visit_week_start(name) == "12/29/2025"
+
+    def test_legacy_plaintext_date_gets_a_week_too(self):
+        assert deid.visit_week_start(f"{_aes_hash(22)}_{_doctor_hash(2)}_07022026") == "6/29/2026"
+
+    def test_no_recoverable_date_returns_none(self, monkeypatch):
+        monkeypatch.setattr(deid, "get_settings", lambda: SimpleNamespace(deid_key=None))
+        name = f"{_aes_hash(22)}_{_date_hash('07162026')}.csv"
+        assert deid.visit_week_start(name) is None
 
 
 class TestKnownAnswerVectors:

@@ -52,17 +52,18 @@ from auth.access_control import check_patient_access
 from auth.base import AuthUser
 from auth.rate_limit import limit
 from db import get_db
-from deid import unhash_visit_date
+from deid import unhash_visit_date, visit_week_start
 from models import DoctorRewriteLog, SentencePrediction, TranscriptAnalysisLog
 
 
 def _visit_order_key(source_filename: str, fallback: datetime) -> datetime:
     """Sortable key that reconstructs the true visit order without exposing the date.
 
-    The de-id pipeline hashes the visit date into the filename; here we decrypt it
-    ONLY to order the timeline (the date is never returned to the client). Falls back
-    to ``fallback`` (the processing timestamp) for legacy names with no hashed date.
-    Both are returned tz-naive so mixed old/new files stay comparable.
+    The de-id pipeline hashes the visit date into the filename; here we decrypt it to
+    order the timeline (only the WEEK it falls in is ever returned to the client, via
+    ``visit_week_start``). Falls back to ``fallback`` (the processing timestamp) for
+    names carrying no date at all. Both are returned tz-naive so mixed old/new files
+    stay comparable.
     """
     raw = unhash_visit_date(source_filename)
     if raw:
@@ -536,8 +537,8 @@ async def get_doctor_files(
             file_map[row.file] = {"speaker": row.speaker, "count": row.sentence_count}
 
     # Chronological visit order from the real (decrypted) visit date hashed into the
-    # filename, falling back to the processing timestamp. The date itself is never
-    # returned — only its 1-based position, which the client shows as "Visit N".
+    # filename, falling back to the processing timestamp. The exact date is never
+    # returned — only its 1-based position ("Visit N") and the week it falls in.
     def _order_key(f: str):
         ca = date_map.get(f)
         return _visit_order_key(f, ca) if ca is not None else datetime.max
@@ -553,8 +554,12 @@ async def get_doctor_files(
             "speaker": info["speaker"],
             "sentence_count": info["count"],
             "visit_index": visit_index[f],
-            # Processing timestamp (generic name — not the clinical visit date, which
-            # is never returned; the client shows visit_index as "Visit N").
+            # Monday of the week this visit happened, "M/D/YYYY", or None when the
+            # name carries no recoverable date. Week granularity only — see
+            # deid.visit_week_start for why the exact day stays server-side.
+            "visit_week": visit_week_start(f),
+            # Processing timestamp (generic name — NOT the clinical visit date; that
+            # is only ever exposed as visit_index + visit_week).
             "processing_date": (
                 date_map[f].isoformat() if date_map.get(f) else None
             ),
@@ -1020,8 +1025,9 @@ async def get_doctor_score_trajectory(
             file_dates[r.source_filename] = r.created_at
 
     # ── Step 2: Build consultation timeline (sorted by real visit order) ──
-    # The visit date is hashed into the filename; _visit_order_key decrypts it only
-    # to order the timeline. The real date is never placed in an event or returned.
+    # The visit date is hashed into the filename; _visit_order_key decrypts it to
+    # order the timeline. The exact date is never placed in an event or returned —
+    # only its position ("Visit N") and its week.
     events = [{"time": file_dates[f], "file": f} for f in file_scores]
     events.sort(key=lambda x: _visit_order_key(x["file"], x["time"]))
 
@@ -1062,9 +1068,11 @@ async def get_doctor_score_trajectory(
 
         trajectory.append({
             # visit_index is the real visit order (1-based) the client shows as
-            # "Visit N". timestamp remains the processing time (a stand-in, not the
-            # real visit date) for backward compat; the real date is never sent.
+            # "Visit N", visit_week the Monday of the week it happened. timestamp
+            # remains the processing time (a stand-in, not the real visit date) for
+            # backward compat; the exact visit day is never sent.
             "visit_index": visit_index,
+            "visit_week": visit_week_start(event["file"]),
             "timestamp": event["time"].isoformat(),
             "event_type": "consultation",
             "file": event["file"],

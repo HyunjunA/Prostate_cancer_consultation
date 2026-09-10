@@ -1321,15 +1321,27 @@ the code.
 "Verified" means measured in a headless browser, not just built. Each item's own
 section above carries the measurement table.
 
+**Follow-on feedback.** Reviewing this build on 2026-09-08, the manager reported
+that the topic overview chart showed "10 patients" for a physician with 5 visits,
+and that the score scale only responded to clicks despite saying "hover". Those
+are **not** regressions from the items above — the patient-count defect predates
+this log entirely (an unscoped `/doctor/scores/average` call returning every
+transcript in the database). Both are recorded, root-caused and fixed in
+[`2026-09-08_manager_webapp_feedback.md`](2026-09-08_manager_webapp_feedback.md),
+which carries the full "why it said 10" chain.
+
 ### Outstanding
 
-1. **Nothing is committed.** The first twelve rows above (items 1-7 plus
-   follow-ups 6b-6f; item 8 is not started) are live on `:3001` but exist only in the working tree — `app/Webapp/src/components/PhysicianReportsModifiedV41Timothy.tsx`,
-   `app/Webapp/src/components/ConsultationScoringV7Timothy7.tsx`
-   and `app/Webapp/tailwind.config.js` modified, this log file untracked. The
-   running container is therefore ahead of git — a checkout or a discarded working
-   tree would silently roll the dashboard back on the next rebuild. Commit once
-   intake settles.
+1. ~~**Nothing is committed.**~~ **Committed on 2026-09-08** as
+   `feat(webapp): make the rubric and topic tiles readable at a glance`
+   (`cf8c1ab`) on `staging/caire` — the first twelve rows above (items 1-7 plus
+   follow-ups 6b-6f; item 8 is not started), together with
+   `app/Webapp/src/components/PhysicianReportsModifiedV41Timothy.tsx`,
+   `app/Webapp/src/components/ConsultationScoringV7Timothy7.tsx`,
+   `app/Webapp/tailwind.config.js` and this log file. Both component files also
+   carried the 2026-09-08 fixes by then, so the commit was split hunk-by-hunk;
+   `cf8c1ab` therefore reconstructs exactly the state deployed on 2026-09-04.
+   Not pushed.
 2. **The `N of M` counter is now always `N of N`** (Item 3 side effect). Not
    wrong, just redundant. Collapsing it to a plain patient count was not
    requested and was left alone.

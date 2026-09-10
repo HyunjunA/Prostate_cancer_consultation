@@ -94,11 +94,14 @@ interface PatientRow {
   name: string;
   fileName: string;
   // Processing timestamp (generic name — NOT the clinical visit date). Held for
-  // possible future use; the UI shows visitIndex ("Visit N"), never a date.
+  // possible future use; it is never rendered.
   processingDate: string;
   // 1-based visit order the server reconstructs from the (hashed) visit date. The
-  // UI shows "Visit N" instead of a calendar date, which is never sent.
+  // UI shows "Visit N"; the exact calendar date is never sent.
   visitIndex?: number;
+  // Monday of the week the visit happened, "M/D/YYYY". The only date-derived value
+  // the API exposes — a visit is locatable to a week, never to a day.
+  visitWeek?: string;
   status?: string;
   overallScore: number;
   topics: Record<TopicName, TopicData>;
@@ -2298,19 +2301,20 @@ const TrajectoryPointDetail: React.FC<{
   item: any;
   isDarkMode: boolean;
   viewMode?: "average" | "individual";
-  fileVisitMap?: Record<string, number>;
+  fileVisitLabelMap?: Record<string, string>;
   showPatientId?: boolean;
 }> = ({
   item,
   isDarkMode,
   viewMode = "average",
-  fileVisitMap = {},
+  fileVisitLabelMap = {},
   showPatientId = false,
 }) => {
   const type = item.eventType === "rewrite" ? "Rewrite" : "Consultation";
   const details = item.patientsDetail ?? [];
-  // Each consultation is labeled by its reconstructed visit order ("Visit N");
-  // the hashed filename is shown only when "?patientid=on" is set.
+  // Each consultation is labeled by its reconstructed visit order and the week it
+  // happened ("Visit 1 week of 9/7/2026"); the hashed filename is shown only when
+  // "?patientid=on" is set.
   return (
     <>
       <div className="font-semibold mb-1">
@@ -2350,10 +2354,7 @@ const TrajectoryPointDetail: React.FC<{
           </div>
           <div className="space-y-0.5">
             {details.map((p: { file: string; overall_score: number }) => {
-              const visitLabel =
-                fileVisitMap[p.file] != null
-                  ? `Visit ${fileVisitMap[p.file]}`
-                  : "Visit";
+              const visitLabel = fileVisitLabelMap[p.file] ?? "Visit";
               const label = showPatientId
                 ? `${visitLabel} · ${(p.file || "").split("_")[0]}`
                 : visitLabel;
@@ -2426,12 +2427,16 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
   onTrackEvent,
   showPatientId = false,
 }) => {
-  // Map each file to its "Visit N" order so the trajectory tooltip can label
-  // patients by visit instead of the hashed filename.
-  const fileVisitMap = useMemo(() => {
-    const map: Record<string, number> = {};
+  // Map each file to its visit label so the trajectory tooltip can name a
+  // consultation by visit and week instead of by the hashed filename. Rebuilt here
+  // rather than reusing PatientRow.name, which carries the "?patientid=on" suffix.
+  const fileVisitLabelMap = useMemo(() => {
+    const map: Record<string, string> = {};
     for (const p of patients) {
-      if (p.visitIndex != null) map[p.fileName] = p.visitIndex;
+      if (p.visitIndex == null) continue;
+      map[p.fileName] = p.visitWeek
+        ? `Visit ${p.visitIndex} week of ${p.visitWeek}`
+        : `Visit ${p.visitIndex}`;
     }
     return map;
   }, [patients]);
@@ -2489,18 +2494,24 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
   const chartData = useMemo(() => {
     if (!trajectoryData || trajectoryData.length === 0) return [];
     return trajectoryData.map((item, idx) => {
-      // The X-axis is visit ORDER ("Visit N"), not a date. The real visit date is
-      // hashed upstream and never sent; visit_index is the server's reconstructed
-      // chronological order (falls back to array position).
+      // The X-axis is visit ORDER ("Visit N"), not a date: visit_index is the
+      // server's reconstructed chronological order (falls back to array position).
+      // The tooltip additionally names the week (visit_week, the Monday of that
+      // week) — the tick itself stays short, since five ticks carrying a date
+      // collide. The exact visit day is hashed upstream and never sent.
       const visitNo = (item as any).visit_index ?? idx + 1;
-      const visitLabel = `Visit ${visitNo}`;
+      const visitWeek = (item as any).visit_week as string | undefined;
+      const tickLabel = `Visit ${visitNo}`;
+      const visitLabel = visitWeek
+        ? `${tickLabel} week of ${visitWeek}`
+        : tickLabel;
       // Individual mode: this consultation's OWN overall score (its own row in
       // patients_detail), NOT the running cumulative average.
       const own = (item.patients_detail ?? []).find(
         (p: any) => p.file === item.file,
       )?.overall_score;
       return {
-        time: visitLabel,
+        time: tickLabel,
         visitLabel,
         eventType: item.event_type,
         file: item.file,
@@ -2759,7 +2770,7 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                   item={hovered.item}
                   isDarkMode={isDarkMode}
                   viewMode={viewMode}
-                  fileVisitMap={fileVisitMap}
+                  fileVisitLabelMap={fileVisitLabelMap}
                   showPatientId={showPatientId}
                 />
               </div>
@@ -2803,7 +2814,7 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                   isDarkMode ? "text-slate-400" : "text-slate-500",
                 )}
               >
-                Avg Score ({patients.length} patients)
+                Your Avg Score ({patients.length} patients)
               </div>
             </div>
 
@@ -4686,8 +4697,12 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   // backend until the de-id pipeline supplies the real (±7-day shifted) date.
   const [fileDateMap, setFileDateMap] = useState<Record<string, string>>({});
   // file -> 1-based visit order (from the server, reconstructed from the hashed
-  // visit date). Shown as "Visit N"; the real date is never fetched.
+  // visit date). Shown as "Visit N"; the exact date is never fetched.
   const [fileVisitMap, setFileVisitMap] = useState<Record<string, number>>({});
+  // file -> Monday of the week the visit happened ("M/D/YYYY"), from the server.
+  // Added 2026-09-08 at the manager's request so a row reads "Visit 1 week of
+  // 9/7/2026". Week granularity is all the API exposes — see deid.visit_week_start.
+  const [fileWeekMap, setFileWeekMap] = useState<Record<string, string>>({});
   const [patients, setPatients] = useState<PatientRow[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<PatientRow | null>(
     null,
@@ -4980,21 +4995,25 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
         const map: Record<string, string> = {};
         const dateMap: Record<string, string> = {};
         const visitMap: Record<string, number> = {};
+        const weekMap: Record<string, string> = {};
         result.file_details.forEach(
           (fd: {
             file: string;
             speaker: string;
             processing_date?: string | null;
             visit_index?: number | null;
+            visit_week?: string | null;
           }) => {
             map[fd.file] = fd.speaker;
             if (fd.processing_date) dateMap[fd.file] = fd.processing_date;
             if (fd.visit_index != null) visitMap[fd.file] = fd.visit_index;
+            if (fd.visit_week) weekMap[fd.file] = fd.visit_week;
           },
         );
         setFileSpeakerMap(map);
         setFileDateMap(dateMap);
         setFileVisitMap(visitMap);
+        setFileWeekMap(weekMap);
 
         // Always auto-detect the transcript speaker from the first (scoped)
         // file — doctorId is a scoping key, not a speaker.
@@ -5042,17 +5061,24 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
         // files) — shown only when the "?patientid=on" trigger is set.
         const patientHash = match ? `SID-${match[1]}` : fileName.split("_")[0];
 
-        const visitLabel = visitIndex != null ? `Visit ${visitIndex}` : "Visit";
+        const visitIdxLabel = visitIndex != null ? `Visit ${visitIndex}` : "Visit";
+        // "Visit 1 week of 9/7/2026" when the server could recover the visit week,
+        // plain "Visit 1" when it could not (a name carrying no date at all).
+        const visitWeek = fileWeekMap[fileName];
+        const visitLabel = visitWeek
+          ? `${visitIdxLabel} week of ${visitWeek}`
+          : visitIdxLabel;
 
         return {
           id,
-          // Server reconstructs the chronological visit order, shown as "Visit N".
-          // When "?patientid=on", append the hashed patient id alongside it
-          // (e.g. "Visit 2 · <hash>") instead of replacing it.
+          // Server reconstructs the chronological visit order, shown as "Visit N"
+          // plus the week it happened. When "?patientid=on", append the hashed
+          // patient id alongside it instead of replacing it.
           name: showPatientId ? `${visitLabel} · ${patientHash}` : visitLabel,
           fileName,
           processingDate: fileDateMap[fileName] ?? "",
           visitIndex,
+          visitWeek,
           status: "completed",
           overallScore: 0,
           topics: {} as Record<TopicName, TopicData>,
@@ -5080,7 +5106,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       // ended up reporting twice the real patient count.
       fetchScoreAverage(undefined, undefined, undefined, doctorId);
     }
-  }, [files, selectedSpeaker, fileDateMap, fileVisitMap, showPatientId]);
+  }, [files, selectedSpeaker, fileDateMap, fileVisitMap, fileWeekMap, showPatientId]);
 
   // ═══════════════════════════════════════════════════════════
   // Auto-select patient when fileId is provided via URL (once only)
