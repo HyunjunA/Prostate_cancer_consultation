@@ -115,10 +115,26 @@ export function useSpeechToText({ onText }: Options) {
       });
       streamRef.current = stream;
 
-      const audioContext = new AudioContext({
+      // A 16 kHz context is preferred: the browser then resamples the
+      // microphone itself, with a better filter than anything we can afford on
+      // the audio thread. Firefox will not do it — it ignores the sampleRate
+      // constraint above and then refuses to connect a device-rate stream into
+      // a 16 kHz context ("Connecting AudioNodes from AudioContexts with
+      // different sample-rate is currently not supported") — so fall back to
+      // the device rate there and let the worklet convert. Chromium and WebKit
+      // never reach the catch, and their path is unchanged.
+      let audioContext = new AudioContext({
         sampleRate: SAMPLE_RATE,
         latencyHint: "interactive",
       });
+      let source: MediaStreamAudioSourceNode;
+      try {
+        source = audioContext.createMediaStreamSource(stream);
+      } catch {
+        await audioContext.close().catch(() => undefined);
+        audioContext = new AudioContext({ latencyHint: "interactive" });
+        source = audioContext.createMediaStreamSource(stream);
+      }
       audioContextRef.current = audioContext;
 
       // Static file, not a bundled module — see public/vad-processor.js.
@@ -130,7 +146,7 @@ export function useSpeechToText({ onText }: Options) {
         channelCountMode: "explicit",
         channelInterpretation: "discrete",
       });
-      audioContext.createMediaStreamSource(stream).connect(worklet);
+      source.connect(worklet);
 
       worklet.port.onmessage = (event: MessageEvent) => {
         workerRef.current?.postMessage({ buffer: event.data.buffer });

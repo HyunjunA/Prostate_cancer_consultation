@@ -15,7 +15,8 @@
     "test:coverage": "jest --coverage",
     "test:stores": "jest --testPathPattern=stores",
     "test:e2e": "playwright test --config=e2e/playwright.config.ts",
-    "test:e2e:headed": "playwright test --config=e2e/playwright.config.ts --headed"
+    "test:e2e:headed": "playwright test --config=e2e/playwright.config.ts --headed",
+    "test:e2e:voice": "playwright test --config=e2e/playwright.voice.config.ts"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",

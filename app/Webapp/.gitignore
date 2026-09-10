@@ -9,6 +9,8 @@ node_modules/
 # the failing test was on, so these must never reach git.
 /test-results/
 /playwright-report/
+# Cross-browser dictation run — see e2e/playwright.voice.config.ts
+/playwright-report-voice/
 
 # Next.js
 /.next/

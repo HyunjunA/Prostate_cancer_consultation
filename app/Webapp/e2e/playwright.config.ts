@@ -8,6 +8,10 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
   testDir: ".",
+  // The dictation spec runs on three engines and downloads ~123 MB of model
+  // weights for each, so it has its own config (playwright.voice.config.ts)
+  // and is kept out of the default Chromium suite.
+  testIgnore: "voice-input-cross-browser.spec.ts",
   // Loads app/Backend/.env into process.env before any spec runs,
   // so backend-verification tests can authenticate against the live API
   // without a hand-edited key. CI exports `secrets.E2E_API_KEY` into the
