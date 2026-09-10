@@ -58,7 +58,9 @@ const RewriteVoiceInput: React.FC<Props> = ({ isDarkMode, onText }) => {
         : "Speak";
 
   return (
-    <div className="flex items-center gap-2">
+    // The onboarding tour spotlights this wrapper, so the anchor stays put
+    // whether or not the error message beside the button is showing.
+    <div data-tour="rewrite-voice-button" className="flex items-center gap-2">
       <button
         type="button"
         onClick={() => (active ? stop() : void start())}

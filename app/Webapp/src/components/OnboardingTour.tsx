@@ -143,6 +143,14 @@ const DETAIL_STEPS: Step[] = [
     disableBeacon: true,
   },
   {
+    target: "[data-tour='rewrite-voice-button']",
+    content:
+      "Prefer to say it out loud? Click \"Speak\" and dictate your rewrite instead of typing it — each sentence is added to the text box as you finish it, and you can keep editing by hand at any time.\n\nYour voice is turned into text inside this browser tab. The audio is never recorded, uploaded, or sent to any outside service.\n\nIf the button reads \"Voice unavailable\", the page was opened over a plain http address; browsers only allow microphone access on an https address.",
+    title: "Dictate Your Re-write",
+    placement: "left",
+    disableBeacon: true,
+  },
+  {
     target: "[data-tour='rubric-button']",
     content:
       "Remember, you can always open the Scoring Rubric from this button to review the full criteria for all five domains.",
@@ -223,6 +231,16 @@ const getTourStyles = (isDarkMode: boolean) => ({
 const TOUR_COMPLETED_KEY = "physician-dashboard-tour-completed";
 const TOUR_VIEW_KEY = "physician-dashboard-tour-view";
 
+// Completion is recorded per view *and* per version. Bump one view's version
+// when its tour gains a step existing users have never seen — that view then
+// replays once, and the other two are left alone. Recording a plain `true`
+// (what earlier builds wrote) is read below as version 1.
+const TOUR_VERSIONS: Record<"dashboard" | "grid" | "detail", number> = {
+  dashboard: 1,
+  grid: 1,
+  detail: 2, // v2 added "Dictate Your Re-write"
+};
+
 // ═══════════════════════════════════════════════════════════
 // OnboardingTour Component
 // ═══════════════════════════════════════════════════════════
@@ -272,7 +290,10 @@ const OnboardingTour: React.FC<OnboardingTourProps> = ({
       );
       const lastTourView = localStorage.getItem(TOUR_VIEW_KEY);
 
-      if (!completedViews[currentView]) {
+      const recorded = completedViews[currentView];
+      const seenVersion = recorded === true ? 1 : Number(recorded) || 0;
+
+      if (seenVersion < TOUR_VERSIONS[currentView]) {
         setRun(true);
         // Pattern A: notify the parent so it can record a tour_open event
         // (with metadata.trigger="auto" — the tour was not explicitly
@@ -303,7 +324,7 @@ const OnboardingTour: React.FC<OnboardingTourProps> = ({
         const completedViews = JSON.parse(
           localStorage.getItem(TOUR_COMPLETED_KEY) || "{}",
         );
-        completedViews[currentView] = true;
+        completedViews[currentView] = TOUR_VERSIONS[currentView];
         localStorage.setItem(
           TOUR_COMPLETED_KEY,
           JSON.stringify(completedViews),
