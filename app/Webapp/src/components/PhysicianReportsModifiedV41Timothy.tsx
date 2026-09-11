@@ -4483,15 +4483,6 @@ const DetailView: React.FC<DetailViewProps> = ({
                     >
                       How would you say it better?
                     </span>
-                    {/* Dictation, immediately after the prompt it answers, so it
-                        reads as the second way of answering rather than as a
-                        control parked on the far side of the row. Kept out of
-                        the textarea itself: a button floating over the box would
-                        cover the text being written. */}
-                    <RewriteVoiceInput
-                      isDarkMode={isDarkMode}
-                      onText={handleVoiceText}
-                    />
                   </div>
 
                   {/* B2: collapsible scoring rubric right under the prompt.
@@ -4570,18 +4561,43 @@ const DetailView: React.FC<DetailViewProps> = ({
                       </div>
                     )}
                   </div>
-                  <textarea
-                    value={newSentence}
-                    onChange={(e) => setNewSentence(e.target.value)}
-                    placeholder="Try rephrasing the sentence above — how would you communicate this to the patient next time?"
+                  {/* The border, background and focus ring belong to this
+                      wrapper, not to the textarea, so the Speak button can sit
+                      inside the same box as the text without ever covering it.
+                      Not absolutely positioned over the textarea: a textarea's
+                      padding is part of its scroll area, so a floating button
+                      would have text scrolling underneath it. Here the button
+                      is outside the scroll area entirely, so overlap is
+                      structurally impossible. */}
+                  <div
                     className={cx(
-                      "w-full p-4 rounded-lg border text-base leading-relaxed transition-colors focus:ring-2 focus:outline-none",
+                      "w-full rounded-lg border transition-colors focus-within:ring-2",
                       isDarkMode
-                        ? "bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400 focus:ring-cyan-600 focus:border-cyan-600"
-                        : "bg-white border-slate-300 text-slate-900 placeholder-slate-400 focus:ring-cyan-400 focus:border-cyan-400",
+                        ? "bg-slate-700 border-slate-600 focus-within:ring-cyan-600 focus-within:border-cyan-600"
+                        : "bg-white border-slate-300 focus-within:ring-cyan-400 focus-within:border-cyan-400",
                     )}
-                    rows={3}
-                  />
+                  >
+                    <textarea
+                      value={newSentence}
+                      onChange={(e) => setNewSentence(e.target.value)}
+                      placeholder="Try rephrasing the sentence above — how would you communicate this to the patient next time?"
+                      className={cx(
+                        "w-full px-4 pt-4 pb-2 bg-transparent border-0 resize-y text-base leading-relaxed focus:ring-0 focus:outline-none",
+                        isDarkMode
+                          ? "text-slate-100 placeholder-slate-400"
+                          : "text-slate-900 placeholder-slate-400",
+                      )}
+                      rows={3}
+                    />
+                    {/* Dictation, on the left so it clears the textarea's
+                        resize handle in the opposite corner. */}
+                    <div className="flex items-center px-3 pb-3">
+                      <RewriteVoiceInput
+                        isDarkMode={isDarkMode}
+                        onText={handleVoiceText}
+                      />
+                    </div>
+                  </div>
 
                   {/* Action row */}
                   <div className="flex items-center gap-3 mt-3">
