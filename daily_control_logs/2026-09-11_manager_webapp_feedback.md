@@ -212,16 +212,16 @@ documented and deliberate trade.
 
 | # | Item | Code | tsc / lint / Jest | Built | Verified | Deployed | Committed |
 |---|---|---|---|---|---|---|---|
-| 1 | Speak button inside the Re-write text box | ✅ | ✅ | ✅ | ✅ (`:3900` + live `:3443`, both themes, 3 engines) | ✅ | ⬜ |
+| 1 | Speak button inside the Re-write text box | ✅ | ✅ | ✅ | ✅ (`:3900` + live `:3443`, both themes, 3 engines) | ✅ | ✅ |
+
+Committed to `feat/rewrite-voice-input` in three commits — the component change,
+the speech-to-text architecture doc, and this log — and pushed.
 
 ### Outstanding
 
-1. **Not committed.** The change is live but the working tree is still dirty:
-   the component, this log, and `docs/architecture/SPEECH_TO_TEXT.md` / `.pdf`
-   are unstaged. Commit when asked — **without a `Co-Authored-By` line**.
-2. **Button size inside the box.** It went in at its existing size
+1. **Button size inside the box.** It went in at its existing size
    (`px-3 py-1.5 text-sm`, measured 98.4 × 34 px). A smaller variant may read
    better now that it sits inside the input; deliberately not pre-emptively changed.
-3. **Footer alignment.** Left was chosen so the button clears the textarea's
+2. **Footer alignment.** Left was chosen so the button clears the textarea's
    resize handle in the opposite corner. If the right side is preferred after
    seeing it, `justify-end` is the whole change.
