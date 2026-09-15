@@ -18,7 +18,8 @@
 
 | # | Item | Detail | Repo / target | Status |
 |---|---|---|---|---|
-| 1 | **Move the Speak button inside the Re-write text box** | Out of the "How would you say it better?" heading row, into the input box itself | dashboard (`app/Webapp`) | ✅ deployed and verified on the live `:3443` / `:3001`; not committed |
+| 1 | **Move the Speak button inside the Re-write text box** | Out of the "How would you say it better?" heading row, into the input box itself | dashboard (`app/Webapp`) | ✅ deployed and verified on the live `:3443` / `:3001`; committed and pushed |
+| 2 | **Load the speech models once per visit, not once per click** | The worker was terminated at every Stop, so every Speak rebuilt both models | dashboard (`app/Webapp`) | ✅ built and verified on `:3900`; not deployed |
 
 ---
 
@@ -208,14 +209,107 @@ So the split is confirmed on the running system: dictation works on https `:3443
 and is cleanly disabled with a stated reason on plain http `:3001`, which is the
 documented and deliberate trade.
 
+---
+
+### Item 2. The speech models load once per visit
+
+**Question, then request.** The developer noticed the "Loading…" label appearing
+every time the Speak button was pressed and asked whether the model really only
+loads once. Measured on the live deployment, it did not:
+
+| Speak click | Time to listening | Network |
+|---|---|---|
+| 1st | 9.3 s | 18 requests, 123 MB |
+| 2nd | 3.3 s | 2 (the onnxruntime WASM binary) |
+| 3rd | 3.3 s | 2 |
+
+Three clicks created **three workers**. The cause was `stop()`, which released the
+microphone and terminated the worker in the same breath. Nothing in the code
+argued for the termination — the function's comment is about giving the
+microphone back — so the 3.3 s was being paid without anyone having chosen to pay
+it. On first hearing this the developer chose to leave it alone, then asked for
+the models to load once per visit instead.
+
+**Two caches, which is what made this confusing.** The 123 MB download happens
+once per browser, ever: Transformers.js stores the weights in the Cache API under
+`transformers-cache` (8 entries, 123.46 MB measured — encoder 77.07, decoder
+40.53, tokenizer 3.59, VAD 2.14). That was never the repeated cost. The repeated
+cost was reading those bytes back, rebuilding two ONNX sessions, and running the
+warm-up inference, all of which a new worker has to do from scratch.
+
+**Change.**
+
+1. **New `src/lib/sttWorkerHost.ts` (41 lines)** owns the worker. `getSttWorker()`
+   creates it on first use and hands the same one out afterwards;
+   `disposeSttWorker()` exists only for a worker that has failed unrecoverably.
+2. **`stop()` no longer terminates.** It still stops the microphone tracks and
+   closes the `AudioContext` **first** — a recording indicator that stays lit
+   after Stop would be its own bug — then detaches its listeners from the worker
+   and tells it to reset.
+3. **Listeners are added and removed per dictation.** With a shared worker,
+   leaving them attached would mean the second dictation delivering every
+   recognised sentence twice.
+4. **The worker answers a repeat `load` with `ready` immediately** (`isLoaded`).
+   Without this the button would sit on "Loading… 0%" forever on the second
+   click, because the existing `loading ??=` guard made the repeat a silent no-op.
+5. **New `reset` message** clears what must not cross between dictations: the
+   rolling buffer, the pre-speech frames kept for front-padding, and the VAD's
+   recurrent state. Sent at both ends of every dictation.
+6. **A session counter** is bumped by `reset`, and a transcription still running
+   when it fires is discarded when it returns. Terminating the worker used to
+   provide that for free; without it, a sentence would appear in the box a second
+   or two after the doctor pressed Stop.
+
+**Measured** on the new build at `127.0.0.1:3900`, clicking Speak three times:
+
+| | Before | After |
+|---|---|---|
+| Workers created for 3 dictations | 3 | **1** |
+| Time to listening, 1st click | 9.0 s | 9.0 s (unchanged — the download) |
+| Time to listening, 2nd / 3rd click | 3.3 s | **0.16 s / 0.17 s** |
+| Model network requests, 2nd / 3rd click | 2 | **0** |
+| Transcript correct on every click | ✅ | ✅ |
+
+Two correctness checks that only matter because the worker is now reused: the
+second and third dictations transcribed cleanly with nothing carried over from the
+first, and after a Stop pressed mid-utterance the box was **unchanged ten seconds
+later** — no late sentence leaked in.
+
+**The cost, measured rather than assumed** (process-tree RSS, headless Chromium):
+
+| | Total | Attributable to dictation |
+|---|---|---|
+| Dashboard open, never dictated | 568 MB | — |
+| Models loaded, transcribing | 1 214 MB | +645 MB |
+| After Stop — **before** this change | — | +247 MB |
+| After Stop — **after** this change | 1 207 MB | **+638 MB, still held** |
+
+So this trades ~390 MB of resident memory, held until the tab closes, for 3.3 s
+per dictation after the first. 123 MB on disk becomes ~640 MB resident because the
+quantized decoder is expanded to floats and onnxruntime allocates its own arenas.
+Nothing unloads it before the tab closes; an idle timer would cap it and is
+recorded as an open item in the architecture doc rather than built on spec.
+
+**Gates.** `npx tsc --noEmit` 609 total (documented baseline), 0 in the three
+edited files; `npm run lint` clean; `npm test` 278/278; `npm run build` succeeds;
+`e2e/voice-input-cross-browser.spec.ts` passes in **Chromium (20.2 s), Firefox
+(36.0 s) and WebKit (24.8 s)** against `:3900`.
+
+`docs/architecture/SPEECH_TO_TEXT.md` and its PDF were updated in the same pass —
+the file table, the message protocol (the page→worker direction was undocumented),
+the performance section, and the stale claim that the button sits outside the
+textarea, which Item 1 had already made untrue.
+
 ## 3. Status as of 2026-09-11
 
 | # | Item | Code | tsc / lint / Jest | Built | Verified | Deployed | Committed |
 |---|---|---|---|---|---|---|---|
 | 1 | Speak button inside the Re-write text box | ✅ | ✅ | ✅ | ✅ (`:3900` + live `:3443`, both themes, 3 engines) | ✅ | ✅ |
+| 2 | Speech models load once per visit | ✅ | ✅ | ✅ | ✅ (`:3900`, 3 engines + reuse and leak checks) | ⬜ | ⬜ |
 
-Committed to `feat/rewrite-voice-input` in three commits — the component change,
-the speech-to-text architecture doc, and this log — and pushed.
+Item 1 was committed to `feat/rewrite-voice-input` in three commits — the component
+change, the speech-to-text architecture doc, and this log — and pushed. Item 2 is
+built and verified locally only.
 
 ### Outstanding
 
@@ -225,3 +319,7 @@ the speech-to-text architecture doc, and this log — and pushed.
 2. **Footer alignment.** Left was chosen so the button clears the textarea's
    resize handle in the opposite corner. If the right side is preferred after
    seeing it, `justify-end` is the whole change.
+3. **Item 2 is not deployed and not committed.** Both need a separate word from
+   the user. Nothing unloads the models before the tab closes either — an idle
+   timer in `sttWorkerHost.ts` would free ~640 MB after a few quiet minutes, and
+   was deliberately not built without being asked for.
