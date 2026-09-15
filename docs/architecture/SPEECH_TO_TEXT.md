@@ -48,18 +48,24 @@ Runtime Web. The consequences:
 
 ## 3. Files
 
-Five files, one per responsibility. None exceeds 240 lines.
+Six files, one per responsibility. None exceeds 280 lines.
 
 | File | Lines | Role |
 |---|---|---|
-| `src/components/RewriteVoiceInput.tsx` | 109 | The button. Presentation only — label, colours, disabled state, error text. |
-| `src/hooks/useSpeechToText.tsx` | 177 | Browser plumbing: permission, `AudioContext`, worklet, worker lifecycle, cleanup. |
-| `src/workers/stt.worker.ts` | 233 | Both models, all inference, and the sentence-boundary state machine. |
-| `public/vad-processor.js` | 114 | `AudioWorklet` on the audio rendering thread: re-chunks and rate-converts the mic stream. |
-| `src/lib/sttConstants.ts` | 90 | Model ids, every tuning constant, the worker message union, `appendTranscript()`. |
+| `src/components/RewriteVoiceInput.tsx` | 108 | The button. Presentation only — label, colours, disabled state, error text. |
+| `src/hooks/useSpeechToText.tsx` | 222 | Browser plumbing: permission, `AudioContext`, worklet, microphone lifetime, cleanup. |
+| `src/lib/sttWorkerHost.ts` | 41 | Owns the worker's lifetime — one per page visit, shared by every dictation. |
+| `src/workers/stt.worker.ts` | 276 | Both models, all inference, and the sentence-boundary state machine. |
+| `public/vad-processor.js` | 113 | `AudioWorklet` on the audio rendering thread: re-chunks and rate-converts the mic stream. |
+| `src/lib/sttConstants.ts` | 89 | Model ids, every tuning constant, the worker message union, `appendTranscript()`. |
+
+The split between the hook and `sttWorkerHost.ts` is the important one: the **microphone**
+belongs to a single dictation and is released the moment it ends, while the **models** belong
+to the visit. Putting both in the hook meant a component unmount — which happens every time a
+doctor moves between sentences — threw the models away too.
 
 Consumer: `src/components/PhysicianReportsModifiedV41Timothy.tsx` imports the button (`:33`)
-and renders it (`:4491`) in the "How would you say it better?" heading row, feeding
+and renders it (`:4595`) in the footer row of the re-write input box, feeding
 `handleVoiceText` (`:3886`).
 
 Test coverage: `src/__tests__/lib/sttConstants.test.ts` (unit, `appendTranscript`) and
@@ -95,7 +101,10 @@ audio capture anywhere but the audio rendering thread drops frames.
 
 Step by step, from the click:
 
-1. `start()` creates the module Worker and posts `{ type: "load" }`. Models begin downloading.
+1. `start()` takes the shared module Worker from `sttWorkerHost.ts` — created here on the
+   first dictation of the visit, reused on every later one — attaches its listeners, and posts
+   `{ type: "reset" }` then `{ type: "load" }`. On a first dictation the models begin
+   downloading; on a later one `ready` comes straight back.
 2. `getUserMedia({ channelCount: 1, echoCancellation, autoGainControl, noiseSuppression,
    sampleRate: 16000 })` prompts for the microphone.
 3. An `AudioContext` is built at 16 kHz, the worklet module is added, and the mic source is
@@ -121,6 +130,18 @@ The only thing that ever crosses from the worker back to the page is a string.
 | `{ type: "speech", active }` | VAD entered/left a sentence | `setSpeaking` → mic icon pulses, label reads `Listening…` |
 | `{ type: "text", text }` | One recognised sentence | `onText(text)` |
 | `{ type: "error", message }` | Load or inference failure | `setStatus("error")`, message shown beside the button |
+
+Three things go the other way:
+
+| Message | Meaning |
+|---|---|
+| `{ type: "load" }` | Load both models. Already loaded — which is the normal case after the first dictation — is answered with `ready` immediately, so the page never waits. |
+| `{ type: "reset" }` | Forget the previous dictation: the rolling buffer, the pre-speech frames, the VAD's recurrent state. Sent at both the start and the end of every dictation. |
+| `{ buffer }` | One 512-sample frame from the worklet. No `type` field; the worker treats any message without one as audio. |
+
+`reset` also bumps a session counter that a transcription in flight compares against when it
+finishes. Without it, a sentence whose inference was still running when the doctor pressed
+Stop would appear in the box a second or two later.
 
 ---
 
@@ -308,10 +329,10 @@ Measured on the deployed TLS door, 18 sentences over one warm session, `hardware
 
 | | |
 |---|---|
-| Model ready after click | 8.9 s (one-time; weights then sit in the Cache API) |
+| Model ready after the **first** click of a visit | 9.0 s (of which the 123 MB download is most) |
+| Model ready after **every later** click | **0.16 s** — the worker still holds them |
 | Per-sentence latency, warm, median | **1.6 s** (re-measured on a later build: 1.1 s) |
 | Real-time factor | ≈ 0.18 — a 9-second sentence transcribes in 1.6 s |
-| First transcript on a cold cache | ~18 s, of which most is the 123 MB download |
 
 Separating the cold and warm numbers is what shows the steady-state cost is under two
 seconds, so no optimisation is warranted yet. Two levers remain unspent if a slower machine
@@ -319,8 +340,36 @@ needs them: the WASM backend is currently **single-threaded** (no `COOP`/`COEP` 
 sent, so `crossOriginIsolated` is false), and `STT_MODEL_ID` can drop to a 63 MB or 28 MB
 build.
 
-The models are loaded on the first `start()`, not on mount — most doctors reach this screen
-without ever dictating, and the download should not be spent on them.
+### Why the second click is free
+
+Two separate caches, often confused:
+
+1. **The weights on disk.** Transformers.js writes them into the browser's Cache API under
+   `transformers-cache` — 8 entries, **123.46 MB** measured: encoder 77.07 MB, quantized
+   decoder 40.53 MB, `tokenizer.json` 3.59 MB, Silero VAD 2.14 MB, four small configs. This
+   survives reloads and restarts, so the 123 MB download happens once per browser, ever.
+2. **The models in memory.** Reading those bytes back, rebuilding two ONNX sessions and
+   running the warm-up inference took **3.3 s** — and used to happen on *every* click,
+   because `stop()` terminated the worker. The worker now outlives the dictation, so it
+   happens once per visit.
+
+The cost of holding them is memory. Process-tree RSS on the deployment, headless Chromium:
+
+| | Total | Attributable to dictation |
+|---|---|---|
+| Dashboard open, never dictated | 568 MB | — |
+| Models loaded, transcribing | 1 214 MB | **+645 MB** |
+| After Stop | 1 207 MB | **+638 MB** — deliberately still held |
+| Second Speak | 1 192 MB | +624 MB |
+
+123 MB on disk becomes ~640 MB resident because the quantized decoder is expanded to floats
+for computation and onnxruntime allocates its own arenas on top. Before this change, Stop
+returned most of it (dropping to +247 MB) and charged 3.3 s for the next sentence; that trade
+was taken the other way round on purpose.
+
+The models are still loaded on the first `start()`, not on mount — most doctors reach this
+screen without ever dictating, and neither the download nor the 640 MB should be spent on
+them.
 
 ---
 
@@ -352,6 +401,11 @@ never a real consultation recording).
 
 ## 10. UI behaviour
 
+**Currently switched off.** `VOICE_INPUT_ENABLED` in `sttConstants.ts` is `false`, which takes
+the button off the screen and drops its tour step; the models are never fetched, because they
+only load on a click that can no longer happen. Everything below describes the feature as it
+behaves when that value is `true` — the one edit needed to bring it back.
+
 The button's label is derived, not stored:
 
 | Condition | Label |
@@ -362,15 +416,18 @@ The button's label is derived, not stored:
 | `status === "listening"` && silent | `Stop` |
 | otherwise | `Speak` |
 
-**Placement.** Immediately after the prompt it answers — `2  How would you say it better?
-[🎤 Speak]`, 8 px to the right, same baseline. Reading order carries the meaning: the
-question, then the two ways of answering it. It stays outside the textarea rather than
-floating over it, because a button over the box covers the text being written. The accepted
-trade-off is that with the inline rubric expanded, the button sits a criteria table away from
-the box.
+**Placement.** Inside the input box, in a footer row below the text — the border, background
+and focus ring belong to a wrapper `div`, and both the textarea and the button sit inside it.
+It is deliberately *not* positioned over the textarea: a textarea's padding is part of its
+scroll area, so a floating button would have text scrolling underneath it. Being in the
+wrapper but outside the textarea makes overlap structurally impossible; measured at 0 px of
+overlap with the box scrolled to the top and to the middle. The button is left-aligned so it
+clears the resize handle in the opposite corner.
 
-**Onboarding.** A "Dictate Your Re-write" step in the detail-view tour (`OnboardingTour.tsx`,
-step 5 of 7) is anchored to `data-tour='rewrite-voice-button'`. It states the three things the
+**Onboarding.** A "Dictate Your Re-write" step in the detail-view tour (`OnboardingTour.tsx`)
+is anchored to `data-tour='rewrite-voice-button'`, and is spread into the step list only when
+`VOICE_INPUT_ENABLED` is true — a step whose target is never rendered stalls the tour rather
+than skipping it. It states the three things the
 button cannot say for itself: dictated sentences land in the same box that can still be typed
 in, the audio is never recorded or uploaded, and a greyed-out "Voice unavailable" means the
 page was opened over plain http.
@@ -380,8 +437,11 @@ sentence to the existing contents with a single space, and attaches a leading `,
 one. It lives in `sttConstants.ts` rather than the hook because it is the one piece of this
 feature worth unit-testing on its own.
 
-**Cleanup.** `useEffect(() => stop, [stop])` releases the microphone, closes the
-`AudioContext` and terminates the worker if the doctor navigates away mid-dictation.
+**Cleanup.** `useEffect(() => stop, [stop])` releases the microphone and closes the
+`AudioContext` if the doctor navigates away mid-dictation — first, so the browser's recording
+indicator goes out immediately. The worker is *not* terminated there: it is detached and told
+to reset, and keeps both models for the rest of the visit. Only a worker that has failed
+unrecoverably is thrown away, by `disposeSttWorker()`.
 
 **Tracking.** Voice usage reuses the existing `rewrite_input` event with
 `metadata: { source: "voice" }`. `event_type` is a Postgres enum, so a new value would have
@@ -394,11 +454,12 @@ needed a migration to record the same thing.
 | Path | What to look at |
 |---|---|
 | `app/Webapp/src/lib/sttConstants.ts` | Model ids, every threshold, `SttWorkerMessage`, `appendTranscript()` |
-| `app/Webapp/src/workers/stt.worker.ts` | `DEVICE_DTYPE` (`:68`), `load()` (`:73`), `isSpeechFrame()` (`:118`), `dispatchSentence()` (`:152`), state machine (`:173`) |
-| `app/Webapp/src/hooks/useSpeechToText.tsx` | Secure-context probe (`:42`), Firefox fallback (`:126`), worklet wiring (`:141`) |
+| `app/Webapp/src/workers/stt.worker.ts` | `DEVICE_DTYPE` (`:72`), `load()` (`:77`), `isSpeechFrame()` (`:131`), `resetSession()` (`:175`), `dispatchSentence()` (`:186`), state machine (`:207`) |
+| `app/Webapp/src/lib/sttWorkerHost.ts` | `getSttWorker()`, `disposeSttWorker()` — why the worker outlives a dictation |
+| `app/Webapp/src/hooks/useSpeechToText.tsx` | Secure-context probe (`:54`), Firefox fallback (`:170`), worklet wiring (`:185`) |
 | `app/Webapp/public/vad-processor.js` | `toTargetRate()` (`:45`), 512-sample framing (`:90`) |
 | `app/Webapp/src/components/RewriteVoiceInput.tsx` | Button, label logic, disabled state |
-| `app/Webapp/src/components/PhysicianReportsModifiedV41Timothy.tsx` | `handleVoiceText` (`:3886`), render site (`:4491`) |
+| `app/Webapp/src/components/PhysicianReportsModifiedV41Timothy.tsx` | `handleVoiceText` (`:3886`), render site (`:4595`) |
 | `app/Webapp/e2e/voice-input-cross-browser.spec.ts` | Capability probe, fake microphone, per-engine assertions |
 | `app/Webapp/next.config.js`, `app/Webapp/.npmrc` | onnxruntime aliasing and the pre-minified bundle plugin |
 
@@ -416,3 +477,12 @@ needed a migration to record the same thing.
    issued.
 5. **`TARGET_SAMPLE_RATE` is duplicated** in `vad-processor.js` because a worklet cannot
    import. Any change to `SAMPLE_RATE` must be made in both places.
+6. **Nothing unloads the models before the tab closes.** Once a doctor has dictated, ~640 MB
+   stays resident for the rest of the visit, even if they never dictate again. An idle timer
+   in `sttWorkerHost.ts` would cap that, at the price of the 3.3 s rebuild for anyone who
+   comes back after it fires. Not added, because no one has reported memory pressure — the
+   number to watch is a clinician laptop, not this server.
+7. **The worker is a singleton with no owner check.** One `RewriteVoiceInput` is ever on
+   screen, so two hooks driving the same worker cannot currently happen. If a second dictation
+   surface is added, `sttWorkerHost.ts` needs to arbitrate rather than hand the same worker to
+   both.
