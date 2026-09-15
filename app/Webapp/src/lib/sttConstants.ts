@@ -10,6 +10,16 @@
  */
 
 /**
+ * Master switch for the Re-write Practice dictation button.
+ *
+ * `false` takes the Speak button off the screen and drops its step from the
+ * guided tour; nothing else changes, and the models are never fetched because
+ * they only load on a click that can no longer happen. Flip this one value to
+ * `true` to put the feature back — there is nothing else to uncomment.
+ */
+export const VOICE_INPUT_ENABLED = false;
+
+/**
  * Model that turns speech into text. Moonshine takes variable-length audio, so a
  * 5-second sentence costs 5 seconds of encoder work; Whisper pads every input to
  * 30 seconds regardless. Short dictation is exactly Moonshine's case.

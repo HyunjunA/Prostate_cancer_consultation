@@ -48,7 +48,7 @@ import {
 // ═══════════════════════════════════════════════════════════
 // Store imports
 // ═══════════════════════════════════════════════════════════
-import { appendTranscript } from "@/lib/sttConstants";
+import { VOICE_INPUT_ENABLED, appendTranscript } from "@/lib/sttConstants";
 import { useFileId } from "@/stores/useFileId";
 import { useDoctorId } from "@/stores/useDoctorId";
 
@@ -4582,7 +4582,11 @@ const DetailView: React.FC<DetailViewProps> = ({
                       onChange={(e) => setNewSentence(e.target.value)}
                       placeholder="Try rephrasing the sentence above — how would you communicate this to the patient next time?"
                       className={cx(
-                        "w-full px-4 pt-4 pb-2 bg-transparent border-0 resize-y text-base leading-relaxed focus:ring-0 focus:outline-none",
+                        // The dictation footer supplies the bottom padding when
+                        // it is there; without it the textarea pads itself.
+                        VOICE_INPUT_ENABLED
+                          ? "w-full px-4 pt-4 pb-2 bg-transparent border-0 resize-y text-base leading-relaxed focus:ring-0 focus:outline-none"
+                          : "w-full px-4 pt-4 pb-4 bg-transparent border-0 resize-y text-base leading-relaxed focus:ring-0 focus:outline-none",
                         isDarkMode
                           ? "text-slate-100 placeholder-slate-400"
                           : "text-slate-900 placeholder-slate-400",
@@ -4590,13 +4594,17 @@ const DetailView: React.FC<DetailViewProps> = ({
                       rows={3}
                     />
                     {/* Dictation, on the left so it clears the textarea's
-                        resize handle in the opposite corner. */}
-                    <div className="flex items-center px-3 pb-3">
-                      <RewriteVoiceInput
-                        isDarkMode={isDarkMode}
-                        onText={handleVoiceText}
-                      />
-                    </div>
+                        resize handle in the opposite corner. Off at the moment:
+                        flip VOICE_INPUT_ENABLED in lib/sttConstants.ts to bring
+                        it back, here and in the guided tour at once. */}
+                    {VOICE_INPUT_ENABLED && (
+                      <div className="flex items-center px-3 pb-3">
+                        <RewriteVoiceInput
+                          isDarkMode={isDarkMode}
+                          onText={handleVoiceText}
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* Action row */}

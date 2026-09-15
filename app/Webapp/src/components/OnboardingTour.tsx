@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Joyride, { Step, CallBackProps, STATUS, ACTIONS, EVENTS } from "react-joyride";
 
+import { VOICE_INPUT_ENABLED } from "@/lib/sttConstants";
+
 // ═══════════════════════════════════════════════════════════
 // Tour Steps — per view
 // ═══════════════════════════════════════════════════════════
@@ -142,14 +144,20 @@ const DETAIL_STEPS: Step[] = [
     placement: "top-start",
     disableBeacon: true,
   },
-  {
-    target: "[data-tour='rewrite-voice-button']",
-    content:
-      "Prefer to say it out loud? Click \"Speak\" and dictate your rewrite instead of typing it — each sentence is added to the text box as you finish it, and you can keep editing by hand at any time.\n\nYour voice is turned into text inside this browser tab. The audio is never recorded, uploaded, or sent to any outside service.\n\nIf the button reads \"Voice unavailable\", the page was opened over a plain http address; browsers only allow microphone access on an https address.",
-    title: "Dictate Your Re-write",
-    placement: "left",
-    disableBeacon: true,
-  },
+  // Only while the button exists: a step whose target is never rendered stalls
+  // the tour instead of skipping it.
+  ...(VOICE_INPUT_ENABLED
+    ? ([
+        {
+          target: "[data-tour='rewrite-voice-button']",
+          content:
+            "Prefer to say it out loud? Click \"Speak\" and dictate your rewrite instead of typing it — each sentence is added to the text box as you finish it, and you can keep editing by hand at any time.\n\nYour voice is turned into text inside this browser tab. The audio is never recorded, uploaded, or sent to any outside service.\n\nIf the button reads \"Voice unavailable\", the page was opened over a plain http address; browsers only allow microphone access on an https address.",
+          title: "Dictate Your Re-write",
+          placement: "left",
+          disableBeacon: true,
+        },
+      ] as Step[])
+    : []),
   {
     target: "[data-tour='rubric-button']",
     content:
