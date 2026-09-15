@@ -74,17 +74,39 @@ async function verifyAdminToken(
 }
 
 function redirectToLogin(request: NextRequest): NextResponse {
-  const url = request.nextUrl.clone();
-  url.pathname = LOGIN_PATH;
-  // Preserve where the user was headed so login can bounce them back.
-  url.searchParams.set("next", request.nextUrl.pathname + request.nextUrl.search);
-  return NextResponse.redirect(url);
+  // When behind nginx, use the public host from X-Forwarded-Host so the
+  // browser receives a redirect to the real domain, not the internal one.
+  const fwdHost = request.headers.get("x-forwarded-host");
+  const fwdProto = request.headers.get("x-forwarded-proto") ?? "https";
+  const origin = fwdHost
+    ? `${fwdProto}://${fwdHost}`
+    : request.nextUrl.origin;
+
+  const loginUrl = new URL(LOGIN_PATH, origin);
+  loginUrl.searchParams.set(
+    "next",
+    request.nextUrl.pathname + request.nextUrl.search,
+  );
+  return NextResponse.redirect(loginUrl);
 }
 
 export async function middleware(request: NextRequest): Promise<NextResponse> {
+  const { pathname, searchParams } = request.nextUrl;
+
   // The login page must stay public, otherwise there's no way in.
-  if (request.nextUrl.pathname === LOGIN_PATH) {
+  if (pathname === LOGIN_PATH) {
     return NextResponse.next();
+  }
+
+  // Root path: only guard when there are no patient/doctor query params.
+  // Personal links (?fileid=… or ?patid=… or ?doctorid=…) pass through so
+  // patients and doctors can reach their view without an admin account.
+  if (pathname === "/") {
+    const hasPersonalLink =
+      searchParams.has("fileid") ||
+      searchParams.has("patid") ||
+      searchParams.has("doctorid");
+    if (hasPersonalLink) return NextResponse.next();
   }
 
   const secret = process.env.JWT_SECRET || "";
@@ -103,7 +125,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 }
 
 export const config = {
-  // Guard all admin pages. The matcher excludes Next internals and static
-  // assets automatically since they live outside /admin.
-  matcher: ["/admin/:path*"],
+  // "/" is guarded when accessed without a personal-link query string.
+  // "/admin/*" is always guarded (except /admin/login itself).
+  matcher: ["/", "/admin/:path*"],
 };
