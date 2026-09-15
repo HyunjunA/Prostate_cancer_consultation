@@ -33,7 +33,7 @@ import sys
 TEST_DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL",
     "postgresql+asyncpg://prostatecancer_user:secure_password_123"
-    "@localhost:5439/prostatecancer_test",
+    "@localhost:5432/prostatecancer_test",
 )
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ.setdefault("API_KEY", "test-api-key")
@@ -68,7 +68,7 @@ if not (_URL.database or "").endswith("_test"):
         f"Refusing to run: TEST_DATABASE_URL names database {_URL.database!r}, "
         "which does not end in '_test'. The suite creates and drops data freely, "
         "so it must own its database. Set TEST_DATABASE_URL to a dedicated one, "
-        "e.g. postgresql+asyncpg://user:pw@localhost:5439/prostatecancer_test"
+        "e.g. postgresql+asyncpg://user:pw@localhost:5432/prostatecancer_test"
     )
 
 

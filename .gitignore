@@ -92,3 +92,4 @@ AI_physician_patient_communication/
 # TLS material for the webapp-tls front door (scripts/generate-webapp-tls-cert.sh).
 # The private key must never enter the repository; regenerate it per host.
 _tls/
+_fonts/
