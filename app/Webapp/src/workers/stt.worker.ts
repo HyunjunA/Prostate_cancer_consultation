@@ -51,6 +51,10 @@ type Transcriber = (audio: Float32Array) => Promise<{ text: string }>;
 let vad: VadModel | null = null;
 let transcriber: Transcriber | null = null;
 let loading: Promise<void> | null = null;
+// Set once both models are live. The worker outlives a single dictation, so a
+// later "load" has to be answered with "ready" rather than silently doing
+// nothing — the page is waiting on that message to enable the button.
+let isLoaded = false;
 
 async function supportsWebGPU(): Promise<boolean> {
   try {
@@ -96,6 +100,7 @@ async function load(): Promise<void> {
 
   // Warm up (compiles WebGPU shaders) so the first real sentence is not slow.
   await transcriber(new Float32Array(SAMPLE_RATE));
+  isLoaded = true;
   post({ type: "ready" });
 }
 
@@ -113,6 +118,14 @@ let state = new Tensor("float32", new Float32Array(2 * 1 * 128), [2, 1, 128]);
 let isRecording = false;
 let postSpeechSamples = 0;
 let prevBuffers: Float32Array[] = [];
+
+// Counts dictations, not sentences. Everything above is rolling state that must
+// not survive from one dictation into the next: half a sentence still in the
+// buffer, the pre-speech frames, the VAD's recurrent state. Bumping this both
+// marks the old state stale and lets a transcription that is still running be
+// discarded when it finally returns, instead of appearing in the box seconds
+// after the doctor pressed Stop.
+let sessionEpoch = 0;
 
 /** Voice activity detection on one frame. */
 async function isSpeechFrame(buffer: Float32Array): Promise<boolean> {
@@ -134,9 +147,11 @@ async function isSpeechFrame(buffer: Float32Array): Promise<boolean> {
 
 async function transcribe(buffer: Float32Array): Promise<void> {
   if (!transcriber) return;
+  const epoch = sessionEpoch;
   const { text } = (await (inferenceChain = inferenceChain.then(() =>
     transcriber!(buffer),
   ))) as { text: string };
+  if (epoch !== sessionEpoch) return; // Dictation ended while this was running.
   if (text?.trim()) post({ type: "text", text });
 }
 
@@ -146,6 +161,25 @@ function reset(offset = 0) {
   isRecording = false;
   postSpeechSamples = 0;
   post({ type: "speech", active: false });
+}
+
+/**
+ * Forget the previous dictation entirely.
+ *
+ * Sent at both ends of a dictation, because the worker is now reused: without
+ * this, the frames kept for front-padding and any half-captured sentence would
+ * be prepended to the doctor's next one. The VAD's recurrent state goes back to
+ * zero too — it is a running summary of the audio it has heard, and the audio it
+ * heard belongs to a different sitting.
+ */
+function resetSession() {
+  sessionEpoch += 1;
+  BUFFER.fill(0);
+  bufferPointer = 0;
+  isRecording = false;
+  postSpeechSamples = 0;
+  prevBuffers = [];
+  state = new Tensor("float32", new Float32Array(2 * 1 * 128), [2, 1, 128]);
 }
 
 /** Ship the sentence we just captured, front-padded with the pre-speech frames. */
@@ -174,6 +208,11 @@ ctx.onmessage = async (event: MessageEvent) => {
   const data = event.data as { type?: string; buffer?: Float32Array };
 
   if (data.type === "load") {
+    // Already holding both models from an earlier dictation: answer at once.
+    if (isLoaded) {
+      post({ type: "ready" });
+      return;
+    }
     loading ??= load().catch((error: unknown) => {
       loading = null;
       post({
@@ -181,6 +220,11 @@ ctx.onmessage = async (event: MessageEvent) => {
         message: error instanceof Error ? error.message : String(error),
       });
     });
+    return;
+  }
+
+  if (data.type === "reset") {
+    resetSession();
     return;
   }
 
