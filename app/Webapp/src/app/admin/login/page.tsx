@@ -104,6 +104,11 @@ function AdminLoginForm() {
             {submitting ? "Signing in…" : "Sign in"}
           </button>
         </form>
+
+        <p className="mt-6 text-center text-xs text-gray-400">
+          계정이 없으신가요?{" "}
+          <span className="text-gray-500">담당자에게 문의하세요.</span>
+        </p>
       </div>
     </div>
   );
