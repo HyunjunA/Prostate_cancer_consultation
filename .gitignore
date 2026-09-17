@@ -93,3 +93,4 @@ AI_physician_patient_communication/
 # The private key must never enter the repository; regenerate it per host.
 _tls/
 _fonts/
+SERVER_ACCESS.txt
