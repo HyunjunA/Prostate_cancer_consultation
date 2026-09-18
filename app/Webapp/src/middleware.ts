@@ -121,6 +121,17 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     return redirectToLogin(request);
   }
 
+  // Logged-in admins visiting "/" are sent to /admin directly.
+  // The selection screen is for patient/doctor personal links only.
+  if (pathname === "/") {
+    const fwdHost = request.headers.get("x-forwarded-host");
+    const fwdProto = request.headers.get("x-forwarded-proto") ?? "https";
+    const origin = fwdHost
+      ? `${fwdProto}://${fwdHost}`
+      : request.nextUrl.origin;
+    return NextResponse.redirect(new URL("/admin", origin));
+  }
+
   return NextResponse.next();
 }
 
