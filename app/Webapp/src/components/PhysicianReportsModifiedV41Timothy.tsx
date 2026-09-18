@@ -2221,34 +2221,6 @@ const DashboardViewV1: React.FC<DashboardViewProps> = ({
                         ? patient.overallScore.toFixed(1)
                         : "N/A"}
                     </span>
-                    <span
-                      className={cx(
-                        "text-xs font-medium px-2 py-1 rounded-full",
-                        !hasAiScore
-                          ? isDarkMode
-                            ? "bg-slate-700 text-slate-400"
-                            : "bg-slate-200 text-slate-500"
-                          : patient.overallScore >= 4
-                            ? isDarkMode
-                              ? "bg-emerald-900/50 text-emerald-300"
-                              : "bg-emerald-100 text-emerald-700"
-                            : patient.overallScore >= 3
-                              ? isDarkMode
-                                ? "bg-yellow-900/50 text-yellow-300"
-                                : "bg-yellow-100 text-yellow-700"
-                              : isDarkMode
-                                ? "bg-red-900/50 text-red-300"
-                                : "bg-red-100 text-red-700",
-                      )}
-                    >
-                      {!hasAiScore
-                        ? "AI Score Not Available"
-                        : patient.overallScore >= 4
-                          ? "High"
-                          : patient.overallScore >= 3
-                            ? "Standard"
-                            : "Needs Improvement"}
-                    </span>
                   </div>
                 </td>
                 <td className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6 text-center" style={{ width: "30%" }}>
