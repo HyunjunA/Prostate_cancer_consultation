@@ -45,7 +45,7 @@ import { loginAsAdmin } from "./_admin_auth";
 // generous headroom on a slow CI runner.
 test.setTimeout(240_000);
 
-const API_BASE = "http://localhost:8000";
+const API_BASE = process.env.E2E_API_BASE || "http://localhost:18001";
 const API_KEY = process.env.E2E_API_KEY || process.env.API_KEY || "";
 const AUTH_HEADERS: Record<string, string> = API_KEY
   ? { "X-API-Key": API_KEY }

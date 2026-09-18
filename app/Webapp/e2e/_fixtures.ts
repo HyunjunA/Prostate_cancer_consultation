@@ -150,7 +150,7 @@ export async function getFirstAvailableFixture(
   const file = files[0];
   return {
     file,
-    patient: `Patient_${file.replace(/\.xlsx$/i, "")}`,
+    patient: `Patient_${file.replace(/\.(xlsx|csv)$/i, "")}`,
     doctor: "Interviewer:",
   };
 }
@@ -169,6 +169,31 @@ export async function getFirstAvailableFixture(
  * caller assigns the result when no fixture is available, so any
  * code that runs after this call can treat `FIXTURE` as defined.
  */
+/**
+ * Find the E2E test fixture (file prefixed with "E2E_").
+ * Falls back to the first available fixture if none is found.
+ * Use this in follow-up survey E2E tests so they always use the
+ * dedicated test patient, not a real patient who may have already
+ * completed all surveys (which would show the "Thank You" screen).
+ */
+export async function requireE2EFixture(
+  request: APIRequestContext,
+  baseURL: string | undefined,
+): Promise<DemoFixture> {
+  const all = await getAllFixtures(request, baseURL);
+  if (all.length === 0) {
+    test.skip(true, "precondition: no patient data in backend");
+  }
+  const e2e = all.find((f) => f.file.startsWith("E2E_"));
+  if (!e2e) {
+    test.skip(
+      true,
+      "precondition: E2E test fixture not seeded — run e2e-setup.ts first",
+    );
+  }
+  return e2e as DemoFixture;
+}
+
 export async function requireFirstFixture(
   request: APIRequestContext,
   baseURL: string | undefined,
@@ -209,7 +234,7 @@ export async function getAllFixtures(
   const files = body.files ?? [];
   return files.map((file) => ({
     file,
-    patient: `Patient_${file.replace(/\.xlsx$/i, "")}`,
+    patient: `Patient_${file.replace(/\.(xlsx|csv)$/i, "")}`,
     doctor: "Interviewer:",
   }));
 }

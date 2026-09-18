@@ -45,12 +45,14 @@ test.setTimeout(120_000);
 
 let ALL_FIXTURES: DemoFixture[] = [];
 
-const API_BASE = "http://localhost:8000";
+const API_BASE = process.env.E2E_API_BASE || "http://localhost:18001";
 const API_KEY = process.env.E2E_API_KEY || process.env.API_KEY || "";
 const AUTH_HEADERS = { "X-API-Key": API_KEY };
 
 test.beforeAll(async ({ request, baseURL }) => {
-  ALL_FIXTURES = await getAllFixtures(request, baseURL);
+  const allFix = await getAllFixtures(request, baseURL);
+  // Use only the E2E test fixtures so tests never touch real patient data.
+  ALL_FIXTURES = allFix.filter((f) => f.file.startsWith("E2E_"));
   test.skip(
     ALL_FIXTURES.length === 0,
     "precondition: no patient data — /api/backend/patient/files returned []",

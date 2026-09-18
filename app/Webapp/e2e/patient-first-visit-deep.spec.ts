@@ -67,7 +67,7 @@ test.setTimeout(300_000);
 // page calls them from the browser without auth), but the GET we
 // use for round-trip verification might be — read the same env var
 // the survey-submit-flow spec uses so behavior is consistent.
-const API_BASE = "http://localhost:8000";
+const API_BASE = process.env.E2E_API_BASE || "http://localhost:18001";
 const API_KEY = process.env.E2E_API_KEY || process.env.API_KEY || "";
 const AUTH_HEADERS: Record<string, string> = API_KEY
   ? { "X-API-Key": API_KEY }

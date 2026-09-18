@@ -24,8 +24,12 @@ import { expect, type Page } from "@playwright/test";
 /** Wait for the follow-up page to fully load (Welcome step visible). */
 export async function waitForFollowUpPage(page: Page, url: string) {
   await page.goto(url);
+  // Wait for the "Start Survey" button which appears only on the Welcome
+  // step when the patient has not yet begun (or has been reset).
+  // This is more reliable than matching "Welcome" text since that string
+  // also appears in the progress sidebar and may not pass isVisible().
   await expect(
-    page.getByText("Welcome").first(),
+    page.getByRole("button", { name: /Start Survey/i }),
   ).toBeVisible({ timeout: 15_000 });
 }
 
@@ -64,9 +68,19 @@ export async function clickNextQuestion(page: Page) {
   await page.waitForTimeout(200);
 }
 
-/** Click the "Continue to Next Section" / "Complete Survey" button
- *  that moves the survey from one section to the next. */
+/** Dismiss the submit-success modal (click "OK") then advance to the next
+ *  survey section. The modal appears after every oneWay section submit;
+ *  clicking OK triggers the section-advance logic inside the component. */
 export async function goToNextStep(page: Page) {
+  // The success modal shows "OK" button after each section submit.
+  // Clicking it advances the flow to the next section.
+  const okButton = page.getByRole("button", { name: /^OK$/i });
+  if (await okButton.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await okButton.click();
+    await page.waitForTimeout(500);
+    return;
+  }
+  // Fallback: older button labels
   const nextButton = page.getByRole("button", {
     name: /Continue to Next Section|Complete Survey/i,
   });
@@ -102,12 +116,13 @@ export async function completeSDM(page: Page) {
   await clickSDMOption(page, "Yes");
 
   // Submit
-  const submitBtn = page.getByRole("button", { name: /Submit Responses/i });
+  const submitBtn = page.getByRole("button", { name: /Submit.*continue|Submit Responses/i });
   await expect(submitBtn).toBeEnabled({ timeout: 5_000 });
   await submitBtn.click();
   await expect(
     page.getByText("Responses submitted successfully!"),
   ).toBeVisible({ timeout: 10_000 });
+  // Dismiss the success modal so callers can proceed to the next section.
 }
 
 /** Fill and submit the DCS section (16 Likert questions). Each uses a
@@ -127,7 +142,7 @@ export async function completeDCS(page: Page) {
     }
   }
 
-  const submitBtn = page.getByRole("button", { name: /Submit Responses/i });
+  const submitBtn = page.getByRole("button", { name: /Submit.*continue|Submit Responses/i });
   await expect(submitBtn).toBeEnabled({ timeout: 5_000 });
   await submitBtn.click();
   await expect(
@@ -142,9 +157,12 @@ export async function completeDCS(page: Page) {
  *  returned an AI-generated summary for that domain), then picks
  *  the first option. */
 export async function completeRiskPerception(page: Page) {
+  // Risk Perception section shows a slider for Q1 and radio buttons for Q2-Q5.
+  // Wait for the first radio label or slider to appear rather than the heading
+  // text, since "Risk Perception" may only appear in the progress sidebar.
   await expect(
-    page.getByText("Risk Perception").first(),
-  ).toBeVisible({ timeout: 5_000 });
+    page.locator('[data-track-proximity="RiskPerception_Submit_Button"], label:has(input[type="radio"]), input[type="range"]').first(),
+  ).toBeVisible({ timeout: 10_000 });
 
   for (let q = 1; q <= 5; q++) {
     await page.waitForTimeout(300);
@@ -168,17 +186,26 @@ export async function completeRiskPerception(page: Page) {
       await page.waitForTimeout(400);
     }
 
-    // Real <input type="radio"> inside <label> — clicking the label works.
+    // Q1 uses a slider; Q2-Q5 use radio buttons.
+    const slider = page.locator('input[type="range"]').first();
     const radioLabels = page.locator('label:has(input[type="radio"])');
-    await expect(radioLabels.first()).toBeVisible({ timeout: 5_000 });
-    await radioLabels.first().click();
+    if (await slider.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      // Move the slider to mid-range (50) so it registers as answered.
+      await slider.fill("50");
+      await page.waitForTimeout(200);
+    } else {
+      // Use the visible filter so hidden labels inside collapsed panels are skipped.
+      const visibleRadio = radioLabels.filter({ visible: true }).first();
+      await expect(visibleRadio).toBeVisible({ timeout: 5_000 });
+      await visibleRadio.click();
+    }
 
     if (q < 5) {
       await clickNextQuestion(page);
     }
   }
 
-  const submitBtn = page.getByRole("button", { name: /Submit Responses/i });
+  const submitBtn = page.getByRole("button", { name: /Submit.*continue|Submit Responses/i });
   await expect(submitBtn).toBeEnabled({ timeout: 5_000 });
   await submitBtn.click();
   await expect(

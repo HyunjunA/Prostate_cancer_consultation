@@ -12,11 +12,12 @@ export default defineConfig({
   // weights for each, so it has its own config (playwright.voice.config.ts)
   // and is kept out of the default Chromium suite.
   testIgnore: "voice-input-cross-browser.spec.ts",
-  // Loads app/Backend/.env into process.env before any spec runs,
-  // so backend-verification tests can authenticate against the live API
-  // without a hand-edited key. CI exports `secrets.E2E_API_KEY` into the
-  // workflow env directly — the setup hook only fills gaps.
-  globalSetup: "./global-setup.ts",
+  // globalSetup runs in two stages:
+  //   1. global-setup.ts  — loads .env so API_KEY is available everywhere
+  //   2. e2e-setup.ts     — seeds E2E-only test fixtures into the DB
+  // globalTeardown removes those fixtures after all specs finish.
+  globalSetup: "./e2e-setup.ts",
+  globalTeardown: "./e2e-teardown.ts",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

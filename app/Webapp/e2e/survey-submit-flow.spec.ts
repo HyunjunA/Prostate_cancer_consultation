@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { requireFirstFixture, type DemoFixture } from "./_fixtures";
+import { getAllFixtures, type DemoFixture } from "./_fixtures";
 import {
   waitForFollowUpPage,
   startSurvey,
@@ -30,27 +30,33 @@ import {
 // These tests are long multi-step flows — give each test up to 120 seconds.
 test.setTimeout(120_000);
 
-let FIXTURE: DemoFixture;
-let FOLLOWUP_URL: string;
-let SPEAKER: string;
+// One dedicated patient per test section — prevents survey-completion
+// state from leaking between tests (session restore would skip ahead).
+const E2E_PATIENTS: Record<string, { file: string; patient: string }> = {
+  sdm:  { file: "E2E_TEST_FILE_PATIENT_A_DOC1_20260101.csv", patient: "Patient_E2E_TEST_FILE_PATIENT_A_DOC1_20260101" },
+  dcs:  { file: "E2E_TEST_FILE_PATIENT_B_DOC1_20260101.csv", patient: "Patient_E2E_TEST_FILE_PATIENT_B_DOC1_20260101" },
+  risk: { file: "E2E_TEST_FILE_PATIENT_C_DOC1_20260101.csv", patient: "Patient_E2E_TEST_FILE_PATIENT_C_DOC1_20260101" },  // needs &combined=1
+  sat:  { file: "E2E_TEST_FILE_PATIENT_D_DOC1_20260101.csv", patient: "Patient_E2E_TEST_FILE_PATIENT_D_DOC1_20260101" },
+};
 
-const API_BASE = "http://localhost:8000";
-// API_KEY comes from the environment so the real value never lands
-// in git. `e2e/global-setup.ts` populates process.env from
-// app/Backend/.env when running locally; CI exports
-// `secrets.E2E_API_KEY` directly. The backend-verification test
-// below skips itself when the key is absent so the UI-only tests in
-// this file still run on a fresh checkout.
+function followUpUrl(section: keyof typeof E2E_PATIENTS): string {
+  const { file, patient } = E2E_PATIENTS[section];
+  const base = `/?fileid=${encodeURIComponent(file)}&patid=${encodeURIComponent(patient)}&visit=followup`;
+  // Risk Perception is only reachable in the combined (Total Survey) flow.
+  return section === "risk" ? base + "&combined=1" : base;
+}
+
+const API_BASE = process.env.E2E_API_BASE || "http://localhost:18001";
 const API_KEY = process.env.E2E_API_KEY || process.env.API_KEY || "";
 const AUTH_HEADERS = { "X-API-Key": API_KEY };
 
+// Verify E2E fixtures are present (seeded by globalSetup)
 test.beforeAll(async ({ request, baseURL }) => {
-  FIXTURE = await requireFirstFixture(request, baseURL);
-  FOLLOWUP_URL =
-    `/?fileid=${encodeURIComponent(FIXTURE.file)}` +
-    `&patid=${encodeURIComponent(FIXTURE.patient)}` +
-    `&visit=followup`;
-  SPEAKER = FIXTURE.patient;
+  const all = await getAllFixtures(request, baseURL);
+  const e2eFiles = all.filter((f) => f.file.startsWith("E2E_"));
+  if (e2eFiles.length < 4) {
+    test.skip(true, `precondition: need 4 E2E fixtures, found ${e2eFiles.length}`);
+  }
 });
 
 // ===========================================================================
@@ -59,7 +65,7 @@ test.beforeAll(async ({ request, baseURL }) => {
 
 test.describe("SDM Survey Submit", () => {
   test("fill all 4 SDM questions and submit via UI", async ({ page }) => {
-    await waitForFollowUpPage(page, FOLLOWUP_URL);
+    await waitForFollowUpPage(page, followUpUrl("sdm"));
     await startSurvey(page);
     await completeSDM(page);
   });
@@ -69,13 +75,14 @@ test.describe("SDM Survey Submit", () => {
       !API_KEY,
       "API_KEY not set — load app/Backend/.env or export E2E_API_KEY",
     );
-    await waitForFollowUpPage(page, FOLLOWUP_URL);
+    const url = followUpUrl("sdm");
+    await waitForFollowUpPage(page, url);
     await startSurvey(page);
     await completeSDM(page);
 
     // Verify via Backend API that submission was received
     const resp = await fetch(
-      `${API_BASE}/api/surveys/by-speaker/${encodeURIComponent(SPEAKER)}`,
+      `${API_BASE}/api/surveys/by-speaker/${encodeURIComponent(E2E_PATIENTS.sdm.patient)}`,
       { headers: AUTH_HEADERS },
     );
     expect(resp.ok).toBe(true);
@@ -90,7 +97,7 @@ test.describe("SDM Survey Submit", () => {
 
 test.describe("DCS Survey Submit", () => {
   test("fill all 16 DCS questions and submit via UI", async ({ page }) => {
-    await waitForFollowUpPage(page, FOLLOWUP_URL);
+    await waitForFollowUpPage(page, followUpUrl("dcs"));
     await startSurvey(page);
 
     // Fast-forward through SDM
@@ -110,7 +117,7 @@ test.describe("Risk Perception Survey Submit", () => {
   test("fill all 5 risk perception questions and submit via UI", async ({
     page,
   }) => {
-    await waitForFollowUpPage(page, FOLLOWUP_URL);
+    await waitForFollowUpPage(page, followUpUrl("risk"));
     await startSurvey(page);
 
     // Fast-forward through SDM + DCS
@@ -130,15 +137,13 @@ test.describe("Risk Perception Survey Submit", () => {
 
 test.describe("Patient Satisfaction Survey Submit", () => {
   test("fill satisfaction feedback and submit via UI", async ({ page }) => {
-    await waitForFollowUpPage(page, FOLLOWUP_URL);
+    await waitForFollowUpPage(page, followUpUrl("sat"));
     await startSurvey(page);
 
-    // Fast-forward through SDM + DCS + Risk Perception
+    // Fast-forward through SDM + DCS (Risk is not in the basic follow-up flow).
     await completeSDM(page);
     await goToNextStep(page);
     await completeDCS(page);
-    await goToNextStep(page);
-    await completeRiskPerception(page);
     await goToNextStep(page);
 
     // Now on Satisfaction
