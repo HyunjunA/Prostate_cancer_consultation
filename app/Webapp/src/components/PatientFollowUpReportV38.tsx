@@ -721,6 +721,8 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
     useState(false);
   const [satisfactionSubmitted, setSatisfactionSubmitted] = useState(false);
 
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   // True once the mount-time restore fetch has resolved. Auto-save waits for this
   // so it never re-saves the just-restored values (and works for a fresh patient).
   const [surveyHydrated, setSurveyHydrated] = useState(false);
@@ -1092,6 +1094,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
 
   const handleSubmitSDM = async () => {
     setIsSubmittingSDM(true);
+    setSubmitError(null);
     try {
       await submitSurvey({
         survey_type: "sdm",
@@ -1119,7 +1122,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
       setSuccessMsg("Responses submitted successfully!");
     } catch (error) {
       console.error("SDM submission error:", error);
-      alert("Failed to submit. Please try again.");
+      setSubmitError(error instanceof Error ? error.message : "Failed to submit. Please try again.");
     } finally {
       setIsSubmittingSDM(false);
     }
@@ -1153,7 +1156,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
       setSuccessMsg("Responses submitted successfully!");
     } catch (error) {
       console.error("DCS submission error:", error);
-      alert("Failed to submit. Please try again.");
+      setSubmitError(error instanceof Error ? error.message : "Failed to submit. Please try again.");
     } finally {
       setIsSubmittingDCS(false);
     }
@@ -1187,7 +1190,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
       setSuccessMsg("Responses submitted successfully!");
     } catch (error) {
       console.error("Risk submission error:", error);
-      alert("Failed to submit. Please try again.");
+      setSubmitError(error instanceof Error ? error.message : "Failed to submit. Please try again.");
     } finally {
       setIsSubmittingRisk(false);
     }
@@ -1231,7 +1234,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
       setSuccessMsg("Feedback submitted successfully!");
     } catch (error) {
       console.error("Satisfaction submission error:", error);
-      alert("Failed to submit. Please try again.");
+      setSubmitError(error instanceof Error ? error.message : "Failed to submit. Please try again.");
     } finally {
       setIsSubmittingSatisfaction(false);
     }
@@ -1550,6 +1553,7 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
                   onProgressSave={saveDCSProgress}
                   isDark={isDarkMode}
                   oneWay
+                  isSubmitting={isSubmittingDCS}
                   onTrackEvent={handleTrackEvent}
                   onQuestionView={(qid, idx) =>
                     trackFollowup(currentFile, currentSpeaker, {
@@ -1560,6 +1564,11 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
                     })
                   }
                 />
+                {submitError && (
+                  <p className="mt-3 text-sm text-red-600 text-center">
+                    {submitError}
+                  </p>
+                )}
               </div>
             )}
 

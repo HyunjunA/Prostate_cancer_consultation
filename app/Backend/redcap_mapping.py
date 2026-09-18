@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 # First run of digits anywhere in the id: "SID_22" / "sid 22" / "22" -> "22".
 _DIGITS_RX = re.compile(r"\d+")
 
-_LOOKUP_TIMEOUT_SEC = 30
+_LOOKUP_TIMEOUT_SEC = 90
 
 
 def to_record_id(sid: Optional[str]) -> Optional[str]:

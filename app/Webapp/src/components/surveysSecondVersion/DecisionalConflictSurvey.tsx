@@ -289,6 +289,7 @@ interface DecisionalConflictSurveyProps {
   ) => void;
   onSubmit?: () => void;
   onProgressSave?: () => void;
+  isSubmitting?: boolean;
   isDark?: boolean;
   physicianName?: string;
   onTrackEvent?: (eventData: {
@@ -320,6 +321,7 @@ export const DecisionalConflictSurvey: React.FC<
   onQuestionView,
   oneWay = false,
   locked = false,
+  isSubmitting = false,
 }) => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = React.useState(0);
 
@@ -464,27 +466,36 @@ export const DecisionalConflictSurvey: React.FC<
           </button>
         ) : (
           onSubmit && (
-            <button
-              onClick={handleSubmitClick}
-              disabled={!isCurrentAnswered || locked}
-              data-track-proximity="DCS_Submit_Button"
-              className={cx(
-                "px-8 py-3 rounded-lg text-sm font-semibold transition-all shadow-lg",
-                isCurrentAnswered
-                  ? isDark
-                    ? "bg-teal-700 text-teal-100 hover:bg-teal-600 hover:shadow-xl"
-                    : "bg-teal-600 text-white hover:bg-teal-700 hover:shadow-xl"
-                  : isDark
-                    ? "bg-slate-700 text-slate-500 cursor-not-allowed"
-                    : "bg-gray-300 text-gray-500 cursor-not-allowed",
+            <div className="flex flex-col items-center gap-2">
+              <button
+                onClick={handleSubmitClick}
+                disabled={!isCurrentAnswered || locked || isSubmitting}
+                data-track-proximity="DCS_Submit_Button"
+                className={cx(
+                  "px-8 py-3 rounded-lg text-sm font-semibold transition-all shadow-lg",
+                  isCurrentAnswered && !isSubmitting
+                    ? isDark
+                      ? "bg-teal-700 text-teal-100 hover:bg-teal-600 hover:shadow-xl"
+                      : "bg-teal-600 text-white hover:bg-teal-700 hover:shadow-xl"
+                    : isDark
+                      ? "bg-slate-700 text-slate-500 cursor-not-allowed"
+                      : "bg-gray-300 text-gray-500 cursor-not-allowed",
+                )}
+              >
+                {locked
+                  ? "Submitted"
+                  : isSubmitting
+                    ? "Submitting… please wait"
+                    : oneWay
+                      ? "Submit & continue to next section"
+                      : "Submit Responses"}
+              </button>
+              {isSubmitting && (
+                <p className="text-xs text-gray-500 text-center max-w-xs">
+                  Saving your responses — this may take a moment. Please do not close this page.
+                </p>
               )}
-            >
-              {locked
-                ? "Submitted"
-                : oneWay
-                  ? "Submit & continue to next section"
-                  : "Submit Responses"}
-            </button>
+            </div>
           )
         )}
       </div>

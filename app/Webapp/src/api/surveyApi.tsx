@@ -79,9 +79,14 @@ export interface ApiError {
  *   answers: { q1: 0, q2: 1, q3: 2, ... }
  * });
  */
+const SUBMIT_TIMEOUT_MS = 90_000;
+
 export async function submitSurvey(
   submission: SurveySubmission
 ): Promise<SurveyResponse> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SUBMIT_TIMEOUT_MS);
+
   try {
     const response = await fetch(`${API_BASE_URL}/api/backend/surveys/submit`, {
       method: "POST",
@@ -89,6 +94,7 @@ export async function submitSurvey(
         "Content-Type": "application/json",
       },
       body: JSON.stringify(submission),
+      signal: controller.signal,
     });
 
     if (!response.ok) {
@@ -102,10 +108,16 @@ export async function submitSurvey(
     return data;
   } catch (error) {
     if (error instanceof Error) {
+      if (error.name === "AbortError") {
+        console.error(`❌ Survey submission timed out after ${SUBMIT_TIMEOUT_MS / 1000}s`);
+        throw new Error("Submission is taking longer than expected. Your responses are saved — please wait a moment and try again.");
+      }
       console.error(`❌ Survey submission failed:`, error.message);
       throw error;
     }
     throw new Error("An unexpected error occurred");
+  } finally {
+    clearTimeout(timer);
   }
 }
 
