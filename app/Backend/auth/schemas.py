@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -28,6 +28,8 @@ class UserUpdate(BaseModel):
 
 
 class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     username: str
     email: Optional[str]
@@ -37,9 +39,6 @@ class UserResponse(BaseModel):
     auth_provider: str
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
-
-    class Config:
-        from_attributes = True
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -52,15 +51,14 @@ class APIKeyCreate(BaseModel):
 
 
 class APIKeyResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     label: Optional[str]
     is_active: bool
     created_at: Optional[datetime]
     expires_at: Optional[datetime]
     last_used_at: Optional[datetime]
-
-    class Config:
-        from_attributes = True
 
 
 class APIKeyCreated(APIKeyResponse):
