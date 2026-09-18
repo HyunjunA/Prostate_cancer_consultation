@@ -9,9 +9,9 @@ const DonutChartPlotly = () => {
       values: [19, 26, 55],
       labels: ["Residential", "Non-Residential", "Utility"],
       type: "pie",
-      hole: 0.4, // 이 속성이 도넛 차트를 만듭니다. 0.4는 중앙 구멍의 크기 (0-1 사이 값)
-      textinfo: "label+percent", // 라벨과 퍼센트를 표시
-      textposition: "outside", // 텍스트를 차트 바깥에 위치
+      hole: 0.4, // creates the donut shape; 0.4 is the inner hole size (0–1)
+      textinfo: "label+percent", // display label and percent
+      textposition: "outside", // position text outside the chart
       automargin: true,
     },
   ];
@@ -25,15 +25,15 @@ const DonutChartPlotly = () => {
     },
     showlegend: true,
     legend: {
-      orientation: "h", // legend를 수평으로 배치
-      yanchor: "bottom", // legend를 아래쪽에 고정
-      y: -0.2, // legend의 y 위치
-      xanchor: "center", // legend를 중앙에 배치
-      x: 0.5, // legend의 x 위치
+      orientation: "h", // arrange legend horizontally
+      yanchor: "bottom", // anchor legend at bottom
+      y: -0.2, // y position of the legend
+      xanchor: "center", // center the legend horizontally
+      x: 0.5, // x position of the legend
     },
     annotations: [
       {
-        // 중앙에 텍스트 추가 (선택사항)
+        // Add center text (optional)
         text: "Total",
         showarrow: false,
         font: {

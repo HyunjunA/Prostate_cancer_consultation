@@ -80,7 +80,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   const { doctorId } = useDoctorId();
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ Integrate useDoctorData hook (PUT 함수 추가)
+  // ✅ Integrate useDoctorData hook (add PUT function)
   // ═══════════════════════════════════════════════════════════
   const {
     files,

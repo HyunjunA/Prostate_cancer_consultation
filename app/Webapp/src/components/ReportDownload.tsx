@@ -3529,7 +3529,7 @@ export const ReportDownload = () => {
   //       };
 
   //       // Check for Korean characters and determine if we need to translate
-  //       const hasKoreanText =
+  //       const hasSummaryPrefix =
   //         /[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F\uA960-\uA97F\uAC00-\uD7A3]/.test(
   //           summaryText
   //         );
@@ -3543,10 +3543,10 @@ export const ReportDownload = () => {
   //       }
 
   //       // Remove Korean language indicators if present
-  //       if (hasKoreanText && cleanText.includes("여기서 Summary:")) {
-  //         const koreanPrefixIndex = cleanText.indexOf("여기서 Summary:");
+  //       if (hasSummaryPrefix && cleanText.includes("Here is the Summary:")) {
+  //         const summaryPrefixIndex = cleanText.indexOf("Here is the Summary:");
   //         cleanText = cleanText
-  //           .substring(koreanPrefixIndex + "여기서 Summary:".length)
+  //           .substring(summaryPrefixIndex + "Here is the Summary:".length)
   //           .trim();
   //       }
 
@@ -4985,7 +4985,7 @@ export const ReportDownload = () => {
   //       };
 
   //       // Check for Korean characters and determine if we need to translate
-  //       const hasKoreanText =
+  //       const hasSummaryPrefix =
   //         /[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F\uA960-\uA97F\uAC00-\uD7A3]/.test(
   //           summaryText
   //         );
@@ -4999,10 +4999,10 @@ export const ReportDownload = () => {
   //       }
 
   //       // Remove Korean language indicators if present
-  //       if (hasKoreanText && cleanText.includes("여기서 Summary:")) {
-  //         const koreanPrefixIndex = cleanText.indexOf("여기서 Summary:");
+  //       if (hasSummaryPrefix && cleanText.includes("Here is the Summary:")) {
+  //         const summaryPrefixIndex = cleanText.indexOf("Here is the Summary:");
   //         cleanText = cleanText
-  //           .substring(koreanPrefixIndex + "여기서 Summary:".length)
+  //           .substring(summaryPrefixIndex + "Here is the Summary:".length)
   //           .trim();
   //       }
 
@@ -5778,7 +5778,7 @@ export const ReportDownload = () => {
   //       };
 
   //       // Check for Korean characters and determine if we need to translate
-  //       const hasKoreanText =
+  //       const hasSummaryPrefix =
   //         /[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F\uA960-\uA97F\uAC00-\uD7A3]/.test(
   //           summaryText
   //         );
@@ -5792,10 +5792,10 @@ export const ReportDownload = () => {
   //       }
 
   //       // Remove Korean language indicators if present
-  //       if (hasKoreanText && cleanText.includes("여기서 Summary:")) {
-  //         const koreanPrefixIndex = cleanText.indexOf("여기서 Summary:");
+  //       if (hasSummaryPrefix && cleanText.includes("Here is the Summary:")) {
+  //         const summaryPrefixIndex = cleanText.indexOf("Here is the Summary:");
   //         cleanText = cleanText
-  //           .substring(koreanPrefixIndex + "여기서 Summary:".length)
+  //           .substring(summaryPrefixIndex + "Here is the Summary:".length)
   //           .trim();
   //       }
 
@@ -6574,7 +6574,7 @@ export const ReportDownload = () => {
   //       };
 
   //       // Check for Korean characters and determine if we need to translate
-  //       const hasKoreanText =
+  //       const hasSummaryPrefix =
   //         /[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F\uA960-\uA97F\uAC00-\uD7A3]/.test(
   //           summaryText
   //         );
@@ -6588,10 +6588,10 @@ export const ReportDownload = () => {
   //       }
 
   //       // Remove Korean language indicators if present
-  //       if (hasKoreanText && cleanText.includes("여기서 Summary:")) {
-  //         const koreanPrefixIndex = cleanText.indexOf("여기서 Summary:");
+  //       if (hasSummaryPrefix && cleanText.includes("Here is the Summary:")) {
+  //         const summaryPrefixIndex = cleanText.indexOf("Here is the Summary:");
   //         cleanText = cleanText
-  //           .substring(koreanPrefixIndex + "여기서 Summary:".length)
+  //           .substring(summaryPrefixIndex + "Here is the Summary:".length)
   //           .trim();
   //       }
 
@@ -7371,7 +7371,7 @@ export const ReportDownload = () => {
         };
 
         // Check for Korean characters and determine if we need to translate
-        const hasKoreanText =
+        const hasSummaryPrefix =
           /[\uAC00-\uD7AF\u1100-\u11FF\u3130-\u318F\uA960-\uA97F\uAC00-\uD7A3]/.test(
             summaryText
           );
@@ -7385,10 +7385,10 @@ export const ReportDownload = () => {
         }
 
         // Remove Korean language indicators if present
-        if (hasKoreanText && cleanText.includes("여기서 Summary:")) {
-          const koreanPrefixIndex = cleanText.indexOf("여기서 Summary:");
+        if (hasSummaryPrefix && cleanText.includes("Here is the Summary:")) {
+          const summaryPrefixIndex = cleanText.indexOf("Here is the Summary:");
           cleanText = cleanText
-            .substring(koreanPrefixIndex + "여기서 Summary:".length)
+            .substring(summaryPrefixIndex + "Here is the Summary:".length)
             .trim();
         }
 

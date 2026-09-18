@@ -1,6 +1,6 @@
 // PhysicianReportsModified.tsx
 // Language: TypeScript/React (TailwindCSS)
-// ✅ 완전 재구성: generateSampleData 제거, API 데이터 기반으로 변환
+// ✅ Full refactor: remove generateSampleData, convert to API-based data
 
 import React, { useState, useEffect, useMemo } from "react";
 import ConsultationScoring from "./ConsultationScoring";
@@ -32,7 +32,7 @@ interface SentenceDetail {
   sentence: string;
   time: string;
   score?: number;
-  // ✅ Rewrite 관련 필드
+  // ✅ Rewrite-related fields
   hasRewrite?: boolean;
   revisedSentence?: string;
   revisedScore?: number;
@@ -59,7 +59,7 @@ interface PhysicianReportsProps {
 }
 
 // ═══════════════════════════════════════════════════════════
-// ✅ Constants: Class ↔ Topic 매핑
+// ✅ Constants: Class ↔ Topic mapping
 // ═══════════════════════════════════════════════════════════
 const CLASS_TO_TOPIC: Record<string, TopicName> = {
   "1": "Cancer Prognosis",
@@ -92,13 +92,13 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   isDarkMode = false,
 }) => {
   // ═══════════════════════════════════════════════════════════
-  // Store에서 fileId, doctorId 가져오기
+  // Get fileId, doctorId from store
   // ═══════════════════════════════════════════════════════════
   const { fileId } = useFileId();
   const { doctorId } = useDoctorId();
 
   // ═══════════════════════════════════════════════════════════
-  // useDoctorData 훅
+  // useDoctorData hook
   // ═══════════════════════════════════════════════════════════
   const {
     files,
@@ -113,7 +113,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   } = useDoctorData();
 
   // ═══════════════════════════════════════════════════════════
-  // UI 상태
+  // UI state
   // ═══════════════════════════════════════════════════════════
   const [selectedFile, setSelectedFile] = useState<string>("");
   const [selectedSpeaker, setSelectedSpeaker] = useState<string>("");
@@ -122,7 +122,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   const [selectedSuggestion, setSelectedSuggestion] =
     useState<ImprovementSuggestion | null>(null);
 
-  // Rewrite 상태
+  // Rewrite state
   const [newSentence, setNewSentence] = useState("");
   const [rescoring, setRescoring] = useState(false);
   const [showRewrite, setShowRewrite] = useState(false);
@@ -132,7 +132,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }>({ status: "idle", message: "" });
 
   // ═══════════════════════════════════════════════════════════
-  // Store 값 → 로컬 상태 동기화
+  // Sync store values → local state
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (fileId) {
@@ -149,14 +149,14 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [doctorId]);
 
   // ═══════════════════════════════════════════════════════════
-  // 초기 로드: 파일 목록
+  // Initial load: file list
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     fetchFiles();
   }, []);
 
   // ═══════════════════════════════════════════════════════════
-  // default value 설정
+  // Set default values
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (files && files.length > 0 && !selectedFile && !fileId) {
@@ -171,7 +171,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [selectedSpeaker, doctorId]);
 
   // ═══════════════════════════════════════════════════════════
-  // 파일/스피커 변경 시 데이터 로드
+  // Load data on file/speaker change
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (selectedFile && selectedSpeaker) {
@@ -182,10 +182,10 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [selectedFile, selectedSpeaker]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ 핵심: API 데이터 → Topics 구조 변환
+  // ✅ Core: convert API data → Topics structure
   // ═══════════════════════════════════════════════════════════
   const topicsData: TopicsMap = useMemo(() => {
-    // 기본 빈 구조 생성
+    // Initialize empty structure
     const result: TopicsMap = {};
     ALL_TOPICS.forEach((topic) => {
       result[topic] = {
@@ -195,18 +195,18 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       };
     });
 
-    // sentences가 없으면 빈 구조 반환
+    // Return empty structure if no sentences
     if (!sentences?.data || sentences.data.length === 0) {
       console.log("⚠️ No sentences data");
       return result;
     }
 
-    // Rewrites를 i-i2 키로 매핑
+    // Map rewrites by i-i2 key
     const rewriteMap = new Map<string, DoctorRewriteItem>();
     if (rewritesFiltered?.data) {
       rewritesFiltered.data.forEach((rw) => {
         const key = `${rw.i}-${rw.i2}`;
-        // 같은 문장에 여러 rewrite가 있으면 가장 최신 것만 (time 기준)
+        // If multiple rewrites exist for the same sentence, keep only the latest one (by time)
         const existing = rewriteMap.get(key);
         if (!existing || new Date(rw.time) > new Date(existing.time)) {
           rewriteMap.set(key, rw);
@@ -217,7 +217,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
     console.log("📊 Processing sentences:", sentences.data.length);
     console.log("📝 Rewrites map:", rewriteMap.size);
 
-    // sentences.data를 class별로 그룹핑
+    // Group sentences.data by class
     sentences.data.forEach((item: DoctorSentenceItem) => {
       const topicName = CLASS_TO_TOPIC[item.class];
       if (!topicName) {
@@ -244,11 +244,11 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       result[topicName].sentences.push(item.sentence);
     });
 
-    // 각 Topic의 최고 점수 계산
+    // Compute max score per Topic
     ALL_TOPICS.forEach((topic) => {
       const details = result[topic].sentenceDetails;
       if (details.length > 0) {
-        // rewrite가 있으면 revisedScore, 없으면 원본 score 사용
+        // Use revisedScore if a rewrite exists, otherwise use the original score
         const scores = details.map((d) =>
           d.hasRewrite && d.revisedScore ? d.revisedScore : d.score || 0
         );
@@ -261,7 +261,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [sentences, rewritesFiltered]);
 
   // ═══════════════════════════════════════════════════════════
-  // 전체 평균 점수 계산
+  // Compute overall average score
   // ═══════════════════════════════════════════════════════════
   const overallScore = useMemo(() => {
     const scores = ALL_TOPICS.map((t) => topicsData[t]?.score || 0);
@@ -378,7 +378,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   };
 
   // ═══════════════════════════════════════════════════════════
-  // Score 계산 (간단한 휴리스틱)
+  // Compute score (simple heuristic)
   // ═══════════════════════════════════════════════════════════
   const rescoreSentence = async (sentence: string): Promise<number> => {
     setRescoring(true);
@@ -396,7 +396,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   };
 
   // ═══════════════════════════════════════════════════════════
-  // Rewrite 저장 핸들러
+  // Rewrite save handler
   // ═══════════════════════════════════════════════════════════
   const handleSaveRewrite = async (sentenceDetail: SentenceDetail) => {
     if (!newSentence.trim() || !selectedTopic) return;
@@ -425,10 +425,10 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           message: `✅ Saved! New score: ${newScore}`,
         });
 
-        // data 새로고침
+        // Refresh data
         await fetchRewritesFiltered(selectedFile, selectedSpeaker);
 
-        // 입력 초기화
+        // input initialize
         setNewSentence("");
         setSelectedSuggestion(null);
 
@@ -456,7 +456,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   const GridView = () => {
     const [showFullContext, setShowFullContext] = useState(false);
 
-    // 모든 문장을 시간순으로 정렬한 Full Context
+    // Sort all sentences chronologically for Full Context
     const allSentences = useMemo(() => {
       const all: Array<SentenceDetail & { topic: TopicName }> = [];
       ALL_TOPICS.forEach((topic) => {
@@ -464,7 +464,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           all.push({ ...detail, topic });
         });
       });
-      // time 기준 정렬
+      // Sort by time
       return all.sort((a, b) => a.time.localeCompare(b.time));
     }, []);
 

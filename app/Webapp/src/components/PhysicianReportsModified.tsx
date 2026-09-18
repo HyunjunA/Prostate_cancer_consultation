@@ -48,42 +48,42 @@
 //   );
 
 //   // ═══════════════════════════════════════════════════════════
-//   // ✅ 추가 #1: useDoctorData 훅에서 모든 항목 추출
+//   // ✅ add #1: extract all items from useDoctorData hook
 //   // ═══════════════════════════════════════════════════════════
 //   const {
-//     files, // ✅ 추가됨
-//     sentences, // ✅ 추가됨
-//     rewritesAll, // ✅ 추가됨 (NEW)
-//     rewritesFiltered, // ✅ 추가됨 (NEW)
-//     rewritesPaginated, // ✅ 추가됨 (NEW)
-//     fetchFiles, // ✅ 추가됨 (NEW)
-//     fetchSentences, // ✅ 추가됨
-//     fetchRewritesAll, // ✅ 추가됨 (NEW)
-//     fetchRewritesFiltered, // ✅ 추가됨 (NEW)
-//     fetchRewritesPaginated, // ✅ 추가됨 (NEW)
+//     files, // ✅ added
+//     sentences, // ✅ added
+//     rewritesAll, // ✅ added (NEW)
+//     rewritesFiltered, // ✅ added (NEW)
+//     rewritesPaginated, // ✅ added (NEW)
+//     fetchFiles, // ✅ added (NEW)
+//     fetchSentences, // ✅ added
+//     fetchRewritesAll, // ✅ added (NEW)
+//     fetchRewritesFiltered, // ✅ added (NEW)
+//     fetchRewritesPaginated, // ✅ added (NEW)
 //   } = useDoctorData();
 
 //   // ═══════════════════════════════════════════════════════════
-//   // ✅ 추가 #2: UI 상태 변수 5개 추가
+//   // ✅ add #2: add 5 UI state variables
 //   // ═══════════════════════════════════════════════════════════
 //   const [selectedFile, setSelectedFile] = useState<string>("");
-//   // selection된 파일을 추적
+//   // track the selected file
 
 //   const [selectedSpeaker, setSelectedSpeaker] =
 //     useState<string>("Interviewer:");
-//   // selection된 스피커를 추적
+//   // track the selected speaker
 
 //   const [skipValue, setSkipValue] = useState<number>(0);
-//   // 페이지네이션: 건너뛸 개수
+//   // pagination: number of items to skip
 
 //   const [limitValue, setLimitValue] = useState<number>(50);
-//   // 페이지네이션: 가져올 개수
+//   // pagination: number of items to fetch
 
 //   const [activeTab, setActiveTab] = useState<string>("sentences");
-//   // 현재 활성 탭 추적 (Sentences 또는 Rewrites)
+//   // track current active tab (Sentences or Rewrites)
 
 //   // ═══════════════════════════════════════════════════════════
-//   // ✅ 추가 #3: useEffect - 초기 파일 목록 로드 + console.log
+//   // ✅ add #3: useEffect - initial file list load + console.log
 //   // ═══════════════════════════════════════════════════════════
 //   useEffect(() => {
 //     console.log("📁 Fetching files...");
@@ -91,7 +91,7 @@
 //   }, []);
 
 //   // ═══════════════════════════════════════════════════════════
-//   // ✅ 추가 #3-1: files 데이터 변경 감시 + console.log
+//   // ✅ add #3-1: watch files data changes + console.log
 //   // ═══════════════════════════════════════════════════════════
 //   useEffect(() => {
 //     if (files) {
@@ -100,7 +100,7 @@
 //   }, [files]);
 
 //   // ═══════════════════════════════════════════════════════════
-//   // ✅ 추가 #4: useEffect - 기본 파일 자동 선택
+//   // ✅ add #4: useEffect - auto-select default file
 //   // ═══════════════════════════════════════════════════════════
 //   useEffect(() => {
 //     if (files && files.length > 0 && !selectedFile) {
@@ -111,7 +111,7 @@
 //   }, [files]);
 
 //   // ═══════════════════════════════════════════════════════════
-//   // ✅ 추가 #5: useEffect - 파일/스피커 변경 시 데이터 자동 로드
+//   // ✅ add #5: useEffect - auto-load data on file/speaker change
 //   // ═══════════════════════════════════════════════════════════
 //   useEffect(() => {
 //     if (selectedFile) {
@@ -123,7 +123,7 @@
 //   }, [selectedFile, selectedSpeaker]);
 
 //   // ═══════════════════════════════════════════════════════════
-//   // ✅ 추가 #6: useEffect - sentences 데이터 변경 감시 + console.log
+//   // ✅ add #6: useEffect - watch sentences data changes + console.log
 //   // ═══════════════════════════════════════════════════════════
 //   useEffect(() => {
 //     if (sentences) {
@@ -133,7 +133,7 @@
 //   }, [sentences]);
 
 //   // ═══════════════════════════════════════════════════════════
-//   // ✅ 추가 #7: useEffect - rewritesAll 데이터 변경 감시 + console.log
+//   // ✅ add #7: useEffect - watch rewritesAll data changes + console.log
 //   // ═══════════════════════════════════════════════════════════
 //   useEffect(() => {
 //     if (rewritesAll) {
@@ -143,7 +143,7 @@
 //   }, [rewritesAll]);
 
 //   // ═══════════════════════════════════════════════════════════
-//   // ✅ 추가 #8: useEffect - rewritesFiltered 데이터 변경 감시 + console.log
+//   // ✅ add #8: useEffect - watch rewritesFiltered data changes + console.log
 //   // ═══════════════════════════════════════════════════════════
 //   useEffect(() => {
 //     if (rewritesFiltered) {
@@ -156,7 +156,7 @@
 //   }, [rewritesFiltered]);
 
 //   // ═══════════════════════════════════════════════════════════
-//   // ✅ 추가 #9: useEffect - rewritesPaginated 데이터 변경 감시 + console.log
+//   // ✅ add #9: useEffect - watch rewritesPaginated data changes + console.log
 //   // ═══════════════════════════════════════════════════════════
 //   useEffect(() => {
 //     if (rewritesPaginated) {
@@ -169,7 +169,7 @@
 //   }, [rewritesPaginated]);
 
 //   // ═══════════════════════════════════════════════════════════
-//   // ✅ 추가 #10: 핸들러 함수 - 모든 Rewrites 로드 + console.log
+//   // ✅ add #10: handler function - load all Rewrites + console.log
 //   // ═══════════════════════════════════════════════════════════
 //   const handleLoadAllRewrites = () => {
 //     console.log("🔄 Physician-Loading all rewrites...");
@@ -178,7 +178,7 @@
 //   };
 
 //   // ═══════════════════════════════════════════════════════════
-//   // ✅ 추가 #11: 핸들러 함수 - 필터된 Rewrites 로드 + console.log
+//   // ✅ add #11: handler function - load filtered Rewrites + console.log
 //   // ═══════════════════════════════════════════════════════════
 //   const handleLoadFilteredRewrites = () => {
 //     if (selectedFile && selectedSpeaker) {
@@ -193,7 +193,7 @@
 //   };
 
 //   // ═══════════════════════════════════════════════════════════
-//   // ✅ 추가 #12: 핸들러 함수 - 페이지네이션 Rewrites 로드 + console.log
+//   // ✅ add #12: handler function - load paginated Rewrites + console.log
 //   // ═══════════════════════════════════════════════════════════
 //   const handleLoadPaginatedRewrites = () => {
 //     console.log(
@@ -204,7 +204,7 @@
 //   };
 
 //   // ═══════════════════════════════════════════════════════════
-//   // ✅ 추가 #13: 핸들러 함수 - 파일 새로고침 + console.log
+//   // ✅ add #13: handler function - refresh files + console.log
 //   // ═══════════════════════════════════════════════════════════
 //   const handleRefreshFiles = () => {
 //     console.log("🔃 Physician-Refreshing files...");
@@ -212,7 +212,7 @@
 //   };
 
 //   // ════════════════════════════════════════════════════════════
-//   // REST API 모든 엔드포인트 - useEffect 호출 (의존성 배열 없음)
+//   // REST API all endpoints - useEffect call (no dependency array)
 //   // ════════════════════════════════════════════════════════════
 
 //   const BASE_URL = "http://localhost:8000";
@@ -1818,7 +1818,7 @@
 
 // PhysicianReports.tsx
 // Language: TypeScript/React (TailwindCSS)
-// NOTE: 모든 API 호출을 useDoctorData 훅으로 통합, 중복 제거됨
+// NOTE: all API calls consolidated into useDoctorData hook, duplicates removed
 
 import React, { useState, useEffect, useMemo } from "react";
 import * as XLSX from "xlsx";
@@ -1863,7 +1863,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   );
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useDoctorData 훅 통합
+  // ✅ Integrate useDoctorData hook
   // ═══════════════════════════════════════════════════════════
   const {
     files,
@@ -1879,7 +1879,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   } = useDoctorData();
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ UI 상태 변수
+  // ✅ UI state variables
   // ═══════════════════════════════════════════════════════════
   const [selectedFile, setSelectedFile] = useState<string>("");
   const [selectedSpeaker, setSelectedSpeaker] =
@@ -1889,7 +1889,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   const [activeTab, setActiveTab] = useState<string>("sentences");
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - 초기 파일 목록 로드 (한 번만)
+  // ✅ useEffect - initial file list load (once only)
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     console.log("📁 Fetching files...");
@@ -1898,7 +1898,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, []);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - files 데이터 변경 감시
+  // ✅ useEffect - watch files data changes
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (files) {
@@ -1907,7 +1907,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [files]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - 기본 파일 자동 선택
+  // ✅ useEffect - auto-select default file
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (files && files.length > 0 && !selectedFile) {
@@ -1918,7 +1918,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [files, selectedFile]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - 파일/스피커 변경 시 데이터 자동 로드
+  // ✅ useEffect - auto-load data on file/speaker change
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (selectedFile && selectedSpeaker) {
@@ -1930,7 +1930,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [selectedFile, selectedSpeaker]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - sentences 데이터 변경 감시
+  // ✅ useEffect - watch sentences data changes
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (sentences) {
@@ -1940,7 +1940,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [sentences]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - rewritesAll 데이터 변경 감시
+  // ✅ useEffect - watch rewritesAll data changes
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (rewritesAll) {
@@ -1950,7 +1950,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [rewritesAll]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - rewritesFiltered 데이터 변경 감시
+  // ✅ useEffect - watch rewritesFiltered data changes
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (rewritesFiltered) {
@@ -1963,7 +1963,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [rewritesFiltered]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - rewritesPaginated 데이터 변경 감시
+  // ✅ useEffect - watch rewritesPaginated data changes
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (rewritesPaginated) {
@@ -1976,7 +1976,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [rewritesPaginated]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ 핸들러 함수 - 모든 Rewrites 로드
+  // ✅ handler function - load all Rewrites
   // ═══════════════════════════════════════════════════════════
   const handleLoadAllRewrites = () => {
     console.log("🔄 Physician-Loading all rewrites...");
@@ -1985,7 +1985,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   };
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ 핸들러 함수 - 필터된 Rewrites 로드
+  // ✅ handler function - load filtered Rewrites
   // ═══════════════════════════════════════════════════════════
   const handleLoadFilteredRewrites = () => {
     if (selectedFile && selectedSpeaker) {
@@ -2000,7 +2000,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   };
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ 핸들러 함수 - 페이지네이션 Rewrites 로드
+  // ✅ handler function - load paginated Rewrites
   // ═══════════════════════════════════════════════════════════
   const handleLoadPaginatedRewrites = () => {
     console.log(
@@ -2011,7 +2011,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   };
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ 핸들러 함수 - 파일 새로고침
+  // ✅ handler function - refresh files
   // ═══════════════════════════════════════════════════════════
   const handleRefreshFiles = () => {
     console.log("🔃 Physician-Refreshing files...");
@@ -2348,7 +2348,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
     return arr;
   }, [patients, search, scoreBand]);
 
-  // DashboardView (나머지는 변경 없음 - 이전 코드 유지)
+  // DashboardView (rest unchanged — keeping previous code)
   const DashboardView = () => (
     <div className="space-y-8">
       <div

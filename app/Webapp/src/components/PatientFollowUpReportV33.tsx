@@ -18,25 +18,25 @@
  * - Survey question UI (risk perception, treatment understanding)
  * - REDCap integration (survey input in dashboard → sent to REDCap via backend)
  * - Clearly separated question-by-question layout
- * - 페이지 역할/목적 안내 문구
+ * - Page role/purpose introduction text
  *
- * [오픈 이슈 - Tim 확인 필요]
- * - Second visit 정의 불명확 (어떤 이벤트를 second visit으로 간주하는지)
- * - Summary 포함 여부 미확정 (현재 Risk Perception에 포함되어 있으나 확정 아님)
- * - Baseline 설문 부재 (사전지식 측정 없음 - 연구 설계 우려사항)
+ * [Open issues - needs Tim to check]
+ * - Second visit definition unclear (which event counts as second visit)
+ * - Whether to include Summary is undecided (currently in Risk Perception but not finalized)
+ * - No Baseline survey (no pre-visit knowledge measurement — research design concern)
  *
- * [명시적으로 제외된 것]
- * - 첫 방문 요약 5개 재평가 기능
- * - 근거 문장 클릭 트래킹 (First visit 기능)
- * - 별점 rating (필수 요구사항 아님)
+ * [Explicitly excluded]
+ * - Re-rating of first visit's 5 summaries
+ * - Evidence sentence click tracking (first-visit feature)
+ * - Star rating (not a required feature)
  *
  * ============================================================================
  *
  * Survey Flow:
- * 1. Welcome/Introduction (목적 및 프로토콜 안내)
+ * 1. Welcome/Introduction (purpose and protocol overview)
  * 2. SDM - Shared Decision Making
  * 3. Decisional Conflict Survey
- * 4. Risk Perception Survey (TODO: Summary 포함 여부 확정 필요 - 현재 collapsible로 구현)
+ * 4. Risk Perception Survey (TODO: confirm whether to include Summary — currently implemented as collapsible)
  * 5. Patient Satisfaction
  * 6. Completion/Thank You
  */

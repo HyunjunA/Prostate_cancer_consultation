@@ -100,10 +100,10 @@ const StackedBarChartplotly: React.FC<StackedBarProps> = ({
           aggregations: [{ target: "y", func: "sum", enabled: true }],
         },
       ],
-      // animation 설정
+      // animation configure
       opacity: 0.7,
       marker: {
-        color: "#1f77b4", // 색상 추가
+        color: "#1f77b4", // add color
       },
     },
     {
@@ -117,10 +117,10 @@ const StackedBarChartplotly: React.FC<StackedBarProps> = ({
           aggregations: [{ target: "y", func: "sum", enabled: true }],
         },
       ],
-      // animation 설정
+      // animation configure
       opacity: 0.7,
       marker: {
-        color: "#ff7f0e", // 색상 추가
+        color: "#ff7f0e", // add color
       },
     },
   ];
@@ -134,14 +134,14 @@ const StackedBarChartplotly: React.FC<StackedBarProps> = ({
       t: 40,
       b: 40,
     },
-    // animation 설정
+    // animation configure
     transition: {
       duration: 1000,
       easing: "cubic-in-out",
     },
-    // 초기 프레임 설정
+    // Configure initial frame
     animate: true,
-    // data 업데이트시 애니메이션 설정
+    // Configure animation on data update
     updatemenus: [
       {
         type: "buttons",
@@ -163,7 +163,7 @@ const StackedBarChartplotly: React.FC<StackedBarProps> = ({
         ],
       },
     ],
-    // 초기 프레임 설정
+    // Configure initial frame
     frames: [
       {
         name: "initial",
@@ -185,7 +185,7 @@ const StackedBarChartplotly: React.FC<StackedBarProps> = ({
   };
 
   React.useEffect(() => {
-    // component가 마운트된 후 애니메이션 시작
+    // Trigger animation after component mounts
     const timer = setTimeout(() => {
       const plotElement = document.querySelector(".js-plotly-plot");
       if (plotElement) {
@@ -206,7 +206,7 @@ const StackedBarChartplotly: React.FC<StackedBarProps> = ({
         useResizeHandler={true}
         style={{ width: "100%", height: "100%" }}
         onInitialized={(figure) => {
-          // 초기 렌더링시 애니메이션 시작
+          // Trigger animation on initial render
           if (figure) {
             const frames = [
               {

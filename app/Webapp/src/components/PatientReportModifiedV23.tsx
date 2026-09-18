@@ -940,7 +940,7 @@ const PatientReport: React.FC<PatientReportProps> = ({
       });
       alert("Thank you! Your responses have been recorded.");
     } catch (error) {
-      console.error("❌ Questions 제출 실패:", error);
+      console.error("❌ Failed to submit Questions:", error);
       alert("Failed to submit. Please try again.");
     }
   };
@@ -977,7 +977,7 @@ const PatientReport: React.FC<PatientReportProps> = ({
         "Thank you! Your Shared Decision Making responses have been recorded."
       );
     } catch (error) {
-      console.error("❌ SDM 제출 실패:", error);
+      console.error("❌ Failed to submit SDM:", error);
       alert("Failed to submit. Please try again.");
     }
   };
@@ -1004,7 +1004,7 @@ const PatientReport: React.FC<PatientReportProps> = ({
       setSubmittedSurveys((prev) => ({ ...prev, baseline: true }));
       alert("Thank you! Your baseline information has been recorded.");
     } catch (error) {
-      console.error("❌ Baseline 제출 실패:", error);
+      console.error("❌ Failed to submit Baseline:", error);
       alert("Failed to submit. Please try again.");
     }
   };
@@ -1042,7 +1042,7 @@ const PatientReport: React.FC<PatientReportProps> = ({
         "Thank you! Your Decisional Conflict Survey responses have been recorded."
       );
     } catch (error) {
-      console.error("❌ DCS 제출 실패:", error);
+      console.error("❌ Failed to submit DCS:", error);
       alert("Failed to submit. Please try again.");
     }
   };
@@ -1078,7 +1078,7 @@ const PatientReport: React.FC<PatientReportProps> = ({
       setSubmittedSurveys((prev) => ({ ...prev, risk: true }));
       alert("Thank you! Your Risk Perception responses have been recorded.");
     } catch (error) {
-      console.error("❌ Risk Perception 제출 실패:", error);
+      console.error("❌ Failed to submit Risk Perception:", error);
       alert("Failed to submit. Please try again.");
     }
   };
@@ -1109,7 +1109,7 @@ const PatientReport: React.FC<PatientReportProps> = ({
       setSubmittedSurveys((prev) => ({ ...prev, satisfaction: true }));
       alert("Thank you! Your satisfaction feedback has been recorded.");
     } catch (error) {
-      console.error("❌ Satisfaction 제출 실패:", error);
+      console.error("❌ Failed to submit Satisfaction:", error);
       alert("Failed to submit. Please try again.");
     }
   };

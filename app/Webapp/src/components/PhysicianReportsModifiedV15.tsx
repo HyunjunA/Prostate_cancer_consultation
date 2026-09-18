@@ -1,9 +1,9 @@
 // PhysicianReportsModified.tsx
 // Language: TypeScript/React (TailwindCSS)
-// ✅ 기존 UI 형태 유지 (Dashboard → Grid → Detail)
-// ✅ generateSampleData() 제거 - API 데이터로 대체
-// ✅ Re-write 기능 API 연동 (문장 선택, DB 저장, rewrite 이력)
-// ✅ 수정 후 즉시 UI 반영 (topicsData에서 항상 최신 데이터 참조)
+// ✅ Keep existing UI layout (Dashboard → Grid → Detail)
+// ✅ Remove generateSampleData() - replaced with API data
+// ✅ Wire Re-write feature to API (sentence selection, DB save, rewrite history)
+// ✅ Fix: UI reflects changes immediately (always references latest data from topicsData)
 
 import React, { useState, useEffect, useMemo } from "react";
 import ConsultationScoring from "./ConsultationScoring";
@@ -35,7 +35,7 @@ interface SentenceDetail {
   sentence: string;
   time: string;
   score?: number;
-  // Rewrite 관련 필드
+  // Rewrite-related fields
   hasRewrite?: boolean;
   revisedSentence?: string;
   revisedScore?: number;
@@ -68,7 +68,7 @@ interface ImprovementSuggestion {
 }
 
 // ═══════════════════════════════════════════════════════════
-// ✅ 수정: selectedTopic에서 data 제거 (항상 topicsData에서 최신 참조)
+// ✅ Fix: remove data from selectedTopic (always reference latest from topicsData)
 // ═══════════════════════════════════════════════════════════
 interface SelectedTopicState {
   name: TopicName;
@@ -115,7 +115,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   const { doctorId } = useDoctorId();
 
   // ═══════════════════════════════════════════════════════════
-  // useDoctorData 훅
+  // useDoctorData hook
   // ═══════════════════════════════════════════════════════════
   const {
     files,
@@ -130,12 +130,12 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   } = useDoctorData();
 
   // ═══════════════════════════════════════════════════════════
-  // UI 상태
+  // UI state
   // ═══════════════════════════════════════════════════════════
   const [selectedFile, setSelectedFile] = useState<string>("");
   const [selectedSpeaker, setSelectedSpeaker] = useState<string>("");
 
-  // Patients (files → patients 변환)
+  // Patients (convert files → patients)
   const [patients, setPatients] = useState<PatientRow[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<PatientRow | null>(
     null
@@ -146,7 +146,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
     "dashboard" | "grid" | "detail"
   >("dashboard");
 
-  // ✅ 수정: selectedTopic 타입 변경 (data 제거)
+  // ✅ Fix: change selectedTopic type (remove data)
   const [selectedTopic, setSelectedTopic] = useState<SelectedTopicState | null>(
     null
   );
@@ -171,7 +171,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   );
 
   // ═══════════════════════════════════════════════════════════
-  // Store 값 동기화
+  // Sync store values
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (fileId) setSelectedFile(fileId);
@@ -182,14 +182,14 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [doctorId]);
 
   // ═══════════════════════════════════════════════════════════
-  // 초기 로드: 파일 목록
+  // Initial load: file list
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     fetchFiles();
   }, []);
 
   // ═══════════════════════════════════════════════════════════
-  // 기본 스피커 설정
+  // Set default speaker
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (!selectedSpeaker && !doctorId) {
@@ -198,12 +198,12 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [selectedSpeaker, doctorId]);
 
   // ═══════════════════════════════════════════════════════════
-  // files → patients 변환 (Dashboard용)
+  // Convert files → patients (for Dashboard)
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (files && files.length > 0) {
       const patientList: PatientRow[] = files.map((fileName, idx) => {
-        // 파일명에서 ID 추출: "quality-coded-nlp-pilot-sid-1.xlsx" → "SID-1"
+        // Extract ID from filename: e.g. "quality-coded-nlp-pilot-sid-1.xlsx" → "SID-1"
         const match = fileName.match(/sid-(\d+)/i);
         const id = match
           ? `SID-${match[1]}`
@@ -215,7 +215,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           fileName,
           consultationDate: new Date().toISOString().split("T")[0], // default value
           status: "completed",
-          overallScore: 0, // 나중에 계산
+          overallScore: 0, // computed later
           topics: {} as Record<TopicName, TopicData>,
         };
       });
@@ -227,7 +227,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [files]);
 
   // ═══════════════════════════════════════════════════════════
-  // Patient 선택 시 → sentences 로드
+  // Load sentences when patient is selected
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (selectedPatient && selectedSpeaker) {
@@ -239,11 +239,11 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [selectedPatient, selectedSpeaker]);
 
   // ═══════════════════════════════════════════════════════════
-  // sentences → topics 변환 + rewrites 병합
-  // ✅ 핵심: rewritesFiltered가 변경되면 자동으로 재계산됨
+  // Convert sentences → topics and merge rewrites
+  // ✅ core: automatically recomputed whenever rewritesFiltered changes
   // ═══════════════════════════════════════════════════════════
   const topicsData: Record<TopicName, TopicData> = useMemo(() => {
-    // 빈 구조 초기화
+    // Initialize empty structure
     const result: Record<TopicName, TopicData> = {} as Record<
       TopicName,
       TopicData
@@ -260,12 +260,12 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       return result;
     }
 
-    // Rewrites Map 생성 (최신 rewrite만 유지)
-    // ✅ 수정: key에 class 포함하여 다른 topic의 같은 [i, i2] 문장과 혼동 방지
+    // Build rewrites Map (keep only latest rewrite per sentence)
+    // ✅ Fix: include class in key to avoid collision with same [i, i2] sentences across different topics
     const rewriteMap = new Map<string, DoctorRewriteItem>();
     if (rewritesFiltered?.data) {
       rewritesFiltered.data.forEach((rw) => {
-        const key = `${rw.i}-${rw.i2}-${rw.class}`; // ✅ class 포함
+        const key = `${rw.i}-${rw.i2}-${rw.class}`; // ✅ include class
         const existing = rewriteMap.get(key);
         if (!existing || new Date(rw.time) > new Date(existing.time)) {
           rewriteMap.set(key, rw);
@@ -273,12 +273,12 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       });
     }
 
-    // sentences를 class별로 그룹핑
+    // Group sentences by class
     sentences.data.forEach((item: DoctorSentenceItem) => {
       const topicName = CLASS_TO_TOPIC[item.class];
       if (!topicName) return;
 
-      const key = `${item.i}-${item.i2}-${item.class}`; // ✅ class 포함
+      const key = `${item.i}-${item.i2}-${item.class}`; // ✅ include class
       const rewrite = rewriteMap.get(key);
 
       const detail: SentenceDetail = {
@@ -297,7 +297,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       result[topicName].sentences.push(item.sentence);
     });
 
-    // 각 Topic의 최고 점수 계산
+    // Compute max score per Topic
     ALL_TOPICS.forEach((topic) => {
       const details = result[topic].sentenceDetails;
       if (details.length > 0) {
@@ -308,12 +308,12 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       }
     });
 
-    console.log("✅ topicsData 재계산됨:", result);
+    console.log("✅ topicsData recomputed:", result);
     return result;
   }, [sentences, rewritesFiltered]);
 
   // ═══════════════════════════════════════════════════════════
-  // 전체 평균 점수 계산
+  // Compute overall average score
   // ═══════════════════════════════════════════════════════════
   const overallScore = useMemo(() => {
     const scores = ALL_TOPICS.map((t) => topicsData[t]?.score || 0);
@@ -323,7 +323,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [topicsData]);
 
   // ═══════════════════════════════════════════════════════════
-  // Filtered Patients (Dashboard용)
+  // Filtered Patients (for Dashboard)
   // ═══════════════════════════════════════════════════════════
   const filteredPatients = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -832,7 +832,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   const GridView = () => {
     const [showContext, setShowContext] = useState(false);
 
-    // 모든 문장을 시간순으로 정렬
+    // Sort all sentences chronologically
     const allSentences = useMemo(() => {
       const all: Array<SentenceDetail & { topic: TopicName }> = [];
       ALL_TOPICS.forEach((topic) => {
@@ -847,7 +847,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
     // makes the hook conditional, which breaks React's hook ordering.
     if (!selectedPatient) return null;
 
-    // ✅ 수정: setSelectedTopic에서 data 제거
+    // ✅ Fix: remove data from setSelectedTopic
     const handleSuggestionClick = (
       topicName: TopicName,
       suggestion: ImprovementSuggestion
@@ -860,7 +860,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       setCurrentView("detail");
     };
 
-    // Sentences 로딩 중 표시
+    // Show loading state while Sentences are loading
     const isLoadingSentences =
       apiLoading && (!sentences?.data || sentences.data.length === 0);
 
@@ -1154,7 +1154,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
                         <button
                           onClick={() => {
                             setSelectedSuggestion(null);
-                            // ✅ 수정: data 제거
+                            // ✅ Fix: remove data
                             setSelectedTopic({
                               name: topicName,
                               patient: selectedPatient,
@@ -1215,7 +1215,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
                               <button
                                 key={idx}
                                 onClick={() =>
-                                  // ✅ 수정: data 제거
+                                  // ✅ Fix: remove data
                                   handleSuggestionClick(topicName, s)
                                 }
                                 className={cx(
@@ -1247,7 +1247,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
                         <button
                           onClick={() => {
                             setSelectedSuggestion(null);
-                            // ✅ 수정: data 제거
+                            // ✅ Fix: remove data
                             setSelectedTopic({
                               name: topicName,
                               patient: selectedPatient,
@@ -1277,7 +1277,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
 
   // ═══════════════════════════════════════════════════════════
   // DetailView (with Re-write API Integration)
-  // ✅ 핵심 수정: topicsData[topicName]에서 항상 최신 데이터 참조
+  // ✅ core fix: always reference latest data from topicsData[topicName]
   // ═══════════════════════════════════════════════════════════
   const DetailView = () => {
     const [showRewrite, setShowRewrite] = useState(false);
@@ -1291,13 +1291,13 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
 
     if (!selectedTopic) return null;
 
-    // ✅ 핵심 수정: data를 selectedTopic에서 가져오지 않고, topicsData에서 직접 참조
+    // ✅ core fix: get data directly from topicsData, not from selectedTopic
     const { name: topicName, patient } = selectedTopic;
-    const data = topicsData[topicName]; // ✅ 항상 최신 데이터!
+    const data = topicsData[topicName]; // ✅ always the latest data!
 
     const currentSentence = data.sentenceDetails[selectedSentenceIdx];
 
-    // ✅ Re-write 저장 핸들러
+    // ✅ Re-write save handler
     const handleSaveRewrite = async () => {
       if (!newSentence.trim() || !currentSentence) return;
 
@@ -1325,10 +1325,10 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
             message: `✅ Saved! New score: ${newScore}`,
           });
 
-          // ✅ 데이터 새로고침 - rewritesFiltered 업데이트 → topicsData 자동 재계산 → UI 갱신
+          // ✅ Refresh data — rewritesFiltered updates → topicsData recomputes automatically → UI refreshes
           await fetchRewritesFiltered(selectedFile, selectedSpeaker);
 
-          // 입력 초기화
+          // input initialize
           setNewSentence("");
           setSelectedSuggestion(null);
 
@@ -1803,7 +1803,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   // ═══════════════════════════════════════════════════════════
   // Loading & Error States
   // ═══════════════════════════════════════════════════════════
-  // Dashboard 로딩 중일 때만 전체 로딩 표시
+  // Show loading state only while Dashboard is loading
   if (loading && currentView === "dashboard") {
     return (
       <div
@@ -1826,7 +1826,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
     );
   }
 
-  // files 로드 실패 시에만 전체 에러 표시 (Dashboard에서)
+  // Show error state only when file loading fails (in Dashboard)
   if (
     apiError &&
     currentView === "dashboard" &&

@@ -6,11 +6,11 @@
  * Second Visit patient page - survey-only component
  *
  * ============================================================================
- * v4 변경사항
+ * v4 changes
  * ============================================================================
- * - v3 구조 유지 (question-by-question, 한 번에 하나의 질문만 표시)
- * - Healthcare 테마 색상 적용 (Teal/Cyan/Sky/Emerald/Blue)
- * - v1의 왼쪽 Progress Sidebar 추가 (전체 진행률 표시 포함)
+ * - Keep v3 structure (question-by-question, show one question at a time)
+ * - Apply Healthcare theme colors (Teal/Cyan/Sky/Emerald/Blue)
+ * - Add left Progress Sidebar from v1 (including overall progress display)
  *
  * ============================================================================
  * Requirements specification (transcript-based)
@@ -25,17 +25,17 @@
  * - Survey question UI (risk perception, treatment understanding)
  * - REDCap integration (survey input in dashboard → sent to REDCap via backend)
  * - Clearly separated question-by-question layout
- * - 페이지 역할/목적 안내 문구
+ * - Page role/purpose introduction text
  *
- * [Dr. Daskivich 요구사항 - 2024 업데이트]
- * - 한 번에 하나의 질문만 표시 (one question at a time)
- * - 각 질문 하단에 progress bar 표시
- * - 답변 완료 시 'Next' 버튼 활성화
+ * [Dr. Daskivich requirements - 2024 update]
+ * - Show one question at a time
+ * - Show a progress bar below each question
+ * - Enable 'Next' button when answer is complete
  *
  * ============================================================================
  *
  * Survey Flow (Question-by-Question):
- * 1. Welcome/Introduction (목적 및 프로토콜 안내)
+ * 1. Welcome/Introduction (purpose and protocol overview)
  * 2. SDM Questions (1-9, one at a time)
  * 3. Decisional Conflict Questions (1-16, one at a time)
  * 4. Risk Perception Questions (1-5, one at a time, with collapsible summaries)
