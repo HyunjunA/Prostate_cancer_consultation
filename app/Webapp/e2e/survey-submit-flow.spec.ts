@@ -33,10 +33,10 @@ test.setTimeout(120_000);
 // One dedicated patient per test section — prevents survey-completion
 // state from leaking between tests (session restore would skip ahead).
 const E2E_PATIENTS: Record<string, { file: string; patient: string }> = {
-  sdm:  { file: "E2E_TEST_FILE_PATIENT_A_DOC1_20260101.csv", patient: "Patient_E2E_TEST_FILE_PATIENT_A_DOC1_20260101" },
-  dcs:  { file: "E2E_TEST_FILE_PATIENT_B_DOC1_20260101.csv", patient: "Patient_E2E_TEST_FILE_PATIENT_B_DOC1_20260101" },
-  risk: { file: "E2E_TEST_FILE_PATIENT_C_DOC1_20260101.csv", patient: "Patient_E2E_TEST_FILE_PATIENT_C_DOC1_20260101" },  // needs &combined=1
-  sat:  { file: "E2E_TEST_FILE_PATIENT_D_DOC1_20260101.csv", patient: "Patient_E2E_TEST_FILE_PATIENT_D_DOC1_20260101" },
+  sdm:  { file: "E2E_TEST_FILE_PATIENT_A_DOC1_01012026.csv", patient: "Patient_E2E_TEST_FILE_PATIENT_A_DOC1_01012026" },
+  dcs:  { file: "E2E_TEST_FILE_PATIENT_B_DOC1_01012026.csv", patient: "Patient_E2E_TEST_FILE_PATIENT_B_DOC1_01012026" },
+  risk: { file: "E2E_TEST_FILE_PATIENT_C_DOC1_01012026.csv", patient: "Patient_E2E_TEST_FILE_PATIENT_C_DOC1_01012026" },  // needs &combined=1
+  sat:  { file: "E2E_TEST_FILE_PATIENT_D_DOC1_01012026.csv", patient: "Patient_E2E_TEST_FILE_PATIENT_D_DOC1_01012026" },
 };
 
 function followUpUrl(section: keyof typeof E2E_PATIENTS): string {

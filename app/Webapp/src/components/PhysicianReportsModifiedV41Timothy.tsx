@@ -3044,30 +3044,6 @@ const DashboardViewV2: React.FC<DashboardViewProps> = ({
                           </span>
                         )}
                       </button>
-                      <span
-                        className={cx(
-                          "text-xs font-medium px-2 py-0.5 rounded-full",
-                          patient.overallScore >= 4
-                            ? isDarkMode
-                              ? "bg-emerald-900/50 text-emerald-300"
-                              : "bg-emerald-50 text-emerald-700"
-                            : patient.overallScore >= 3
-                              ? isDarkMode
-                                ? "bg-yellow-900/50 text-yellow-300"
-                                : "bg-yellow-50 text-yellow-700"
-                              : isDarkMode
-                                ? "bg-red-900/50 text-red-300"
-                                : "bg-red-50 text-red-700",
-                        )}
-                      >
-                        {!hasScore
-                          ? "AI Score Not Available"
-                          : patient.overallScore >= 4
-                            ? "High"
-                            : patient.overallScore >= 3
-                              ? "Standard"
-                              : "Needs Improvement"}
-                      </span>
                     </div>
                   </td>
                   <td className="px-6 py-3.5 text-center" style={{ width: "30%" }}>
@@ -3237,28 +3213,6 @@ const GridView: React.FC<GridViewProps> = ({
                   )}
                 >
                   {overallScore !== null ? overallScore.toFixed(1) : "—"}
-                </span>
-                <span
-                  className={cx(
-                    "text-xs font-medium px-2 py-1 rounded-full",
-                    overallScore !== null && overallScore >= 4
-                      ? isDarkMode
-                        ? "bg-emerald-900/50 text-emerald-300"
-                        : "bg-emerald-100 text-emerald-700"
-                      : overallScore !== null && overallScore >= 3
-                        ? isDarkMode
-                          ? "bg-yellow-900/50 text-yellow-300"
-                          : "bg-yellow-100 text-yellow-700"
-                        : isDarkMode
-                          ? "bg-red-900/50 text-red-300"
-                          : "bg-red-100 text-red-700",
-                  )}
-                >
-                  {overallScore !== null && overallScore >= 4
-                    ? "High Quality"
-                    : overallScore !== null && overallScore >= 3
-                      ? "Standard"
-                      : "Needs Improvement"}
                 </span>
               </>
             )}

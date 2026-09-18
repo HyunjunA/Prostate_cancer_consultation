@@ -47,46 +47,46 @@ def _sentence_data():
 FIXTURES = [
     # Patient A — used for SDM E2E test
     {
-        "file":       "E2E_TEST_FILE_PATIENT_A_DOC1_20260101.csv",
+        "file":       "E2E_TEST_FILE_PATIENT_A_DOC1_01012026.csv",
         "patient_id": "E2EPATIENT_A",
         "doctor_id":  "E2EDOC1",
-        "speaker":    "Patient_E2E_TEST_FILE_PATIENT_A_DOC1_20260101",
+        "speaker":    "Patient_E2E_TEST_FILE_PATIENT_A_DOC1_01012026",
         "domains":    _domain_data(),
         "sentences":  _sentence_data(),
     },
     # Patient B — used for DCS E2E test
     {
-        "file":       "E2E_TEST_FILE_PATIENT_B_DOC1_20260101.csv",
+        "file":       "E2E_TEST_FILE_PATIENT_B_DOC1_01012026.csv",
         "patient_id": "E2EPATIENT_B",
         "doctor_id":  "E2EDOC1",
-        "speaker":    "Patient_E2E_TEST_FILE_PATIENT_B_DOC1_20260101",
+        "speaker":    "Patient_E2E_TEST_FILE_PATIENT_B_DOC1_01012026",
         "domains":    _domain_data(),
         "sentences":  _sentence_data(),
     },
     # Patient C — used for Risk Perception E2E test
     {
-        "file":       "E2E_TEST_FILE_PATIENT_C_DOC1_20260101.csv",
+        "file":       "E2E_TEST_FILE_PATIENT_C_DOC1_01012026.csv",
         "patient_id": "E2EPATIENT_C",
         "doctor_id":  "E2EDOC1",
-        "speaker":    "Patient_E2E_TEST_FILE_PATIENT_C_DOC1_20260101",
+        "speaker":    "Patient_E2E_TEST_FILE_PATIENT_C_DOC1_01012026",
         "domains":    _domain_data(),
         "sentences":  _sentence_data(),
     },
     # Patient D — used for Satisfaction E2E test
     {
-        "file":       "E2E_TEST_FILE_PATIENT_D_DOC1_20260101.csv",
+        "file":       "E2E_TEST_FILE_PATIENT_D_DOC1_01012026.csv",
         "patient_id": "E2EPATIENT_D",
         "doctor_id":  "E2EDOC1",
-        "speaker":    "Patient_E2E_TEST_FILE_PATIENT_D_DOC1_20260101",
+        "speaker":    "Patient_E2E_TEST_FILE_PATIENT_D_DOC1_01012026",
         "domains":    _domain_data(),
         "sentences":  _sentence_data(),
     },
     # Patient E — used for complete-flow E2E test (all 4 surveys in sequence)
     {
-        "file":       "E2E_TEST_FILE_PATIENT_E_DOC1_20260101.csv",
+        "file":       "E2E_TEST_FILE_PATIENT_E_DOC1_01012026.csv",
         "patient_id": "E2EPATIENT_E",
         "doctor_id":  "E2EDOC1",
-        "speaker":    "Patient_E2E_TEST_FILE_PATIENT_E_DOC1_20260101",
+        "speaker":    "Patient_E2E_TEST_FILE_PATIENT_E_DOC1_01012026",
         "domains":    _domain_data(),
         "sentences":  _sentence_data(),
     },
