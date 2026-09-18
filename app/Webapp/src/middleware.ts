@@ -105,7 +105,8 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     const hasPersonalLink =
       searchParams.has("fileid") ||
       searchParams.has("patid") ||
-      searchParams.has("doctorid");
+      searchParams.has("doctorid") ||
+      searchParams.has("f");   // shorthand used by AdminPatientPicker
     if (hasPersonalLink) return NextResponse.next();
   }
 
@@ -121,9 +122,10 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     return redirectToLogin(request);
   }
 
-  // Logged-in admins visiting "/" are sent to /admin directly.
-  // The selection screen is for patient/doctor personal links only.
-  if (pathname === "/") {
+  // Logged-in admins visiting "/" without a personal link go to /admin.
+  // Personal links (?f=…, ?fileid=…, etc.) pass through to the patient/doctor view.
+  if (pathname === "/" && !searchParams.has("f") && !searchParams.has("fileid") &&
+      !searchParams.has("patid") && !searchParams.has("doctorid")) {
     const fwdHost = request.headers.get("x-forwarded-host");
     const fwdProto = request.headers.get("x-forwarded-proto") ?? "https";
     const origin = fwdHost
