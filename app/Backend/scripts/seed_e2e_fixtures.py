@@ -72,12 +72,21 @@ FIXTURES = [
         "domains":    _domain_data(),
         "sentences":  _sentence_data(),
     },
-    # Patient D — used for Satisfaction + complete-flow E2E test
+    # Patient D — used for Satisfaction E2E test
     {
         "file":       "E2E_TEST_FILE_PATIENT_D_DOC1_20260101.csv",
         "patient_id": "E2EPATIENT_D",
         "doctor_id":  "E2EDOC1",
         "speaker":    "Patient_E2E_TEST_FILE_PATIENT_D_DOC1_20260101",
+        "domains":    _domain_data(),
+        "sentences":  _sentence_data(),
+    },
+    # Patient E — used for complete-flow E2E test (all 4 surveys in sequence)
+    {
+        "file":       "E2E_TEST_FILE_PATIENT_E_DOC1_20260101.csv",
+        "patient_id": "E2EPATIENT_E",
+        "doctor_id":  "E2EDOC1",
+        "speaker":    "Patient_E2E_TEST_FILE_PATIENT_E_DOC1_20260101",
         "domains":    _domain_data(),
         "sentences":  _sentence_data(),
     },

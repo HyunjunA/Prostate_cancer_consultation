@@ -51,8 +51,10 @@ const AUTH_HEADERS = { "X-API-Key": API_KEY };
 
 test.beforeAll(async ({ request, baseURL }) => {
   const allFix = await getAllFixtures(request, baseURL);
-  // Use only the E2E test fixtures so tests never touch real patient data.
-  ALL_FIXTURES = allFix.filter((f) => f.file.startsWith("E2E_"));
+  // Use only Patient E — dedicated for the complete-flow test.
+  // Patients A-D are reserved for per-section tests in survey-submit-flow.spec.ts
+  // and must not be consumed here (their survey state would block those tests).
+  ALL_FIXTURES = allFix.filter((f) => f.file.includes("PATIENT_E_"));
   test.skip(
     ALL_FIXTURES.length === 0,
     "precondition: no patient data — /api/backend/patient/files returned []",
@@ -70,10 +72,11 @@ test.describe("Patient Follow-up — Complete Flow End-to-End", () => {
     page,
   }) => {
     for (const fixture of ALL_FIXTURES) {
+      // Use combined=1 so the Risk Perception step is included in the flow.
       const url =
         `/?fileid=${encodeURIComponent(fixture.file)}` +
         `&patid=${encodeURIComponent(fixture.patient)}` +
-        `&visit=followup`;
+        `&visit=followup&combined=1`;
       // eslint-disable-next-line no-console
       console.log(
         `[followup-loop] starting ${fixture.patient}  (file=${fixture.file})`,
@@ -89,19 +92,13 @@ test.describe("Patient Follow-up — Complete Flow End-to-End", () => {
       await completeRiskPerception(page);
       await goToNextStep(page);
       await completeSatisfaction(page, "Great experience.");
+      // Dismiss the satisfaction success modal — this auto-advances to Thank You.
+      await goToNextStep(page);
 
-      const completeButton = page.getByRole("button", {
-        name: /Complete Survey/i,
-      });
-      await expect(completeButton).toBeEnabled({ timeout: 5_000 });
-      await completeButton.click();
-
-      await expect(
-        page.getByText("Complete").first(),
-      ).toBeVisible({ timeout: 5_000 });
+      // Verify the completion screen renders.
       await expect(
         page.getByRole("heading", { name: /Thank You/i }),
-      ).toBeVisible({ timeout: 5_000 });
+      ).toBeVisible({ timeout: 10_000 });
 
       // eslint-disable-next-line no-console
       console.log(`[followup-loop] ✓ completed ${fixture.patient}`);

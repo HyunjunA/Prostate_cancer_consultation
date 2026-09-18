@@ -11,11 +11,14 @@ import * as fs from "fs";
 import dotenv from "dotenv";
 
 async function globalSetup(): Promise<void> {
-  // Load backend .env so API_KEY / DATABASE_URL are available
+  // Load backend .env so API_KEY / DATABASE_URL / admin credentials are available.
   const envPath = path.resolve(__dirname, "../../../Backend/.env");
   if (fs.existsSync(envPath)) {
     dotenv.config({ path: envPath, override: false });
   }
+  // Provide admin credentials for admin-gated E2E tests if not already set.
+  if (!process.env.E2E_ADMIN_USER) process.env.E2E_ADMIN_USER = "admin";
+  if (!process.env.E2E_ADMIN_PASSWORD) process.env.E2E_ADMIN_PASSWORD = "admin1234567";
 
   // app/Webapp/e2e/ → app/Webapp/ → app/ → repo root (.venv lives here)
   const venv = path.resolve(__dirname, "../../../.venv/bin/python");

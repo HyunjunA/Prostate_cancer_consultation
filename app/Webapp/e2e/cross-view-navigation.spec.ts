@@ -143,14 +143,13 @@ test.describe("Cross-View Navigation", () => {
     const bodyText = await page.locator("body").innerText();
     expect(bodyText.length).toBeGreaterThan(0);
 
-    // Test with completely bogus params
+    // Test with completely bogus params — no personal-link key present,
+    // so middleware redirects to /admin/login.
     await page.goto("/?foo=bar&baz=qux");
     await page.waitForTimeout(2000);
 
-    // Should show selection screen since no valid params are present
-    await expect(
-      page.getByText("Patient Consultation System")
-    ).toBeVisible({ timeout: 10_000 });
+    // Middleware redirects unknown root requests to the admin login page.
+    await expect(page).toHaveURL(/\/admin\/login/, { timeout: 10_000 });
 
     // No critical JS errors
     const criticalErrors = errors.filter(
