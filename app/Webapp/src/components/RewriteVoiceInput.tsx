@@ -101,6 +101,20 @@ const RewriteVoiceInput: React.FC<Props> = ({ isDarkMode, onText }) => {
           {error}
         </span>
       )}
+
+      {/* Warning shown while actively listening */}
+      {status === "listening" && (
+        <span
+          className={cx(
+            "text-xs px-2 py-0.5 rounded-full font-medium",
+            isDarkMode
+              ? "bg-amber-900/40 text-amber-300 border border-amber-700/50"
+              : "bg-amber-50 text-amber-700 border border-amber-200",
+          )}
+        >
+          ⚠ Transcription may not be perfect — please review before saving
+        </span>
+      )}
     </div>
   );
 };

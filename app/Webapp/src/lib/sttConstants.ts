@@ -17,7 +17,7 @@
  * they only load on a click that can no longer happen. Flip this one value to
  * `true` to put the feature back — there is nothing else to uncomment.
  */
-export const VOICE_INPUT_ENABLED = false;
+export const VOICE_INPUT_ENABLED = true;
 
 /**
  * Model that turns speech into text. Moonshine takes variable-length audio, so a
