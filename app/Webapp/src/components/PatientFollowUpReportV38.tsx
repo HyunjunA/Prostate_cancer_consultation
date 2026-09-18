@@ -83,7 +83,7 @@ import RiskPerceptionWithSummary, {
 // import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV41";
 import PatientReportFirstVisit from "@/components/PatientInitialVisitReportV42";
 
-import { submitSurvey, fetchSurveySubmissions } from "@/api/surveyApi";
+import { submitSurvey, saveProgress, fetchSurveySubmissions } from "@/api/surveyApi";
 import { useDebounce } from "@/hooks/useDebounce";
 import { sendTrackingEvents } from "@/api/trackingApi";
 import { trackFollowup, startSession, endSession } from "@/tracking/track";
@@ -1245,43 +1245,39 @@ const PatientSurvey: React.FC<PatientSurveyProps> = ({
   // ─────────────────────────────────────────────────────────────────────────
 
   const saveSDMProgress = () => {
-    submitSurvey({
+    saveProgress({
       survey_type: "sdm",
       file: currentFile,
       speaker: currentSpeaker,
       answers: sdmAnswers,
-      metadata: { partial: true },
-    }).catch((err) => console.error("SDM progress save failed:", err));
+    });
   };
 
   const saveDCSProgress = () => {
-    submitSurvey({
+    saveProgress({
       survey_type: "dcs",
       file: currentFile,
       speaker: currentSpeaker,
       answers: dcsAnswers,
-      metadata: { partial: true },
-    }).catch((err) => console.error("DCS progress save failed:", err));
+    });
   };
 
   const saveRiskProgress = () => {
-    submitSurvey({
+    saveProgress({
       survey_type: "risk_perception",
       file: currentFile,
       speaker: currentSpeaker,
       answers: riskAnswers,
-      metadata: { partial: true },
-    }).catch((err) => console.error("Risk progress save failed:", err));
+    });
   };
 
   const saveSatisfactionProgress = () => {
-    submitSurvey({
+    saveProgress({
       survey_type: "satisfaction",
       file: currentFile,
       speaker: currentSpeaker,
       answers: satisfactionAnswers,
-      metadata: { partial: true },
-    }).catch((err) => console.error("Satisfaction progress save failed:", err));
+    });
   };
 
   // ── Auto-save: persist in-progress answers (partial:true) shortly after the

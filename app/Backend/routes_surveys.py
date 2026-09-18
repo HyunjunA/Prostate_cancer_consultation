@@ -603,6 +603,54 @@ async def submit_survey(
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# POST - Progress save (DB only, no REDCap)
+# Fires on every "Next" click inside a survey section. Separated from /submit
+# so that intermediate auto-saves do not trigger REDCap and do not count
+# against the /submit rate limit. Always stored as partial=true.
+# Rate limit is intentionally generous: 16 questions × multiple surveys = ~60
+# saves in a normal session.
+# ══════════════════════════════════════════════════════════════════════════════
+@router.post("/progress", dependencies=[limit(120, 60)])
+async def save_survey_progress(
+    submission: SurveySubmission,
+    db: AsyncSession = Depends(get_db)
+):
+    """Save partial survey progress to DB only — no REDCap sync."""
+    parent_file = await resolve_patient_summary_file(db, submission.file, submission.speaker)
+    if parent_file is None:
+        raise HTTPException(status_code=404,
+                            detail=f"No patient record for speaker '{submission.speaker}'")
+
+    extra_meta = dict(submission.metadata or {})
+    extra_meta["partial"] = True  # always partial for progress saves
+
+    db_record = PatientSurveySubmissionLog(
+        file=parent_file,
+        speaker=submission.speaker,
+        survey_type=submission.survey_type,
+        answers=submission.answers,
+        extra_data=extra_meta,
+        sid=unhash_patient_sid(submission.speaker),
+        doctor=unhash_doctor_num(submission.speaker),
+        redcap_synced=False
+    )
+
+    db.add(db_record)
+    await db.commit()
+    await db.refresh(db_record)
+
+    return {
+        "status": "progress_saved",
+        "survey_type": submission.survey_type,
+        "file": submission.file,
+        "speaker": submission.speaker,
+        "answer_count": len(submission.answers),
+        "db": {"id": db_record.id, "saved": True},
+        "redcap": {"enabled": False, "skipped": True}
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # GET - List All Submissions (with filters & pagination)
 # ══════════════════════════════════════════════════════════════════════════════
 @router.get("/submissions")

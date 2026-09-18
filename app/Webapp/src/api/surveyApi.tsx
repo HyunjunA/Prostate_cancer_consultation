@@ -81,6 +81,31 @@ export interface ApiError {
  */
 const SUBMIT_TIMEOUT_MS = 90_000;
 
+/**
+ * Save partial survey progress to the backend (DB only, no REDCap sync).
+ * Call this on every "Next" click inside a survey. Unlike submitSurvey(),
+ * this never triggers REDCap and has a higher rate limit (120/min).
+ * Failures are swallowed — a dropped progress-save is not fatal; the user
+ * can still finish the survey and the final submit will persist all answers.
+ */
+export async function saveProgress(
+  submission: Omit<SurveySubmission, "metadata">
+): Promise<void> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/backend/surveys/progress`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...submission, metadata: { partial: true } }),
+    });
+    if (!response.ok) {
+      console.warn(`⚠️ Progress save returned ${response.status} — continuing`);
+    }
+  } catch (error) {
+    // Non-fatal: progress saves are best-effort.
+    console.warn("⚠️ Progress save failed (non-fatal):", error);
+  }
+}
+
 export async function submitSurvey(
   submission: SurveySubmission
 ): Promise<SurveyResponse> {
