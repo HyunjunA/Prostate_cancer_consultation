@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
     name: COOKIE_NAME,
     value: data.access_token,
     httpOnly: true,
-    sameSite: "strict",
+    sameSite: "lax",
     secure: isHttps,
     path: "/",
     maxAge: typeof data.expires_in === "number" ? data.expires_in : 3600,
