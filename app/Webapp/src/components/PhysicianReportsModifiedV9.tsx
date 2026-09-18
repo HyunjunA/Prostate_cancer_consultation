@@ -204,7 +204,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           id,
           name: `Patient ${id}`,
           fileName,
-          consultationDate: new Date().toISOString().split("T")[0], // 기본값
+          consultationDate: new Date().toISOString().split("T")[0], // default value
           status: "completed",
           overallScore: 0, // 나중에 계산
           topics: {} as Record<TopicName, TopicData>,
@@ -1245,7 +1245,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
             message: `✅ Saved! New score: ${newScore}`,
           });
 
-          // 데이터 새로고침
+          // data 새로고침
           await fetchRewritesFiltered(selectedFile, selectedSpeaker);
 
           // 입력 초기화

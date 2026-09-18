@@ -106,8 +106,8 @@ function AdminLoginForm() {
         </form>
 
         <p className="mt-6 text-center text-xs text-gray-400">
-          계정이 없으신가요?{" "}
-          <span className="text-gray-500">담당자에게 문의하세요.</span>
+          Don&apos;t have an account?{" "}
+          <span className="text-gray-500">Contact your administrator.</span>
         </p>
       </div>
     </div>

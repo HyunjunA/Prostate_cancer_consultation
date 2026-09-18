@@ -53,10 +53,10 @@ export const LineChart = ({
   useEffect(() => {
     if (!chartRef.current) return;
 
-    // 기존 tooltip 제거
+    // Remove existing tooltip
     d3.select("body").selectAll(".tooltip").remove();
 
-    const margin = { top: 30, right: 120, bottom: 100, left: 80 }; // 수정된 margin
+    const margin = { top: 30, right: 120, bottom: 100, left: 80 }; // adjusted margin
     const innerWidth = width - margin.left - margin.right;
     const innerHeight = height - margin.top - margin.bottom;
 
@@ -296,7 +296,7 @@ export const LineChart = ({
         .on("mouseover", () => {
           // Dim all lines
           g.selectAll("path").style("opacity", 0.2);
-          g.selectAll("circle").style("opacity", 0.2).attr("r", 4); // 기본 크기로 리셋
+          g.selectAll("circle").style("opacity", 0.2).attr("r", 4); // Reset to default size
 
           // Highlight selected line and its dots
           g.selectAll(`.${item.class}`)
@@ -304,7 +304,7 @@ export const LineChart = ({
             .style("stroke-width", 3);
           g.selectAll(`.dot-${item.label.toLowerCase()}`)
             .style("opacity", 1)
-            .attr("r", 6); // 선택된 라인의 dots 크기 증가
+            .attr("r", 6); // Increase dot size for selected line
 
           // Highlight corresponding dots
           g.selectAll(`.dot-${item.label.toLowerCase()}`)
@@ -332,7 +332,7 @@ export const LineChart = ({
     const tooltipDiv = d3
       .select("body")
       .append("div")
-      .attr("class", "tooltip") // class 추가
+      .attr("class", "tooltip") // add class
       .style("position", "absolute")
       .style("visibility", "hidden")
       .style("background", chartStyles.tooltip.backgroundColor)
@@ -341,13 +341,13 @@ export const LineChart = ({
       .style("padding", chartStyles.tooltip.padding)
       .style("font-size", chartStyles.tooltip.fontSize)
       .style("box-shadow", chartStyles.tooltip.boxShadow)
-      .style("pointer-events", "none") // 추가: 마우스 이벤트 방지
+      .style("pointer-events", "none") // added: prevent mouse events
       .style("z-index", "9999");
 
     // Add hover effects
     const focus = g.append("g").style("display", "none");
 
-    // 선택된 날짜를 위한 그룹 추가
+    // Add group for selected date
     const selectionGroup = g.append("g").attr("class", "selection-group");
 
     // Add vertical line for hover
@@ -378,7 +378,7 @@ export const LineChart = ({
         const x = xScale(selectedDateOnXaxis.week_ending) || 0;
         const formattedDate = formatDate(selectedDateOnXaxis.week_ending);
 
-        // 선택된 날짜에 수직선 추가
+        // Add vertical line at selected date
         selectionGroup
           .append("line")
           .attr("x1", x)
@@ -389,7 +389,7 @@ export const LineChart = ({
           .style("stroke-width", "1px")
           .style("stroke-dasharray", "3,3");
 
-        // 선택된 포인트 표시
+        // Show selected point
         if (selectedDateOnXaxis.Negative_count !== -1) {
           selectionGroup
             .append("circle")
@@ -415,7 +415,7 @@ export const LineChart = ({
         // const yPosition = svgRect.top + margin.top;
         const yPosition = svgRect.top + 1.5 * margin.top;
 
-        // tooltip 표시 추가
+        // Add tooltip display
         const tooltipContent = `
             <div style="font-weight: bold; margin-bottom: 5px; font-size: ${
               chartStyles.tooltip.fontSize
@@ -452,7 +452,7 @@ export const LineChart = ({
       }
     };
 
-    // 초기 선택 상태 업데이트
+    // Update initial selection state
     updateSelection();
 
     // Add overlay rectangle for mouse events
@@ -464,13 +464,13 @@ export const LineChart = ({
       .style("pointer-events", "all")
       .on("mouseover", () => {
         focus.style("display", null);
-        selectionGroup.style("opacity", 0.3); // 이 줄 추가
+        selectionGroup.style("opacity", 0.3); // add this line
       })
       .on("mouseout", () => {
         focus.style("display", "none");
         tooltipDiv.style("visibility", "hidden");
-        selectionGroup.style("opacity", 1); // 이 줄 추가
-        setSelectedDateOnXaxis(null); // 마우스가 차트를 벗어날 때 선택 해제
+        selectionGroup.style("opacity", 1); // add this line
+        setSelectedDateOnXaxis(null); // Deselect when mouse leaves chart
       })
       .on("mousemove", function (event) {
         const mouse = d3.pointer(event, this);
@@ -483,7 +483,7 @@ export const LineChart = ({
         const d = data[Math.max(0, Math.min(index, data.length - 1))];
 
         if (d) {
-          // 현재 마우스 위치의 데이터로 selectedDateOnXaxis 업데이트
+          // Update selectedDateOnXaxis with data at current mouse position
           setSelectedDateOnXaxis(d);
 
           const x = xScale(d.week_ending) || 0;
@@ -498,7 +498,7 @@ export const LineChart = ({
               .style("display", "block")
               .attr("cx", x)
               .attr("cy", yScale(d.Negative_count))
-              .attr("r", 6); // hover 시 크기 증가
+              .attr("r", 6); // Increase size on hover
           } else {
             negativePoint.style("display", "none");
           }
@@ -547,7 +547,7 @@ export const LineChart = ({
             .html(tooltipContent);
         }
       });
-  }, [data, width, height, title, id, selectedDateOnXaxis]); // selectedDateOnXaxis 추가
+  }, [data, width, height, title, id, selectedDateOnXaxis]); // added selectedDateOnXaxis
 
   return (
     <div className="w-full h-full">

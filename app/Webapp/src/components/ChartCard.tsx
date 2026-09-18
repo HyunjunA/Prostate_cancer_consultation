@@ -59,7 +59,7 @@ export const ChartCard: React.FC<ChartCardProps> = ({ children, title }) => {
     >
       <div className="px-5 py-4">
         {" "}
-        {/* h-full 제거 */}
+        {/* removed h-full */}
         {title && (
           <div
             className="border-b border-gray-100 dark:border-gray-700 pb-3 mb-4
@@ -96,7 +96,7 @@ export const ChartCard: React.FC<ChartCardProps> = ({ children, title }) => {
         )}
         <div className="relative">
           {" "}
-          {/* 높이 제한 완전 제거 */}
+          {/* height limit fully removed */}
           <div className="relative">{children}</div>
         </div>
       </div>

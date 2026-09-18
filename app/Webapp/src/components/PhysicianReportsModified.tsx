@@ -67,11 +67,11 @@
 //   // ✅ 추가 #2: UI 상태 변수 5개 추가
 //   // ═══════════════════════════════════════════════════════════
 //   const [selectedFile, setSelectedFile] = useState<string>("");
-//   // 선택된 파일을 추적
+//   // selection된 파일을 추적
 
 //   const [selectedSpeaker, setSelectedSpeaker] =
 //     useState<string>("Interviewer:");
-//   // 선택된 스피커를 추적
+//   // selection된 스피커를 추적
 
 //   const [skipValue, setSkipValue] = useState<number>(0);
 //   // 페이지네이션: 건너뛸 개수

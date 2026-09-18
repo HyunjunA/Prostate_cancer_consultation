@@ -40,8 +40,8 @@ const ScatterPlot = () => {
       b: 35,
       t: 60,
     },
-    // height: 400, // 고정 높이 설정
-    // width: 450, // 고정 너비 설정
+    // height: 400, // fixed height
+    // width: 450, // fixed width
   };
 
   const config = {
@@ -54,7 +54,7 @@ const ScatterPlot = () => {
   return (
     <div className="w-full h-[400px]">
       {" "}
-      {/* 컨테이너 높이 고정 */}
+      {/* fixed container height */}
       <Plot
         data={data}
         layout={layout}

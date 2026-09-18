@@ -989,9 +989,9 @@ export default PatientReport;
 
 //   // ---------- Excel -> PatientData (multi-visit) ----------
 //   const processExcelDataForPatient = (rawData: any[]): PatientData => {
-//     // TODO: 여기에 실제 컬럼 스키마에 맞게 그룹핑/매핑 로직 구현
-//     // 예시: rows를 date별로 그룹핑 => topic별로 묶고 {extractedSentences[], aiSummary} 조합
-//     // 현재는 데모 목적으로 샘플 데이터를 반환
+//     // TODO: implement grouping/mapping logic based on actual column schema here
+//     // Example: group rows by date => group by topic and compose {extractedSentences[], aiSummary}
+//     // Currently returns sample data for demo purposes
 //     return generateSamplePatientData();
 //   };
 
@@ -1021,7 +1021,7 @@ export default PatientReport;
 //         );
 //         setActiveTab(firstTopics[0] ?? "Cancer Prognosis");
 //       } catch {
-//         // 파일이 없으면 샘플 데이터
+//         // Return sample data if no file
 //         const sample = generateSamplePatientData();
 //         setPatientData(sample);
 //         setActiveVisitIdx(0);
@@ -1035,7 +1035,7 @@ export default PatientReport;
 //     }
 //   };
 
-//   // 방문(날짜) 바뀌면 토픽도 그 방문의 첫 토픽으로 리셋
+//   // Reset topic to first topic of visit when visit (date) changes
 //   useEffect(() => {
 //     if (!patientData) return;
 //     const topics = Object.keys(
@@ -1141,7 +1141,7 @@ export default PatientReport;
 
 //   if (!patientData) return null;
 
-//   // 현재 활성 방문
+//   // Current active visit
 //   const visit = patientData.visits[activeVisitIdx];
 //   const topicKeys = Object.keys(visit.consultationTopics);
 //   const currentTopicData = visit.consultationTopics[activeTab];

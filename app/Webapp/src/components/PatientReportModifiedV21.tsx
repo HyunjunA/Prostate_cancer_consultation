@@ -408,7 +408,7 @@ const cx = (...classes: (string | false | null | undefined)[]) =>
    SECTION 4: CONSTANTS - Topic Mapping
 ============================================================================= */
 
-// class_name → Topic Name 매핑
+// Mapping: class_name → Topic Name
 const CLASS_TO_TOPIC_MAP: Record<string, string> = {
   "1": "Cancer Prognosis",
   "1.0": "Cancer Prognosis",
@@ -422,7 +422,7 @@ const CLASS_TO_TOPIC_MAP: Record<string, string> = {
   "5.0": "Irritative Urinary Symptoms",
 };
 
-// Topic Name → class number 매핑 (for API update)
+// Mapping: Topic Name → class number (for API update)
 const TOPIC_TO_CLASS_NUMBER: Record<string, 1 | 2 | 3 | 4 | 5> = {
   "Cancer Prognosis": 1,
   "Life Expectancy": 2,
@@ -431,7 +431,7 @@ const TOPIC_TO_CLASS_NUMBER: Record<string, 1 | 2 | 3 | 4 | 5> = {
   "Irritative Urinary Symptoms": 5,
 };
 
-// 토픽 순서 정의
+// Define topic order
 const TOPIC_ORDER = [
   "Cancer Prognosis",
   "Life Expectancy",
@@ -823,7 +823,7 @@ const PatientReport: React.FC<PatientReportProps> = ({
         if (topicName) {
           topics[topicName] = {
             aiSummary: cls.summary || "Summary not available.",
-            extractedSentences: [], // 필요시 별도 API에서 가져오기
+            extractedSentences: [], // Fetch from separate API if needed
           };
         }
       });

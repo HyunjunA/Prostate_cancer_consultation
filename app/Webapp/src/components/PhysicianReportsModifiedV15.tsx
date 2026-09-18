@@ -213,7 +213,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           id,
           name: `Patient ${id}`,
           fileName,
-          consultationDate: new Date().toISOString().split("T")[0], // 기본값
+          consultationDate: new Date().toISOString().split("T")[0], // default value
           status: "completed",
           overallScore: 0, // 나중에 계산
           topics: {} as Record<TopicName, TopicData>,

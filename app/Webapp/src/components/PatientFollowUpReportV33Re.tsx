@@ -3,7 +3,7 @@
 /**
  * PatientFollowUpReport.tsx - v4
  *
- * Second Visit 환자 페이지 - 설문 전용 컴포넌트
+ * Second Visit patient page - survey-only component
  *
  * ============================================================================
  * v4 변경사항
@@ -13,18 +13,18 @@
  * - v1의 왼쪽 Progress Sidebar 추가 (전체 진행률 표시 포함)
  *
  * ============================================================================
- * 요구사항 명세 (Transcript 기반)
+ * Requirements specification (transcript-based)
  * ============================================================================
  *
- * [목적]
- * - 환자가 첫 방문 이후 AI 요약을 본 뒤, follow-up 이후에
- * - 리스크 인식(risk perception) 및 치료 이해도(treatment understanding) 질문에 답하여
- * - AI 요약이 환자가 follow-up에서 더 정보 기반 질문을 하도록 돕는지 측정
+ * [Purpose]
+ * - After the patient views the AI summary post-first-visit, and after follow-up,
+ * - to answer risk perception and treatment understanding questions,
+ * - measuring whether the AI summary helps patients ask more informed follow-up questions.
  *
- * [필수 요구사항]
- * - 설문 질문 UI (risk perception, treatment understanding)
- * - REDCap 연동 저장 (대시보드 내 설문 입력 → 백엔드에서 REDCap으로 전송)
- * - 질문 단위로 명확히 분리된 구성 (question-by-question)
+ * [Required features]
+ * - Survey question UI (risk perception, treatment understanding)
+ * - REDCap integration (survey input in dashboard → sent to REDCap via backend)
+ * - Clearly separated question-by-question layout
  * - 페이지 역할/목적 안내 문구
  *
  * [Dr. Daskivich 요구사항 - 2024 업데이트]

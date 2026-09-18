@@ -1,7 +1,7 @@
 // PhysicianReportsModified.tsx
 // Language: TypeScript/React (TailwindCSS)
-// NOTE: 모든 API 호출을 useDoctorData 훅으로 통합, store에서 fileId/doctorId 사용
-// ✅ 수정사항: "AI Re-write" → "Re-write", Suggestions 클릭 가능, DB 저장 연동
+// NOTE: consolidated all API calls into useDoctorData hook; fileId/doctorId from store
+// ✅ Changes: "AI Re-write" → "Re-write", Suggestions clickable, DB save integration
 
 import React, { useState, useEffect, useMemo } from "react";
 import * as XLSX from "xlsx";
@@ -10,7 +10,7 @@ import ConsultationScoring from "./ConsultationScoring";
 import { useDoctorData, DoctorRewriteData } from "@/hooks/useDoctorData";
 
 // ═══════════════════════════════════════════════════════════
-// ✅ Store imports 추가
+// ✅ Added store imports
 // ═══════════════════════════════════════════════════════════
 import { useFileId } from "@/stores/useFileId";
 import { useDoctorId } from "@/stores/useDoctorId";
@@ -27,7 +27,7 @@ type TopicName =
 interface TopicData {
   score: number;
   sentences: string[];
-  // ✅ 추가: 각 문장의 메타데이터 (i, i2 등)
+  // ✅ Added: metadata for each sentence (i, i2, etc.)
   sentenceDetails?: Array<{
     i: number;
     i2: number;
@@ -49,13 +49,13 @@ interface PhysicianReportsProps {
   isDarkMode?: boolean;
 }
 
-// ✅ 추가: Suggestion 타입
+// ✅ Added: Suggestion type
 interface ImprovementSuggestion {
   targetScore: number;
   suggestion: string;
 }
 
-// ✅ 추가: Topic → Class 매핑
+// ✅ Added: Topic → Class mapping
 const TOPIC_TO_CLASS: Record<string, string> = {
   "Cancer Prognosis": "1",
   "Life Expectancy": "2",
@@ -74,13 +74,13 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   );
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ Store에서 fileId, doctorId 가져오기
+  // ✅ Get fileId, doctorId from store
   // ═══════════════════════════════════════════════════════════
   const { fileId } = useFileId();
   const { doctorId } = useDoctorId();
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useDoctorData 훅 통합 (PUT 함수 추가)
+  // ✅ Integrate useDoctorData hook (PUT 함수 추가)
   // ═══════════════════════════════════════════════════════════
   const {
     files,
@@ -95,13 +95,13 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
     fetchRewritesAll,
     fetchRewritesFiltered,
     fetchRewritesPaginated,
-    // ✅ PUT 함수들
+    // ✅ PUT functions
     saveRewrite,
     saveRewriteWithTimestamp,
   } = useDoctorData();
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ UI 상태 변수 - store 값으로 초기화
+  // ✅ UI state variables - initialized with store values
   // ═══════════════════════════════════════════════════════════
   const [selectedFile, setSelectedFile] = useState<string>("");
   const [selectedSpeaker, setSelectedSpeaker] = useState<string>("");
@@ -110,7 +110,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   const [activeTab, setActiveTab] = useState<string>("sentences");
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ Store 값이 변경되면 로컬 상태 업데이트
+  // ✅ Update local state when store values change
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (fileId) {
@@ -127,7 +127,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [doctorId]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - 초기 파일 목록 로드 (한 번만)
+  // ✅ useEffect - load initial file list (once only)
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     console.log("📁 Fetching files...");
@@ -136,7 +136,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, []);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - files 데이터 변경 감시
+  // ✅ useEffect - watch for files data changes
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (files) {
@@ -145,11 +145,11 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [files]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - 기본 파일 자동 선택 (store 값이 없을 때만)
+  // ✅ useEffect - auto-select default file (only when store has no value)
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (files && files.length > 0 && !selectedFile && !fileId) {
-      // Store에 값이 없고, 로컬 상태도 없으면 기본값 설정
+      // Set default value if store and local state are both empty
       const defaultFile = files[0] || "quality-coded-nlp-pilot-sid-1.xlsx";
       setSelectedFile(defaultFile);
       console.log("📌 Physician-Default file selected:", defaultFile);
@@ -157,7 +157,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [files, selectedFile, fileId]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - 기본 스피커 자동 선택 (store 값이 없을 때만)
+  // ✅ useEffect - auto-select default speaker (only when store has no value)
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (!selectedSpeaker && !doctorId) {
@@ -168,7 +168,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [selectedSpeaker, doctorId]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - 파일/스피커 변경 시 데이터 자동 로드
+  // ✅ useEffect - auto-load data on file/speaker change
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (selectedFile && selectedSpeaker) {
@@ -180,7 +180,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [selectedFile, selectedSpeaker]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - sentences 데이터 변경 감시
+  // ✅ useEffect - watch for sentences data changes
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (sentences) {
@@ -192,7 +192,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [sentences]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - rewritesAll 데이터 변경 감시
+  // ✅ useEffect - watch for rewritesAll data changes
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (rewritesAll) {
@@ -204,7 +204,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [rewritesAll]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - rewritesFiltered 데이터 변경 감시
+  // ✅ useEffect - watch for rewritesFiltered data changes
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (rewritesFiltered) {
@@ -219,7 +219,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [rewritesFiltered]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - rewritesPaginated 데이터 변경 감시
+  // ✅ useEffect - watch for rewritesPaginated data changes
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (rewritesPaginated) {
@@ -234,7 +234,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [rewritesPaginated]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ 핸들러 함수 - 모든 Rewrites 로드
+  // ✅ Handler - load all Rewrites
   // ═══════════════════════════════════════════════════════════
   const handleLoadAllRewrites = () => {
     console.log("🔄 Physician-Loading all rewrites...");
@@ -243,7 +243,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   };
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ 핸들러 함수 - 필터된 Rewrites 로드
+  // ✅ Handler - load filtered Rewrites
   // ═══════════════════════════════════════════════════════════
   const handleLoadFilteredRewrites = () => {
     if (selectedFile && selectedSpeaker) {
@@ -258,7 +258,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   };
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ 핸들러 함수 - 페이지네이션 Rewrites 로드
+  // ✅ Handler - load paginated Rewrites
   // ═══════════════════════════════════════════════════════════
   const handleLoadPaginatedRewrites = () => {
     console.log(
@@ -269,7 +269,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   };
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ 핸들러 함수 - 파일 새로고침
+  // ✅ Handler - refresh file
   // ═══════════════════════════════════════════════════════════
   const handleRefreshFiles = () => {
     console.log("🔃 Physician-Refreshing files...");
@@ -294,11 +294,11 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   const [newSentence, setNewSentence] = useState("");
   const [rescoring, setRescoring] = useState(false);
 
-  // ✅ 추가: 선택된 Suggestion 상태
+  // ✅ Added: selected Suggestion state
   const [selectedSuggestion, setSelectedSuggestion] =
     useState<ImprovementSuggestion | null>(null);
 
-  // ✅ 추가: 저장 상태
+  // ✅ Added: save state
   const [saveStatus, setSaveStatus] = useState<{
     status: "idle" | "saving" | "success" | "error";
     message: string;
@@ -742,7 +742,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           Communication Quality Assessment • Prostate Cancer Consultations •{" "}
           {patients.length} patient reports
         </p>
-        {/* ✅ 현재 선택된 파일/스피커 표시 */}
+        {/* ✅ Show currently selected file/speaker */}
         <div className="mt-2 flex gap-4 text-sm">
           <span className={isDarkMode ? "text-cyan-400" : "text-cyan-600"}>
             📁 File: {selectedFile || "Not selected"}
@@ -1116,7 +1116,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       [patient]
     );
 
-    // ✅ Suggestion 클릭 핸들러
+    // ✅ Suggestion click handler
     const handleSuggestionClick = (
       topicName: TopicName,
       topicData: TopicData,
@@ -1395,7 +1395,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
                                 : "text-cyan-600 hover:text-cyan-800"
                             )}
                           >
-                            {/* ✅ 변경: "AI Re-write" → "Re-write" */}
+                            {/* ✅ Changed: "AI Re-write" → "Re-write" */}
                             Re-write →
                           </button>
                         </td>
@@ -1414,7 +1414,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   const DetailedAnalysisView: React.FC = () => {
     const [showRewrite, setShowRewrite] = useState(false);
 
-    // ✅ 선택된 suggestion이 있으면 자동으로 rewrite 모드 열기
+    // ✅ Auto-open rewrite mode if a suggestion is selected
     useEffect(() => {
       if (selectedSuggestion) {
         setShowRewrite(true);
@@ -1458,21 +1458,21 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       return `Consultation Scoring: ${score} (${name})`;
     };
 
-    // ✅ 수정: handleRescoring - DB 저장 연동
+    // ✅ Updated: handleRescoring - DB save integration
     const handleRescoring = async () => {
       if (!newSentence.trim()) return;
 
       setSaveStatus({ status: "saving", message: "Saving..." });
 
       try {
-        // 1. Score 계산
+        // 1. Calculate score
         const newScore = await rescoreSentence(newSentence);
 
-        // 2. DB에 저장
+        // 2. Save to DB
         const classNumber = TOPIC_TO_CLASS[topicName] || "1";
         const originalSentence = data.sentences[0] || "";
 
-        // sentenceDetails가 있으면 첫 번째 문장의 i, i2 사용, 없으면 기본값
+        // Use i, i2 from first sentence if sentenceDetails available, otherwise use defaults
         const firstDetail = data.sentenceDetails?.[0];
         const i = firstDetail?.i ?? 0;
         const i2 = firstDetail?.i2 ?? 0;
@@ -1495,7 +1495,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
             message: `✅ Saved! New score: ${newScore}`,
           });
 
-          // 3. 로컬 상태 업데이트
+          // 3. Update local state
           const updated = patients.map((p) => {
             if (p.id !== patient.id) return p;
             const prevTopic = p.topics[topicName];
@@ -1520,16 +1520,16 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
             patient: nextPatient,
           });
 
-          // 4. 입력 초기화
+          // 4. Reset input
           setNewSentence("");
           setSelectedSuggestion(null);
 
-          // 5. Rewrites 새로고침
+          // 5. Refresh Rewrites
           if (selectedFile && selectedSpeaker) {
             fetchRewritesFiltered(selectedFile, selectedSpeaker);
           }
 
-          // 3초 후 메시지 클리어
+          // Clear message after 3 seconds
           setTimeout(() => {
             setSaveStatus({ status: "idle", message: "" });
           }, 3000);
@@ -1548,7 +1548,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       }
     };
 
-    // ✅ Suggestion 선택 핸들러
+    // ✅ Suggestion selection handler
     const handleSelectSuggestion = (suggestion: ImprovementSuggestion) => {
       setSelectedSuggestion(suggestion);
       setShowRewrite(true);
@@ -1746,7 +1746,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
               )}
               aria-expanded={showRewrite}
             >
-              {/* ✅ 변경: "AI Rewrite" → "Re-write" */}
+              {/* ✅ Changed: "AI Rewrite" → "Re-write" */}
               {showRewrite ? "Hide Re-write" : "Show Re-write"}
             </button>
           </div>
@@ -1766,11 +1766,11 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
                   isDarkMode ? "text-slate-300" : "text-slate-700"
                 )}
               >
-                {/* ✅ 변경: "AI Re-write" → "Re-write" */}
+                {/* ✅ Changed: "AI Re-write" → "Re-write" */}
                 Re-write
               </h4>
 
-              {/* ✅ 선택된 Suggestion 표시 */}
+              {/* ✅ Show selected Suggestion */}
               {selectedSuggestion && (
                 <div
                   className={cx(
@@ -1807,10 +1807,10 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
               >
                 Enter an improved version of the sentence following the
                 suggestion above.
-                {/* ✅ 변경: AI 언급 제거 */}
+                {/* ✅ Changed: removed AI reference */}
               </p>
 
-              {/* ✅ 원본 문장 표시 */}
+              {/* ✅ Show original sentence */}
               <div className="mb-4">
                 <div
                   className={cx(
@@ -1856,7 +1856,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
                   />
                 </div>
 
-                {/* ✅ 저장 상태 표시 */}
+                {/* ✅ Show save status */}
                 {saveStatus.message && (
                   <div
                     className={cx(

@@ -97,7 +97,7 @@ const VotingScatter: React.FC<VotingScatterProps> = ({
     plot_bgcolor: "rgb(254, 247, 234)",
     hovermode: "closest",
     autosize: true,
-    height: 600, // 필요한 경우 더 큰 값으로 조정
+    height: 600, // increase if needed
   };
 
   const config = {

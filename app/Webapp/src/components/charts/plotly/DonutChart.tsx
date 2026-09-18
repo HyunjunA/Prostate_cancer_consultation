@@ -25,11 +25,11 @@ const DonutChartPlotly = () => {
     },
     showlegend: true,
     legend: {
-      orientation: "h", // 범례를 수평으로 배치
-      yanchor: "bottom", // 범례를 아래쪽에 고정
-      y: -0.2, // 범례의 y 위치
-      xanchor: "center", // 범례를 중앙에 배치
-      x: 0.5, // 범례의 x 위치
+      orientation: "h", // legend를 수평으로 배치
+      yanchor: "bottom", // legend를 아래쪽에 고정
+      y: -0.2, // legend의 y 위치
+      xanchor: "center", // legend를 중앙에 배치
+      x: 0.5, // legend의 x 위치
     },
     annotations: [
       {

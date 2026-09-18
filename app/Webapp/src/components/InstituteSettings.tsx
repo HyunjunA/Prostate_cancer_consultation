@@ -181,7 +181,7 @@ export const InstituteSettings: React.FC<InstituteSettingsProps> = ({
                   institute={institute}
                   lastSelectedInstitute={lastSelectedInstitute}
                   toggleInstitute={toggleInstitute}
-                  disabled={institute.id === "all-institutions"} // disabled prop 추가
+                  disabled={institute.id === "all-institutions"} // added disabled prop
                 />
               );
             })}

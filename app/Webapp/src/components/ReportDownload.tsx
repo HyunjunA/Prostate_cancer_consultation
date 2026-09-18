@@ -81,13 +81,13 @@
 //         throw new Error("OpenAI API key is not configured");
 //       }
 
-//       // OpenAI 클라이언트 초기화
+//       // Initialize OpenAI client
 //       const openai = new OpenAI({
 //         apiKey: apiKey,
-//         dangerouslyAllowBrowser: true, // 브라우저에서 실행을 허용
+//         dangerouslyAllowBrowser: true, // Allow execution in browser
 //       });
 
-//       // 시스템 프롬프트 설정
+//       // Set system prompt
 //       const systemPrompt = `
 //       You are a highly cautious and defensive data analysis expert.
 //       You do not draw premature conclusions and refrain from making definitive judgments in the absence of clear evidence.
@@ -126,7 +126,7 @@
 //       Now, generate a concise summary (100-150 words) following the defensive analysis principles.
 //       `;
 
-//       // 메시지 배열 준비
+//       // Prepare message array
 //       const messages = [
 //         {
 //           role: "system",
@@ -134,15 +134,15 @@
 //         },
 //       ];
 
-//       // 이미지 처리
+//       // Process image
 //       console.log("Processing images for analysis...");
 //       for (let i = 0; i < chartImages.length; i++) {
 //         const imageData = chartImages[i];
 
-//         // 이미지 데이터 형식 검증
+//         // Validate image data format
 //         let imageUrl;
 //         if (typeof imageData === "string") {
-//           // imageData가 이미 URL 또는 base64 문자열인 경우
+//           // If imageData is already a URL or base64 string
 //           imageUrl =
 //             imageData.startsWith("data:") || imageData.startsWith("http")
 //               ? imageData
@@ -168,22 +168,22 @@
 //         });
 //       }
 
-//       // 디버깅을 위한 콘솔 로그
+//       // Console log for debugging
 //       console.log(
 //         "Sending request to OpenAI API with API key:",
 //         apiKey ? "API key exists" : "API key is missing"
 //       );
 //       console.log("Number of images being processed:", chartImages.length);
 
-//       // OpenAI API 호출
+//       // Call OpenAI API
 //       const response = await openai.chat.completions.create({
-//         model: "gpt-4o", // 비전 모델 사용
+//         model: "gpt-4o", // Use vision model
 //         messages: messages,
 //         temperature: 0.5,
 //         max_tokens: 300,
 //       });
 
-//       // 응답 처리
+//       // Handle response
 //       if (!response || !response.choices || response.choices.length === 0) {
 //         throw new Error("Unexpected response format from OpenAI API");
 //       }
@@ -191,7 +191,7 @@
 //       return response.choices[0].message.content.trim();
 //     } catch (error) {
 //       console.error("Error generating summary with OpenAI:", error);
-//       // 에러 전파하여 호출자가 처리할 수 있도록 함
+//       // Re-throw error so callers can handle it
 //       throw error;
 //     }
 //   };
@@ -232,24 +232,24 @@
 
 //     const element = document.documentElement;
 
-//     // PDF 초기화
+//     // Initialize PDF
 //     const pdf = new jsPDF({
 //       orientation: "portrait",
 //       unit: "mm",
 //       format: "a4",
 //     });
 
-//     // PDF 페이지 크기 계산
+//     // Calculate PDF page size
 //     const pdfWidth = pdf.internal.pageSize.getWidth();
 //     const pdfHeight = pdf.internal.pageSize.getHeight();
 //     const margin = 10;
 
-//     // 이미지를 여러 부분으로 나누어 캡처하기 위한 계산
+//     // Calculate how to split image into multiple sections for capture
 //     const totalHeight = element.scrollHeight;
 //     const pageHeightInPx = (pdfHeight / pdfWidth) * element.scrollWidth;
 //     const numberOfPages = Math.ceil(totalHeight / pageHeightInPx);
 
-//     // 메타데이터 설정
+//     // Set metadata
 //     pdf.setProperties({
 //       title: "Influenza Analysis Report",
 //       author: "Your Organization Name",
@@ -257,7 +257,7 @@
 //       keywords: "influenza, healthcare, analysis",
 //     });
 
-//     // 로고 설정
+//     // Configure logo
 //     const logoWidth = 50;
 //     const logoHeight = 15;
 //     const logoMargin = 10;
@@ -265,7 +265,7 @@
 //       <svg baseProfile="tiny" height="125" version="1.2" width="249" xmlns="http://www.w3.org/2000/svg" xmlns:ev="http://www.w3.org/2001/xml-events" xmlns:xlink="http://www.w3.org/1999/xlink"><defs /><path d="M 69,74 68,75 67,75 66,76 66,81 68,83 72,83 73,82 74,82 74,80 75,79 75,78 74,77 74,76 72,74 Z" fill="#A0171C" stroke="none" /><path d="M 26,58 25,59 24,59 22,61 22,65 24,67 29,67 30,66 31,66 31,65 32,64 32,62 31,61 31,60 30,59 29,59 28,58 Z" fill="#A0171C" stroke="none" /><path d="M 99,51 96,54 96,57 97,58 97,59 98,60 103,60 105,58 105,54 104,53 104,52 103,52 102,51 Z" fill="#A0171C" stroke="none" /><path d="M 202,42 202,83 209,83 209,70 210,69 225,69 226,68 227,68 228,67 229,67 232,64 232,63 233,62 233,60 234,59 234,52 233,51 233,49 232,48 232,47 230,45 229,45 227,43 223,43 222,42 Z" fill="#0C1E46" stroke="none" /><path d="M 169,42 169,83 196,83 196,78 176,78 175,77 175,42 Z" fill="#0C1E46" stroke="none" /><path d="M 126,42 125,43 125,83 132,83 132,66 133,65 153,65 154,66 154,83 161,83 161,42 155,42 154,43 154,59 153,60 133,60 132,59 132,42 Z" fill="#0C1E46" stroke="none" /><path d="M 112,42 112,69 118,69 119,68 119,43 118,42 Z" fill="#A0171C" stroke="none" /><path d="M 83,42 83,83 89,83 89,42 Z" fill="#A0171C" stroke="none" /><path d="M 53,42 52,43 52,83 59,83 59,42 Z" fill="#A0171C" stroke="none" /><path d="M 40,42 39,43 39,83 46,83 46,42 Z" fill="#A0171C" stroke="none" /><path d="M 8,42 8,83 15,83 15,43 14,42 Z" fill="#A0171C" stroke="none" /></svg>
 //     `;
 
-//     // 헤더 함수
+//     // Header function
 //     const addHeader = (pdf) => {
 //       pdf.setFontSize(8);
 //       pdf.setTextColor(128, 128, 128);
@@ -277,7 +277,7 @@
 //       );
 //     };
 
-//     // 푸터 함수
+//     // Footer function
 //     const addFooter = (pdf) => {
 //       const pageWidth = pdf.internal.pageSize.getWidth();
 //       pdf.setFontSize(8);
@@ -290,7 +290,7 @@
 //       );
 //     };
 
-//     // 로고 추가 함수
+//     // Add logo function
 //     const addLogo = async (pdf) => {
 //       const svgBlob = new Blob([svgLogo], { type: "image/svg+xml" });
 //       const url = URL.createObjectURL(svgBlob);
@@ -319,10 +319,10 @@
 //       });
 //     };
 
-//     // 첫 페이지 구성
+//     // Compose first page
 //     await addLogo(pdf);
 
-//     // 제목 추가
+//     // Add title
 //     pdf.setFontSize(18);
 //     pdf.setTextColor(0, 30, 70);
 //     pdf.setFont("helvetica", "bold");
@@ -330,14 +330,14 @@
 
 //     let currentPosition = logoHeight + logoMargin * 4 + 10;
 
-//     // 각 페이지별로 차트 캡처 및 추가
+//     // Capture and add chart for each page
 //     for (let i = 0; i < numberOfPages; i++) {
 //       if (i > 0) {
 //         pdf.addPage();
 //         currentPosition = margin;
 //       }
 
-//       // 현재 페이지에 해당하는 부분만 캡처
+//       // Capture only the section for the current page
 //       const canvas = await html2canvas(element, {
 //         scale: 2,
 //         useCORS: true,
@@ -362,16 +362,16 @@
 
 //       const imageData = canvas.toDataURL("image/png");
 
-//       // 실제 이미지 비율 계산
+//       // Calculate actual image aspect ratio
 //       const imgWidth = canvas.width;
 //       const imgHeight = canvas.height;
 //       const ratio = imgWidth / imgHeight;
 
-//       // PDF에서의 이미지 크기 계산
+//       // Calculate image dimensions in PDF
 //       const pdfImgWidth = pdfWidth;
 //       const pdfImgHeight = pdfImgWidth / ratio;
 
-//       // 현재 페이지에 이미지 추가
+//       // Add image to current page
 //       pdf.addImage(
 //         imageData,
 //         "PNG",
@@ -384,7 +384,7 @@
 //         0
 //       );
 
-//       // 첫 페이지의 경우 캡션 추가
+//       // Add caption for first page
 //       if (i === 0) {
 //         pdf.setFontSize(10);
 //         pdf.setTextColor(89, 89, 89);
@@ -393,16 +393,16 @@
 //         pdf.text(captionText, margin, currentPosition + pdfImgHeight + 5);
 //       }
 
-//       // 헤더와 푸터 추가
+//       // Add header and footer
 //       addHeader(pdf);
 //       addFooter(pdf);
 //     }
 
-//     // 마지막 페이지에 요약 추가
+//     // Add summary to last page
 //     pdf.addPage();
 //     addHeader(pdf);
 
-//     // 요약 섹션 추가 - 이제 AI로 생성된 텍스트 사용
+//     // Add summary section - now using AI-generated text
 //     pdf.setFontSize(14);
 //     pdf.setTextColor(160, 23, 28);
 //     pdf.setFont("helvetica", "bold");

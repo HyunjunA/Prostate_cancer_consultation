@@ -1045,7 +1045,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
               title={titleByScore(selectedTopic.data.score)}
               subtitle="Quality of Risk Communication"
               highlightedQuote={
-                // 대표 문장(없을 때 안전 처리)
+                // Representative sentence (safe fallback when absent)
                 selectedTopic.data.sentences?.[0] ??
                 "No representative sentence available."
               }

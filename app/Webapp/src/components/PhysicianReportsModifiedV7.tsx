@@ -156,7 +156,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, []);
 
   // ═══════════════════════════════════════════════════════════
-  // 기본값 설정
+  // default value 설정
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (files && files.length > 0 && !selectedFile && !fileId) {
@@ -425,7 +425,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           message: `✅ Saved! New score: ${newScore}`,
         });
 
-        // 데이터 새로고침
+        // data 새로고침
         await fetchRewritesFiltered(selectedFile, selectedSpeaker);
 
         // 입력 초기화

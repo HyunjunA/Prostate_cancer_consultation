@@ -1,6 +1,6 @@
 // PhysicianReportsModified.tsx
 // Language: TypeScript/React (TailwindCSS)
-// NOTE: 모든 API 호출을 useDoctorData 훅으로 통합, store에서 fileId/doctorId 사용
+// NOTE: consolidated all API calls into useDoctorData hook; fileId/doctorId from store
 
 import React, { useState, useEffect, useMemo } from "react";
 import * as XLSX from "xlsx";
@@ -9,7 +9,7 @@ import ConsultationScoring from "./ConsultationScoring";
 import { useDoctorData } from "@/hooks/useDoctorData";
 
 // ═══════════════════════════════════════════════════════════
-// ✅ Store imports 추가
+// ✅ Added store imports
 // ═══════════════════════════════════════════════════════════
 import { useFileId } from "@/stores/useFileId";
 import { useDoctorId } from "@/stores/useDoctorId";
@@ -51,13 +51,13 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   );
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ Store에서 fileId, doctorId 가져오기
+  // ✅ Get fileId, doctorId from store
   // ═══════════════════════════════════════════════════════════
   const { fileId } = useFileId();
   const { doctorId } = useDoctorId();
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useDoctorData 훅 통합
+  // ✅ Integrate useDoctorData hook
   // ═══════════════════════════════════════════════════════════
   const {
     files,
@@ -73,7 +73,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   } = useDoctorData();
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ UI 상태 변수 - store 값으로 초기화
+  // ✅ UI state variables - initialized with store values
   // ═══════════════════════════════════════════════════════════
   const [selectedFile, setSelectedFile] = useState<string>("");
   const [selectedSpeaker, setSelectedSpeaker] = useState<string>("");
@@ -82,7 +82,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   const [activeTab, setActiveTab] = useState<string>("sentences");
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ Store 값이 변경되면 로컬 상태 업데이트
+  // ✅ Update local state when store values change
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (fileId) {
@@ -99,7 +99,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [doctorId]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - 초기 파일 목록 로드 (한 번만)
+  // ✅ useEffect - load initial file list (once only)
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     console.log("📁 Fetching files...");
@@ -108,7 +108,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, []);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - files 데이터 변경 감시
+  // ✅ useEffect - watch for files data changes
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (files) {
@@ -117,11 +117,11 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [files]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - 기본 파일 자동 선택 (store 값이 없을 때만)
+  // ✅ useEffect - auto-select default file (only when store has no value)
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (files && files.length > 0 && !selectedFile && !fileId) {
-      // Store에 값이 없고, 로컬 상태도 없으면 기본값 설정
+      // Set default value if store and local state are both empty
       const defaultFile = files[0] || "quality-coded-nlp-pilot-sid-1.xlsx";
       setSelectedFile(defaultFile);
       console.log("📌 Physician-Default file selected:", defaultFile);
@@ -129,7 +129,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [files, selectedFile, fileId]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - 기본 스피커 자동 선택 (store 값이 없을 때만)
+  // ✅ useEffect - auto-select default speaker (only when store has no value)
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (!selectedSpeaker && !doctorId) {
@@ -140,7 +140,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [selectedSpeaker, doctorId]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - 파일/스피커 변경 시 데이터 자동 로드
+  // ✅ useEffect - auto-load data on file/speaker change
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (selectedFile && selectedSpeaker) {
@@ -152,7 +152,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [selectedFile, selectedSpeaker]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - sentences 데이터 변경 감시
+  // ✅ useEffect - watch for sentences data changes
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (sentences) {
@@ -164,7 +164,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [sentences]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - rewritesAll 데이터 변경 감시
+  // ✅ useEffect - watch for rewritesAll data changes
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (rewritesAll) {
@@ -176,7 +176,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [rewritesAll]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - rewritesFiltered 데이터 변경 감시
+  // ✅ useEffect - watch for rewritesFiltered data changes
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (rewritesFiltered) {
@@ -191,7 +191,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [rewritesFiltered]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect - rewritesPaginated 데이터 변경 감시
+  // ✅ useEffect - watch for rewritesPaginated data changes
   // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (rewritesPaginated) {
@@ -206,7 +206,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [rewritesPaginated]);
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ 핸들러 함수 - 모든 Rewrites 로드
+  // ✅ Handler - load all Rewrites
   // ═══════════════════════════════════════════════════════════
   const handleLoadAllRewrites = () => {
     console.log("🔄 Physician-Loading all rewrites...");
@@ -215,7 +215,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   };
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ 핸들러 함수 - 필터된 Rewrites 로드
+  // ✅ Handler - load filtered Rewrites
   // ═══════════════════════════════════════════════════════════
   const handleLoadFilteredRewrites = () => {
     if (selectedFile && selectedSpeaker) {
@@ -230,7 +230,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   };
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ 핸들러 함수 - 페이지네이션 Rewrites 로드
+  // ✅ Handler - load paginated Rewrites
   // ═══════════════════════════════════════════════════════════
   const handleLoadPaginatedRewrites = () => {
     console.log(
@@ -241,7 +241,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   };
 
   // ═══════════════════════════════════════════════════════════
-  // ✅ 핸들러 함수 - 파일 새로고침
+  // ✅ Handler - refresh file
   // ═══════════════════════════════════════════════════════════
   const handleRefreshFiles = () => {
     console.log("🔃 Physician-Refreshing files...");
@@ -604,7 +604,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           Communication Quality Assessment • Prostate Cancer Consultations •{" "}
           {patients.length} patient reports
         </p>
-        {/* ✅ 현재 선택된 파일/스피커 표시 */}
+        {/* ✅ Show currently selected file/speaker */}
         <div className="mt-2 flex gap-4 text-sm">
           <span className={isDarkMode ? "text-cyan-400" : "text-cyan-600"}>
             📁 File: {selectedFile || "Not selected"}

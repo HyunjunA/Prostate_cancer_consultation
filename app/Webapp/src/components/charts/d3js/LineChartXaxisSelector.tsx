@@ -1458,7 +1458,7 @@
 //     return () => window.removeEventListener("resize", checkScreenSize);
 //   }, []);
 
-//   // 버튼의 크기와 패딩을 고려한 마진 설정
+//   // Set margin accounting for button size and padding
 //   const buttonSize = 40;
 //   const margin = {
 //     top: 80,
@@ -1480,10 +1480,10 @@
 //       .range([0, innerWidth])
 //       .padding(0);
 
-//     // 기존 circle 제거
+//     // Remove existing circle
 //     interactionGroup.selectAll(".selector-circle").remove();
 
-//     // 새로운 circle 추가
+//     // Add new circle
 //     interactionGroup
 //       .append("circle")
 //       .attr("class", "selector-circle")
@@ -1576,13 +1576,13 @@
 //       setSelectedDateOnXaxis(data[index]);
 //     };
 
-//     // x축 생성
+//     // Create x-axis
 //     const xAxis = g
 //       .append("g")
 //       .attr("class", "x-axis")
 //       .attr("transform", `translate(0,0)`);
 
-//     // X축 라벨 추가
+//     // Add x-axis labels
 //     g.append("text")
 //       .attr("class", "x-axis-label")
 //       .attr("text-anchor", "middle")
@@ -1618,7 +1618,7 @@
 //         handleClick(d.toString());
 //       });
 
-//     // 클릭 영역
+//     // Click area
 //     data.forEach((d) => {
 //       interactionGroup
 //         .append("rect")
@@ -1634,7 +1634,7 @@
 //         });
 //     });
 
-//     // 타이틀
+//     // Title
 //     svg
 //       .append("text")
 //       .attr("x", width / 2)
@@ -1644,7 +1644,7 @@
 //       .style("font-weight", chartStyles.title.fontWeight)
 //       .text(title);
 
-//     // 초기 circle 그리기
+//     // Draw initial circle
 //     updateSelectionCircle();
 //   }, [data, width, height, title, id, isMobile]);
 
@@ -1730,7 +1730,7 @@ export const LineChartXaxisSelector = ({
     return () => window.removeEventListener("resize", checkScreenSize);
   }, []);
 
-  // 원래 마진 설정 복원
+  // Restore original margin settings
   const margin = { top: 80, right: isMobile ? 60 : 120, bottom: 30, left: 80 };
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
@@ -1744,12 +1744,12 @@ export const LineChartXaxisSelector = ({
       .scalePoint()
       .domain(data.map((d) => d.week_ending))
       .range([0, innerWidth])
-      .padding(0.5); // 원래 padding 값으로 복원
+      .padding(0.5); // restore original padding value
 
-    // 기존 circle 제거
+    // Remove existing circle
     interactionGroup.selectAll(".selector-circle").remove();
 
-    // 새로운 circle 추가
+    // Add new circle
     interactionGroup
       .append("circle")
       .attr("class", "selector-circle")
@@ -1761,7 +1761,7 @@ export const LineChartXaxisSelector = ({
       .attr("stroke-width", 2);
   };
 
-  // selectedDateOnXaxis 변경 감지
+  // Detect selectedDateOnXaxis change
   useEffect(() => {
     updateSelectionCircle();
   }, [selectedDateOnXaxis, data]);
@@ -1821,7 +1821,7 @@ export const LineChartXaxisSelector = ({
       .scalePoint()
       .domain(data.map((d) => d.week_ending))
       .range([0, innerWidth])
-      .padding(0.5); // 원래 padding 값으로 복원
+      .padding(0.5); // restore original padding value
 
     const formatDate = (dateStr: string) => {
       const date = new Date(dateStr);
@@ -1843,13 +1843,13 @@ export const LineChartXaxisSelector = ({
       setSelectedDateOnXaxis(data[index]);
     };
 
-    // x축 생성
+    // Create x-axis
     const xAxis = g
       .append("g")
       .attr("class", "x-axis")
       .attr("transform", `translate(0,0)`);
 
-    // X축 라벨 추가
+    // Add x-axis labels
     g.append("text")
       .attr("class", "x-axis-label")
       .attr("text-anchor", "middle")
@@ -1859,7 +1859,7 @@ export const LineChartXaxisSelector = ({
       .style("font-family", "Arial, sans-serif")
       .text("Week");
 
-    // 표시할 틱의 개수를 제한
+    // Limit the number of ticks to display
     const numTicks = isMobile ? 5 : 10;
     const tickValues = data
       .filter((_, i) => i % Math.ceil(data.length / numTicks) === 0)
@@ -1886,7 +1886,7 @@ export const LineChartXaxisSelector = ({
         handleClick(d.toString());
       });
 
-    // 클릭 영역
+    // Click area
     data.forEach((d) => {
       interactionGroup
         .append("rect")
@@ -1902,7 +1902,7 @@ export const LineChartXaxisSelector = ({
         });
     });
 
-    // 타이틀
+    // Title
     svg
       .append("text")
       .attr("x", width / 2)
@@ -1912,7 +1912,7 @@ export const LineChartXaxisSelector = ({
       .style("font-weight", chartStyles.title.fontWeight)
       .text(title);
 
-    // 초기 circle 그리기
+    // Draw initial circle
     updateSelectionCircle();
   }, [data, width, height, title, id, isMobile]);
 

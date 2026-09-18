@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 
 const SankeyDiagramplotly = () => {
-  // 예시 데이터
+  // Sample data
   const sampleData = {
     type: "sankey",
     domain: {

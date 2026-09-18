@@ -396,7 +396,7 @@ const PatientReport: React.FC<PatientReportProps> = ({
   isDarkMode = false,
 }) => {
   // ════════════════════════════════════════════════════════════
-  // REST API 모든 엔드포인트 - useEffect 호출 (의존성 배열 없음)
+  // REST API all endpoints - called in useEffect (no dependency array)
   // ════════════════════════════════════════════════════════════
   const {
     fetchFiles: fetchPatientFiles,
@@ -414,8 +414,8 @@ const PatientReport: React.FC<PatientReportProps> = ({
   // ═══════════════════════════════════════════════════════════
   // 8️⃣ Patient Interface - Get Summaries (All)
   // ═══════════════════════════════════════════════════════════
-  // ✅ useEffect에서 훅 함수들을 호출 (이미 API Key가 포함됨)
-  // ✅ useEffect들 - 의존성 배열 비움
+  // ✅ Call hook functions inside useEffect (API Key already included)
+  // ✅ useEffects - empty dependency arrays
 
   useEffect(() => {
     console.log("🎯 Fetching all patient scoring...");

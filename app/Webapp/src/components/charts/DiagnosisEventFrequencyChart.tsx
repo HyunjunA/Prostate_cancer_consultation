@@ -45,7 +45,7 @@ const DiagnosisEventFrequencyChart: React.FC<
     svg.selectAll("*").remove();
 
     const { width, height } = dimensions;
-    const margin = { top: 80, right: 100, bottom: 80, left: 200 }; // 원래대로 복원하고 right를 증가
+    const margin = { top: 80, right: 100, bottom: 80, left: 200 }; // restored to original and increased right margin
 
     // Color scheme based on dark mode
     const textColor = isDarkMode ? "#e2e8f0" : "#2d3748";
@@ -247,7 +247,7 @@ const DiagnosisEventFrequencyChart: React.FC<
     bars
       .append("text")
       .attr("y", (d) => yScale(d[0])! + yScale.bandwidth() / 2)
-      .attr("x", margin.left - 10 + 10) // 시작점 조정
+      .attr("x", margin.left - 10 + 10) // adjust start position
       .attr("dominant-baseline", "middle")
       .attr("font-size", "14px")
       .attr("font-weight", "600")
@@ -258,7 +258,7 @@ const DiagnosisEventFrequencyChart: React.FC<
       .duration(1000)
       .delay((d, i) => i * 100 + 800)
       .attr("opacity", 1)
-      .attr("x", (d) => Math.max(margin.left - 10 + 10, xScale(d[1]) - 40)); // 위치 계산 조정
+      .attr("x", (d) => Math.max(margin.left - 10 + 10, xScale(d[1]) - 40)); // adjust position calculation
 
     // Enhanced axes
     const xAxis = svg
@@ -282,7 +282,7 @@ const DiagnosisEventFrequencyChart: React.FC<
       .style("font-size", "12px")
       .style("font-weight", "500")
       .style("fill", textColor)
-      .style("text-anchor", "end"); // 텍스트를 오른쪽 정렬로 변경
+      .style("text-anchor", "end"); // change to right-align text
 
     // Axis lines
     svg
@@ -314,10 +314,10 @@ const DiagnosisEventFrequencyChart: React.FC<
       .attr("fill", textColor)
       .text("Event Names");
 
-    // Add rank indicators - 위치를 더 왼쪽으로 이동
+    // Add rank indicators - shift further left
     bars
       .append("circle")
-      .attr("cx", margin.left - 80) // -50에서 -80으로 더 왼쪽으로
+      .attr("cx", margin.left - 80) // moved further left from -50 to -80
       .attr("cy", (d) => yScale(d[0])! + yScale.bandwidth() / 2)
       .attr("r", 0)
       .attr("fill", (d, i) => (i < 3 ? "#fbbf24" : "#6b7280"))
@@ -331,7 +331,7 @@ const DiagnosisEventFrequencyChart: React.FC<
 
     bars
       .append("text")
-      .attr("x", margin.left - 80) // -50에서 -80으로 더 왼쪽으로
+      .attr("x", margin.left - 80) // moved further left from -50 to -80
       .attr("y", (d) => yScale(d[0])! + yScale.bandwidth() / 2)
       .attr("text-anchor", "middle")
       .attr("dominant-baseline", "middle")

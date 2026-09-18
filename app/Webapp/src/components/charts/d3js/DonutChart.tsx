@@ -91,8 +91,8 @@
 //       .style("background-color", theme === "dark" ? "#1f2937" : "#ffffff")
 //       .style("color", theme === "dark" ? "#ffffff" : "#000000")
 //       .style("z-index", "9999") // 높은 z-index 추가
-//       .style("box-shadow", "0 2px 4px rgba(0,0,0,0.1)") // 선택적: 시각적 구분을 위한 그림자 추가
-//       .style("backdrop-filter", "blur(8px)"); // 선택적: 배경 블러 효과 추가
+//       .style("box-shadow", "0 2px 4px rgba(0,0,0,0.1)") // selection적: 시각적 구분을 위한 그림자 추가
+//       .style("backdrop-filter", "blur(8px)"); // selection적: 배경 블러 효과 추가
 
 //     const total = d3.sum(data, (d) => d.count);
 

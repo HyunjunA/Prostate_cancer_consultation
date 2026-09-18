@@ -3,7 +3,7 @@
 /**
  * PatientFollowUpReport.tsx
  *
- * Second Visit 환자 페이지 - 설문 전용 컴포넌트
+ * Second Visit patient page - survey-only component
  * Uses MODIFIED Survey components with one-question-at-a-time navigation
  * Healthcare Theme (Teal/Cyan/Sky/Emerald/Blue color scheme)
  */
