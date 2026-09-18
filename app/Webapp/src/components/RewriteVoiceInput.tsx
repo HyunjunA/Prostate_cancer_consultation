@@ -112,7 +112,7 @@ const RewriteVoiceInput: React.FC<Props> = ({ isDarkMode, onText }) => {
               : "bg-amber-50 text-amber-700 border border-amber-200",
           )}
         >
-          ⚠ Transcription may not be perfect — please review before saving
+          ⚠ Speech-to-text may contain errors — please review before clicking Try &amp; Score
         </span>
       )}
     </div>
