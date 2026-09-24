@@ -3982,15 +3982,20 @@ const DetailView: React.FC<DetailViewProps> = ({
             .map((item, idx) => {
               const isCurrentPatient = item.file === patient.fileName;
               const patientInfo = allPatients?.find((p) => p.fileName === item.file);
+              const visitNo = patientInfo?.visitIndex ?? idx + 1;
               return {
-                index: idx + 1,
+                index: `Visit ${visitNo}`,
                 file: item.file,
-                label: patientInfo?.name || `Patient ${idx + 1}`,
+                label: patientInfo?.name || `Visit ${visitNo}`,
                 score: item.avg_score ?? 0,
                 isCurrentPatient,
               };
             })
-            .sort((a, b) => a.index - b.index);
+            .sort((a, b) => {
+              const ai = parseInt(String(a.index).replace("Visit ", ""), 10) || 0;
+              const bi = parseInt(String(b.index).replace("Visit ", ""), 10) || 0;
+              return ai - bi;
+            });
 
           if (topicScores.length === 0) return null;
 
@@ -4042,13 +4047,6 @@ const DetailView: React.FC<DetailViewProps> = ({
                       tick={{ fontSize: 10, fill: isDarkMode ? "#94a3b8" : "#64748b" }}
                       tickLine={false}
                       axisLine={{ stroke: isDarkMode ? "#475569" : "#cbd5e1" }}
-                      label={{
-                        value: "Patient #",
-                        position: "insideBottomRight",
-                        offset: -4,
-                        fontSize: 10,
-                        fill: isDarkMode ? "#64748b" : "#94a3b8",
-                      }}
                     />
                     <YAxis
                       domain={[0, 5]}
