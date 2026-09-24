@@ -4506,7 +4506,7 @@ const DetailView: React.FC<DetailViewProps> = ({
                     <textarea
                       value={newSentence}
                       onChange={(e) => setNewSentence(e.target.value)}
-                      placeholder="Try rephrasing the sentence above — how would you communicate this to the patient next time?"
+                      placeholder="Type your rewrite here, or click Speak to dictate — then click Score to evaluate it."
                       className={cx(
                         // The dictation footer supplies the bottom padding when
                         // it is there; without it the textarea pads itself.
@@ -4559,7 +4559,7 @@ const DetailView: React.FC<DetailViewProps> = ({
                         ? "Scoring..."
                         : saveStatus.status === "saving"
                           ? "Scoring..."
-                          : "Try & Score"}
+                          : "Score"}
                     </button>
 
                     {/* Save Status inline */}

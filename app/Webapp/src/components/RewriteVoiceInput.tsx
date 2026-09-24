@@ -106,13 +106,14 @@ const RewriteVoiceInput: React.FC<Props> = ({ isDarkMode, onText }) => {
       {status === "listening" && (
         <span
           className={cx(
-            "text-xs px-2 py-0.5 rounded-full font-medium",
+            "text-xs px-2 py-1 rounded-md font-medium leading-snug max-w-xs",
             isDarkMode
               ? "bg-amber-900/40 text-amber-300 border border-amber-700/50"
               : "bg-amber-50 text-amber-700 border border-amber-200",
           )}
         >
-          ⚠ Speech-to-text may contain errors — please review before clicking Try &amp; Score
+          ⚠ Review and edit the transcription before clicking Score.
+          The recording may take a moment to finish after you stop speaking.
         </span>
       )}
     </div>
