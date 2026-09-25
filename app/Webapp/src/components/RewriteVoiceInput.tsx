@@ -4,6 +4,8 @@ import React from "react";
 
 import { useSpeechToText } from "@/hooks/useSpeechToText";
 
+import SttLoadingModal from "./SttLoadingModal";
+
 interface Props {
   isDarkMode: boolean;
   /** Receives one recognised sentence at a time, as the doctor speaks. */
@@ -43,28 +45,55 @@ const MicIcon: React.FC<{ className?: string }> = ({ className }) => (
  * this only ever appends to what is already in the box.
  */
 const RewriteVoiceInput: React.FC<Props> = ({ isDarkMode, onText }) => {
-  const { supported, unsupportedReason, status, progress, speaking, error, start, stop } =
-    useSpeechToText({ onText });
+  const {
+    supported,
+    unsupportedReason,
+    status,
+    assets,
+    speaking,
+    error,
+    start,
+    stop,
+    cancel,
+  } = useSpeechToText({ onText });
 
   const active = status === "loading" || status === "listening";
+  // "finishing" is the worker transcribing what was still buffered when Stop was
+  // pressed. Clicking again during it would start a dictation that the pending
+  // flush is about to tear down, so the button waits it out instead.
+  const busy = status === "finishing";
+  // No percentage here any more: the load is several files fetched in
+  // parallel, and a single number for it either ran backwards or sat at 100
+  // through the warm-up. The detail lives in SttLoadingModal, which has room
+  // to name what is actually being fetched.
   const label = !supported
     ? "Voice unavailable"
     : status === "loading"
-      ? `Loading… ${Math.round(progress)}%`
-      : status === "listening"
-        ? speaking
-          ? "Listening…"
-          : "Stop"
-        : "Speak";
+      ? "Preparing…"
+      : status === "finishing"
+        ? "Finishing…"
+        : status === "listening"
+          ? speaking
+            ? "Listening…"
+            : "Stop"
+          : "Speak";
 
   return (
     // The onboarding tour spotlights this wrapper, so the anchor stays put
     // whether or not the error message beside the button is showing.
     <div data-tour="rewrite-voice-button" className="flex items-center gap-2">
+      {status === "loading" && (
+        <SttLoadingModal
+          isDarkMode={isDarkMode}
+          assets={assets}
+          onCancel={cancel}
+        />
+      )}
+
       <button
         type="button"
         onClick={() => (active ? stop() : void start())}
-        disabled={!supported}
+        disabled={!supported || busy}
         aria-pressed={status === "listening"}
         title={
           unsupportedReason ??
@@ -102,8 +131,10 @@ const RewriteVoiceInput: React.FC<Props> = ({ isDarkMode, onText }) => {
         </span>
       )}
 
-      {/* Warning shown while actively listening */}
-      {status === "listening" && (
+      {/* Warning shown while actively listening, and while the last sentence
+          is still being transcribed — that is exactly when the text is still
+          changing under the doctor. */}
+      {(status === "listening" || status === "finishing") && (
         <span
           className={cx(
             "text-xs px-2 py-1 rounded-md font-medium leading-snug max-w-xs",
