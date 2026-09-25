@@ -10,6 +10,8 @@
  * because patients open their own link and have no admin account.
  */
 
+import { useRouter } from "next/navigation";
+
 import AdminPatientTable, { type VisitEntry } from "@/components/AdminPatientTable";
 import { usePatientFileList } from "@/hooks/usePatientFileList";
 
@@ -43,6 +45,7 @@ function patientUrl(file: string, visit: VisitEntry): string {
 
 export default function AdminPatientPicker() {
   const { patientList, loading, processingCount } = usePatientFileList();
+  const router = useRouter();
 
   const spinner = (size: string) => (
     <svg className={`animate-spin ${size}`} viewBox="0 0 24 24">
@@ -112,8 +115,14 @@ export default function AdminPatientPicker() {
       ) : (
         <AdminPatientTable
           files={patientList}
+          // Client-side, deliberately: a `window.location` assignment here tore
+          // the document down, and with it the speech-to-text worker that holds
+          // ~123 MB of already-decoded model weights. Rebuilding those costs the
+          // doctor ~3.3 s on the first dictation of every patient they open.
+          // Routing through the App Router keeps the document — and the worker —
+          // alive for the whole tab. See lib/sttWorkerHost.ts.
           onSelect={(file, visit) => {
-            window.location.href = patientUrl(file, visit);
+            router.push(patientUrl(file, visit));
           }}
         />
       )}

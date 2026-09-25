@@ -11,6 +11,7 @@
  * public — that is the link handed out from deid_mapping.csv.
  */
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 interface Doctor {
@@ -55,7 +56,13 @@ export default function AdminPhysicianPicker() {
         <ul className="space-y-2">
           {doctors.map((d) => (
             <li key={d.doctor_id}>
-              <a
+              {/* Link, not a plain <a>: the dashboard this opens is the one
+                  screen that can dictate, and a full page load would discard
+                  the speech-to-text worker along with the document. A doctor
+                  who comes back here to switch patients would then wait ~3.3 s
+                  for the models to be rebuilt every time. See
+                  lib/sttWorkerHost.ts. */}
+              <Link
                 href={`/?doctorid=${encodeURIComponent(d.doctor_id)}`}
                 className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm transition-all hover:bg-slate-50"
               >
@@ -63,7 +70,7 @@ export default function AdminPhysicianPicker() {
                 <span className="text-xs text-slate-500">
                   {d.patient_count} patient{d.patient_count !== 1 ? "s" : ""}
                 </span>
-              </a>
+              </Link>
             </li>
           ))}
         </ul>
