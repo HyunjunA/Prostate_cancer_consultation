@@ -24,14 +24,40 @@ export const VOICE_INPUT_ENABLED = true;
  * 5-second sentence costs 5 seconds of encoder work; Whisper pads every input to
  * 30 seconds regardless. Short dictation is exactly Moonshine's case.
  *
- * Swapping in Whisper is a one-line change — the pipeline API is identical:
+ * Swapping in Whisper is one line *here* — the pipeline API is identical:
  *   "onnx-community/whisper-base"     multilingual, stronger punctuation
  *   "onnx-community/whisper-tiny.en"  English only, smallest Whisper
+ *
+ * but not one line overall: remote loading is off, so the new repo's files must
+ * be added to the manifest in scripts/fetch-stt-assets.sh and re-fetched, or the
+ * feature fails closed on the first click. Whisper also has no equivalent of the
+ * Moonshine token heuristic documented below, so maxNewTokensFor() would need
+ * revisiting. See docs/architecture/SPEECH_TO_TEXT.md §5.4.
  */
 export const STT_MODEL_ID = "onnx-community/moonshine-base-ONNX";
 
 /** Voice activity detection model — decides where a spoken sentence ends. */
 export const VAD_MODEL_ID = "onnx-community/silero-vad";
+
+/**
+ * Where the browser loads model weights from. Both models are served by the
+ * COMPASS server out of `public/stt-models/`, not fetched from huggingface.co,
+ * so no third-party origin is contacted and no request metadata — IP, timing,
+ * user agent — is disclosed to one.
+ *
+ * Populate it with `bash scripts/fetch-stt-assets.sh`. Changing either model id
+ * above means re-running that script with the new files added to its manifest;
+ * remote loading is disabled, so a file that is not on disk is an error rather
+ * than a silent fall back to the internet.
+ */
+export const STT_MODEL_PATH = "/stt-models/";
+
+/**
+ * Where the browser loads the ONNX Runtime WASM binaries from. Same reasoning,
+ * different vendor: the default is a jsDelivr URL, which is a second
+ * third-party origin executing code in the clinician's tab.
+ */
+export const STT_WASM_PATH = "/stt-wasm/";
 
 /** Sample rate of the audio. The same for both models, as it happens. */
 export const SAMPLE_RATE = 16000;
@@ -65,6 +91,37 @@ export const MIN_SPEECH_DURATION_SAMPLES = 250 * SAMPLE_RATE_MS; // 250 ms
 /** Maximum duration of audio the transcriber handles in one go, in seconds. */
 export const MAX_BUFFER_DURATION = 30;
 
+/**
+ * Ceiling on the tokens Moonshine may emit for one captured sentence.
+ *
+ * Transformers.js applies its own heuristic when none is supplied —
+ * `Math.floor(seconds) * 6` in `_call_moonshine` (pipelines.js) — taken from the
+ * Moonshine paper, where it exists to stop the decoder looping on repeated
+ * output. Two things make it cut real speech short here:
+ *
+ *   - It floors *whole seconds*. Our shortest capture is 250 ms of speech plus
+ *     400 ms of trailing silence, 80 ms of pad and 3 pre-roll frames — about
+ *     826 ms, which floors to 0 and allows **zero** tokens. A doctor who says
+ *     "Correct." gets nothing at all, silently.
+ *   - 6 tokens per second is below a brisk speaker. A trailing fragment split
+ *     off by a pause ("and that's the main concern", ~8 tokens in 1.6 s) is
+ *     allowed only 6, so its last words are dropped.
+ *
+ * Passing an explicit value overrides the heuristic: `_call_moonshine` spreads
+ * caller kwargs *after* its own default. The floor is what fixes short captures;
+ * the rate is what fixes fast ones. Both are deliberately generous — the cost of
+ * being too high is a slightly longer decode on a sentence that ends early
+ * anyway, while the cost of being too low is silently losing the doctor's words.
+ */
+export const TOKENS_PER_SECOND = 8;
+export const MIN_NEW_TOKENS = 24;
+
+/** The bound actually passed to the transcriber, for a buffer of `samples`. */
+export function maxNewTokensFor(samples: number): number {
+  const seconds = samples / SAMPLE_RATE;
+  return Math.max(MIN_NEW_TOKENS, Math.ceil(seconds * TOKENS_PER_SECOND));
+}
+
 /** Size of the buffers arriving from the audio worklet. */
 export const NEW_BUFFER_SIZE = 512;
 
@@ -73,13 +130,69 @@ export const MAX_NUM_PREV_BUFFERS = Math.ceil(
   SPEECH_PAD_SAMPLES / NEW_BUFFER_SIZE,
 );
 
+/**
+ * The pieces of the first-click load, in the order the modal lists them.
+ *
+ * Deliberately not a single aggregated percentage. The load is several files
+ * fetched partly in parallel, so one combined bar either jumps backwards or has
+ * to pretend it knows the total before any server has said so. Naming what is
+ * being fetched is both honest and more useful: a doctor who sees "Speech model
+ * · encoder 48 / 81 MB" knows what is taking the time.
+ */
+export type SttAssetId = "vad" | "encoder" | "decoder" | "warmup";
+
+/** Fixed display order — rows appear greyed out before they start. */
+export const STT_ASSET_ORDER: readonly SttAssetId[] = [
+  "vad",
+  "encoder",
+  "decoder",
+  "warmup",
+];
+
+export const STT_ASSET_LABELS: Record<SttAssetId, string> = {
+  vad: "Voice detector",
+  encoder: "Speech model · encoder",
+  decoder: "Speech model · decoder",
+  warmup: "Warming up",
+};
+
+export interface SttAssetProgress {
+  id: SttAssetId;
+  /** Bytes received. Always 0 for `warmup`, which has no bytes to count. */
+  loaded: number;
+  /** Bytes expected, or 0 until the server has sent a `Content-Length`. */
+  total: number;
+  done: boolean;
+}
+
+/**
+ * Which row of the loading modal a Transformers.js progress event belongs to.
+ *
+ * The library reports per *file*, including the handful of JSON configs that
+ * are a few kB each. Those return `null`: a row that appears and completes in
+ * the same frame reads as a glitch, and they are rounding error next to the
+ * weights.
+ */
+export function sttAssetIdFor(repoId: string, file: string): SttAssetId | null {
+  if (!file.includes(".onnx")) return null;
+  if (repoId === VAD_MODEL_ID) return "vad";
+  if (file.includes("encoder_model")) return "encoder";
+  if (file.includes("decoder_model")) return "decoder";
+  return null;
+}
+
 /** Messages the STT worker posts back to the main thread. */
 export type SttWorkerMessage =
   | { type: "loading"; message: string }
-  | { type: "progress"; progress: number }
+  // One row of the loading modal, complete each time — the worker keeps the
+  // running byte tally so the page never has to merge partial updates.
+  | { type: "asset"; asset: SttAssetProgress }
   | { type: "ready" }
   | { type: "speech"; active: boolean }
   | { type: "text"; text: string }
+  // Everything still buffered when the doctor pressed Stop has been transcribed
+  // and delivered. Only after this is it safe to detach from the worker.
+  | { type: "flushed" }
   | { type: "error"; message: string };
 
 /**

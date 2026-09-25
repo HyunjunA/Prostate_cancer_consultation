@@ -155,6 +155,13 @@ public/json_nuspar_related/
 public/json_nuspar_related_2/
 public/not_used/
 
+# Self-hosted speech-to-text assets — ~223 MB of model weights and WASM
+# binaries, fetched rather than committed. Run `bash scripts/fetch-stt-assets.sh`
+# from the repo root on every deployment, before `npm run build` or any image
+# build. Voice input fails closed without them: remote loading is disabled.
+public/stt-models/
+public/stt-wasm/
+
 # Specific files you might want to ignore
 public/uploads/
 data/

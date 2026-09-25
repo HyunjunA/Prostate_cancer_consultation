@@ -15,7 +15,7 @@
  * module does not depend on the bundler enabling top-level await.
  */
 
-import { AutoModel, Tensor, pipeline } from "@huggingface/transformers";
+import { AutoModel, Tensor, env, pipeline } from "@huggingface/transformers";
 
 import {
   EXIT_THRESHOLD,
@@ -27,7 +27,12 @@ import {
   SPEECH_PAD_SAMPLES,
   SPEECH_THRESHOLD,
   STT_MODEL_ID,
+  STT_MODEL_PATH,
+  STT_WASM_PATH,
   VAD_MODEL_ID,
+  maxNewTokensFor,
+  sttAssetIdFor,
+  type SttAssetId,
   type SttWorkerMessage,
 } from "@/lib/sttConstants";
 
@@ -41,12 +46,39 @@ const ctx = self as unknown as WorkerScope;
 
 const post = (message: SttWorkerMessage) => ctx.postMessage(message);
 
+// ── Asset origin ─────────────────────────────────────────────────────────────
+
+// Serve every byte this feature needs from the COMPASS server. By default
+// Transformers.js fetches weights from huggingface.co and tells ONNX Runtime to
+// fetch its WASM binaries from cdn.jsdelivr.net — two third-party origins that
+// have to be reachable through the hospital firewall, that receive the
+// clinician's IP and user agent, and that are not pinned to a hash.
+//
+// `allowRemoteModels = false` is the part that makes this structural rather
+// than a preference: a file missing from public/stt-models/ now raises an
+// error instead of quietly reaching the internet, so the guarantee cannot
+// decay into "it worked in testing".
+//
+// Populate both directories with `bash scripts/fetch-stt-assets.sh`.
+env.allowLocalModels = true;
+env.localModelPath = STT_MODEL_PATH;
+env.allowRemoteModels = false;
+
+// Guarded the same way the library guards its own default: the wasm backend is
+// absent in environments that never reach it.
+if (env.backends.onnx?.wasm) {
+  env.backends.onnx.wasm.wasmPaths = STT_WASM_PATH;
+}
+
 // ── Models ───────────────────────────────────────────────────────────────────
 
 /** Silero VAD returns the updated recurrent state alongside the speech score. */
 type VadOutput = { stateN: Tensor; output: Tensor };
 type VadModel = (inputs: Record<string, Tensor>) => Promise<VadOutput>;
-type Transcriber = (audio: Float32Array) => Promise<{ text: string }>;
+type Transcriber = (
+  audio: Float32Array,
+  options?: { max_new_tokens?: number },
+) => Promise<{ text: string }>;
 
 let vad: VadModel | null = null;
 let transcriber: Transcriber | null = null;
@@ -78,12 +110,33 @@ async function load(): Promise<void> {
   const device = (await supportsWebGPU()) ? "webgpu" : "wasm";
   post({ type: "loading", message: "Loading speech model" });
 
-  // Download progress covers both models; the weights land in the browser's
-  // Cache API, so this is a first-visit cost only.
-  const progress_callback = (item: { status?: string; progress?: number }) => {
-    if (item.status === "progress" && typeof item.progress === "number") {
-      post({ type: "progress", progress: item.progress });
+  // Transformers.js reports per file, and its `done` event carries no byte
+  // counts — so the tally is kept here and every message leaves as a finished
+  // row. The weights land in the browser's Cache API, so all of this is a
+  // first-visit cost only; on later visits the rows complete almost at once.
+  const bytes = new Map<SttAssetId, { loaded: number; total: number }>();
+
+  const progress_callback = (item: {
+    status?: string;
+    name?: string;
+    file?: string;
+    loaded?: number;
+    total?: number;
+  }) => {
+    if (item.status !== "progress" && item.status !== "done") return;
+    const id = sttAssetIdFor(item.name ?? "", item.file ?? "");
+    if (!id) return;
+
+    if (item.status === "progress") {
+      const row = { loaded: item.loaded ?? 0, total: item.total ?? 0 };
+      bytes.set(id, row);
+      post({ type: "asset", asset: { id, ...row, done: false } });
+      return;
     }
+    // `done` for a file served from cache can be the first event we see, in
+    // which case there is no size to report — the row still has to complete.
+    const total = bytes.get(id)?.total ?? 0;
+    post({ type: "asset", asset: { id, loaded: total, total, done: true } });
   };
 
   vad = (await AutoModel.from_pretrained(VAD_MODEL_ID, {
@@ -99,7 +152,13 @@ async function load(): Promise<void> {
   })) as unknown as Transcriber;
 
   // Warm up (compiles WebGPU shaders) so the first real sentence is not slow.
+  // No byte counter exists for this, but it is seconds of work on a cold
+  // WebGPU context — leaving it unnamed is what made the modal look stuck at
+  // the end.
+  post({ type: "asset", asset: { id: "warmup", loaded: 0, total: 0, done: false } });
   await transcriber(new Float32Array(SAMPLE_RATE));
+  post({ type: "asset", asset: { id: "warmup", loaded: 0, total: 0, done: true } });
+
   isLoaded = true;
   post({ type: "ready" });
 }
@@ -108,6 +167,11 @@ async function load(): Promise<void> {
 
 // Transformers.js cannot run two inferences at once, so they are chained.
 let inferenceChain: Promise<unknown> = Promise.resolve();
+
+// The most recent transcription handed off by dispatchSentence(). `flush()`
+// waits on it so that pressing Stop delivers the final sentence rather than
+// throwing it away — inferences are serialized, so the last one settles last.
+let pendingTranscription: Promise<void> = Promise.resolve();
 
 const BUFFER = new Float32Array(MAX_BUFFER_DURATION * SAMPLE_RATE);
 let bufferPointer = 0;
@@ -148,8 +212,12 @@ async function isSpeechFrame(buffer: Float32Array): Promise<boolean> {
 async function transcribe(buffer: Float32Array): Promise<void> {
   if (!transcriber) return;
   const epoch = sessionEpoch;
+  // Without an explicit bound Transformers.js allows floor(seconds) * 6 tokens,
+  // which is zero for a capture under a second and too tight for a fast
+  // speaker — the doctor's last words go missing. See maxNewTokensFor().
+  const max_new_tokens = maxNewTokensFor(buffer.length);
   const { text } = (await (inferenceChain = inferenceChain.then(() =>
-    transcriber!(buffer),
+    transcriber!(buffer, { max_new_tokens }),
   ))) as { text: string };
   if (epoch !== sessionEpoch) return; // Dictation ended while this was running.
   if (text?.trim()) post({ type: "text", text });
@@ -196,10 +264,35 @@ function dispatchSentence(overflow?: Float32Array) {
   padded.set(captured, offset);
   prevBuffers = [];
 
-  void transcribe(padded);
+  pendingTranscription = transcribe(padded);
 
   if (overflow) BUFFER.set(overflow, 0);
   reset(overflow?.length ?? 0);
+}
+
+/**
+ * Finish the dictation without losing its tail.
+ *
+ * A sentence is only dispatched once `MIN_SILENCE_DURATION_MS` of silence has
+ * followed it, and transcription then takes another second or so. A doctor who
+ * stops talking and immediately presses Stop is inside that window, so the
+ * previous behaviour — reset, which clears the buffer and bumps the epoch —
+ * discarded the last thing they said. Here the buffer is handed to the
+ * transcriber first and `flushed` is posted only once the text has gone out,
+ * which is the signal the page waits for before detaching.
+ *
+ * Deliberately does not touch `sessionEpoch`: bumping it is what would make
+ * `transcribe()` drop the very result being waited for.
+ */
+async function flush(): Promise<void> {
+  // Mid-sentence, or holding one whose closing silence never arrived.
+  if (isRecording || bufferPointer >= MIN_SPEECH_DURATION_SAMPLES) {
+    dispatchSentence();
+  }
+  // Serialized inference means the last transcription settles last, so this one
+  // promise covers every sentence still in flight.
+  await pendingTranscription.catch(() => undefined);
+  post({ type: "flushed" });
 }
 
 // ── Message handling ─────────────────────────────────────────────────────────
@@ -220,6 +313,11 @@ ctx.onmessage = async (event: MessageEvent) => {
         message: error instanceof Error ? error.message : String(error),
       });
     });
+    return;
+  }
+
+  if (data.type === "flush") {
+    void flush();
     return;
   }
 

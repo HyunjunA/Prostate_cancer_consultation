@@ -2,10 +2,33 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { SAMPLE_RATE, type SttWorkerMessage } from "@/lib/sttConstants";
+import {
+  SAMPLE_RATE,
+  type SttAssetId,
+  type SttAssetProgress,
+  type SttWorkerMessage,
+} from "@/lib/sttConstants";
 import { disposeSttWorker, getSttWorker } from "@/lib/sttWorkerHost";
 
-export type SttStatus = "idle" | "loading" | "listening" | "error";
+export type SttStatus =
+  | "idle"
+  | "loading"
+  | "listening"
+  // Stop was pressed and the worker is transcribing what was still buffered.
+  // Short-lived — a second at most — but the dictation is not over until the
+  // last sentence has been delivered, and the button must not say otherwise.
+  | "finishing"
+  | "error";
+
+/**
+ * How long to wait for the worker's `flushed` before giving up on it.
+ *
+ * The flush is one transcription of at most `MAX_BUFFER_DURATION` of audio, so a
+ * second or two in practice. This only exists so that a worker which never
+ * answers — wedged, or killed mid-inference — cannot strand the button in
+ * "Finishing…" forever.
+ */
+const FLUSH_TIMEOUT_MS = 5000;
 
 interface Options {
   /** Called once per recognised sentence, as the doctor speaks. */
@@ -27,7 +50,9 @@ interface Options {
  */
 export function useSpeechToText({ onText }: Options) {
   const [status, setStatus] = useState<SttStatus>("idle");
-  const [progress, setProgress] = useState(0);
+  // One entry per weight file being fetched, plus the warm-up. Keyed rather
+  // than summed — see SttAssetId in sttConstants.ts for why.
+  const [assets, setAssets] = useState<Partial<Record<SttAssetId, SttAssetProgress>>>({});
   const [speaking, setSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unsupportedReason, setUnsupportedReason] = useState<string | null>(null);
@@ -42,6 +67,8 @@ export function useSpeechToText({ onText }: Options) {
   } | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  // Guards the wait for `flushed` — see FLUSH_TIMEOUT_MS.
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Keep the latest callback without making start()/stop() change identity.
   const onTextRef = useRef(onText);
   onTextRef.current = onText;
@@ -61,11 +88,15 @@ export function useSpeechToText({ onText }: Options) {
   }, []);
 
   /**
-   * Detach from the worker without ending it. Anything the worker is still
-   * transcribing is dropped by the reset, so a sentence finishing after the
-   * doctor pressed Stop does not turn up in the box.
+   * Detach from the worker without ending it, discarding anything still in
+   * flight. This is the hard stop — it bumps the worker's session, so a
+   * transcription that has not been delivered yet never will be.
    */
   const releaseWorker = useCallback(() => {
+    if (flushTimerRef.current) {
+      clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = null;
+    }
     const worker = workerRef.current;
     if (!worker) return;
     if (listenersRef.current) {
@@ -77,32 +108,76 @@ export function useSpeechToText({ onText }: Options) {
     workerRef.current = null;
   }, []);
 
-  const stop = useCallback(() => {
-    // The microphone goes back immediately — the browser's recording indicator
-    // staying lit after Stop would be its own bug, and is the reason this is
-    // first.
+  /** Hand the microphone back. Always first — see the comment in stop(). */
+  const teardownAudio = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
-
     void audioContextRef.current?.close().catch(() => undefined);
     audioContextRef.current = null;
+  }, []);
+
+  /**
+   * End the dictation without waiting for anything — used when there is no one
+   * left to deliver text to (unmount) or when start() failed partway through.
+   */
+  const stopImmediate = useCallback(() => {
+    teardownAudio();
+    releaseWorker();
+    setSpeaking(false);
+    setStatus((prev) => (prev === "error" ? prev : "idle"));
+  }, [releaseWorker, teardownAudio]);
+
+  /**
+   * The Stop button.
+   *
+   * A sentence is only handed to the transcriber after 400 ms of silence, and
+   * transcribing it takes about another second. Someone who finishes talking and
+   * presses Stop straight away is inside that window, so detaching here — which
+   * is what this used to do — silently threw away the last thing they said.
+   * Instead the worker is asked to flush, and the teardown happens on `flushed`.
+   *
+   * The microphone still goes back immediately: the browser's recording
+   * indicator staying lit while we wait would be its own bug, and the audio
+   * needed for the flush is already inside the worker.
+   */
+  const stop = useCallback(() => {
+    teardownAudio();
+    setSpeaking(false);
+
+    const worker = workerRef.current;
+    if (!worker || !listenersRef.current) {
+      stopImmediate();
+      return;
+    }
 
     // The worker is NOT terminated: it holds both models, and rebuilding them
     // costs the doctor ~3.3 s on the very next click. It is released at the end
     // of the visit by the page going away.
-    releaseWorker();
+    setStatus((prev) => (prev === "error" ? prev : "finishing"));
+    worker.postMessage({ type: "flush" });
 
-    setSpeaking(false);
-    setProgress(0);
-    setStatus((prev) => (prev === "error" ? prev : "idle"));
-  }, [releaseWorker]);
+    if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+    flushTimerRef.current = setTimeout(() => {
+      flushTimerRef.current = null;
+      stopImmediate();
+    }, FLUSH_TIMEOUT_MS);
+  }, [stopImmediate, teardownAudio]);
 
   const start = useCallback(async () => {
     if (unsupportedReason) return;
     setError(null);
+    // Clear the rows from any earlier attempt: a worker that failed and was
+    // disposed loads again from scratch, and rows left showing "done" from the
+    // attempt that failed would be a lie.
+    setAssets({});
     setStatus("loading");
 
     try {
+      // A flush from the previous dictation may still be outstanding. Drop it:
+      // the worker is shared, so attaching a second set of listeners would
+      // deliver every sentence of this dictation twice.
+      releaseWorker();
+
       // Shared across dictations, and already holding the models if this is not
       // the first one — in which case "load" is answered with "ready" straight
       // away and the doctor never sees the loading label.
@@ -112,8 +187,8 @@ export function useSpeechToText({ onText }: Options) {
       const onMessage = (event: MessageEvent) => {
         const message = event.data as SttWorkerMessage;
         switch (message.type) {
-          case "progress":
-            setProgress(message.progress);
+          case "asset":
+            setAssets((prev) => ({ ...prev, [message.asset.id]: message.asset }));
             break;
           case "ready":
             setStatus("listening");
@@ -123,6 +198,11 @@ export function useSpeechToText({ onText }: Options) {
             break;
           case "text":
             onTextRef.current(message.text);
+            break;
+          case "flushed":
+            // The final sentence has been delivered — `text` for it arrived
+            // just above this, because the worker posts it before `flushed`.
+            stopImmediate();
             break;
           case "error":
             setError(message.message);
@@ -200,23 +280,32 @@ export function useSpeechToText({ onText }: Options) {
         err instanceof Error ? err.message : "Could not access the microphone.",
       );
       setStatus("error");
-      stop();
+      stopImmediate();
     }
-  }, [stop, unsupportedReason]);
+  }, [releaseWorker, stopImmediate, unsupportedReason]);
 
   // Release the microphone if the doctor navigates away mid-dictation. The
   // models are not unloaded here: moving between sentences and domains unmounts
   // this hook constantly, and the next screen is one more place to dictate from.
-  useEffect(() => stop, [stop]);
+  //
+  // Deliberately the immediate stop rather than a flush: the box that would
+  // receive the text has gone with the component, so there is nothing to wait
+  // for and a pending flush would only deliver into a dead callback.
+  useEffect(() => stopImmediate, [stopImmediate]);
 
   return {
     supported: unsupportedReason == null,
     unsupportedReason,
     status,
-    progress,
+    assets,
     speaking,
     error,
     start,
     stop,
+    // The loading modal's Cancel. It detaches rather than aborting: the fetches
+    // already in flight finish into the browser's Cache API, so a doctor who
+    // cancels and clicks Speak again a minute later pays for the bytes once,
+    // not twice.
+    cancel: stopImmediate,
   };
 }
