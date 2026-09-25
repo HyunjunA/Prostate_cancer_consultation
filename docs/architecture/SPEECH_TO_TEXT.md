@@ -41,23 +41,35 @@ Runtime Web. The consequences:
   boundary exists.
 - **Nothing is stored.** No disk, no IndexedDB, no network. The only cached artefact is the
   model weights, in the browser's Cache API, on first visit.
-- **The cost moves to the client.** A ~123 MB one-time download and CPU inference on the
-  doctor's own machine. Section 8 records what that actually costs.
+- **No third-party origin is contacted either.** The weights and the ONNX Runtime WASM
+  binaries are served by the COMPASS server out of `public/`, not by `huggingface.co` and
+  `cdn.jsdelivr.net`, and remote loading is disabled outright so it cannot silently come back.
+  **§5.4 is the section to read before touching anything in this feature** — it is what makes
+  the feature work behind a hospital firewall, and it is easy to break from the deploy side.
+- **The cost moves to the client.** A one-time download (151 MB on the WASM path, 181 MB on
+  WebGPU) and CPU inference on the doctor's own machine. Section 8 records what that costs.
 
 ---
 
 ## 3. Files
 
-Six files, one per responsibility. None exceeds 280 lines.
+Eight files, one per responsibility. None exceeds 375 lines.
 
 | File | Lines | Role |
 |---|---|---|
-| `src/components/RewriteVoiceInput.tsx` | 108 | The button. Presentation only — label, colours, disabled state, error text. |
-| `src/hooks/useSpeechToText.tsx` | 222 | Browser plumbing: permission, `AudioContext`, worklet, microphone lifetime, cleanup. |
+| `src/components/RewriteVoiceInput.tsx` | 154 | The button. Presentation only — label, colours, disabled state, error text. |
+| `src/components/SttLoadingModal.tsx` | 116 | The first-click loading window: copy, the row list, Cancel (§4.3, §10). |
+| `src/components/SttLoadingRow.tsx` | 95 | One row of that window — label, byte counts, its own bar. |
+| `src/hooks/useSpeechToText.tsx` | 311 | Browser plumbing: permission, `AudioContext`, worklet, microphone lifetime, the Stop handshake (§4.1), cleanup. |
 | `src/lib/sttWorkerHost.ts` | 41 | Owns the worker's lifetime — one per page visit, shared by every dictation. |
-| `src/workers/stt.worker.ts` | 276 | Both models, all inference, and the sentence-boundary state machine. |
+| `src/workers/stt.worker.ts` | 374 | Asset origin (§5.4), both models, all inference, the token ceiling (§4.2), per-file load reporting (§4.3), and the sentence-boundary state machine. |
 | `public/vad-processor.js` | 113 | `AudioWorklet` on the audio rendering thread: re-chunks and rate-converts the mic stream. |
-| `src/lib/sttConstants.ts` | 89 | Model ids, every tuning constant, the worker message union, `appendTranscript()`. |
+| `src/lib/sttConstants.ts` | 212 | Model ids, asset paths, every tuning constant, `maxNewTokensFor()`, `sttAssetIdFor()`, the worker message union, `appendTranscript()`. |
+
+One file is **not** in this repo's source tree but is required at runtime: the 223 MB of
+weights and WASM binaries under `public/stt-models/` and `public/stt-wasm/`, fetched by
+`scripts/fetch-stt-assets.sh`. See §5.4 — a deployment that skips it has a feature that fails
+closed on the first click.
 
 The split between the hook and `sttWorkerHost.ts` is the important one: the **microphone**
 belongs to a single dictation and is released the moment it ends, while the **models** belong
@@ -125,27 +137,138 @@ The only thing that ever crosses from the worker back to the page is a string.
 | Message | Meaning | Hook's reaction |
 |---|---|---|
 | `{ type: "loading", message }` | Download started | (status is already `loading`) |
-| `{ type: "progress", progress }` | 0–100 across **both** models | `setProgress` → `Loading… N%` |
+| `{ type: "asset", asset }` | One row of the loading modal — `{ id, loaded, total, done }` | Merged into `assets` by `id` → one bar per file (§4.3) |
 | `{ type: "ready" }` | Warm-up inference done | `setStatus("listening")` |
 | `{ type: "speech", active }` | VAD entered/left a sentence | `setSpeaking` → mic icon pulses, label reads `Listening…` |
 | `{ type: "text", text }` | One recognised sentence | `onText(text)` |
+| `{ type: "flushed" }` | Everything buffered at Stop has been transcribed and delivered | `stopImmediate()` — detach from the worker, status back to `idle` |
 | `{ type: "error", message }` | Load or inference failure | `setStatus("error")`, message shown beside the button |
 
-Three things go the other way:
+Four things go the other way:
 
 | Message | Meaning |
 |---|---|
 | `{ type: "load" }` | Load both models. Already loaded — which is the normal case after the first dictation — is answered with `ready` immediately, so the page never waits. |
-| `{ type: "reset" }` | Forget the previous dictation: the rolling buffer, the pre-speech frames, the VAD's recurrent state. Sent at both the start and the end of every dictation. |
+| `{ type: "flush" }` | Stop was pressed. Transcribe whatever is still buffered, post its `text`, then answer `flushed`. Sent instead of detaching, so the last sentence is not thrown away — see §4.1. |
+| `{ type: "reset" }` | Forget the previous dictation: the rolling buffer, the pre-speech frames, the VAD's recurrent state. Sent at the start of every dictation and when the page detaches. |
 | `{ buffer }` | One 512-sample frame from the worklet. No `type` field; the worker treats any message without one as audio. |
 
 `reset` also bumps a session counter that a transcription in flight compares against when it
 finishes. Without it, a sentence whose inference was still running when the doctor pressed
 Stop would appear in the box a second or two later.
 
+### 4.1 Stop is a handshake, not a hang-up
+
+A sentence is only handed to the transcriber after `MIN_SILENCE_DURATION_MS` (400 ms) of
+silence, and transcribing it costs roughly another second. Someone who stops talking and
+clicks Stop straight away is inside that window. The hook used to detach on the click —
+`reset`, remove the listeners, bump the session — which silently discarded the last thing
+they said.
+
+So Stop now runs in two halves:
+
+1. **Immediately:** the microphone tracks are stopped and the `AudioContext` is closed. The
+   browser's recording indicator must not stay lit while we wait, and the audio the flush
+   needs is already inside the worker.
+2. **On `flushed`:** the listeners come off and the status goes back to `idle`.
+
+Between the two the status is `finishing` and the button is disabled (see §10). The worker is
+never terminated — it holds both models, and rebuilding them would cost the doctor the full
+load on the next click.
+
+Two guards make this safe:
+
+- `useSpeechToText.tsx` arms a `FLUSH_TIMEOUT_MS` (5 s) timer when it sends `flush`. A worker
+  that never answers — wedged, or killed mid-inference — cannot strand the button in
+  `Finishing…`.
+- `start()` calls `releaseWorker()` before attaching. A flush from the previous dictation may
+  still be outstanding, and the worker is shared, so a second set of listeners would deliver
+  every sentence of the new dictation twice.
+
+Unmount takes the other route deliberately: the box that would receive the text has gone with
+the component, so it stops immediately rather than flushing into a dead callback.
+
+### 4.2 The token ceiling
+
+`stt.worker.ts` passes an explicit `max_new_tokens` to every transcription, computed by
+`maxNewTokensFor(samples)` in `sttConstants.ts`.
+
+Left to itself, Transformers.js applies its own bound in `_call_moonshine`
+(`pipelines.js:1931`):
+
+```js
+const max_new_tokens = Math.floor(aud.length / sampling_rate) * 6;
+return super._call(audio, { max_new_tokens, ...kwargs, ...inputs });
+```
+
+It comes from the Moonshine paper, where it exists to stop the decoder looping on repeated
+output. Two properties of it cut real speech short here:
+
+- **It floors whole seconds.** The shortest capture this worker can emit is 250 ms of speech
+  (`MIN_SPEECH_DURATION_SAMPLES`) plus 400 ms of trailing silence, 80 ms of pad and 3 pre-roll
+  frames — about **826 ms**, which floors to 0 and allows **zero** tokens. The result is an
+  empty string, which `if (text?.trim())` then drops without a trace. A doctor who says
+  "Correct." gets nothing at all.
+- **6 tokens per second is below a brisk speaker.** A trailing fragment split off by a pause
+  ("and that's the main concern", ~8 tokens in 1.6 s) is allowed only 6, so its last words go
+  missing. Measured against the real tokenizer, typical clinical sentences run 15–32 tokens
+  for 11–22 words — about **1.4 tokens per word**.
+
+Note the spread order above: caller kwargs land *after* the library's own default, so passing
+a value overrides it rather than being overridden by it.
+
+The replacement is `Math.max(MIN_NEW_TOKENS, Math.ceil(seconds * TOKENS_PER_SECOND))` — a
+floor of 24 tokens and a rate of 8/s. Both are deliberately generous: being too high costs a
+slightly longer decode on a sentence the model finishes early anyway, while being too low
+silently loses the doctor's words. `src/__tests__/lib/sttConstants.test.ts` pins the cases
+that were actually broken, including that the new bound is never below the library's at any
+duration the worker can emit.
+
+This is the defect that shows up **without** touching Stop — it is the more common of the two
+by a wide margin.
+
+### 4.3 Reporting the load, per file
+
+The first click of a visit downloads ~150 MB. It used to be reported as a single percentage
+in the button's own label, which was wrong twice over:
+
+- **The number ran backwards.** Transformers.js reports per *file* — `hub.js:598` dispatches
+  `{ status, name, file, loaded, total, progress }`, where `progress` is that one file's
+  share. The worker threw `file` away and the hook wrote whatever arrived into one variable,
+  so each file restarted the bar at 0. Worse, `from_pretrained` fetches the encoder and the
+  decoder concurrently, so two streams interleaved into that one variable and the percentage
+  could drop from 80 % to 30 % mid-download.
+- **It then sat at 100 % doing nothing visible.** After the last byte comes session
+  construction and a warm-up inference that compiles WebGPU shaders. Neither emits a progress
+  event, so the bar was full while the doctor still waited.
+
+The replacement does not aggregate. Each file gets its own named row, which makes the
+repeated 0 → 100 self-explanatory — there are simply several things to fetch — and answers
+the question the doctor is actually asking, which is what is taking the time:
+
+| `SttAssetId` | Label | Source |
+|---|---|---|
+| `vad` | `Voice detector` | `silero-vad/onnx/model.onnx`, 2.2 MB |
+| `encoder` | `Speech model · encoder` | `moonshine-base-ONNX/onnx/encoder_model.onnx`, 80.8 MB |
+| `decoder` | `Speech model · decoder` | `decoder_model_merged_q4` (WebGPU) or `_q8` (WASM) |
+| `warmup` | `Warming up` | The warm-up inference — no byte count, so an indeterminate bar |
+
+Two details carry the design:
+
+- **The worker keeps the tally, not the page.** The library's `done` event carries only
+  `{ name, file }` — no byte counts — so the worker remembers the last `loaded`/`total` per
+  id and always posts a complete row. The page never merges partial updates.
+- **JSON configs get no row.** `sttAssetIdFor()` returns `null` for anything that is not
+  `.onnx`. The half-dozen config and tokenizer files are a few kB each; a row that appears
+  and completes in the same frame reads as a glitch.
+
+`sttAssetIdFor()` routes the VAD by **repo id**, not filename — Silero's weight file is also
+called `model.onnx`, so filename alone would misfile it as the transcriber's. That is the kind
+of mistake which does not crash, it just leaves a row that never moves, so it is unit-tested.
+
 ---
 
-## 5. The two models
+## 5. The two models, and where their bytes come from
 
 ### 5.1 Silero VAD — the gate
 
@@ -181,7 +304,9 @@ Measured ONNX download sizes (encoder fp32 + merged decoder q8, i.e. the WASM co
 | silero-vad (always loaded) | — | 2.2 MB | 2.2 MB |
 
 Both families use the identical pipeline call, and the model id is a single constant
-(`STT_MODEL_ID`), so switching is a one-line change if load time or quality argues for it.
+(`STT_MODEL_ID`), so switching is a one-line change *in the code* if load time or quality
+argues for it — but the weights are self-hosted, so the fetch manifest has to change with it.
+See §5.4.
 
 ### 5.3 Backend and precision — `DEVICE_DTYPE`
 
@@ -208,6 +333,147 @@ In short: **WebGPU runs the decoder at q4, WASM runs it at q8**, and the encoder
 precision either way.
 
 No GPU is required. Every latency figure in §8 was measured on the **CPU/WASM path**.
+
+### 5.4 Where the bytes come from — self-hosted, and why remote loading is off
+
+Out of the box this feature contacts **two third-party origins** at runtime: Transformers.js
+fetches model weights from `huggingface.co`, and it points ONNX Runtime Web at
+`cdn.jsdelivr.net` for the WASM binaries. Neither default survives here. Both are redirected
+to the COMPASS server at the top of `stt.worker.ts` (`:60-68`):
+
+```ts
+env.allowLocalModels  = true;
+env.localModelPath    = STT_MODEL_PATH;   // "/stt-models/"
+env.allowRemoteModels = false;            // ← the load-bearing line
+if (env.backends.onnx?.wasm) {
+  env.backends.onnx.wasm.wasmPaths = STT_WASM_PATH;  // "/stt-wasm/"
+}
+```
+
+**Why this is not a preference.** Three reasons, in order of how much they cost when ignored:
+
+1. **The hospital firewall.** A clinician's machine may not be allowed to reach
+   `huggingface.co` or a CDN at all. Every byte now comes from the same origin that already
+   served the dashboard, so if the page loads, the feature loads.
+2. **Metadata disclosure.** A remote fetch hands the clinician's IP, user agent and timing to
+   a third party on every cold start. §2 says the *audio* never leaves the tab; without
+   self-hosting, the *fact that someone is dictating* still did.
+3. **Reproducibility.** Two clinicians onboarding a month apart would otherwise be able to
+   receive different weights with no change to COMPASS. The fetch script pins a commit SHA.
+
+**Why `allowRemoteModels = false` matters more than the two path settings.** The paths alone
+would be a preference that decays: forget one file and Transformers.js quietly falls back to
+the internet, so it still works in testing and the guarantee is silently gone. With remote
+loading disabled, `hub.js:534` **throws** rather than reaching `getFile(remoteURL)`. A missing
+file is a loud, immediate failure. This is deliberate — the feature fails closed.
+
+#### What is on disk
+
+`scripts/fetch-stt-assets.sh` populates two gitignored directories
+(`app/Webapp/.gitignore:158-163`). **13 files, 223 MB:**
+
+| Directory | Contents | Origin removed | Size |
+|---|---|---|---|
+| `app/Webapp/public/stt-models/onnx-community/moonshine-base-ONNX/` | 6 configs + `tokenizer.json` + `encoder_model.onnx` + **both** decoder quantisations | `huggingface.co` | 193 MB |
+| `app/Webapp/public/stt-models/onnx-community/silero-vad/` | `onnx/model.onnx`, `LICENSE` | `huggingface.co` | 2.2 MB |
+| `app/Webapp/public/stt-wasm/` | `ort-wasm-simd-threaded.jsep.{mjs,wasm}` | `cdn.jsdelivr.net` | 21 MB |
+
+Two details that catch people out:
+
+- **Both decoder builds are required**, not one. The worker picks `q4` or `q8` from
+  `DEVICE_DTYPE` only after probing for a WebGPU adapter (§5.3), so which one a given laptop
+  needs is not knowable at deploy time. With remote loading off, the absent one is a crash.
+- **The WASM binaries are copied, not downloaded.** jsDelivr serves the same files that ship
+  inside `node_modules/@huggingface/transformers/dist/`, so the script copies them from there.
+  That is why `npm install` must have run in `app/Webapp` before the script does.
+
+A browser downloads a *subset*, not all 223 MB — only the files its own backend needs.
+Measured across the deployed TLS door: **151.1 MB** on the WASM path, **181.4 MB** on WebGPU.
+
+#### When it has to run
+
+```bash
+bash scripts/fetch-stt-assets.sh            # fetch + verify
+bash scripts/fetch-stt-assets.sh --verify   # verify only, download nothing
+```
+
+Re-running is safe: a file whose byte size already matches the manifest is skipped. Order
+matters in two places:
+
+- **Before `npm run build`.** The files live under `public/`, which Next.js only picks up at
+  build time. Running the script after a build leaves them out of the deployed tree.
+- **Again when assembling `output: "standalone"`.** The standalone build does not copy
+  `public/` into itself — that is a manual step, and no script in this repo does it. Forget it
+  and the browser gets 404s from a server that has the files on disk one directory up. The
+  full sequence on this deployment:
+
+  ```bash
+  bash scripts/fetch-stt-assets.sh            # ← before the build, not after
+  cd app/Webapp && npm run build
+  cp -r public       .next/standalone/public
+  cp -r .next/static .next/standalone/.next/static
+  cp .env            .next/standalone/.env
+  systemctl --user restart compass-webapp
+  ```
+
+  Never run `next dev` in `app/Webapp` on this host: the dev server writes the same `.next/`
+  the running service serves from, which destroys the standalone build.
+
+Size is the only integrity check today. A SHA-256 digest per file would be stronger; tracked
+as an open item in `STT_FEATURE_REPORT.md` §15.
+
+#### Changing `STT_MODEL_ID` is not a one-line change any more
+
+§5.2 says swapping the model is one constant. That is still true of the *code*, but the
+manifest in `fetch-stt-assets.sh` — repo id, pinned revision, and the exact filename and byte
+size of every file — has to change with it, and the script re-run before the next build.
+Otherwise the new model id resolves to files that are not on disk and the feature fails
+closed, as designed.
+
+#### The trap: a stale browser cache hides all of this
+
+**Self-hosting cannot be verified from the browser's UI.** Transformers.js writes weights into
+the Cache API bucket `transformers-cache`, and — this is the part that surprises people — for
+a browser cache the key is the **remote URL**, not the local path:
+
+```js
+// node_modules/@huggingface/transformers/src/utils/hub.js
+const proposedCacheKey = cache instanceof FileCache ? /* … */ : remoteURL;   // :484
+response = await tryCache(cache, localPath, proposedCacheKey);               // :502
+```
+
+`tryCache` tries **both** keys. So a browser that used this feature *before* the switch still
+has entries keyed by `https://huggingface.co/...`, they still hit, and **no request reaches
+the COMPASS server at all**. The feature works perfectly while proving nothing.
+
+This was observed for real on 2026-09-25: a production test fetched `/stt-wasm/*` and
+`/vad-processor.js` with 200s and made **zero** `/stt-models/` requests, because the WASM
+binaries were never in `transformers-cache` and the weights were.
+
+To actually verify, clear the cache first:
+
+```
+DevTools → Application → Cache Storage → delete "transformers-cache"    (or use a fresh profile)
+```
+
+then dictate and confirm the server was hit:
+
+```bash
+podman logs compass-nginx-tls 2>&1 | grep stt-models
+# want: GET /stt-models/onnx-community/moonshine-base-ONNX/onnx/encoder_model.onnx 200 80818781
+```
+
+A `curl` against the URL proves the *server* is correct; only a cleared browser proves the
+*client* takes that path.
+
+#### Residual references are inert
+
+`grep` still finds `https://huggingface.co` and `https://cdn.jsdelivr.net/...` in the built
+chunks. Those are Transformers.js's default constants, not call sites that execute: the
+`env.*` assignments above override them, and `allowRemoteModels = false` prevents the one code
+path that would use `remoteURL`. Do not "fix" this by patching the vendored strings — the
+guarantee is the `env` configuration plus the fail-closed throw, and that is what to assert in
+a test.
 
 ---
 
@@ -244,7 +510,14 @@ Below `MIN_SILENCE_DURATION_SAMPLES` (400 ms) nothing happens — the speaker is
 breath. At or above it, the sentence is over.
 
 **Noise rejection.** If the whole capture is shorter than 250 ms it is thrown away without
-transcribing: a cough, a chair, a door.
+transcribing: a cough, a chair, a door. A capture that survives this test is the shortest the
+transcriber ever sees — 250 ms of speech plus pad, silence and pre-roll, about 826 ms — which
+is exactly the case the library's own token bound prices at zero. See §4.2.
+
+**Stop does not wait for silence.** `flush()` dispatches whatever is buffered if the VAD is
+still mid-sentence (`isRecording`), or if enough has accumulated to clear the 250 ms noise
+floor. The 400 ms silence rule is a sentence *boundary* detector; at Stop there is no next
+sentence to separate this one from.
 
 **The 30-second ceiling.** If someone talks continuously past the buffer, the buffer is
 dispatched as-is and the overflow samples are copied to the front of the fresh buffer via
@@ -329,10 +602,19 @@ Measured on the deployed TLS door, 18 sentences over one warm session, `hardware
 
 | | |
 |---|---|
-| Model ready after the **first** click of a visit | 9.0 s (of which the 123 MB download is most) |
+| Model ready after the **first** click of a visit | ~~9.0 s~~ — **superseded, see note below** |
 | Model ready after **every later** click | **0.16 s** — the worker still holds them |
 | Per-sentence latency, warm, median | **1.6 s** (re-measured on a later build: 1.1 s) |
 | Real-time factor | ≈ 0.18 — a 9-second sentence transcribes in 1.6 s |
+
+**The 9.0 s figure predates self-hosting (§5.4) and should not be quoted.** It was measured
+when the weights came from `huggingface.co` over the public internet, which was most of it.
+The bytes now come from the same host as the page: the server-side floor measured through
+nginx+TLS is **151.1 MB in ≈0.50 s** (≈300 MB/s, 3 runs; 181.4 MB in ≈0.32 s for the WebGPU
+set on loopback). Real first-click time is therefore dominated by the clinician's link to this
+server, not by a CDN — roughly 5 s on 1 Gbps, 7 s on office Wi-Fi, 17 s on 100 Mbps. Those
+three are **estimates**; no real end-to-end first click has been measured since the switch,
+and the §5.4 cache trap is exactly why that measurement is harder than it looks.
 
 Separating the cold and warm numbers is what shows the steady-state cost is under two
 seconds, so no optimisation is warranted yet. Two levers remain unspent if a slower machine
@@ -347,7 +629,9 @@ Two separate caches, often confused:
 1. **The weights on disk.** Transformers.js writes them into the browser's Cache API under
    `transformers-cache` — 8 entries, **123.46 MB** measured: encoder 77.07 MB, quantized
    decoder 40.53 MB, `tokenizer.json` 3.59 MB, Silero VAD 2.14 MB, four small configs. This
-   survives reloads and restarts, so the 123 MB download happens once per browser, ever.
+   survives reloads and restarts, so the download happens once per browser, ever.
+   **Entries are keyed by the URL they were first fetched from**, which is why a browser that
+   predates §5.4 keeps serving weights off old `huggingface.co` keys — see the trap in §5.4.
 2. **The models in memory.** Reading those bytes back, rebuilding two ONNX sessions and
    running the warm-up inference took **3.3 s** — and used to happen on *every* click,
    because `stop()` terminated the worker. The worker now outlives the dictation, so it
@@ -370,6 +654,69 @@ was taken the other way round on purpose.
 The models are still loaded on the first `start()`, not on mount — most doctors reach this
 screen without ever dictating, and neither the download nor the 640 MB should be spent on
 them.
+
+### What "once per visit" depends on
+
+A `Worker` cannot outlive the document that created it. Neither can the two ONNX sessions
+built inside it — those live in the worker's heap, not in the Cache API. So "once per visit"
+holds exactly as long as the tab keeps the **same document**, and the boundary is drawn where
+it should be:
+
+| | Models kept? |
+|---|---|
+| Moving between views inside the doctor dashboard | yes — `history.replaceState()`, same document |
+| Opening a different doctor from `/admin/physicians` | yes — App Router client navigation |
+| Picking a patient in `/admin/patients` | yes — App Router client navigation |
+| Signing out, or signing back in | no — deliberately a full load, which is also a state reset |
+| Closing the tab and returning | no — nothing survives a document, by design |
+
+That table is a property of how the app navigates, not of this feature, and it did not hold
+until 2026-09-25. `AdminPhysicianPicker.tsx` linked to `/?doctorid=…` with a plain `<a>`, and
+`AdminPatientPicker.tsx` navigated by assigning `window.location.href`. Both tear the document
+down, so a doctor who opened a second patient paid the 3.3 s rebuild again — and, because the
+modal reports bytes as they come back out of the Cache API (§4.3), it *looked* like a second
+download even though the network was idle. Both are now `next/link` / `useRouter().push()`.
+
+The trap for anyone adding a screen: a plain `<a href="/…">` to an in-app route is not
+equivalent to a `<Link>` here. It is a full page load, and it silently costs the doctor a
+3.3 s wait on their next dictation. Nothing fails, so nothing reports it.
+
+Browser **back/forward** is a different mechanism and is *not* covered by the table above. It
+leaves the document, so the only thing that can save the models is the back/forward cache
+(bfcache), which freezes the whole document — worker included — instead of discarding it.
+
+Four `beforeunload` listeners were moved to `pagehide` on 2026-09-25 to stop disqualifying the
+document: `PhysicianReportsModifiedV41Timothy.tsx`, `tracking/hooks/index.ts`,
+`tracking/lib/posthog.ts` and `tracking/lib/sessionRecorder.ts`. All four only flush tracking,
+and `pagehide` fires on every unload `beforeunload` did, plus once more when the document is
+frozen — so nothing buffered is lost. The doctor dashboard additionally listens for `pageshow`
+with `persisted`, restarting the dwell clock so a restored visit is not billed the time spent
+elsewhere.
+
+Be precise about what that buys, because the browsers differ:
+
+| | `beforeunload` blocks bfcache? |
+|---|---|
+| Firefox | yes — this change is what makes bfcache possible there at all |
+| Chrome, Safari | no — `unload` blocks, `beforeunload` does not |
+
+So on Chrome the swap is correct practice and removes a future hazard, but it is **not**
+established that it was the thing forcing the reload. The other Chrome prerequisites do hold
+here — the document is served `Cache-Control: s-maxage=31536000, stale-while-revalidate`, with
+no `no-store`, and there are no `unload` handlers or WebSockets anywhere in `src/`.
+
+**This could not be verified from the server.** Chrome disables bfcache whenever a DevTools or
+CDP client is attached, and Playwright always attaches one — every run reports
+`BackForwardCacheDisabledForDelegate` / `BackForwardCacheDisabledByCommandLine` regardless of
+what the app does. Notably no *app-level* reason was ever reported, but that is weak evidence,
+not a pass. The instrument that does work is Chrome DevTools → Application → Back/forward
+cache → **Test back/forward cache**, run in a real browser on the deployment.
+
+If bfcache turns out to decline there, the durable answer is to stop depending on it: give the
+dashboard an in-app route back, so the round trip is a client-side navigation and falls under
+the table above. bfcache is a heuristic the browser may refuse for reasons the app does not
+control — memory pressure, an extension, a live GPU device — whereas keeping the document is
+deterministic.
 
 ---
 
@@ -401,20 +748,42 @@ never a real consultation recording).
 
 ## 10. UI behaviour
 
-**Currently switched off.** `VOICE_INPUT_ENABLED` in `sttConstants.ts` is `false`, which takes
-the button off the screen and drops its tour step; the models are never fetched, because they
-only load on a click that can no longer happen. Everything below describes the feature as it
-behaves when that value is `true` — the one edit needed to bring it back.
+**Currently switched on.** `VOICE_INPUT_ENABLED` in `sttConstants.ts:20` is `true`. Setting it
+to `false` is the single edit that takes the button off the screen and drops its tour step;
+the models are then never fetched, because they only load on a click that can no longer
+happen. (Assets stay on disk either way — the switch is client-side, not a deploy step.)
 
 The button's label is derived, not stored:
 
 | Condition | Label |
 |---|---|
 | `!supported` | `Voice unavailable` (disabled, reason in the tooltip) |
-| `status === "loading"` | `Loading… N%` |
+| `status === "loading"` | `Preparing…` (the detail is in the modal — see below) |
+| `status === "finishing"` | `Finishing…` (disabled — see §4.1) |
 | `status === "listening"` && speaking | `Listening…` (mic icon pulses) |
 | `status === "listening"` && silent | `Stop` |
 | otherwise | `Speak` |
+
+**The loading modal.** While `status === "loading"`, `SttLoadingModal` covers the screen with
+one progress row per file (§4.3) and a Cancel button. Three things about it are deliberate:
+
+- **It waits 250 ms before appearing** (`APPEAR_AFTER_MS`). Only the first dictation of a
+  visit downloads anything; every later one is answered from memory within a frame or two, and
+  a window that flashes open and shut reads as a fault.
+- **The backdrop does not dismiss it.** Cancel is explicit, because a stray click landing on
+  the overlay would otherwise abandon a download the doctor is waiting on.
+- **Cancel detaches rather than aborts.** The fetches already in flight finish into the
+  browser's Cache API, so someone who cancels and clicks Speak again a minute later pays for
+  the bytes once, not twice.
+
+It is a modal, so it covers the input box and typing stops for its duration — the cost of
+giving the explanation room. That is the accepted trade: it only ever appears on a visit's
+first dictation, and the doctor who clicked Speak was not mid-sentence at the keyboard.
+
+`finishing` is the only state in which the button is disabled while the feature is working
+normally. Clicking through it would start a dictation that the pending flush is about to tear
+down. The "review before scoring" warning beside the button stays up for it too, because that
+is precisely when the text is still changing under the doctor.
 
 **Placement.** Inside the input box, in a footer row below the text — the border, background
 and focus ring belong to a wrapper `div`, and both the textarea and the button sit inside it.
@@ -437,9 +806,11 @@ sentence to the existing contents with a single space, and attaches a leading `,
 one. It lives in `sttConstants.ts` rather than the hook because it is the one piece of this
 feature worth unit-testing on its own.
 
-**Cleanup.** `useEffect(() => stop, [stop])` releases the microphone and closes the
-`AudioContext` if the doctor navigates away mid-dictation — first, so the browser's recording
-indicator goes out immediately. The worker is *not* terminated there: it is detached and told
+**Cleanup.** `useEffect(() => stopImmediate, [stopImmediate])` releases the microphone and
+closes the `AudioContext` if the doctor navigates away mid-dictation — first, so the browser's
+recording indicator goes out immediately. Note it is `stopImmediate`, not `stop`: unmount has
+no box left to deliver text into, so it skips the flush handshake rather than transcribing
+into a dead callback. The worker is *not* terminated there: it is detached and told
 to reset, and keeps both models for the rest of the visit. Only a worker that has failed
 unrecoverably is thrown away, by `disposeSttWorker()`.
 
@@ -453,12 +824,17 @@ needed a migration to record the same thing.
 
 | Path | What to look at |
 |---|---|
-| `app/Webapp/src/lib/sttConstants.ts` | Model ids, every threshold, `SttWorkerMessage`, `appendTranscript()` |
-| `app/Webapp/src/workers/stt.worker.ts` | `DEVICE_DTYPE` (`:72`), `load()` (`:77`), `isSpeechFrame()` (`:131`), `resetSession()` (`:175`), `dispatchSentence()` (`:186`), state machine (`:207`) |
+| `app/Webapp/src/lib/sttConstants.ts` | `VOICE_INPUT_ENABLED` (`:20`), model ids (`:31`, `:34`), asset paths (`:47`, `:54`), every threshold, `maxNewTokensFor()` (`:114`) — see §4.2, `SttAssetId` (`:142`) and `sttAssetIdFor()` (`:176`) — see §4.3, `SttWorkerMessage`, `appendTranscript()` |
+| `app/Webapp/src/workers/stt.worker.ts` | **asset-origin block (`:61-68`) — see §5.4**, `DEVICE_DTYPE` (`:102`), `load()` (`:107`), `isSpeechFrame()` (`:166`), `resetSession()` (`:214`), `dispatchSentence()` (`:225`), `flush()` (`:258`) — see §4.1, `progress_callback` (`:119`) — see §4.3, state machine |
+| `scripts/fetch-stt-assets.sh` | The manifest: repo ids, pinned revisions, per-file byte sizes. Run before every build; `--verify` to check without downloading |
+| `app/Webapp/public/stt-models/`, `public/stt-wasm/` | The 223 MB the browser actually loads. Gitignored (`app/Webapp/.gitignore:158-163`) — fetched per deployment, never committed |
 | `app/Webapp/src/lib/sttWorkerHost.ts` | `getSttWorker()`, `disposeSttWorker()` — why the worker outlives a dictation |
-| `app/Webapp/src/hooks/useSpeechToText.tsx` | Secure-context probe (`:54`), Firefox fallback (`:170`), worklet wiring (`:185`) |
+| `app/Webapp/src/hooks/useSpeechToText.tsx` | Secure-context probe (`:72`), `releaseWorker()` (`:88`), `stopImmediate()` (`:116`), `stop()` (`:137`) — see §4.1, Firefox fallback (`:246`), worklet wiring (`:256`) |
+| `app/Webapp/src/__tests__/lib/sttConstants.test.ts` | `appendTranscript` joins and the `maxNewTokensFor` bounds that were actually broken (§4.2) |
 | `app/Webapp/public/vad-processor.js` | `toTargetRate()` (`:45`), 512-sample framing (`:90`) |
 | `app/Webapp/src/components/RewriteVoiceInput.tsx` | Button, label logic, disabled state |
+| `app/Webapp/src/components/SttLoadingModal.tsx` | `APPEAR_AFTER_MS` (`:26`) — why the window is delayed, Cancel wiring |
+| `app/Webapp/src/components/SttLoadingRow.tsx` | `sizeLabel()` — the `48.0 / 81.0 MB` text and the indeterminate warm-up bar |
 | `app/Webapp/src/components/PhysicianReportsModifiedV41Timothy.tsx` | `handleVoiceText` (`:3886`), render site (`:4595`) |
 | `app/Webapp/e2e/voice-input-cross-browser.spec.ts` | Capability probe, fake microphone, per-engine assertions |
 | `app/Webapp/next.config.js`, `app/Webapp/.npmrc` | onnxruntime aliasing and the pre-minified bundle plugin |
@@ -467,22 +843,53 @@ needed a migration to record the same thing.
 
 ## 12. Open items
 
-1. **Manual Safari check.** WPE WebKit passes; a real Mac or iPhone has not been tried.
-2. **`COOP`/`COEP` headers** would make onnxruntime-web multi-threaded. Not sent today, so
+1. **The truncation fix (§4.1, §4.2) has not been confirmed by a user.** Deployed
+   2026-09-25 and covered by unit tests, but the symptom was reported from real dictation and
+   only real dictation can close it. If words still go missing, the next thing to measure is
+   the VAD boundary — whether the capture itself ends early — rather than the token bound,
+   which is now well clear of any sentence length observed.
+2. **Manual Safari check.** WPE WebKit passes; a real Mac or iPhone has not been tried.
+3. **`COOP`/`COEP` headers** would make onnxruntime-web multi-threaded. Not sent today, so
    WASM inference is single-threaded.
-3. **A lighter model** (63 MB int8-encoder moonshine-base, or 28 MB moonshine-tiny) is a
-   one-line change if a clinician laptop proves too slow.
-4. **The certificate warning on `:3443`.** Removing it needs `_tls/ca.crt` imported on each
+4. **A lighter model** (63 MB int8-encoder moonshine-base, or 28 MB moonshine-tiny) if a
+   clinician laptop proves too slow — one constant in the code, plus the manifest edit and
+   re-fetch described at the end of §5.4.
+5. **The self-hosted path has never been confirmed from a browser.** Every `/stt-models/`
+   request in the access log so far is `curl`. The one production test to date hit the cache
+   instead (§5.4). Until someone dictates from a profile with `transformers-cache` cleared and
+   the encoder appears in `podman logs compass-nginx-tls`, treat "works behind a firewall" as
+   designed-for, not demonstrated.
+6. **Asset integrity is checked by byte size, not by hash.** `fetch-stt-assets.sh` pins a
+   commit SHA and compares file lengths; it does not verify SHA-256 digests. Tracked in
+   `STT_FEATURE_REPORT.md` §15.
+7. **The certificate warning on `:3443`.** Removing it needs `_tls/ca.crt` imported on each
    client, or a hostname under a controlled domain so a publicly trusted certificate can be
    issued.
-5. **`TARGET_SAMPLE_RATE` is duplicated** in `vad-processor.js` because a worklet cannot
+8. **`TARGET_SAMPLE_RATE` is duplicated** in `vad-processor.js` because a worklet cannot
    import. Any change to `SAMPLE_RATE` must be made in both places.
-6. **Nothing unloads the models before the tab closes.** Once a doctor has dictated, ~640 MB
+9. **Nothing unloads the models before the tab closes.** Once a doctor has dictated, ~640 MB
    stays resident for the rest of the visit, even if they never dictate again. An idle timer
    in `sttWorkerHost.ts` would cap that, at the price of the 3.3 s rebuild for anyone who
    comes back after it fires. Not added, because no one has reported memory pressure — the
    number to watch is a clinician laptop, not this server.
-7. **The worker is a singleton with no owner check.** One `RewriteVoiceInput` is ever on
+10. **The worker is a singleton with no owner check.** One `RewriteVoiceInput` is ever on
    screen, so two hooks driving the same worker cannot currently happen. If a second dictation
    surface is added, `sttWorkerHost.ts` needs to arbitrate rather than hand the same worker to
    both.
+11. **Browser back/forward is unverified.** The four `beforeunload` listeners that would have
+   disqualified the document are gone (§8), but whether Chrome now restores from bfcache
+   cannot be measured from here — Chrome switches bfcache off whenever CDP is attached, which
+   Playwright always does. Needs one run of DevTools → Application → Back/forward cache →
+   Test, in a real browser. If it declines, add an in-app route back from the dashboard and
+   stop depending on bfcache at all.
+12. **The dashboard has no way out except the browser's back button.** `/?doctorid=…` renders
+   no `next/link`, no `useRouter`, and no outbound `href`; `AdminTopBar` lives in
+   `src/app/admin/layout.tsx`, which `/` is not under. That is why the client-side navigation
+   fix in §8 covers getting *into* the dashboard but not back out of it, and it is the reason
+   item 11 matters at all. A link back to `/admin/physicians` would close the loop
+   deterministically — deferred because it is a product decision, not a speech one: a doctor
+   arriving on their own public `?doctorid=` link has no picker to return to.
+12. **Nothing stops the next plain `<a href="/…">` from undoing §8.** The property that keeps
+   the models alive is "the app never does a full page load between screens", and it is held
+   by convention across two pickers, not by a lint rule or a test. `jsx-a11y` has no rule for
+   this; `@next/next/no-html-link-for-pages` covers `pages/` only, not the App Router.

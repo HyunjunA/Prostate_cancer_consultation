@@ -16,6 +16,8 @@
 | `REDCAP_RECORD_ID_MAPPING.md` / `_KR` | EN/KR | **REDCap record_id** — a survey is attributed to the record whose record_id is the study SID (record_id == SID) |
 | `ARCHITECTURE.md` | EN | System overview · deployment · module layout |
 | `WEBAPP_ARCHITECTURE.md` / `_KR` | EN/KR | **Webapp internals** — query-string routing · admin gate · Zustand stores and their consumers · component tree per persona · what is dead (Mermaid diagrams) |
+| `SPEECH_TO_TEXT.md` | EN | **In-browser dictation (developer guide)** — threads · models · sentence boundaries · browser quirks · measured cost. **§5.4 = self-hosted assets**: 223 MB served from `public/`, `allowRemoteModels = false`, `scripts/fetch-stt-assets.sh` must run before every build |
+| `STT_FEATURE_REPORT.md` / `_KR` | EN/KR | **Audit report** for the same feature — legal scope of use (§0) · licences · privacy · residual risks · recommendations. Not the doc to read for code changes |
 
 ---
 

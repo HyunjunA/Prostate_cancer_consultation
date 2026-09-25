@@ -18,6 +18,8 @@ Top-level catalog of all docs under `docs/`. Updated 2026-04-28.
 |---|---|
 | [`ARCHITECTURE.md`](architecture/ARCHITECTURE.md) | Deployment topology, repo layout, module map, request flow. |
 | [`DATABASE_SCHEMA.md`](architecture/DATABASE_SCHEMA.md) | All 19 tables — columns, FKs, table groups. |
+| [`SPEECH_TO_TEXT.md`](architecture/SPEECH_TO_TEXT.md) | **In-browser dictation, for developers.** Threads and data flow, the two models, sentence-boundary state machine, per-browser quirks, measured performance. **§5.4 is required reading before deploying or changing it** — all 223 MB of weights and WASM are self-hosted, remote loading is disabled, and the fetch step is easy to skip. |
+| [`STT_FEATURE_REPORT.md`](architecture/STT_FEATURE_REPORT.md) | Audit/compliance report for the same feature — what it may legally be used for (§0), licences, privacy posture, residual risks, recommendations. Read `SPEECH_TO_TEXT.md` first if you just need to work on the code. (KR: [`STT_FEATURE_REPORT_KR.md`](architecture/STT_FEATURE_REPORT_KR.md)) |
 
 ---
 
