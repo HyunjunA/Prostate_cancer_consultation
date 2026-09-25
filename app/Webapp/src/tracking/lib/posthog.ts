@@ -83,8 +83,15 @@ export const initializePostHog = (): boolean => {
   // Periodic flush
   _flushTimer = setInterval(() => flushEvents(false), FLUSH_INTERVAL_MS);
 
-  // Flush on page unload (keepalive for reliable delivery)
-  window.addEventListener("beforeunload", () => flushEvents(true));
+  // Flush on page hide (keepalive for reliable delivery).
+  //
+  // `pagehide` rather than `beforeunload`, which would make every page that
+  // tracks ineligible for the back/forward cache — including the doctor
+  // dashboard, where a reload costs ~3.3 s of speech-model rebuild
+  // (docs/architecture/SPEECH_TO_TEXT.md §8). `pagehide` fires on every unload
+  // `beforeunload` would have caught, and additionally when the document is
+  // frozen into bfcache, so nothing buffered is lost either way.
+  window.addEventListener("pagehide", () => flushEvents(true));
 
   console.log(
     "%c[Tracking] Backend bridge initialized",

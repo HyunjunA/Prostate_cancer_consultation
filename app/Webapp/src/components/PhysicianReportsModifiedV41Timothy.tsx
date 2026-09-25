@@ -4832,7 +4832,13 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
       }
     };
 
-    const handleBeforeUnload = () => {
+    // `pagehide`, not `beforeunload`: a `beforeunload` listener makes the
+    // document ineligible for the back/forward cache, and this screen is the
+    // expensive one to rebuild — the speech models live in a worker that dies
+    // with the document and cost ~3.3 s to restore (docs/architecture/
+    // SPEECH_TO_TEXT.md §8). `pagehide` covers every unload `beforeunload`
+    // did, and also fires when the document is frozen into bfcache.
+    const handlePageHide = () => {
       recordTimeSpent();
       flushEvents(true);
       if (selectedSpeaker) {
@@ -4841,6 +4847,15 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
           metadata: { view: currentView },
         });
       }
+    };
+
+    // Restored from bfcache. The events above were already sent, so this is a
+    // fresh visit as far as tracking is concerned: restart the dwell clock so
+    // the time spent on the page we came back from is not billed to this one.
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      pageLoadTimeRef.current = Date.now();
+      trackEvent("page_enter", "physician_dashboard");
     };
 
     trackEvent("page_enter", "physician_dashboard");
@@ -4879,14 +4894,16 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
     const periodicFlushTimer = setInterval(() => flushEvents(false), 10_000);
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("pageshow", handlePageShow);
 
     return () => {
       clearInterval(periodicFlushTimer);
       recordTimeSpent();
       flushEvents(true);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("pageshow", handlePageShow);
       window.removeEventListener("tour-open", handleTourOpen);
       window.removeEventListener("tour-end", handleTourEnd);
     };

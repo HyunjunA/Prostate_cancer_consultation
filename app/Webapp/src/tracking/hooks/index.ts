@@ -135,8 +135,17 @@ export const useTracking = (options?: UseTrackingOptions) => {
       }
     }
 
-    // End the session when the app unmounts
-    const handleBeforeUnload = () => {
+    // End the session when the page goes away.
+    //
+    // `pagehide` rather than `beforeunload`: registering a `beforeunload`
+    // listener disqualifies the document from the back/forward cache, and the
+    // doctor dashboard pays ~3.3 s to rebuild its speech models every time the
+    // browser has to reload instead of restoring (docs/architecture/
+    // SPEECH_TO_TEXT.md §8). `pagehide` fires in every case `beforeunload`
+    // does, plus once more when the document enters bfcache — and if it is
+    // later restored, the next event simply opens a new session, which is the
+    // same thing a reload would have done.
+    const handlePageHide = () => {
       const session = getOrCreateSession();
       captureEvent("session_end", {
         timestamp: new Date().toISOString(),
@@ -146,10 +155,10 @@ export const useTracking = (options?: UseTrackingOptions) => {
       endSession();
     };
 
-    window.addEventListener("beforeunload", handleBeforeUnload);
+    window.addEventListener("pagehide", handlePageHide);
 
     return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
+      window.removeEventListener("pagehide", handlePageHide);
     };
   }, [config.enabled, cursorProximityConfig.enabled]);
 

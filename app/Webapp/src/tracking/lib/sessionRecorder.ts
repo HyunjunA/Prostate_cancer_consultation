@@ -164,8 +164,10 @@ export function startRecording(
   // Periodic flush
   _flushTimer = setInterval(() => flushEvents(false), FLUSH_INTERVAL_MS);
 
-  // Flush on page unload
-  window.addEventListener("beforeunload", () => flushEvents(true));
+  // Flush on page hide. `pagehide` rather than `beforeunload` so the document
+  // stays eligible for the back/forward cache — see the same note in
+  // posthog.ts and docs/architecture/SPEECH_TO_TEXT.md §8.
+  window.addEventListener("pagehide", () => flushEvents(true));
 
   console.log(
     "%c[SessionRecorder] Recording started (PHI masked)",
