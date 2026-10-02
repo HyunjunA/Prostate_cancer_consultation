@@ -28,6 +28,18 @@ function AdminLoginForm() {
         body: JSON.stringify({ username, password }),
       });
       if (res.ok) {
+        // Check if a password reset is required before proceeding.
+        try {
+          const me = await fetch("/api/backend/admin-auth/me").then((r) =>
+            r.ok ? r.json() : null
+          );
+          if (me?.force_password_change) {
+            window.location.assign("/admin/settings");
+            return;
+          }
+        } catch {
+          // Non-fatal: fall through to normal redirect.
+        }
         // Full navigation so the middleware re-runs with the new cookie.
         window.location.assign(nextPath);
         return;
