@@ -9,6 +9,7 @@ interface AdminUser {
   id: number;
   username: string;
   role: string;
+  force_password_change: boolean;
 }
 
 export default function AdminSettingsPage() {
@@ -95,6 +96,15 @@ export default function AdminSettingsPage() {
             Signed in as <span className="font-semibold text-gray-700">{user.username}</span>
             <span className="ml-2 text-xs text-gray-400">({user.role})</span>
           </p>
+        )}
+
+        {user?.force_password_change && !success && (
+          <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4">
+            <p className="text-sm font-semibold text-amber-900">
+              <span aria-hidden>⚠️</span>{" "}
+              You are using a temporary password. Please change it now before continuing.
+            </p>
+          </div>
         )}
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">

@@ -156,6 +156,7 @@ async def create_user(
         password_hash=_hash_password(body.password) if body.password else None,
         role=body.role,
         is_superuser=body.is_superuser,
+        force_password_change=True,  # require password reset on first login
     )
     db.add(new_user)
     await db.commit()
@@ -195,6 +196,7 @@ async def update_user(
     update_data = body.model_dump(exclude_unset=True)
     if "password" in update_data:
         db_user.password_hash = _hash_password(update_data.pop("password"))
+        db_user.force_password_change = False  # password has been set by the user
     for field, value in update_data.items():
         setattr(db_user, field, value)
 

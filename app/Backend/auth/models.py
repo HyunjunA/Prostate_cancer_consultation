@@ -33,6 +33,7 @@ class AuthUser(Base):
     )
     is_superuser = Column(Boolean, nullable=False, server_default="false")
     is_active = Column(Boolean, nullable=False, server_default="true")
+    force_password_change = Column(Boolean, nullable=False, server_default="false")
     auth_provider = Column(String(50), nullable=False, server_default="local")
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())

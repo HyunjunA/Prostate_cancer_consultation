@@ -36,6 +36,7 @@ class UserResponse(BaseModel):
     role: str
     is_superuser: bool
     is_active: bool
+    force_password_change: bool
     auth_provider: str
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
