@@ -5,6 +5,8 @@ notused
 .env.*
 !.env.example
 !.env.*.example
+CREDENTIALS.md
+ONBOARDING_EMAIL.txt
 
 # Python
 __pycache__/
