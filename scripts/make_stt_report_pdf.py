@@ -248,11 +248,40 @@ def build_en():
     ], [3.5*cm, 5*cm, 2*cm, 3.5*cm]))
     s += [Spacer(1, 0.15*cm),
           p("<b>Conclusion:</b> MIT and Apache-2.0 are fully permissive licenses. No copyleft, "
-            "no usage fees, no attribution requirement beyond retaining license notices. "
-            "Suitable for clinical research and commercial institutional deployment.")]
+            "no usage fees. Suitable for clinical research and commercial institutional deployment."),
+          Spacer(1, 0.15*cm),
+          p("<b>⚠ Moonshine is dual-licensed.</b> The MIT grant applies here only because COMPASS "
+            "uses the English model (moonshine-base-ONNX). Changing <i>STT_MODEL_ID</i> in "
+            "sttConstants.ts to a non-English legacy model — <b>Korean in particular</b> — would "
+            "move this deployment onto the Moonshine Community Licence: revocable, non-transferable, "
+            "and restricted to non-commercial use (commercial use requires annual revenue below "
+            "US$1M). The current configuration is compliant. "
+            "Any model swap must be reviewed before shipping.")]
 
-    # 4. Network
-    s += sec("4. Network Traffic", H1)
+    # 4. Licence Obligations
+    s += sec("4. Licence Obligations", H1)
+    s.append(base_table([
+        ["Component", "Obligation", "Status"],
+        ["moonshine-base-ONNX (MIT)",
+         "Keep copyright + permission notice with the software",
+         "⚠ Not yet — no THIRD_PARTY_NOTICES.md"],
+        ["silero-vad (MIT)",
+         "Keep copyright + permission notice with the software",
+         "⚠ Not yet"],
+        ["@huggingface/transformers (Apache-2.0)",
+         "Keep licence text; note modified files (§4a, §4b)",
+         "⚠ Not yet"],
+        ["onnxruntime-web (MIT)",
+         "Keep copyright + permission notice with the software",
+         "⚠ Not yet"],
+    ], [5*cm, 5.5*cm, 3.5*cm]))
+    s += [Spacer(1, 0.15*cm),
+          p("This is a <b>paperwork gap, not a permission problem</b>. Current use is not unlawful. "
+            "Recommended fix: add <i>THIRD_PARTY_NOTICES.md</i> listing each component with its "
+            "licence text, reachable from the served application.")]
+
+    # 5. Network
+    s += sec("5. Network Traffic", H1)
     s.append(base_table([
         ["Event", "Destination", "Protocol", "Size", "Frequency"],
         ["First Speak click\n(model download)", "cdn-lfs.huggingface.co", "HTTPS 443", "~125 MB total", "Once — cached afterwards"],
@@ -263,8 +292,8 @@ def build_en():
     s += [Spacer(1, 0.1*cm),
           p("Domains to whitelist: huggingface.co · cdn-lfs.huggingface.co · cdn-lfs-us-1.huggingface.co (all port 443 HTTPS)", SM)]
 
-    # 5. Browser
-    s += sec("5. Browser Compatibility", H1)
+    # 6. Browser
+    s += sec("6. Browser Compatibility", H1)
     s.append(base_table([
         ["Browser", "Support", "Notes"],
         ["Chrome / Edge 89+",           "Full",    "WebGPU when available; WASM fallback. Native 16 kHz AudioContext."],
@@ -274,11 +303,11 @@ def build_en():
         ["Internet Explorer / old Edge","None",    "No AudioWorklet, no module Workers."],
     ], [3.5*cm, 2*cm, 8.5*cm]))
 
-    # 6. Security
+    # 7. Security
     s += [PageBreak()]
-    s += sec("6. Security & Institutional Review", H1)
+    s += sec("7. Security & Institutional Review", H1)
 
-    s += [p("<b>6.1  Positive security properties</b>", H2), Spacer(1, 0.1*cm)]
+    s += [p("<b>7.1  Positive security properties</b>", H2), Spacer(1, 0.1*cm)]
     s.append(base_table([
         ["Property", "Detail"],
         ["Audio never leaves browser",  "Microphone audio stays in the Web Worker. Only plain-text result crosses to the page."],
@@ -289,7 +318,7 @@ def build_en():
         ["Session isolation",           "{type:'reset'} clears in-flight transcriptions on Stop. No cross-dictation data bleed."],
     ], [4*cm, 10*cm]))
 
-    s += [Spacer(1, 0.25*cm), p("<b>6.2  Institutional risk table</b>", H2), Spacer(1, 0.1*cm)]
+    s += [Spacer(1, 0.25*cm), p("<b>7.2  Institutional risk table</b>", H2), Spacer(1, 0.1*cm)]
     risk_rows = [
         ["Risk",                                      "Level",  "Details & Mitigation"],
         ["HuggingFace CDN blocked by firewall",       "HIGH",   "Models (~125 MB) downloaded from cdn-lfs.huggingface.co on first use. Button stays in 'Loading...' if blocked.\nMitigation: Whitelist cdn-lfs*.huggingface.co:443 OR host models locally on the COMPASS server."],
@@ -303,7 +332,7 @@ def build_en():
     ]
     s.append(risk_table(risk_rows, font))
 
-    s += [Spacer(1, 0.25*cm), p("<b>6.3  Memory profile</b>", H2), Spacer(1, 0.1*cm)]
+    s += [Spacer(1, 0.25*cm), p("<b>7.3  Memory profile</b>", H2), Spacer(1, 0.1*cm)]
     s.append(base_table([
         ["Metric", "Value", "Notes"],
         ["First download",      "~125 MB", "One-time; cached in Browser Cache API"],
@@ -313,8 +342,8 @@ def build_en():
         ["Network after cache", "0 bytes", "Fully offline once models are cached"],
     ], [3.5*cm, 2.5*cm, 8*cm]))
 
-    # 7. Recommendations
-    s += sec("7. Recommendations", H1)
+    # 8. Recommendations
+    s += sec("8. Recommendations", H1)
     s.append(base_table([
         ["#", "Action", "Priority"],
         ["1", "Whitelist at firewall: huggingface.co, cdn-lfs.huggingface.co, cdn-lfs-us-1.huggingface.co (port 443). Required for first-time model download.", "HIGH"],
@@ -325,8 +354,8 @@ def build_en():
         ["6", "Train users: first click may show 'Loading...' for 1–3 min on slow connections. Subsequent sessions are instant.", "LOW"],
     ], [0.7*cm, 12*cm, 1.5*cm]))
 
-    # 8. Summary
-    s += sec("8. Summary", H1)
+    # 9. Summary
+    s += sec("9. Summary", H1)
     s += [
         p("The COMPASS STT feature is <b>architecturally sound from a privacy and security "
           "standpoint</b>. Audio never leaves the browser, no PHI is transmitted externally, "
@@ -338,8 +367,11 @@ def build_en():
           "WebAssembly. These are solvable with targeted whitelisting, or by hosting model files "
           "locally on the COMPASS server."),
         Spacer(1, 0.1*cm),
-        p("No code changes are required for compliance. The feature is ready for clinical use "
-          "in HTTPS-served environments where the above network/policy conditions are met."),
+        p("No code changes are required for audio privacy compliance. "
+          "One paperwork action is outstanding: add <i>THIRD_PARTY_NOTICES.md</i> with component "
+          "licence texts (see §4). Keep the model English — switching to a non-English legacy "
+          "model changes the licence terms (see §3). The feature is otherwise ready for clinical "
+          "use in HTTPS-served environments where the network/policy conditions in §8 are met."),
     ]
 
     doc.build(s)
@@ -464,10 +496,41 @@ def build_kr():
     ], [3.5*cm, 5*cm, 2*cm, 3.5*cm]))
     s += [Spacer(1, 0.15*cm),
           p("<b>결론:</b> MIT·Apache-2.0은 모두 허용적 라이선스입니다. "
-            "카피레프트 없음, 사용료 없음, 임상 연구 및 기관 상업 배포에 법적 제약 없음.")]
+            "카피레프트 없음, 사용료 없음, 임상 연구 및 기관 상업 배포에 법적 제약 없음."),
+          Spacer(1, 0.15*cm),
+          p("<b>⚠ Moonshine은 이중 라이선스입니다.</b> MIT 허가가 적용되는 이유는 COMPASS가 "
+            "<b>영어 모델</b>(moonshine-base-ONNX)을 사용하기 때문입니다. "
+            "sttConstants.ts의 <i>STT_MODEL_ID</i>를 비영어 레거시 모델 — "
+            "<b>특히 한국어 모델</b> — 로 변경하면 이 배포는 Moonshine Community Licence로 "
+            "전환됩니다: 취소 가능, 양도 불가, 비상업 사용만 허용 "
+            "(연매출 US$1M 미만에서만 상업 이용 허용). "
+            "현재 설정은 준수 상태입니다. 모델 교체 전 반드시 라이선스 검토가 필요합니다.")]
 
-    # 4. 네트워크
-    s += [Spacer(1, 0.3*cm), p("4. 네트워크 트래픽 분석", H1),
+    # 4. 라이선스 의무
+    s += [Spacer(1, 0.3*cm), p("4. 라이선스 의무 사항", H1),
+          HRFlowable(width="100%", thickness=1.5, color=NAVY), Spacer(1, 0.2*cm)]
+    s.append(tbl([
+        ["구성 요소", "의무 사항", "현재 상태"],
+        ["moonshine-base-ONNX (MIT)",
+         "저작권·허가 고지문을 소프트웨어와 함께 배포",
+         "⚠ 미이행 — THIRD_PARTY_NOTICES.md 없음"],
+        ["silero-vad (MIT)",
+         "저작권·허가 고지문을 소프트웨어와 함께 배포",
+         "⚠ 미이행"],
+        ["@huggingface/transformers (Apache-2.0)",
+         "라이선스 텍스트 동봉; 수정된 파일 표시 (§4a, §4b)",
+         "⚠ 미이행"],
+        ["onnxruntime-web (MIT)",
+         "저작권·허가 고지문을 소프트웨어와 함께 배포",
+         "⚠ 미이행"],
+    ], [5*cm, 5.5*cm, 3.5*cm]))
+    s += [Spacer(1, 0.15*cm),
+          p("이는 <b>서류상의 누락이며 사용 권한 문제가 아닙니다</b>. 현재 사용은 위법이 아닙니다. "
+            "권장 조치: 각 구성 요소의 라이선스 텍스트를 포함한 "
+            "<i>THIRD_PARTY_NOTICES.md</i>를 서비스된 앱에서 접근 가능한 위치에 추가하세요.")]
+
+    # 5. 네트워크
+    s += [Spacer(1, 0.3*cm), p("5. 네트워크 트래픽 분석", H1),
           HRFlowable(width="100%", thickness=1.5, color=NAVY), Spacer(1, 0.2*cm)]
     s.append(tbl([
         ["이벤트", "목적지", "프로토콜", "크기", "빈도"],
@@ -479,8 +542,8 @@ def build_kr():
     s += [Spacer(1, 0.1*cm),
           p("허용 필요 도메인: huggingface.co · cdn-lfs.huggingface.co · cdn-lfs-us-1.huggingface.co (포트 443)", SM)]
 
-    # 5. 브라우저 호환성
-    s += [Spacer(1, 0.3*cm), p("5. 브라우저 호환성", H1),
+    # 6. 브라우저 호환성
+    s += [Spacer(1, 0.3*cm), p("6. 브라우저 호환성", H1),
           HRFlowable(width="100%", thickness=1.5, color=NAVY), Spacer(1, 0.2*cm)]
     s.append(tbl([
         ["브라우저", "지원", "비고"],
@@ -491,12 +554,12 @@ def build_kr():
         ["Internet Explorer",    "미지원",    "AudioWorklet, 모듈 Worker 없음"],
     ], [3.5*cm, 2*cm, 8.5*cm]))
 
-    # 6. 보안 검토
+    # 7. 보안 검토
     s += [PageBreak()]
-    s += [Spacer(1, 0.3*cm), p("6. 보안 및 기관 환경 검토", H1),
+    s += [Spacer(1, 0.3*cm), p("7. 보안 및 기관 환경 검토", H1),
           HRFlowable(width="100%", thickness=1.5, color=NAVY), Spacer(1, 0.2*cm)]
 
-    s += [p("<b>6.1  긍정적 보안 특성</b>", H2), Spacer(1, 0.1*cm)]
+    s += [p("<b>7.1  긍정적 보안 특성</b>", H2), Spacer(1, 0.1*cm)]
     s.append(tbl([
         ["특성", "상세"],
         ["음성 브라우저 외부 미전송",  "마이크 음성은 Web Worker 내부에서만 처리. 평문 텍스트 결과만 페이지로 전달"],
@@ -507,7 +570,7 @@ def build_kr():
         ["세션 격리",                  "{type:'reset'}으로 중지 시 진행중 전사 폐기. 세션 간 데이터 누출 없음"],
     ], [4*cm, 10*cm]))
 
-    s += [Spacer(1, 0.25*cm), p("<b>6.2  기관 환경 위험 분석</b>", H2), Spacer(1, 0.1*cm)]
+    s += [Spacer(1, 0.25*cm), p("<b>7.2  기관 환경 위험 분석</b>", H2), Spacer(1, 0.1*cm)]
     risk_rows_kr = [
         ["위험 요소",                          "수준", "상세 및 대응 방안"],
         ["방화벽의 HuggingFace CDN 차단",       "높음", "첫 사용 시 cdn-lfs.huggingface.co에서 ~125 MB 다운로드. 차단 시 'Loading...' 상태 지속.\n대응: cdn-lfs*.huggingface.co:443 허용목록 추가, 또는 모델을 COMPASS 서버에 로컬 호스팅"],
@@ -521,7 +584,7 @@ def build_kr():
     ]
     s.append(risk_table(risk_rows_kr, font))
 
-    s += [Spacer(1, 0.25*cm), p("<b>6.3  메모리 프로파일</b>", H2), Spacer(1, 0.1*cm)]
+    s += [Spacer(1, 0.25*cm), p("<b>7.3  메모리 프로파일</b>", H2), Spacer(1, 0.1*cm)]
     s.append(tbl([
         ["지표", "수치", "비고"],
         ["최초 다운로드",     "~125 MB",   "1회, Browser Cache API에 저장"],
@@ -531,8 +594,8 @@ def build_kr():
         ["캐시 후 네트워크",  "0 바이트",  "모델 캐시 후 완전 오프라인"],
     ], [3.5*cm, 2.5*cm, 8*cm]))
 
-    # 7. 권장 사항
-    s += [Spacer(1, 0.3*cm), p("7. 권장 조치", H1),
+    # 8. 권장 사항
+    s += [Spacer(1, 0.3*cm), p("8. 권장 조치", H1),
           HRFlowable(width="100%", thickness=1.5, color=NAVY), Spacer(1, 0.2*cm)]
     s.append(tbl([
         ["#", "조치 내용", "우선순위"],
@@ -544,8 +607,8 @@ def build_kr():
         ["6", "사용자 교육: 첫 클릭 시 느린 연결에서 1–3분 로딩 가능. 이후 세션은 즉시 시작. 실제 진료 전 테스트 권장", "낮음"],
     ], [0.7*cm, 12*cm, 1.5*cm]))
 
-    # 8. 결론
-    s += [Spacer(1, 0.3*cm), p("8. 결론", H1),
+    # 9. 결론
+    s += [Spacer(1, 0.3*cm), p("9. 결론", H1),
           HRFlowable(width="100%", thickness=1.5, color=NAVY), Spacer(1, 0.2*cm)]
     s += [
         p("COMPASS STT 기능은 <b>개인정보 보호 및 보안 측면에서 구조적으로 안전</b>합니다. "
@@ -559,8 +622,11 @@ def build_kr():
           "WebAssembly를 제한하는 엔드포인트 보안 정책입니다. "
           "이는 특정 도메인 허용목록 추가 또는 모델 파일 로컬 호스팅으로 해결 가능합니다."),
         Spacer(1, 0.1*cm),
-        p("컴플라이언스를 위한 코드 변경은 필요하지 않습니다. "
-          "위 네트워크·정책 조건이 충족된 HTTPS 환경에서 즉시 임상 사용이 가능합니다."),
+        p("음성 개인정보 보호 컴플라이언스를 위한 코드 변경은 필요하지 않습니다. "
+          "한 가지 서류 조치가 남아 있습니다: 구성 요소 라이선스 텍스트를 포함한 "
+          "<i>THIRD_PARTY_NOTICES.md</i>를 추가하세요 (§4 참고). "
+          "모델은 영어로 유지하세요 — 비영어 레거시 모델로 교체 시 라이선스 조건이 변경됩니다 "
+          "(§3 참고). 위 §8의 네트워크·정책 조건이 충족된 HTTPS 환경에서 즉시 임상 사용이 가능합니다."),
     ]
 
     doc.build(s)
