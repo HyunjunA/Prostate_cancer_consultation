@@ -63,6 +63,12 @@ export default function AdminTopBar() {
               Signed in as <span className="font-semibold">{username}</span>
             </span>
           )}
+          <Link
+            href="/admin/settings"
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+          >
+            Settings
+          </Link>
           <button
             type="button"
             onClick={handleLogout}
