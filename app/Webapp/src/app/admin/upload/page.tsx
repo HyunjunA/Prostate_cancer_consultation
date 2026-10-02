@@ -29,7 +29,6 @@ import AdminUploadQueue, {
   LIVE,
   Status,
 } from "@/components/AdminUploadQueue";
-import DuplicateUploadDialog from "@/components/DuplicateUploadDialog";
 import usePipelineGate from "@/hooks/usePipelineGate";
 
 // Fast client-side checks. Extension gate, plus a "does this look de-identified"
@@ -55,9 +54,9 @@ interface PrecheckResult {
   analyzed_at?: string | null;
 }
 
-// Statuses the Upload button acts on. "duplicate" is included on purpose — it is a
-// warning, not a block, and re-processing is legitimate (e.g. after a DB reset).
-const UPLOADABLE: Status[] = ["pending", "error", "duplicate"];
+// Statuses the Upload button acts on. "duplicate" is intentionally excluded —
+// files already processed in the DB are blocked, not just warned.
+const UPLOADABLE: Status[] = ["pending", "error"];
 
 // Statuses that describe the file the user just picked, not a past run. The poll
 // must not overwrite these: a re-upload of an already-processed name would otherwise
@@ -99,7 +98,7 @@ export default function AdminUploadPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [blockedDuplicates, setBlockedDuplicates] = useState<{ name: string; message: string }[]>([]);
   // The pipeline handles one transcript at a time; uploading mid-run would queue
   // behind it invisibly. `stale` means the queue is stuck, not working — uploading
   // is re-enabled then so a file the watcher cannot process never locks the page.
@@ -163,21 +162,20 @@ export default function AdminUploadPage() {
     setItems((prev) => prev.map((x) => (x.uid === uid ? { ...x, ...patch } : x)));
 
   // Ask the backend whether this de-identified name already has results in the DB.
-  // Best-effort: a failed precheck leaves the item "pending" so the upload still
-  // works — the warning is a convenience, not a gate.
+  // If duplicate: remove from the queue immediately and add to the blocked list.
+  // Best-effort: a network failure leaves the item "pending" so upload still works.
   const precheck = useCallback((uid: number, name: string) => {
     fetch(`/api/backend/admin/upload-precheck?name=${encodeURIComponent(name)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d: PrecheckResult | null) => {
         if (!d?.duplicate) return;
         const when = d.analyzed_at ? new Date(d.analyzed_at).toLocaleString() : "earlier";
-        setByUid(uid, {
-          status: "duplicate",
-          message:
-            `Already processed ${when}` +
-            (d.analysis_id ? ` (analysis #${d.analysis_id})` : "") +
-            ". Uploading again re-runs the pipeline.",
-        });
+        const message =
+          `Already processed ${when}` +
+          (d.analysis_id ? ` (analysis #${d.analysis_id})` : "") + ".";
+        // Remove from upload queue — duplicate files are blocked, not warned.
+        setItems((prev) => prev.filter((x) => x.uid !== uid));
+        setBlockedDuplicates((prev) => [...prev, { name, message }]);
       })
       .catch(() => { /* precheck is best-effort */ });
   }, []);
@@ -215,14 +213,13 @@ export default function AdminUploadPage() {
     });
   }, [precheck]);
 
-  const uploadAll = async (includeDuplicates: boolean) => {
+  const uploadAll = async () => {
     setBusy(true);
     const snapshot = items;
     for (const it of snapshot) {
       // Skip already-sent, client-rejected (raw / wrong type), and any history item
       // rebuilt without a File (browsers can't restore a File — not re-uploadable).
       if (!UPLOADABLE.includes(it.status) || !it.file) continue;
-      if (it.status === "duplicate" && !includeDuplicates) continue;
       setByUid(it.uid, { status: "uploading", message: undefined });
       try {
         const fd = new FormData();
@@ -252,16 +249,8 @@ export default function AdminUploadPage() {
     void refreshLog();
   };
 
-  const duplicates = items.filter((it) => it.status === "duplicate" && it.file);
-
-  // Warn before sending a name the pipeline has already processed; otherwise upload
-  // straight away.
   const onUploadClick = () => {
     if (gateLocked) return;
-    if (duplicates.length > 0) {
-      setConfirmOpen(true);
-      return;
-    }
     void uploadAll(false);
   };
 
@@ -331,15 +320,17 @@ export default function AdminUploadPage() {
             <span aria-hidden>{gate.stale ? "⚠️" : "⏳"}</span>{" "}
             {gate.stale ? (
               <>
-                {gate.queued[0]} has been waiting {formatWait(gate.waitingSeconds)} — the
+                <code className="break-all font-mono font-normal">{gate.queued[0]}</code>{" "}
+                has been waiting {formatWait(gate.waitingSeconds)} — the
                 pipeline watch may be down. Upload is re-enabled, but check the watcher
                 before adding more.
               </>
             ) : (
               <>
-                Processing {gate.queued[0]}
-                {gate.queued.length > 1 && ` (+${gate.queued.length - 1} more queued)`} —{" "}
-                {formatWait(gate.waitingSeconds)} elapsed. Upload is disabled until it
+                Processing{" "}
+                <code className="break-all font-mono font-normal">{gate.queued[0]}</code>
+                {gate.queued.length > 1 && ` (+${gate.queued.length - 1} more queued)`}
+                {" "}— {formatWait(gate.waitingSeconds)} elapsed. Upload is disabled until it
                 finishes.
               </>
             )}
@@ -383,6 +374,23 @@ export default function AdminUploadPage() {
         }}
       />
 
+      {blockedDuplicates.length > 0 && (
+        <div className="mt-4 rounded-xl border border-rose-300 bg-rose-50 p-4">
+          <p className="text-sm font-semibold text-rose-800 mb-2">
+            <span aria-hidden>🚫</span>{" "}
+            {blockedDuplicates.length} file{blockedDuplicates.length > 1 ? "s" : ""} already processed — not added to queue:
+          </p>
+          <ul className="space-y-1">
+            {blockedDuplicates.map((d, i) => (
+              <li key={i} className="text-xs text-rose-700">
+                <code className="break-all font-mono">{d.name}</code>
+                <span className="ml-2 text-rose-500">— {d.message}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {items.length > 0 && (
         <>
           <AdminUploadQueue items={items} />
@@ -396,14 +404,6 @@ export default function AdminUploadPage() {
             >
               {buttonLabel}
             </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => setItems([])}
-              className="rounded-lg border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50"
-            >
-              Clear
-            </button>
           </div>
           {disabledReason && (
             <p className="mt-2 text-xs text-slate-500">{disabledReason}</p>
@@ -411,19 +411,6 @@ export default function AdminUploadPage() {
         </>
       )}
 
-      <DuplicateUploadDialog
-        open={confirmOpen}
-        duplicates={duplicates.map((d) => ({ name: d.name, message: d.message }))}
-        onCancel={() => setConfirmOpen(false)}
-        onSkipDuplicates={() => {
-          setConfirmOpen(false);
-          void uploadAll(false);
-        }}
-        onReprocess={() => {
-          setConfirmOpen(false);
-          void uploadAll(true);
-        }}
-      />
     </main>
   );
 }
