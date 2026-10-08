@@ -17,10 +17,12 @@ Only de-identified files are accepted
     scrub the body, which would leak PHI while looking clean). Admin-only.
 """
 
+import io
 import logging
 import os
 import re
 import time
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -32,6 +34,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from fastapi.responses import StreamingResponse
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -371,8 +374,27 @@ async def get_upload_log(
         .scalar_subquery()
     )
 
+    # ID of the earliest completed analysis row for this upload — used by the
+    # download endpoint so the UI can request the exact run's stored xlsx_data.
+    analysis_id_subq = (
+        select(TranscriptAnalysisLog.id)
+        .where(
+            TranscriptAnalysisLog.source_filename == AdminUploadLog.queued_filename,
+            TranscriptAnalysisLog.processed.is_(True),
+            _COMPLETED_AT > AdminUploadLog.uploaded_at,
+        )
+        .order_by(_COMPLETED_AT.asc())
+        .limit(1)
+        .correlate(AdminUploadLog)
+        .scalar_subquery()
+    )
+
     stmt = (
-        select(AdminUploadLog, completed_at.label("completed_at"))
+        select(
+            AdminUploadLog,
+            completed_at.label("completed_at"),
+            analysis_id_subq.label("analysis_id"),
+        )
         .order_by(AdminUploadLog.uploaded_at.desc(), AdminUploadLog.id.desc())
         .limit(limit)
     )
@@ -386,7 +408,7 @@ async def get_upload_log(
     now = datetime.now(timezone.utc)
 
     uploads = []
-    for row, finished in rows:
+    for row, finished, aid in rows:
         # How long the run took, or has been going so far. The page renders a live
         # timer off this: a run is minutes long, and a static badge reads as stuck.
         elapsed = None
@@ -401,5 +423,86 @@ async def get_upload_log(
             "uploaded_at": row.uploaded_at.isoformat() if row.uploaded_at else None,
             "analyzed_at": finished.isoformat() if finished else None,
             "elapsed_seconds": elapsed,
+            "analysis_id": aid,        # transcript_analysis_log.id — used for download
         })
     return {"uploads": uploads}
+
+
+@router.get("/download-transcript/{analysis_id}",
+            dependencies=[Depends(require_admin_user)])
+async def download_transcript(
+    analysis_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    """Stream the original transcript file from the database.
+
+    The binary content is stored in transcript_analysis_log.xlsx_data at
+    pipeline persistence time, so no shared filesystem is required.
+    """
+    result = await db.execute(
+        select(
+            TranscriptAnalysisLog.xlsx_data,
+            TranscriptAnalysisLog.source_filename,
+        ).where(TranscriptAnalysisLog.id == analysis_id)
+    )
+    row = result.first()
+    if row is None or row.xlsx_data is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Transcript not found or file data not stored.",
+        )
+    filename = Path(row.source_filename).name if row.source_filename else f"transcript_{analysis_id}"
+    return StreamingResponse(
+        io.BytesIO(row.xlsx_data),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/download-all-transcripts",
+            dependencies=[Depends(require_admin_user)])
+async def download_all_transcripts(
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    """Return all processed transcripts as a ZIP archive.
+
+    Only rows where processed=True and xlsx_data is not null are included.
+    """
+    result = await db.execute(
+        select(
+            TranscriptAnalysisLog.id,
+            TranscriptAnalysisLog.xlsx_data,
+            TranscriptAnalysisLog.source_filename,
+        ).where(
+            TranscriptAnalysisLog.processed.is_(True),
+            TranscriptAnalysisLog.xlsx_data.isnot(None),
+        ).order_by(TranscriptAnalysisLog.id.asc())
+    )
+    rows = result.all()
+
+    if not rows:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No processed transcripts with stored file data found.",
+        )
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        seen: dict[str, int] = {}
+        for row in rows:
+            name = Path(row.source_filename).name if row.source_filename else f"transcript_{row.id}"
+            # Deduplicate names: a re-uploaded file produces a second row.
+            if name in seen:
+                seen[name] += 1
+                stem, suffix = (name.rsplit(".", 1) if "." in name else (name, ""))
+                name = f"{stem}_{seen[name]}.{suffix}" if suffix else f"{stem}_{seen[name]}"
+            else:
+                seen[name] = 0
+            zf.writestr(name, row.xlsx_data)
+
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="transcripts_all.zip"'},
+    )

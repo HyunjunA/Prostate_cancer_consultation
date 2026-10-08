@@ -46,6 +46,7 @@ interface UploadLogRow {
   state?: string;
   message?: string;
   elapsed_seconds?: number | null;
+  analysis_id?: number | null;
 }
 
 interface PrecheckResult {
@@ -66,16 +67,19 @@ const LOCAL_ONLY: Status[] = ["pending", "invalid", "rejected", "duplicate", "up
 const POLL_MS = 5000;
 
 /** What the row's derived server state means for the badge and the caption. */
-function fromLogRow(r: UploadLogRow): Pick<Item, "status" | "message" | "elapsedSeconds"> {
+function fromLogRow(
+  r: UploadLogRow,
+): Pick<Item, "status" | "message" | "elapsedSeconds" | "analysis_id"> {
   // Fall back to "queued", never "done": an older backend without `state` knows only
   // that the file was accepted, which is exactly what "queued" says.
   const state = r.state ?? (r.status === "error" ? "error" : "queued");
   const elapsedSeconds = r.elapsed_seconds ?? undefined;
+  const analysis_id = r.analysis_id ?? undefined;
   if (state === "error") {
     return { status: "error", message: r.message || "Upload failed.", elapsedSeconds };
   }
   if (state === "analyzed") {
-    return { status: "analyzed", message: "Analysis complete.", elapsedSeconds };
+    return { status: "analyzed", message: "Analysis complete.", elapsedSeconds, analysis_id };
   }
   if (state === "processing") {
     return {
@@ -261,6 +265,29 @@ export default function AdminUploadPage() {
   };
 
   const hasUploadable = items.some((it) => UPLOADABLE.includes(it.status) && it.file);
+  const analyzedItems = items.filter((it) => it.status === "analyzed" && it.analysis_id !== undefined);
+
+  const [downloading, setDownloading] = useState(false);
+  const downloadAll = async () => {
+    setDownloading(true);
+    try {
+      const res = await fetch("/api/backend/admin/download-all-transcripts");
+      if (!res.ok) throw new Error(`${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "transcripts_all.zip";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      // non-fatal: let the user try again
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   // Why the button is dead. It used to disable on `!hasUploadable` while still
   // reading "Upload" with no tooltip and nothing on the page, so a coordinator whose
@@ -404,6 +431,16 @@ export default function AdminUploadPage() {
             >
               {buttonLabel}
             </button>
+            {analyzedItems.length > 0 && (
+              <button
+                type="button"
+                disabled={downloading}
+                onClick={downloadAll}
+                className="rounded-lg border border-emerald-300 bg-emerald-50 px-5 py-2.5 text-sm font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-50"
+              >
+                {downloading ? "Preparing…" : `Download All (${analyzedItems.length})`}
+              </button>
+            )}
           </div>
           {disabledReason && (
             <p className="mt-2 text-xs text-slate-500">{disabledReason}</p>

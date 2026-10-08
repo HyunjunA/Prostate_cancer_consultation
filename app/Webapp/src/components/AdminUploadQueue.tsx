@@ -11,6 +11,9 @@
  * minutes, and a static badge over that span reads as "nothing is happening".
  */
 
+import { Download } from "lucide-react";
+import { useState } from "react";
+
 /** Where a file is. The first five are client-side; the rest come from the server. */
 export type Status =
   | "pending"
@@ -36,6 +39,8 @@ export interface Item {
   message?: string;
   // Seconds since the upload — running while processing, final once analyzed.
   elapsedSeconds?: number;
+  // transcript_analysis_log.id — present when state="analyzed", used for download.
+  analysis_id?: number;
 }
 
 const BADGE: Record<Status, string> = {
@@ -57,6 +62,54 @@ export const LIVE: Status[] = ["uploading", "queued", "processing"];
 export function formatWait(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
   return `${Math.round(seconds / 60)} min`;
+}
+
+/** Fetch a transcript from the backend and trigger a browser download. */
+async function downloadFile(analysisId: number, name: string): Promise<void> {
+  const res = await fetch(`/api/backend/admin/download-transcript/${analysisId}`);
+  if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function DownloadButton({ analysisId, name }: { analysisId: number; name: string }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+
+  async function handleClick() {
+    setLoading(true);
+    setError(false);
+    try {
+      await downloadFile(analysisId, name);
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={loading}
+      title={error ? "Download failed — try again" : "Download transcript"}
+      className={`rounded-lg border px-2 py-1 transition-colors disabled:opacity-50
+        ${error
+          ? "border-rose-300 text-rose-600 hover:bg-rose-50"
+          : "border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+        }`}
+    >
+      <Download size={14} className={loading ? "animate-pulse" : ""} />
+    </button>
+  );
 }
 
 interface Props {
@@ -84,6 +137,9 @@ export default function AdminUploadQueue({ items }: Props) {
             <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${BADGE[it.status]}`}>
               {it.status}
             </span>
+            {it.status === "analyzed" && it.analysis_id !== undefined && (
+              <DownloadButton analysisId={it.analysis_id} name={it.name} />
+            )}
           </div>
         </li>
       ))}
