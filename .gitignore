@@ -8,6 +8,15 @@ notused
 CREDENTIALS.md
 ONBOARDING_EMAIL.txt
 
+# Course document — work in progress
+docs/COURSE.md
+docs/COURSE.pdf
+docs/assets/
+scripts/stt_report_content.json
+scripts/capture-course-screenshots.js
+scripts/optimize-course-screenshots.py
+scripts/make_course_pdf.py
+
 # Python
 __pycache__/
 *.pyc
