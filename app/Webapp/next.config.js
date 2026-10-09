@@ -3,6 +3,13 @@ const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
   output: "standalone",
+  // Strip all console.* calls from the production bundle. The codebase has
+  // ~590 console calls across active and archived components; removing them
+  // at build time is cleaner than hunting each one manually and ensures no
+  // debug output leaks to the browser DevTools console in production.
+  compiler: {
+    removeConsole: process.env.NODE_ENV === "production",
+  },
   typescript: {
     // Still true, and here is exactly why — do not flip this silently.
     //
