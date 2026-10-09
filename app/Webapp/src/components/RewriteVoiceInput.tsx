@@ -144,7 +144,7 @@ const RewriteVoiceInput: React.FC<Props> = ({ isDarkMode, onText }) => {
                 : "bg-amber-50 text-amber-700 border border-amber-200",
             )}
           >
-            ⚠ Review and edit the transcription before clicking Score.
+            Review and edit the transcription before clicking Score.
             The recording may take a moment to finish after you stop speaking.
           </span>
         )}
@@ -170,7 +170,7 @@ const RewriteVoiceInput: React.FC<Props> = ({ isDarkMode, onText }) => {
             ? "bg-slate-800 text-amber-400 border border-slate-700"
             : "bg-amber-50 text-amber-700 border border-amber-200",
         )}>
-          ⚠ Voice input is not supported in this browser.
+          Voice input is not supported in this browser.
           Please switch to <strong>Chrome</strong> or <strong>Edge</strong>.
         </p>
       )}
