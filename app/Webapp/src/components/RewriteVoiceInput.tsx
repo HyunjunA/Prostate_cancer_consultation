@@ -81,71 +81,98 @@ const RewriteVoiceInput: React.FC<Props> = ({ isDarkMode, onText }) => {
   return (
     // The onboarding tour spotlights this wrapper, so the anchor stays put
     // whether or not the error message beside the button is showing.
-    <div data-tour="rewrite-voice-button" className="flex items-center gap-2">
-      {status === "loading" && (
-        <SttLoadingModal
-          isDarkMode={isDarkMode}
-          assets={assets}
-          onCancel={cancel}
-        />
-      )}
-
-      <button
-        type="button"
-        onClick={() => (active ? stop() : void start())}
-        disabled={!supported || busy}
-        aria-pressed={status === "listening"}
-        title={
-          unsupportedReason ??
-          "Dictate your rewrite — speech is transcribed in your browser and the audio is never uploaded"
-        }
-        className={cx(
-          "inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-semibold transition-all",
-          !supported
-            ? isDarkMode
-              ? "border-slate-700 text-slate-500 cursor-not-allowed"
-              : "border-slate-200 text-slate-400 cursor-not-allowed"
-            : status === "listening"
-              ? isDarkMode
-                ? "border-rose-500 bg-rose-500/15 text-rose-300"
-                : "border-rose-500 bg-rose-50 text-rose-600"
-              : isDarkMode
-                ? "border-slate-600 text-cyan-400 hover:border-cyan-500 hover:bg-cyan-500/10"
-                : "border-slate-300 text-cyan-600 hover:border-cyan-400 hover:bg-cyan-50",
+    <div data-tour="rewrite-voice-button" className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        {status === "loading" && (
+          <SttLoadingModal
+            isDarkMode={isDarkMode}
+            assets={assets}
+            onCancel={cancel}
+          />
         )}
-      >
-        <MicIcon
-          className={cx("w-4 h-4", speaking && "animate-pulse")}
-        />
-        {label}
-      </button>
 
-      {error && (
-        <span
+        <button
+          type="button"
+          onClick={() => (active ? stop() : void start())}
+          disabled={!supported || busy}
+          aria-pressed={status === "listening"}
+          title={
+            unsupportedReason ??
+            "Dictate your rewrite — speech is transcribed in your browser and the audio is never uploaded"
+          }
           className={cx(
-            "text-xs font-medium",
-            isDarkMode ? "text-red-400" : "text-red-600",
+            "inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-semibold transition-all",
+            !supported
+              ? isDarkMode
+                ? "border-slate-700 text-slate-500 cursor-not-allowed"
+                : "border-slate-200 text-slate-400 cursor-not-allowed"
+              : status === "listening"
+                ? isDarkMode
+                  ? "border-rose-500 bg-rose-500/15 text-rose-300"
+                  : "border-rose-500 bg-rose-50 text-rose-600"
+                : isDarkMode
+                  ? "border-slate-600 text-cyan-400 hover:border-cyan-500 hover:bg-cyan-500/10"
+                  : "border-slate-300 text-cyan-600 hover:border-cyan-400 hover:bg-cyan-50",
           )}
         >
-          {error}
-        </span>
+          <MicIcon
+            className={cx("w-4 h-4", speaking && "animate-pulse")}
+          />
+          {label}
+        </button>
+
+        {error && (
+          <span
+            className={cx(
+              "text-xs font-medium",
+              isDarkMode ? "text-red-400" : "text-red-600",
+            )}
+          >
+            {error}
+          </span>
+        )}
+
+        {/* Warning shown while actively listening, and while the last sentence
+            is still being transcribed — that is exactly when the text is still
+            changing under the doctor. */}
+        {(status === "listening" || status === "finishing") && (
+          <span
+            className={cx(
+              "text-xs px-2 py-1 rounded-md font-medium leading-snug max-w-xs",
+              isDarkMode
+                ? "bg-amber-900/40 text-amber-300 border border-amber-700/50"
+                : "bg-amber-50 text-amber-700 border border-amber-200",
+            )}
+          >
+            ⚠ Review and edit the transcription before clicking Score.
+            The recording may take a moment to finish after you stop speaking.
+          </span>
+        )}
+      </div>
+
+      {/* Browser requirement hint — always visible so the user knows
+          which browsers are supported before they try. */}
+      {supported && status === "idle" && (
+        <p className={cx(
+          "text-xs",
+          isDarkMode ? "text-slate-500" : "text-slate-400",
+        )}>
+          Requires Chrome, Edge, or Safari
+        </p>
       )}
 
-      {/* Warning shown while actively listening, and while the last sentence
-          is still being transcribed — that is exactly when the text is still
-          changing under the doctor. */}
-      {(status === "listening" || status === "finishing") && (
-        <span
-          className={cx(
-            "text-xs px-2 py-1 rounded-md font-medium leading-snug max-w-xs",
-            isDarkMode
-              ? "bg-amber-900/40 text-amber-300 border border-amber-700/50"
-              : "bg-amber-50 text-amber-700 border border-amber-200",
-          )}
-        >
-          ⚠ Review and edit the transcription before clicking Score.
-          The recording may take a moment to finish after you stop speaking.
-        </span>
+      {/* Unsupported browser — explain why and what to do. */}
+      {!supported && (
+        <p className={cx(
+          "text-xs px-2 py-1.5 rounded-md leading-snug max-w-xs",
+          isDarkMode
+            ? "bg-slate-800 text-amber-400 border border-slate-700"
+            : "bg-amber-50 text-amber-700 border border-amber-200",
+        )}>
+          ⚠ Voice input is not available in this browser.
+          Please use <strong>Chrome 89+</strong>, <strong>Edge 89+</strong>,
+          or <strong>Safari 16.4+</strong>.
+        </p>
       )}
     </div>
   );
