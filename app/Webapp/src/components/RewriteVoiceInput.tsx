@@ -150,18 +150,19 @@ const RewriteVoiceInput: React.FC<Props> = ({ isDarkMode, onText }) => {
         )}
       </div>
 
-      {/* Browser requirement hint — always visible so the user knows
-          which browsers are supported before they try. */}
+      {/* Supported browser — brief privacy note on idle. */}
       {supported && status === "idle" && (
         <p className={cx(
-          "text-xs",
+          "text-xs leading-snug",
           isDarkMode ? "text-slate-500" : "text-slate-400",
         )}>
-          Requires Chrome, Edge, or Safari
+          Audio stays in your browser — never uploaded.
         </p>
       )}
 
-      {/* Unsupported browser — explain why and what to do. */}
+      {/* Unsupported browser — the feature check in useSpeechToText detected
+          a missing API (secure context, getUserMedia, AudioWorklet, or module
+          Worker). Ask the user to switch to a browser that passes all checks. */}
       {!supported && (
         <p className={cx(
           "text-xs px-2 py-1.5 rounded-md leading-snug max-w-xs",
@@ -169,9 +170,8 @@ const RewriteVoiceInput: React.FC<Props> = ({ isDarkMode, onText }) => {
             ? "bg-slate-800 text-amber-400 border border-slate-700"
             : "bg-amber-50 text-amber-700 border border-amber-200",
         )}>
-          ⚠ Voice input is not available in this browser.
-          Please use <strong>Chrome 89+</strong>, <strong>Edge 89+</strong>,
-          or <strong>Safari 16.4+</strong>.
+          ⚠ Voice input is not supported in this browser.
+          Please switch to <strong>Chrome</strong> or <strong>Edge</strong>.
         </p>
       )}
     </div>
