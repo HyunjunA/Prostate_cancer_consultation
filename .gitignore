@@ -105,3 +105,6 @@ AI_physician_patient_communication/
 _tls/
 _fonts/
 SERVER_ACCESS.txt
+
+/clinical_teams.local.md
+/COMPASS_LOCAL_NOTES.md
