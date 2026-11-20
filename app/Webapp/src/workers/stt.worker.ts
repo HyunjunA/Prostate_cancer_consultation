@@ -63,6 +63,9 @@ const post = (message: SttWorkerMessage) => ctx.postMessage(message);
 env.allowLocalModels = true;
 env.localModelPath = STT_MODEL_PATH;
 env.allowRemoteModels = false;
+// The origin sets browser cache headers on the pinned assets. Avoid building
+// a second Response containing an entire model for the Cache Storage API.
+env.useBrowserCache = false;
 
 // Guarded the same way the library guards its own default: the wasm backend is
 // absent in environments that never reach it.
@@ -88,26 +91,7 @@ let loading: Promise<void> | null = null;
 // nothing — the page is waiting on that message to enable the button.
 let isLoaded = false;
 
-async function supportsWebGPU(): Promise<boolean> {
-  try {
-    const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
-    if (!gpu) return false;
-    return (await gpu.requestAdapter()) != null;
-  } catch {
-    return false;
-  }
-}
-
-// The encoder stays full precision either way; only the decoder is quantized,
-// and how far depends on the backend. q4 is a WebGPU-only win — on WASM it is
-// slower than q8 and, on some builds, unsupported.
-const DEVICE_DTYPE = {
-  webgpu: { encoder_model: "fp32", decoder_model_merged: "q4" },
-  wasm: { encoder_model: "fp32", decoder_model_merged: "q8" },
-} as const;
-
 async function load(): Promise<void> {
-  const device = (await supportsWebGPU()) ? "webgpu" : "wasm";
   post({ type: "loading", message: "Loading speech model" });
 
   // Transformers.js reports per file, and its `done` event carries no byte
@@ -141,22 +125,23 @@ async function load(): Promise<void> {
 
   vad = (await AutoModel.from_pretrained(VAD_MODEL_ID, {
     config: { model_type: "custom" } as never,
+    device: "wasm",
+    session_options: { enableCpuMemArena: false, enableMemPattern: false, graphOptimizationLevel: "basic" },
     dtype: "fp32", // Full precision: the model is 2 MB, quantizing buys nothing.
     progress_callback,
   })) as unknown as VadModel;
 
   transcriber = (await pipeline("automatic-speech-recognition", STT_MODEL_ID, {
-    device,
-    dtype: DEVICE_DTYPE[device],
+    // Some available WebGPU adapters reject the Moonshine MatMulNBits pipeline.
+    device: "wasm",
+    session_options: { enableCpuMemArena: false, enableMemPattern: false, graphOptimizationLevel: "basic" },
+    dtype: { encoder_model: "fp32", decoder_model_merged: "q8" },
     progress_callback,
   })) as unknown as Transcriber;
 
-  // Warm up (compiles WebGPU shaders) so the first real sentence is not slow.
-  // No byte counter exists for this, but it is seconds of work on a cold
-  // WebGPU context — leaving it unnamed is what made the modal look stuck at
-  // the end.
+  // Run one silent inference before accepting speech.
   post({ type: "asset", asset: { id: "warmup", loaded: 0, total: 0, done: false } });
-  await transcriber(new Float32Array(SAMPLE_RATE));
+  await transcriber(new Float32Array(SAMPLE_RATE), { max_new_tokens: 1 });
   post({ type: "asset", asset: { id: "warmup", loaded: 0, total: 0, done: true } });
 
   isLoaded = true;
@@ -327,7 +312,7 @@ ctx.onmessage = async (event: MessageEvent) => {
   }
 
   const buffer = data.buffer;
-  if (!buffer || !vad) return;
+  if (!buffer || !isLoaded) return;
 
   const wasRecording = isRecording;
   const speech = await isSpeechFrame(buffer);

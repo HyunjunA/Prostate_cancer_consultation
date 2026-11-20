@@ -36,6 +36,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import get_current_user
+from auth.admin_session import require_admin_user
 from auth.access_control import check_patient_access
 from auth.base import AuthUser
 from core.settings import get_settings
@@ -93,7 +94,7 @@ async def get_patient_files(
     limit: int = Query(default=500, ge=1, le=5000, description="Max files to return"),
     doctor_id: Optional[str] = Query(default=None, description="Scope to one doctor (NULL rows excluded when set)"),
     db: AsyncSession = Depends(get_db),
-    user: AuthUser = Depends(get_current_user)
+    user: AuthUser = Depends(require_admin_user)
 ):
     """List distinct patient file identifiers (xlsx names) the user can see."""
     # `.distinct()` collapses the (file, speaker) PK to file only —

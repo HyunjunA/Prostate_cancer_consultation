@@ -144,8 +144,14 @@ const RewriteVoiceInput: React.FC<Props> = ({ isDarkMode, onText }) => {
                 : "bg-amber-50 text-amber-700 border border-amber-200",
             )}
           >
-            Review and edit the transcription before clicking Score.
-            The recording may take a moment to finish after you stop speaking.
+            <span role="status">
+              {status === "finishing"
+                ? "Finishing transcription…"
+                : speaking
+                  ? "Speech detected. Pause to see your words above."
+                  : "Listening for speech…"}
+            </span>{" "}
+            Review the text before clicking Score.
           </span>
         )}
       </div>

@@ -10,6 +10,7 @@ Endpoints tested:
 
 import pytest
 
+from auth.models import AuthUser
 from tests.factories import TestDataFactory
 
 
@@ -31,36 +32,50 @@ _obsolete_per_class_schema = pytest.mark.skip(
 
 # ── GET /api/patient/files ───────────────────────────────────────────────────
 
+@pytest.fixture
+async def admin_headers(client, db, monkeypatch):
+    from secrets import token_urlsafe
+    from auth.admin_routes import _hash_password
+
+    password = token_urlsafe(32)
+    db.add(AuthUser(username="picker-admin", role="admin", password_hash=_hash_password(password)))
+    await db.commit()
+    monkeypatch.setattr("db.AsyncSessionLocal", db.info["session_factory"])
+    login = await client.post("/api/admin-auth/login", json={"username": "picker-admin", "password": password})
+    assert login.status_code == 200
+    return {"Authorization": "Bearer " + login.json()["access_token"]}
+
+
 class TestGetPatientFiles:
     """GET /api/patient/files — distinct file names from PatientSummary."""
 
-    async def test_empty_db_returns_empty_list(self, client, api_headers):
-        resp = await client.get("/api/patient/files", headers=api_headers)
+    async def test_empty_db_returns_empty_list(self, client, admin_headers):
+        resp = await client.get("/api/patient/files", headers=admin_headers)
         assert resp.status_code == 200
         data = resp.json()
         assert data["files"] == []
 
-    async def test_returns_distinct_files(self, client, api_headers, db):
+    async def test_returns_distinct_files(self, client, admin_headers, db):
         db.add(TestDataFactory.patient_summary(file="alpha.xlsx", speaker="P1"))
         db.add(TestDataFactory.patient_summary(file="alpha.xlsx", speaker="P2"))
         db.add(TestDataFactory.patient_summary(file="beta.xlsx", speaker="P1"))
         await db.commit()
 
-        resp = await client.get("/api/patient/files", headers=api_headers)
+        resp = await client.get("/api/patient/files", headers=admin_headers)
         data = resp.json()
         assert len(data["files"]) == 2
         assert set(data["files"]) == {"alpha.xlsx", "beta.xlsx"}
 
-    async def test_files_sorted_alphabetically(self, client, api_headers, db):
+    async def test_files_sorted_alphabetically(self, client, admin_headers, db):
         db.add(TestDataFactory.patient_summary(file="zebra.xlsx", speaker="P"))
         db.add(TestDataFactory.patient_summary(file="apple.xlsx", speaker="P"))
         db.add(TestDataFactory.patient_summary(file="mango.xlsx", speaker="P"))
         await db.commit()
 
-        resp = await client.get("/api/patient/files", headers=api_headers)
+        resp = await client.get("/api/patient/files", headers=admin_headers)
         files = resp.json()["files"]
         assert files == sorted(files)
 
-    async def test_no_auth_returns_403(self, client):
+    async def test_no_auth_returns_401(self, client):
         resp = await client.get("/api/patient/files")
-        assert resp.status_code == 403
+        assert resp.status_code == 401

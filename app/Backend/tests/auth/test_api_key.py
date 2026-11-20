@@ -131,11 +131,10 @@ class TestAuthRequiredEndpoints:
         assert resp.status_code == 403
         assert resp.json()["detail"] == "Missing API Key"
 
-    async def test_patient_files_requires_auth(self, client):
-        """GET /api/patient/files without key returns 403."""
-        resp = await client.get("/api/patient/files")
-        assert resp.status_code == 403
-        assert resp.json()["detail"] == "Missing API Key"
+    async def test_patient_files_requires_admin_session(self, client, api_headers):
+        resp = await client.get("/api/patient/files", headers=api_headers)
+        assert resp.status_code == 401
+
 
     async def test_dashboard_stats_requires_auth(self, client):
         """GET /api/stats/dashboard without key returns 403."""

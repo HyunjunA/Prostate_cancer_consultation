@@ -229,13 +229,10 @@ async def test_doctor_improvement_suggestions():
 # 4. Patient Interface
 # ===========================================================================
 
-async def test_patient_files():
-    """GET /api/patient/files should return a file list."""
+async def test_patient_files_requires_admin_session():
+    """The server-side proxy's API key alone cannot enumerate patients."""
     resp = await _get("/api/patient/files", headers=AUTH_HEADERS)
-    assert resp.status_code == 200
-    body = resp.json()
-    assert "files" in body
-    assert isinstance(body["files"], list)
+    assert resp.status_code == 401
 
 
 async def test_patient_summaries():

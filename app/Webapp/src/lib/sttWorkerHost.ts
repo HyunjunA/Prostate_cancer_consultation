@@ -1,26 +1,16 @@
-/**
- * Owner of the speech-to-text worker's lifetime.
- *
- * The worker is created once per page visit and then kept, because creating it
- * is what costs: the weights are already in the browser's Cache API after the
- * first visit, but every fresh worker still has to read ~123 MB back, rebuild
- * both ONNX sessions and run a warm-up inference — measured at ~3.3 s on the
- * deployment, every single time. Terminating it at the end of each dictation
- * made a doctor pay that again for every sentence.
- *
- * What is deliberately NOT tied to this module: the microphone and the
- * AudioContext. Those are released the moment dictation stops, by the hook that
- * opened them — holding the worker must never mean holding the microphone.
- *
- * The cost of keeping it is memory: roughly 700 MB resident while the models are
- * loaded, held until the tab is closed or reloaded. That trade was made
- * knowingly; see docs/architecture/SPEECH_TO_TEXT.md.
- */
-
+// Reuse the model between successive sentences, then release its WASM heap.
 let worker: Worker | null = null;
+let idleTimer: ReturnType<typeof setTimeout> | undefined;
+
+export function releaseIdleWorker(instance: Worker): void {
+  if (worker !== instance) return;
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(disposeSttWorker, 30_000);
+}
 
 /** The shared worker, created on first use. */
 export function getSttWorker(): Worker {
+  clearTimeout(idleTimer);
   worker ??= new Worker(new URL("../workers/stt.worker.ts", import.meta.url), {
     type: "module",
   });
@@ -36,6 +26,7 @@ export function getSttWorker(): Worker {
  * so a network blip does not cost a rebuild.
  */
 export function disposeSttWorker(): void {
+  clearTimeout(idleTimer);
   worker?.terminate();
   worker = null;
 }

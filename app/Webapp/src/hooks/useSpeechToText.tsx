@@ -8,7 +8,7 @@ import {
   type SttAssetProgress,
   type SttWorkerMessage,
 } from "@/lib/sttConstants";
-import { disposeSttWorker, getSttWorker } from "@/lib/sttWorkerHost";
+import { disposeSttWorker, getSttWorker, releaseIdleWorker } from "@/lib/sttWorkerHost";
 
 export type SttStatus =
   | "idle"
@@ -105,6 +105,7 @@ export function useSpeechToText({ onText }: Options) {
       listenersRef.current = null;
     }
     worker.postMessage({ type: "reset" });
+    releaseIdleWorker(worker);
     workerRef.current = null;
   }, []);
 
