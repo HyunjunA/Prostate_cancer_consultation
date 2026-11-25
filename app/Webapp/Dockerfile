@@ -1,7 +1,7 @@
 # ../Webapp/Dockerfile — Standalone optimized build
 
 # ── Base ──────────────────────────────────────────────────────────────────────
-FROM node:18-alpine AS base
+FROM node:22-alpine AS base
 RUN apk add --no-cache g++ make py3-pip libc6-compat
 WORKDIR /app
 
@@ -29,7 +29,7 @@ RUN npm run build
 # next.config.js output: "standalone" generates a self-contained server
 # with only the 17 packages needed at runtime (vs 311 in full node_modules).
 # Nginx handles /api proxy and security headers — no Express needed.
-FROM node:18-alpine AS production
+FROM node:22-alpine AS production
 WORKDIR /app
 
 # Security: non-root user

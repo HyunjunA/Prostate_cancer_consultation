@@ -1,7 +1,7 @@
 # Webapp CI gate — runs whenever app/Webapp/ changes.
 #
 # Phase 1 (current):
-#   ✅ next lint  — must pass
+#   ✅ ESLint  — must pass
 #   ✅ jest unit tests (excludes Playwright e2e)
 #
 # Phase 2 (future):
@@ -25,7 +25,7 @@ on:
 
 jobs:
   lint-and-test:
-    name: next lint + jest
+    name: ESLint + jest
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -36,7 +36,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: app/Webapp/package-lock.json
 
@@ -46,9 +46,9 @@ jobs:
         # vs `npm install` which can drift).
         run: npm ci
 
-      - name: next lint
+      - name: ESLint
         working-directory: app/Webapp
-        # ESLint via next.js — same rules developers see locally on
+        # ESLint CLI — same rules developers see locally on
         # `npm run lint`.
         run: npm run lint
 

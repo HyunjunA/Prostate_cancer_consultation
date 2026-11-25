@@ -4955,7 +4955,7 @@ const PhysicianReports: React.FC<PhysicianReportsProps> = ({
   }, [currentView, trackEvent]);
 
   // Track search (debounced) — moved after filteredPatients definition
-  const searchTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pendingSearchTrack = useRef<{ search: string } | null>(null);
   useEffect(() => {
     if (search !== "") pendingSearchTrack.current = { search };

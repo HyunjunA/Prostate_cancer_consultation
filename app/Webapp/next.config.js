@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
   output: "standalone",
   // Strip all console.* calls from the production bundle. The codebase has
   // ~590 console calls across active and archived components; removing them
@@ -13,7 +12,7 @@ const nextConfig = {
   typescript: {
     // Still true, and here is exactly why — do not flip this silently.
     //
-    // `npx tsc --noEmit` reports 609 errors. Their distribution:
+    // Before the Next.js upgrade, `npx tsc --noEmit` reported 609 errors. Their distribution:
     //   487  orphan components (136 files unreachable from any app/ route —
     //        the PhysicianReportsModifiedV*/PatientReportModifiedV* version
     //        history). These are queued for deletion, so typing them is waste.
@@ -76,30 +75,6 @@ const nextConfig = {
 
     return config;
   },
-  // `eslint.ignoreDuringBuilds` is deliberately absent: .eslintrc.json now
-  // exists, `next lint` reports 0 errors, and the build gates on errors only
-  // (the 329 remaining findings are warnings), so the lint gate is live.
 };
 
 module.exports = nextConfig;
-
-// Reference config for serving the app under a sub-path (kept for the day we
-// deploy behind a prefix such as /sarscov):
-//
-// /** @type {import('next').NextConfig} */
-// const nextConfig = {
-//   reactStrictMode: true,
-//   swcMinify: true,
-//   output: "standalone",
-//   basePath: "/sarscov",
-//   assetPrefix: "/sarscov",
-//   trailingSlash: true,
-//   typescript: {
-//     ignoreBuildErrors: true,
-//   },
-//   eslint: {
-//     ignoreDuringBuilds: true,
-//   },
-// };
-
-// module.exports = nextConfig;

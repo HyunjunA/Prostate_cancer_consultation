@@ -5,7 +5,7 @@
  * it up, instead of SFTP-through-a-jump-server. Only files already de-identified by
  * the Secure Transcript Preparation app are accepted; a raw study-id file is rejected
  * by the backend (de-id happens in the app, not on the server). Access is gated by
- * src/middleware.ts (admin_session cookie); the backend re-checks admin on
+ * src/proxy.ts (admin_session cookie); the backend re-checks admin on
  * POST /api/admin/upload-transcript.
  *
  * Duplicate warning: a name that was already processed into the DB is flagged up

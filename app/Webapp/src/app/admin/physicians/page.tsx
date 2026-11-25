@@ -1,4 +1,4 @@
-// Physician roster. Behind the admin gate (src/middleware.ts covers
+// Physician roster. Behind the admin gate (src/proxy.ts covers
 // /admin/:path*); the ?doctorid= dashboard URLs it links to stay public.
 import AdminPhysicianPicker from "@/components/AdminPhysicianPicker";
 

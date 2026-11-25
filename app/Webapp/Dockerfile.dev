@@ -1,5 +1,5 @@
 # ../Webapp/Dockerfile.dev
-FROM node:20-slim
+FROM node:22-slim
 
 ENV NODE_ENV=development \
     NEXT_TELEMETRY_DISABLED=1

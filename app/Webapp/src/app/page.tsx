@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useShallow } from "zustand/react/shallow";
 
@@ -75,7 +75,7 @@ import APITestDashboard from "@/components/ApiTestDashboard";
 // "selection" is the public landing screen shown when no patient/doctor
 // parameter is present. It carries no index of patients or doctors — those
 // moved behind the admin login on 2026-08-27 (/admin/patients,
-// /admin/physicians). See src/middleware.ts for the gate.
+// /admin/physicians). See src/proxy.ts for the gate.
 type ViewType = "patient" | "doctor" | "selection";
 
 // ═══════════════════════════════════════════════════════════
@@ -91,6 +91,14 @@ type VisitType = "first" | "followup" | "combined";
 const DEV_MODE_KEY = "prostatecancerapp_dev_mode";
 
 export default function Home() {
+  return (
+    <Suspense fallback={null}>
+      <HomeContent />
+    </Suspense>
+  );
+}
+
+function HomeContent() {
   const searchParams = useSearchParams();
   const { width, height, setWindowSize } = useWindowSizeStore(
     useShallow((state) => ({

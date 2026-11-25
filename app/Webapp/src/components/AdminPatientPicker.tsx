@@ -6,7 +6,7 @@
  *
  * Moved out of the public home page (src/app/page.tsx) on 2026-08-27: the list
  * is a browsable index of every patient, so it now sits behind the admin gate
- * (src/middleware.ts). The per-patient URLs it navigates to stay public,
+ * (src/proxy.ts). The per-patient URLs it navigates to stay public,
  * because patients open their own link and have no admin account.
  */
 

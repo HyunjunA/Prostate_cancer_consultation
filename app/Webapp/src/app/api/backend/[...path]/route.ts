@@ -10,9 +10,9 @@ const API_KEY = process.env.API_KEY || "";
 
 async function proxyRequest(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
-  const targetPath = params.path.join("/");
+  const targetPath = (await params).path.join("/");
   const targetUrl = `${BACKEND_URL}/api/${targetPath}${request.nextUrl.search}`;
 
   const headers: HeadersInit = {};
@@ -43,7 +43,7 @@ async function proxyRequest(
   // X-Forwarded-For is append-only by convention: keep any upstream chain and
   // add the address we observed, so a future nginx in front still works.
   const forwardedFor = request.headers.get("x-forwarded-for");
-  const observedIp = request.headers.get("x-real-ip") || request.ip || "";
+  const observedIp = request.headers.get("x-real-ip") || "";
   const chain = [forwardedFor, observedIp].filter(Boolean).join(", ");
   if (chain) {
     headers["X-Forwarded-For"] = chain;

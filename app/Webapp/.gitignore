@@ -133,10 +133,7 @@ temp/
 
 # Data files (optional — comment out as needed)
 *.json
-# …but the toolchain config files are not data. Without this negation a fresh
-# clone has no ESLint config, `next lint` drops into its interactive setup
-# prompt, and the build's lint gate silently disappears.
-!.eslintrc.json
+# Keep the JSON manifests and compiler configuration under version control.
 !package.json
 !package-lock.json
 !tsconfig.json

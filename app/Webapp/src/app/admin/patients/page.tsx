@@ -1,4 +1,4 @@
-// Patient records index. Behind the admin gate (src/middleware.ts covers
+// Patient records index. Behind the admin gate (src/proxy.ts covers
 // /admin/:path*); the patient URLs it links to stay public.
 import AdminPatientPicker from "@/components/AdminPatientPicker";
 

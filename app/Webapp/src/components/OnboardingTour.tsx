@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import Joyride, { Step, CallBackProps, STATUS, ACTIONS, EVENTS } from "react-joyride";
+import { Joyride, type Step, type EventData, STATUS, ACTIONS, EVENTS } from "react-joyride";
 
 import { VOICE_INPUT_ENABLED } from "@/lib/sttConstants";
 
@@ -16,7 +16,7 @@ const DASHBOARD_STEPS: Step[] = [
       "Welcome to the Physician Dashboard! This is the Scoring Rubric button. Click it anytime to view the 0–5 scoring criteria for all five risk communication domains. You can hover or click each score level to see cumulative rubric details.",
     title: "Scoring Rubric Guide",
     placement: "bottom-end",
-    disableBeacon: true,
+
   },
   {
     target: "[data-tour='search-filters']",
@@ -24,7 +24,7 @@ const DASHBOARD_STEPS: Step[] = [
       "Use the search bar to quickly find patients by name, ID, or file name. The filter buttons let you narrow the list by performance band: All, High Quality (4–5), Standard (3), or Needs Improvement (0–2).",
     title: "Search & Filter",
     placement: "bottom",
-    disableBeacon: true,
+
   },
   {
     target: "[data-tour='summary-cards']",
@@ -32,7 +32,7 @@ const DASHBOARD_STEPS: Step[] = [
       "These four cards summarize your overall performance. Click any card to filter the patient list below by that performance band. Each card shows the count of patients in that category.",
     title: "Summary Cards",
     placement: "bottom",
-    disableBeacon: true,
+
   },
   {
     target: "[data-tour='trajectory-chart']",
@@ -40,7 +40,7 @@ const DASHBOARD_STEPS: Step[] = [
       "This chart tracks your Overall Quality of Risk Communication Score over time. Each point represents a cumulative average across all patients scored so far. Hover over data points to see individual patient breakdowns.",
     title: "Score Trajectory",
     placement: "bottom",
-    disableBeacon: true,
+
   },
   {
     target: "[data-tour='summary-box']",
@@ -48,7 +48,7 @@ const DASHBOARD_STEPS: Step[] = [
       "This summary panel shows your average score and a breakdown by performance band: High (4–5), Standard (3), and Low (0–2). The color-coded dots represent individual patient scores.",
     title: "Performance Summary",
     placement: "left",
-    disableBeacon: true,
+
   },
   {
     target: "[data-tour='patient-list']",
@@ -56,7 +56,7 @@ const DASHBOARD_STEPS: Step[] = [
       "Here you'll find all patient consultation reports. Each row shows the patient ID, overall score, and a color-coded badge. Click \"View Report\" to see the detailed scoring breakdown for any patient.",
     title: "Patient Reports List",
     placement: "top-start",
-    disableBeacon: true,
+
   },
   {
     target: "[data-tour='restart-tour-button']",
@@ -64,7 +64,7 @@ const DASHBOARD_STEPS: Step[] = [
       "You can replay this guided tour anytime by clicking this button. It will restart the tour for the current page you're viewing.",
     title: "Replay Tour Anytime",
     placement: "top-end",
-    disableBeacon: true,
+
   },
 ];
 
@@ -75,7 +75,7 @@ const GRID_STEPS: Step[] = [
       "This card shows the selected patient's overall communication score and basic information. The score is an average across all five risk communication domains.",
     title: "Patient Overall Score",
     placement: "bottom",
-    disableBeacon: true,
+
   },
   {
     target: "[data-tour='grid-topics-table']",
@@ -83,7 +83,7 @@ const GRID_STEPS: Step[] = [
       "This table breaks down the patient's score by each of the five risk communication domains: Cancer Prognosis, Life Expectancy, Erectile Dysfunction, Urinary Incontinence, and Irritative Symptoms.\n\n• Click a topic name to see the detailed sentence-level view\n• The \"How to Improve\" column shows actionable steps to reach the next score level",
     title: "Domain Scores & Details",
     placement: "top-start",
-    disableBeacon: true,
+
   },
   {
     target: "[data-tour='grid-your-score']",
@@ -91,7 +91,7 @@ const GRID_STEPS: Step[] = [
       "Click any score badge in this column to open the Scoring Rubric for that specific domain. The rubric shows exactly what criteria each score level requires.",
     title: "Score Badges — Click for Rubric",
     placement: "bottom",
-    disableBeacon: true,
+
   },
   {
     target: "[data-tour='rubric-button']",
@@ -99,7 +99,7 @@ const GRID_STEPS: Step[] = [
       "You can also open the Scoring Rubric anytime by clicking this button. It shows the full 0–5 scoring criteria for all five risk communication domains.",
     title: "Scoring Rubric Guide",
     placement: "bottom-end",
-    disableBeacon: true,
+
   },
   {
     target: "[data-tour='restart-tour-button']",
@@ -107,7 +107,7 @@ const GRID_STEPS: Step[] = [
       "You can replay this guided tour anytime by clicking this button. It will restart the tour for the current page you're viewing.",
     title: "Replay Tour Anytime",
     placement: "top-end",
-    disableBeacon: true,
+
   },
 ];
 
@@ -118,7 +118,7 @@ const DETAIL_STEPS: Step[] = [
       "This chart shows every patient's score for the selected domain. The red dot highlights the current patient. Hover over any point to see the patient name and score.",
     title: "Topic Score Overview",
     placement: "bottom",
-    disableBeacon: true,
+
   },
   {
     target: "[data-tour='detail-consultation-scoring']",
@@ -126,7 +126,7 @@ const DETAIL_STEPS: Step[] = [
       "This panel displays all relevant sentences from the consultation, ordered by score. Click any sentence to select it for the Re-write Practice below. The score scale at the bottom shows the current score position.",
     title: "Consultation Scoring",
     placement: "top-start",
-    disableBeacon: true,
+
   },
   {
     target: ".consultation-scoring-scale",
@@ -134,7 +134,7 @@ const DETAIL_STEPS: Step[] = [
       "This is the score scale. The blue indicator shows the current score position. Hover over or click each number (0–5) to see cumulative rubric criteria — what each score level requires for this domain.",
     title: "Score Scale & Rubric",
     placement: "top",
-    disableBeacon: true,
+
   },
   {
     target: "[data-tour='detail-rewrite-panel']",
@@ -142,7 +142,7 @@ const DETAIL_STEPS: Step[] = [
       "Practice improving your communication here. The original sentence is shown with its current score. Type your improved version in the text box and click \"Try & Score\" to see how your rewrite scores.\n\nTip: Click an improvement suggestion in the scoring panel above to get a targeted hint.",
     title: "Re-write Practice",
     placement: "top-start",
-    disableBeacon: true,
+
   },
   // Only while the button exists: a step whose target is never rendered stalls
   // the tour instead of skipping it.
@@ -154,7 +154,7 @@ const DETAIL_STEPS: Step[] = [
             "Prefer to say it out loud? Click \"Speak\" and dictate your rewrite instead of typing it — each sentence is added to the text box as you finish it, and you can keep editing by hand at any time.\n\nYour voice is turned into text inside this browser tab. The audio is never recorded, uploaded, or sent to any outside service.\n\nIf the button reads \"Voice unavailable\", the page was opened over a plain http address; browsers only allow microphone access on an https address.",
           title: "Dictate Your Re-write",
           placement: "left",
-          disableBeacon: true,
+
         },
       ] as Step[])
     : []),
@@ -164,7 +164,7 @@ const DETAIL_STEPS: Step[] = [
       "Remember, you can always open the Scoring Rubric from this button to review the full criteria for all five domains.",
     title: "Scoring Rubric Guide",
     placement: "bottom-end",
-    disableBeacon: true,
+
   },
   {
     target: "[data-tour='restart-tour-button']",
@@ -172,7 +172,7 @@ const DETAIL_STEPS: Step[] = [
       "You can replay this guided tour anytime by clicking this button. It will restart the tour for the current page you're viewing.",
     title: "Replay Tour Anytime",
     placement: "top-end",
-    disableBeacon: true,
+
   },
 ];
 
@@ -181,14 +181,6 @@ const DETAIL_STEPS: Step[] = [
 // ═══════════════════════════════════════════════════════════
 
 const getTourStyles = (isDarkMode: boolean) => ({
-  options: {
-    arrowColor: isDarkMode ? "#1e293b" : "#ffffff",
-    backgroundColor: isDarkMode ? "#1e293b" : "#ffffff",
-    overlayColor: "rgba(0, 0, 0, 0.5)",
-    primaryColor: "#06b6d4",
-    textColor: isDarkMode ? "#e2e8f0" : "#1e293b",
-    zIndex: 10000,
-  },
   tooltip: {
     borderRadius: "12px",
     padding: "20px",
@@ -208,7 +200,7 @@ const getTourStyles = (isDarkMode: boolean) => ({
     lineHeight: "1.6",
     whiteSpace: "pre-line" as const,
   },
-  buttonNext: {
+  buttonPrimary: {
     backgroundColor: "#06b6d4",
     borderRadius: "8px",
     padding: "8px 20px",
@@ -227,9 +219,6 @@ const getTourStyles = (isDarkMode: boolean) => ({
   },
   buttonClose: {
     color: isDarkMode ? "#94a3b8" : "#64748b",
-  },
-  spotlight: {
-    borderRadius: "12px",
   },
 });
 
@@ -322,7 +311,7 @@ const OnboardingTour: React.FC<OnboardingTourProps> = ({
   }, [currentView]);
 
   const handleCallback = useCallback(
-    (data: CallBackProps) => {
+    (data: EventData) => {
       const { status, action, index, type } = data;
       const finishedStatuses: string[] = [STATUS.FINISHED, STATUS.SKIPPED];
 
@@ -380,12 +369,22 @@ const OnboardingTour: React.FC<OnboardingTourProps> = ({
       run={run}
       stepIndex={stepIndex}
       continuous
-      showProgress
-      showSkipButton
       scrollToFirstStep
-      disableOverlayClose
-      spotlightClicks
-      callback={handleCallback}
+      onEvent={handleCallback}
+      options={{
+        arrowColor: isDarkMode ? "#1e293b" : "#ffffff",
+        backgroundColor: isDarkMode ? "#1e293b" : "#ffffff",
+        overlayColor: "rgba(0, 0, 0, 0.5)",
+        primaryColor: "#06b6d4",
+        textColor: isDarkMode ? "#e2e8f0" : "#1e293b",
+        zIndex: 10000,
+        skipBeacon: true,
+        showProgress: true,
+        buttons: ["back", "close", "primary", "skip"],
+        overlayClickAction: false,
+        blockTargetInteraction: false,
+        spotlightRadius: 12,
+      }}
       styles={getTourStyles(isDarkMode)}
       locale={{
         back: "Back",
@@ -393,9 +392,6 @@ const OnboardingTour: React.FC<OnboardingTourProps> = ({
         last: "Got it!",
         next: "Next",
         skip: "Skip tour",
-      }}
-      floaterProps={{
-        disableAnimation: false,
       }}
     />
   );

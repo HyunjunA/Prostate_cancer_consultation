@@ -17,7 +17,7 @@ interface UseViewportTrackingOptions {
  */
 export const useViewportTracking = <T extends HTMLElement>(
   options: UseViewportTrackingOptions
-): RefObject<T> => {
+): RefObject<T | null> => {
   const {
     componentName,
     threshold = 0.5, // 50% by default

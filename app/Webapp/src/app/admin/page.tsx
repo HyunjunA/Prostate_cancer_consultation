@@ -5,7 +5,7 @@
  *
  * Requested by the manager (2026-08-27): the patient and physician entry
  * points used to be browsable from the public home page, so anyone on the LAN
- * could pick any patient. They now live under /admin, which middleware.ts
+ * could pick any patient. They now live under /admin, which proxy.ts
  * gates behind the admin_session cookie, and this page is where staff land
  * after signing in.
  *

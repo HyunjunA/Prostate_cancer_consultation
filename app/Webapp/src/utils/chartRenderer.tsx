@@ -10,7 +10,7 @@ export const renderCharts = (
   selectedCharts: Set<string>,
   data: DemographicState
 ) => {
-  const charts: JSX.Element[] = [];
+  const charts: React.JSX.Element[] = [];
 
   // Age Distribution
   if (selectedCharts.has("age") && data.age) {

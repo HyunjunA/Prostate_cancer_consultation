@@ -4,7 +4,7 @@ import { test, type Page } from "@playwright/test";
  * Admin session helper for specs that need a gated /admin page.
  *
  * The patient and physician indexes moved under /admin on 2026-08-27, and
- * src/middleware.ts redirects any unauthenticated request there to
+ * src/proxy.ts redirects any unauthenticated request there to
  * /admin/login. Specs that start from one of those lists therefore have to
  * sign in first.
  *

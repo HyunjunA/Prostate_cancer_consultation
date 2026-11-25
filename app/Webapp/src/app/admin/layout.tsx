@@ -1,5 +1,5 @@
 // Layout for all /admin pages. Renders the admin top bar (logout) above the
-// page content. Access is enforced by src/middleware.ts (cookie gate) and the
+// page content. Access is enforced by src/proxy.ts (cookie gate) and the
 // backend (per-request admin check); this layout is purely presentational.
 import { type ReactNode } from "react";
 

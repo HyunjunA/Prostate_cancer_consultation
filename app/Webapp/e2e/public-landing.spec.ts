@@ -4,7 +4,7 @@ import { test, expect } from "@playwright/test";
  * Public landing / auth-gate E2E tests.
  *
  * Since 2026-09-17 the root URL "/" redirects unauthenticated visitors to
- * /admin/login (middleware.ts). Personal links (?fileid=… etc.) still pass
+ * /admin/login (proxy.ts). Personal links (?fileid=… etc.) still pass
  * through without auth. Admin routes continue to require an admin cookie.
  */
 test.describe("Public landing screen", () => {

@@ -3,13 +3,13 @@
 // Every /admin/* page (except the login page itself) requires a valid
 // `admin_session` JWT cookie. The cookie is set by the login route handler
 // (src/app/api/admin-auth/login) from a token the backend issues, and is
-// httpOnly so client JS never touches it — only this server-side middleware
+// httpOnly so client JS never touches it — only this server-side proxy
 // and the backend read it.
 //
 // We verify the HS256 signature and expiry here with the Web Crypto API
-// (available in the Edge runtime) so no extra dependency is needed. The
+// so no extra dependency is needed. The
 // backend independently re-verifies the token + admin role on every admin API
-// call, so this middleware is the UX gate and the backend is the hard gate.
+// call, so this proxy is the UX gate and the backend is the hard gate.
 import { NextRequest, NextResponse } from "next/server";
 
 const COOKIE_NAME = "admin_session";
@@ -90,7 +90,7 @@ function redirectToLogin(request: NextRequest): NextResponse {
   return NextResponse.redirect(loginUrl);
 }
 
-export async function middleware(request: NextRequest): Promise<NextResponse> {
+export async function proxy(request: NextRequest): Promise<NextResponse> {
   const { pathname, searchParams } = request.nextUrl;
 
   // The login page must stay public, otherwise there's no way in.
