@@ -58,15 +58,14 @@ Top-level catalog of all docs under `docs/`. Updated 2026-04-28.
 
 ### Production validation guides
 
-Use the PDF to follow a procedure and the Markdown source to update it. All three editions are in [operations/validation/](operations/validation/).
+Use the PDF to follow a procedure and the Markdown source to update it. Both guides are in [operations/validation/](operations/validation/).
 
 | Reader | Language | Task | PDF | Markdown source |
 |---|---|---|---|---|
 | Validation team | English | Sign in to CloudBeaver, find a production analysis, and export its scores to CSV. | [Open PDF](operations/validation/COMPASS_DBEAVER_VALIDATION_GUIDE.pdf) | [Open Markdown](operations/validation/COMPASS_DBEAVER_VALIDATION_GUIDE.md) |
 | Michael | English | Connect by SFTP through the jump host and locate the uploaded transcript, intermediate files, and final results for an assigned case. | [Open PDF](operations/validation/COMPASS_AI_PIPELINE_SFTP_GUIDE.pdf) | [Open Markdown](operations/validation/COMPASS_AI_PIPELINE_SFTP_GUIDE.md) |
-| Michael and Korean-speaking reviewers | Korean | Follow the same SFTP procedure in Korean, from the uploaded transcript to the final result files. | [Open PDF](operations/validation/COMPASS_AI_PIPELINE_SFTP_GUIDE_KO.pdf) | [Open Markdown](operations/validation/COMPASS_AI_PIPELINE_SFTP_GUIDE_KO.md) |
 
-The [CloudBeaver screenshots](operations/validation/compass-cloudbeaver-guide/) illustrate sign-in, database authentication, query results, and CSV export. Both SFTP editions use the [SFTP examples](operations/validation/compass-sftp-guide/) to show the input, intermediate, and final file listings for a synthetic case.
+The [CloudBeaver screenshots](operations/validation/compass-cloudbeaver-guide/) illustrate sign-in, database authentication, query results, and CSV export. The SFTP guide uses the [SFTP examples](operations/validation/compass-sftp-guide/) to show the input, intermediate, and final file listings for a synthetic case.
 
 ---
 
