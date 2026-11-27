@@ -49,6 +49,7 @@ All detailed documentation lives under [`docs/`](docs/).
 | Feature specs (patient, doctor, REDCap) | [`docs/features/`](docs/features/) |
 | ML / NLP pipeline | [`docs/ml-pipeline/`](docs/ml-pipeline/) |
 | Security & PHI compliance | [`docs/security/`](docs/security/) |
+| Production validation guides | [CloudBeaver PDF (English)](docs/operations/validation/COMPASS_DBEAVER_VALIDATION_GUIDE.pdf) · Michael’s SFTP guide ([English PDF](docs/operations/validation/COMPASS_AI_PIPELINE_SFTP_GUIDE.pdf), [Korean PDF](docs/operations/validation/COMPASS_AI_PIPELINE_SFTP_GUIDE_KO.pdf)) · [Guide descriptions and editable sources](docs/INDEX.md#production-validation-guides) |
 | Top-level index | [`docs/INDEX.md`](docs/INDEX.md) |
 
 ---
